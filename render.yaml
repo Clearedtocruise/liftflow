@@ -1,0 +1,22 @@
+# Render Blueprint — LiftFlow API
+# Deploy: connect this repo in Render Dashboard → New Blueprint → select render.yaml
+# Or: https://dashboard.render.com/select-repo?type=blueprint
+
+services:
+  - type: web
+    name: liftflow-api
+    runtime: node
+    rootDir: backend
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false

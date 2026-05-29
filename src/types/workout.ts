@@ -1,0 +1,140 @@
+import type {
+    BaseEntity,
+    BlockType,
+    MovementCategory,
+    SessionStatus,
+    SetType,
+} from './common';
+
+export type Exercise = BaseEntity & {
+  name: string;
+  slug?: string;
+  category: MovementCategory;
+  equipment: string;
+  muscleGroups: string[];
+  secondaryMuscles?: string[];
+  tutorialUrl?: string;
+  instructions?: string;
+  isSystem: boolean;
+  createdBy?: string;
+};
+
+export type WorkoutSet = BaseEntity & {
+  workoutExerciseId: string;
+  setNumber: number;
+  weight?: number;
+  reps?: number;
+  rpe?: number;
+  type: SetType;
+  durationSeconds?: number;
+  timeUnderTensionSeconds?: number;
+  restSeconds?: number;
+  isPr?: boolean;
+  notes?: string;
+  loggedAt: string;
+};
+
+export type WorkoutExercise = BaseEntity & {
+  sessionId: string;
+  blockId?: string;
+  exerciseId: string;
+  exercise?: Exercise;
+  sortOrder: number;
+  suggestedWeight?: number;
+  suggestedReps?: string;
+  sets: WorkoutSet[];
+  isActive?: boolean;
+  notes?: string;
+};
+
+export type WorkoutBlock = BaseEntity & {
+  sessionId: string;
+  blockType: BlockType;
+  sortOrder: number;
+  restSeconds?: number;
+  exercises: WorkoutExercise[];
+  notes?: string;
+};
+
+export type WorkoutSession = BaseEntity & {
+  userId: string;
+  name: string;
+  status: SessionStatus;
+  plannedWorkoutId?: string;
+  trainingPhaseId?: string;
+  startedAt: string;
+  endedAt?: string;
+  durationSeconds?: number;
+  totalVolume?: number;
+  totalSets?: number;
+  blocks: WorkoutBlock[];
+  exercises: WorkoutExercise[];
+  notes?: string;
+  isActive: boolean;
+};
+
+export type RestPeriod = BaseEntity & {
+  sessionId: string;
+  workoutSetId?: string;
+  recommendedSeconds?: number;
+  actualSeconds?: number;
+  startedAt: string;
+  endedAt?: string;
+  wasSkipped: boolean;
+};
+
+export type WorkoutDensityMetrics = BaseEntity & {
+  sessionId: string;
+  totalWorkSeconds?: number;
+  totalRestSeconds?: number;
+  setsPerMinute?: number;
+  volumePerMinute?: number;
+  densityScore?: number;
+  calculatedAt: string;
+};
+
+export type WorkoutHistoryItem = {
+  id: string;
+  name: string;
+  date: string;
+  durationMinutes: number;
+  exerciseCount: number;
+  totalSets: number;
+  totalVolume: number;
+  prCount?: number;
+  status: SessionStatus;
+};
+
+export type ParsedVoiceCommand = {
+  exercise?: string;
+  weight?: number;
+  reps?: number;
+  set?: number;
+  type?: SetType;
+  confidence?: number;
+  rawText: string;
+};
+
+export type VoiceLogEntry = BaseEntity & {
+  userId: string;
+  sessionId?: string;
+  rawTranscript: string;
+  audioUrl?: string;
+  status: import('./common').VoiceCommandStatus;
+  confidence?: number;
+  parsedData?: ParsedVoiceCommand;
+};
+
+export type CreateSetPayload = {
+  workoutExerciseId: string;
+  weight?: number;
+  reps?: number;
+  type?: SetType;
+  durationSeconds?: number;
+};
+
+export type StartSessionPayload = {
+  name: string;
+  templateId?: string;
+  plannedWorkoutId?: string;
+};

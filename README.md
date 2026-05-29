@@ -1,56 +1,54 @@
-# Welcome to your Expo app 👋
+# LiftFlow
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Voice-first AI workout tracking and coaching platform. **Expo SDK 54** — compatible with Expo Go on iPhone (App Store).
 
-## Get started
-
-1. Install dependencies
-
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+## Quick Start
 
 ```bash
-npm run reset-project
+npm install
+npm start
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for full system design.
 
-### Other setup steps
+## What's Implemented (MVP)
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+- Auth screens (login, signup, password reset) with Supabase + mock fallback
+- Active workout screen with mic button, exercise cards, rest timer, quick corrections
+- Workout history screen with placeholder data
+- Settings with voice confirmation modes
+- Explore hub linking to all planned features
+- Legal onboarding flow (UI scaffold)
 
-## Learn more
+## Architecture at a Glance
 
-To learn more about developing your project with Expo, look at the following resources:
+| Layer | Location | Status |
+|-------|----------|--------|
+| Database (40+ tables) | `supabase/schema.sql` | ✅ Ready |
+| TypeScript types (8 domains) | `src/types/` | ✅ Ready |
+| Service interfaces (16 domains) | `src/services/interfaces/` | ✅ Ready |
+| Backend API routes | `backend/src/routes/` | ✅ Scaffolded (501) |
+| Navigation + placeholders | `src/app/` | ✅ Ready |
+| State management | `src/state/` | ✅ MVP |
+| Feature registry | `src/constants/features.ts` | ✅ 30+ features |
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+## Environment
 
-## Join the community
+```bash
+cp .env.example .env
+# EXPO_PUBLIC_SUPABASE_URL, EXPO_PUBLIC_SUPABASE_ANON_KEY, EXPO_PUBLIC_API_URL
+```
 
-Join our community of developers creating universal apps.
+## Backend
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+```bash
+cd backend && npm install && npm run dev
+```
+
+## Delivery Phases
+
+1. **MVP** — Auth, workout UI, voice UI, history, settings
+2. **Phase 1** — Voice parsing, persistence, AI coaching, progression, planning
+3. **Phase 2** — Cardio, HealthKit, Apple Watch, motion/rep detection
+4. **Phase 3** — Nutrition, body composition, photos, goals, analytics
+5. **Phase 4** — Subscriptions, ads, notifications, export/PDF/share

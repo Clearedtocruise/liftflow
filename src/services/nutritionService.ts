@@ -1,0 +1,326 @@
+import { api } from '@/api/client';
+import { mapGroceryList, mapMeal, mapMealPlan, mapNutritionGoals } from '@/lib/db-mappers';
+import { fail, fromError, ok } from '@/lib/serviceResult';
+import type { INutritionService } from '@/services/interfaces';
+import { getAccessToken, supabase } from '@/supabase/client';
+import type { DailyNutritionSummary, Meal, MealType } from '@/types';
+
+function todayDate(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function weekStartDate(): string {
+  const d = new Date();
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+  d.setDate(diff);
+  return d.toISOString().slice(0, 10);
+}
+
+export const nutritionService: INutritionService = {
+  async getGoals(userId) {
+    try {
+      const { data, error } = await supabase
+        .from('nutrition_goals')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('is_active', true)
+        .order('effective_from', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) return fail(error.message);
+      if (!data) return ok(null);
+      return ok(mapNutritionGoals(data));
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
+  async updateGoals(userId, goals) {
+    try {
+      await supabase.from('nutrition_goals').update({ is_active: false }).eq('user_id', userId).eq('is_active', true);
+
+      const { data, error } = await supabase
+        .from('nutrition_goals')
+        .insert({
+          user_id: userId,
+          daily_calories: goals.dailyCalories,
+          protein_g: goals.proteinG,
+          carbs_g: goals.carbsG,
+          fat_g: goals.fatG,
+          water_ml: goals.waterMl,
+          is_active: true,
+          effective_from: todayDate(),
+        })
+        .select('*')
+        .single();
+
+      if (error) return fail(error.message);
+      return ok(mapNutritionGoals(data));
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
+  async logFood(userId, food: { name: string; mealType: MealType; calories?: number; proteinG?: number; carbsG?: number; fatG?: number; date?: string }) {
+    try {
+      const { data, error } = await supabase
+        .from('meals')
+        .insert({
+          user_id: userId,
+          meal_type: food.mealType,
+          name: food.name,
+          scheduled_date: food.date ?? todayDate(),
+          calories: food.calories,
+          protein_g: food.proteinG,
+          carbs_g: food.carbsG,
+          fat_g: food.fatG,
+        })
+        .select('*')
+        .single();
+
+      if (error) return fail(error.message);
+      return ok(mapMeal(data));
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
+  async getMealsForDate(userId, date: string) {
+    try {
+      const { data, error } = await supabase
+        .from('meals')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('scheduled_date', date)
+        .order('created_at', { ascending: false });
+
+      if (error) return fail(error.message);
+      return ok((data ?? []).map(mapMeal));
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
+  async getDailySummary(userId, date?: string) {
+    try {
+      const targetDate = date ?? todayDate();
+      const [mealsResult, goalsResult, hydrationResult] = await Promise.all([
+        supabase.from('meals').select('calories, protein_g, carbs_g, fat_g').eq('user_id', userId).eq('scheduled_date', targetDate),
+        supabase.from('nutrition_goals').select('*').eq('user_id', userId).eq('is_active', true).limit(1).maybeSingle(),
+        supabase.from('hydration_logs').select('amount_ml').eq('user_id', userId).gte('logged_at', `${targetDate}T00:00:00`).lte('logged_at', `${targetDate}T23:59:59`),
+      ]);
+
+      if (mealsResult.error) return fail(mealsResult.error.message);
+
+      const meals = mealsResult.data ?? [];
+      const summary: DailyNutritionSummary = {
+        date: targetDate,
+        caloriesConsumed: meals.reduce((s, m) => s + (m.calories ?? 0), 0),
+        caloriesTarget: goalsResult.data?.daily_calories ?? undefined,
+        proteinG: meals.reduce((s, m) => s + Number(m.protein_g ?? 0), 0),
+        carbsG: meals.reduce((s, m) => s + Number(m.carbs_g ?? 0), 0),
+        fatG: meals.reduce((s, m) => s + Number(m.fat_g ?? 0), 0),
+        waterMl: (hydrationResult.data ?? []).reduce((s, h) => s + h.amount_ml, 0),
+        waterTargetMl: goalsResult.data?.water_ml ?? undefined,
+      };
+
+      return ok(summary);
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
+  async getMealPlans(userId) {
+    try {
+      const { data, error } = await supabase
+        .from('meal_plans')
+        .select('*, meals(*)')
+        .eq('user_id', userId)
+        .order('week_start_date', { ascending: false });
+
+      if (error) return fail(error.message);
+      return ok((data ?? []).map(mapMealPlan));
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
+  async generateWeeklyMealPlan(userId) {
+    try {
+      const token = await getAccessToken();
+      const plan = await api.generateMealPlan(userId, token);
+
+      const { data: saved, error } = await supabase
+        .from('meal_plans')
+        .insert({
+          user_id: userId,
+          name: plan.name ?? 'Weekly Plan',
+          week_start_date: plan.weekStartDate ?? weekStartDate(),
+          ai_generated: true,
+          ai_rationale: plan.aiRationale,
+        })
+        .select('*')
+        .single();
+
+      if (error) return fail(error.message);
+
+      const meals: Meal[] = plan.meals ?? [];
+      if (meals.length > 0) {
+        await supabase.from('meals').insert(
+          meals.map((m) => ({
+            meal_plan_id: saved.id,
+            user_id: userId,
+            meal_type: m.mealType,
+            name: m.name,
+            scheduled_date: m.scheduledDate,
+            calories: m.calories,
+            protein_g: m.proteinG,
+            carbs_g: m.carbsG,
+            fat_g: m.fatG,
+            instructions: m.instructions,
+          })),
+        );
+      }
+
+      const { data: full } = await supabase
+        .from('meal_plans')
+        .select('*, meals(*)')
+        .eq('id', saved.id)
+        .single();
+
+      return ok(mapMealPlan(full!));
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
+  async generateGroceryList(userId, mealPlanId?: string) {
+    try {
+      let planId = mealPlanId;
+      if (!planId) {
+        const { data: latest } = await supabase
+          .from('meal_plans')
+          .select('id')
+          .eq('user_id', userId)
+          .order('week_start_date', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        planId = latest?.id;
+      }
+
+      const { data: meals } = planId
+        ? await supabase.from('meals').select('name').eq('meal_plan_id', planId)
+        : await supabase.from('meals').select('name').eq('user_id', userId).gte('scheduled_date', weekStartDate());
+
+      const ingredientCounts = new Map<string, number>();
+      for (const meal of meals ?? []) {
+        const key = meal.name.toLowerCase();
+        ingredientCounts.set(key, (ingredientCounts.get(key) ?? 0) + 1);
+      }
+
+      const { data: list, error } = await supabase
+        .from('grocery_lists')
+        .insert({
+          user_id: userId,
+          meal_plan_id: planId,
+          name: 'Shopping List',
+          week_start_date: weekStartDate(),
+        })
+        .select('*')
+        .single();
+
+      if (error) return fail(error.message);
+
+      const items = Array.from(ingredientCounts.entries()).map(([name], index) => ({
+        grocery_list_id: list.id,
+        name: name.charAt(0).toUpperCase() + name.slice(1),
+        quantity: 1,
+        unit: 'serving',
+        category: 'general',
+        sort_order: index,
+      }));
+
+      if (items.length > 0) {
+        await supabase.from('grocery_list_items').insert(items);
+      }
+
+      const { data: full } = await supabase
+        .from('grocery_lists')
+        .select('*, grocery_list_items(*)')
+        .eq('id', list.id)
+        .single();
+
+      return ok(mapGroceryList(full!));
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
+  async getGroceryLists(userId) {
+    try {
+      const { data, error } = await supabase
+        .from('grocery_lists')
+        .select('*, grocery_list_items(*)')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (error) return fail(error.message);
+      return ok((data ?? []).map(mapGroceryList));
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
+  async logHydration(userId, amountMl) {
+    try {
+      const { data, error } = await supabase
+        .from('hydration_logs')
+        .insert({ user_id: userId, amount_ml: amountMl, logged_at: new Date().toISOString() })
+        .select('*')
+        .single();
+
+      if (error) return fail(error.message);
+
+      return ok({
+        id: data.id,
+        userId: data.user_id,
+        loggedAt: data.logged_at,
+        amountMl: data.amount_ml,
+        source: data.source,
+        createdAt: data.logged_at,
+      });
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
+  async getRecommendations(userId) {
+    try {
+      const { data, error } = await supabase
+        .from('nutrition_recommendations')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      if (error) return fail(error.message);
+
+      return ok(
+        (data ?? []).map((row) => ({
+          id: row.id,
+          userId: row.user_id,
+          title: row.title,
+          description: row.description,
+          rationale: row.rationale ?? undefined,
+          evidenceCitations: row.evidence_citations ?? [],
+          payload: row.payload ?? {},
+          createdAt: row.created_at,
+        })),
+      );
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+};
