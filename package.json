@@ -49,6 +49,7 @@
     "lint": "node ./node_modules/expo/bin/cli lint",
     "configure:auth": "node scripts/configure-supabase-auth-testing.mjs",
     "verify:release": "node scripts/verify-release.mjs",
+    "deploy:render": "node scripts/deploy-render.mjs",
     "build:ios": "eas build --platform ios --profile production --non-interactive",
     "build:android:apk": "eas build --platform android --profile production-apk --non-interactive",
     "build:android:aab": "eas build --platform android --profile production --non-interactive"
