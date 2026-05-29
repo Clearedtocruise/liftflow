@@ -19,7 +19,7 @@ const SERVICE_NAME = 'liftflow-api';
 const HEALTH_URL = 'https://liftflow-api.onrender.com/health';
 const REPO = 'https://github.com/Clearedtocruise/liftflow';
 const ROOT_DIR = 'backend';
-const BUILD_COMMAND = 'npm install && npm run build';
+const BUILD_COMMAND = 'npm install --include=dev && npm run build';
 const START_COMMAND = 'npm start';
 
 function loadEnv() {
@@ -143,11 +143,27 @@ async function updateEnvVars(serviceId) {
 }
 
 async function triggerDeploy(serviceId) {
-  const deploy = await api(`/services/${serviceId}/deploys`, {
+  const res = await fetch(`https://api.render.com/v1/services/${serviceId}/deploys`, {
     method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
     body: JSON.stringify({ clearCache: 'clear' }),
   });
-  return deploy.deploy ?? deploy;
+  if (!res.ok && res.status !== 202) {
+    const text = await res.text();
+    throw new Error(`${res.status} ${text}`);
+  }
+  const text = await res.text();
+  if (!text) return { id: 'queued', status: res.status };
+  try {
+    const body = JSON.parse(text);
+    return body.deploy ?? body;
+  } catch {
+    return { id: 'queued', status: res.status };
+  }
 }
 
 async function waitForHealth(maxAttempts = 40, intervalMs = 15000) {
