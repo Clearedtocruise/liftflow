@@ -1,11 +1,12 @@
 # Render Blueprint — LiftFlow API
-# Deploy: connect this repo in Render Dashboard → New Blueprint → select render.yaml
-# Or: https://dashboard.render.com/select-repo?type=blueprint
+# Deploy: https://render.com/deploy?repo=https://github.com/Clearedtocruise/liftflow
 
 services:
   - type: web
     name: liftflow-api
     runtime: node
+    repo: https://github.com/Clearedtocruise/liftflow
+    branch: main
     rootDir: backend
     plan: free
     buildCommand: npm install && npm run build
