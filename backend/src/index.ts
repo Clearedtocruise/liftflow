@@ -19,6 +19,7 @@ import { adsRouter, notificationsRouter, subscriptionsRouter } from './routes/pl
 import { trainingRouter } from './routes/training.js';
 import { userRouter } from './routes/user.js';
 import { voiceRouter } from './routes/voice.js';
+import { watchRouter } from './routes/watch.js';
 import { workoutsRouter } from './routes/workouts.js';
 
 const app = express();
@@ -36,6 +37,7 @@ app.use('/api/parse', parseRouter);
 
 // Domain routes — all scaffolded with 501 placeholders
 app.use('/api/voice', voiceRouter);
+app.use('/api/watch', watchRouter);
 app.use('/api/ai', aiRouter);
 app.use('/api/workouts', workoutsRouter);
 app.use('/api/training', trainingRouter);

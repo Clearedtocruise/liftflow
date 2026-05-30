@@ -8,6 +8,7 @@ import type { WorkoutHistoryItem } from '@/types/workout';
 type HistoryCardProps = {
   item: WorkoutHistoryItem;
   onPress?: () => void;
+  onLongPress?: () => void;
 };
 
 function formatDate(dateStr: string): string {
@@ -15,9 +16,9 @@ function formatDate(dateStr: string): string {
   return date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
-export function HistoryCard({ item, onPress }: HistoryCardProps) {
+export function HistoryCard({ item, onPress, onLongPress }: HistoryCardProps) {
   return (
-    <Card onPress={onPress} style={styles.card}>
+    <Card onPress={onPress} onLongPress={onLongPress} style={styles.card}>
       <View style={styles.header}>
         <View>
           <AppText variant="bodyBold">{item.name}</AppText>

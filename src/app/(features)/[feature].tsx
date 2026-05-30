@@ -6,12 +6,25 @@ import { AppText } from '@/components/ui/AppText';
 import { FEATURE_MAP } from '@/constants/features';
 import { LiftFlowColors } from '@/constants/theme';
 
+import AppleWatchScreen from './apple-watch';
+import HealthKitScreen from './healthkit';
+import SubscriptionScreen from './subscription';
+import TrainingProfileScreen from './training-profile';
+
 /**
  * Dynamic feature route — renders placeholder for any registered future feature.
  * Route: /(features)/[feature] e.g. /(features)/ai-coaching
  */
 export default function FeatureScreen() {
   const { feature } = useLocalSearchParams<{ feature: string }>();
+
+  if (feature === 'subscription') return <SubscriptionScreen />;
+  if (feature === 'healthkit') return <HealthKitScreen />;
+  if (feature === 'training-profile') return <TrainingProfileScreen />;
+  if (feature === 'apple-watch' || feature === 'rep-counting' || feature === 'motion-detection') {
+    return <AppleWatchScreen />;
+  }
+
   const definition = feature ? FEATURE_MAP[feature] : undefined;
 
   if (!definition) {

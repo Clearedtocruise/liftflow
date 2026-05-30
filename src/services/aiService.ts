@@ -1,4 +1,4 @@
-import { api } from '@/api/client';
+import { api, apiClient } from '@/api/client';
 import { API_BASE_URL } from '@/constants/api';
 import { fail, fromError, ok } from '@/lib/serviceResult';
 import type { IAICoachingService } from '@/services/interfaces';
@@ -243,6 +243,36 @@ export const aiService: IAICoachingService = {
       }
 
       return this.getRecommendations(userId);
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
+  async generateWorkoutPlan(userId: string) {
+    try {
+      const token = await getAccessToken();
+      const plan = await apiClient.post<{
+        id: string;
+        name: string;
+        rationale: string;
+        muscleGroups: string[];
+        exercises: { name: string; sets: number; reps: string; weightLbs?: number; restSeconds: number; notes?: string }[];
+        estimatedMinutes: number;
+        aiGenerated: boolean;
+        scheduledDate?: string;
+      }>('/api/ai/workout/generate', { userId }, token);
+
+      return ok({
+        id: plan.id,
+        userId,
+        name: plan.name,
+        scheduledDate: plan.scheduledDate ?? new Date().toISOString().slice(0, 10),
+        status: 'planned' as const,
+        suggestedMuscleGroups: plan.muscleGroups,
+        aiRationale: plan.rationale,
+        createdAt: new Date().toISOString(),
+        metadata: { exercises: plan.exercises, estimatedMinutes: plan.estimatedMinutes, aiGenerated: plan.aiGenerated },
+      });
     } catch (e) {
       return fromError(e);
     }

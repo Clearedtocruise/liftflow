@@ -215,6 +215,17 @@ async function main() {
   console.log('\n=== DEPLOY SUCCESS ===');
   console.log(`Service URL: https://${service.slug ?? SERVICE_NAME}.onrender.com`);
   console.log(`Health: HTTP ${health.status}`, JSON.stringify(health.data));
+
+  const verifyUrl = `https://${service.slug ?? SERVICE_NAME}.onrender.com/api/training/programs/dashboard?userId=test`;
+  try {
+    const routeCheck = await fetch(verifyUrl);
+    if (routeCheck.status === 404) {
+      console.warn('\nWARNING: Sprint 2/3 routes return 404 on production.');
+      console.warn('Render deploys from GitHub main — push local backend changes, then re-run deploy:render');
+    }
+  } catch {
+    /* ignore */
+  }
 }
 
 main().catch((e) => {

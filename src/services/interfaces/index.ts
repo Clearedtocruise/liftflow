@@ -82,11 +82,21 @@ export interface IUserService {
 export interface IWorkoutService {
   /** MVP: Start active session */
   startSession(userId: string, payload: StartSessionPayload): Promise<ServiceResult<WorkoutSession>>;
+  /** Start session linked to a planned workout with template exercises preloaded */
+  startSessionFromPlanned(
+    userId: string,
+    plannedWorkoutId: string,
+    payload: StartSessionPayload,
+  ): Promise<ServiceResult<WorkoutSession>>;
   getActiveSession(userId: string): Promise<ServiceResult<WorkoutSession | null>>;
   endSession(sessionId: string): Promise<ServiceResult<WorkoutSession>>;
   /** MVP: Log a set */
   logSet(payload: CreateSetPayload): Promise<ServiceResult<import('@/types').WorkoutSet>>;
+  updateSet(setId: string, payload: import('@/types').UpdateSetPayload): Promise<ServiceResult<import('@/types').WorkoutSet>>;
   deleteSet(setId: string): Promise<ServiceResult<void>>;
+  pauseSession(sessionId: string): Promise<ServiceResult<WorkoutSession>>;
+  resumeSession(sessionId: string): Promise<ServiceResult<WorkoutSession>>;
+  cancelSession(sessionId: string): Promise<ServiceResult<WorkoutSession>>;
   /** History */
   getHistory(userId: string, page?: number): Promise<ServiceResult<PaginatedResponse<WorkoutHistoryItem>>>;
   getSession(sessionId: string): Promise<ServiceResult<WorkoutSession>>;
@@ -96,7 +106,7 @@ export interface IWorkoutService {
   findOrCreateExerciseByName(name: string, userId: string): Promise<ServiceResult<string>>;
   /** Rest timers */
   startRestTimer(sessionId: string, setId: string, recommendedSeconds: number): Promise<ServiceResult<RestPeriod>>;
-  endRestTimer(restPeriodId: string, actualSeconds: number): Promise<ServiceResult<RestPeriod>>;
+  endRestTimer(restPeriodId: string, actualSeconds: number, wasSkipped?: boolean): Promise<ServiceResult<RestPeriod>>;
   /** Density tracking */
   calculateDensity(sessionId: string): Promise<ServiceResult<WorkoutDensityMetrics>>;
 }
@@ -125,6 +135,10 @@ export interface ITrainingService {
   suggestMuscleGroups(userId: string): Promise<ServiceResult<SuggestedMuscleGroups>>;
   assessRecovery(userId: string): Promise<ServiceResult<RecoveryAssessment>>;
   createPlannedWorkout(userId: string, workout: Omit<PlannedWorkout, 'id' | 'createdAt'>): Promise<ServiceResult<PlannedWorkout>>;
+  generateProgram(userId: string, payload: import('@/types').CreateProgramPayload): Promise<ServiceResult<import('@/types').ProgramDashboard | null>>;
+  getDashboard(userId: string): Promise<ServiceResult<import('@/types').ProgramDashboard | null>>;
+  adaptProgram(userId: string): Promise<ServiceResult<import('@/types').ProgramDashboard | null>>;
+  rescheduleWorkout(plannedWorkoutId: string, scheduledDate: string): Promise<ServiceResult<PlannedWorkout>>;
 }
 
 // =============================================================================
@@ -142,6 +156,7 @@ export interface IAICoachingService {
   /** Progression suggestions grounded in exercise science */
   suggestProgression(userId: string, exerciseId: string): Promise<ServiceResult<ProgressionSuggestion>>;
   suggestWorkout(userId: string): Promise<ServiceResult<PlannedWorkout>>;
+  generateWorkoutPlan(userId: string): Promise<ServiceResult<PlannedWorkout & { metadata?: Record<string, unknown> }>>;
   refreshCoaching(userId: string): Promise<ServiceResult<AIRecommendation[]>>;
 }
 
@@ -174,7 +189,16 @@ export interface INutritionService {
   updateGoals(userId: string, goals: Partial<NutritionGoals>): Promise<ServiceResult<NutritionGoals>>;
   logFood(
     userId: string,
-    food: { name: string; mealType: import('@/types').MealType; calories?: number; proteinG?: number; carbsG?: number; fatG?: number; date?: string },
+    food: {
+      name: string;
+      mealType: import('@/types').MealType;
+      calories?: number;
+      proteinG?: number;
+      carbsG?: number;
+      fatG?: number;
+      date?: string;
+      instructions?: string;
+    },
   ): Promise<ServiceResult<import('@/types').Meal>>;
   getMealsForDate(userId: string, date: string): Promise<ServiceResult<import('@/types').Meal[]>>;
   getDailySummary(userId: string, date?: string): Promise<ServiceResult<import('@/types').DailyNutritionSummary>>;
@@ -183,6 +207,8 @@ export interface INutritionService {
   generateGroceryList(userId: string, mealPlanId?: string): Promise<ServiceResult<GroceryList>>;
   getGroceryLists(userId: string): Promise<ServiceResult<GroceryList[]>>;
   logHydration(userId: string, amountMl: number): Promise<ServiceResult<HydrationLog>>;
+  getAdaptiveTargets(userId: string): Promise<ServiceResult<import('@/types/coaching').AdaptiveMacroTargets>>;
+  generateDailyPlan(userId: string, dietaryStyle?: string): Promise<ServiceResult<import('@/types/coaching').DailyMealPlan>>;
   getRecommendations(userId: string): Promise<ServiceResult<NutritionRecommendation[]>>;
 }
 

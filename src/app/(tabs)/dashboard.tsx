@@ -1,18 +1,23 @@
 import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, RefreshControl, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, RefreshControl, StyleSheet, View } from 'react-native';
 
 import { HistoryCard } from '@/components/history/HistoryCard';
 import { Card } from '@/components/layout/Card';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { SectionHeader } from '@/components/layout/SectionHeader';
+import { ProgramDashboardCard } from '@/components/program/ProgramDashboardCard';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Spacing } from '@/constants/theme';
+import { pickDefaultLocation } from '@/constants/trainingProfile';
 import { useAuth } from '@/hooks/useAuth';
+import { useWorkoutLocations } from '@/hooks/useWorkoutLocations';
 import { aiService } from '@/services/aiService';
 import { analyticsService } from '@/services/analyticsService';
-import type { DashboardSummary } from '@/types';
+import { trainingService } from '@/services/trainingService';
+import { useWorkoutSession } from '@/state/workout/WorkoutSessionContext';
+import type { DashboardSummary, PlannedWorkout, ProgramDashboard } from '@/types';
 
 function kgToLbs(kg?: number): string {
   if (!kg) return '—';
@@ -21,14 +26,23 @@ function kgToLbs(kg?: number): string {
 
 export default function DashboardScreen() {
   const { user } = useAuth();
+  const { startSessionFromPlanned } = useWorkoutSession();
+  const { locations, selectedId } = useWorkoutLocations(user?.id);
   const [data, setData] = useState<DashboardSummary | null>(null);
+  const [program, setProgram] = useState<ProgramDashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [adapting, setAdapting] = useState(false);
+  const [startingWorkout, setStartingWorkout] = useState(false);
 
   const load = useCallback(async () => {
     if (!user) return;
-    const result = await analyticsService.getDashboard(user.id);
-    if (result.success) setData(result.data);
+    const [dashResult, programResult] = await Promise.all([
+      analyticsService.getDashboard(user.id),
+      trainingService.getDashboard(user.id),
+    ]);
+    if (dashResult.success) setData(dashResult.data);
+    if (programResult.success) setProgram(programResult.data);
     setLoading(false);
     setRefreshing(false);
   }, [user]);
@@ -41,6 +55,33 @@ export default function DashboardScreen() {
     if (!user) return;
     await aiService.refreshCoaching(user.id);
     router.push('/(tabs)/coaching');
+  }
+
+  async function handleAdaptProgram() {
+    if (!user) return;
+    setAdapting(true);
+    await trainingService.adaptProgram(user.id);
+    setAdapting(false);
+    load();
+  }
+
+  async function handleStartNextWorkout(planned: PlannedWorkout) {
+    if (!user) return;
+    const location = pickDefaultLocation(locations, selectedId);
+    setStartingWorkout(true);
+    const started = await startSessionFromPlanned(planned.id, {
+      name: planned.name,
+      gymName: location?.name ?? user.primaryGymName ?? undefined,
+      trainingLocation: location?.locationType ?? user.trainingLocation,
+      workoutLocationId: location?.id,
+    });
+    setStartingWorkout(false);
+
+    if (started) {
+      router.push('/(tabs)/workout');
+      return;
+    }
+    Alert.alert('Could not start workout', 'Unable to start the planned workout session.');
   }
 
   if (loading) {
@@ -60,6 +101,14 @@ export default function DashboardScreen() {
         </AppText>
         <AppText variant="title">Welcome{user?.displayName ? `, ${user.displayName.split(' ')[0]}` : ''}</AppText>
       </View>
+
+      <ProgramDashboardCard
+        dashboard={program}
+        onAdapt={handleAdaptProgram}
+        onStartNextWorkout={handleStartNextWorkout}
+        startingWorkout={startingWorkout}
+        adapting={adapting}
+      />
 
       <View style={styles.statsGrid}>
         <Card style={styles.statCard}>

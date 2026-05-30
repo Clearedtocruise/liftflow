@@ -67,11 +67,31 @@ create table public.profiles (
   preferred_units text not null default 'imperial' check (preferred_units in ('imperial', 'metric')),
   confirmation_mode public.confirmation_mode not null default 'smart',
   timezone text default 'UTC',
+  training_location text check (training_location in ('home_gym', 'commercial_gym')),
+  primary_gym_name text,
+  available_equipment text[] not null default '{}',
+  primary_training_goal text check (primary_training_goal in ('fat_loss', 'muscle_gain', 'strength', 'general_fitness')),
   onboarding_completed boolean not null default false,
   metadata jsonb not null default '{}',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   deleted_at timestamptz
+);
+
+create table public.workout_locations (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  name text not null,
+  location_type text not null check (location_type in ('home_gym', 'commercial_gym')),
+  available_equipment text[] not null default '{}',
+  is_default boolean not null default false,
+  sort_order integer not null default 0,
+  notes text,
+  latitude double precision,
+  longitude double precision,
+  radius_meters integer not null default 150,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
 
 create table public.user_preferences (
@@ -807,7 +827,7 @@ do $$
 declare
   tbl text;
   tables text[] := array[
-    'profiles', 'user_preferences', 'user_metrics', 'user_devices', 'legal_acceptances',
+    'profiles', 'workout_locations', 'user_preferences', 'user_metrics', 'user_devices', 'legal_acceptances',
     'user_custom_exercises', 'workout_sessions', 'workout_blocks', 'workout_exercises',
     'workout_sets', 'rest_periods', 'workout_density_metrics', 'training_programs',
     'training_phases', 'workout_templates', 'planned_workouts', 'recovery_assessments',
@@ -828,6 +848,7 @@ end $$;
 
 -- Profiles: user owns their row
 create policy "Users manage own profile" on public.profiles for all using (auth.uid() = id);
+create policy "Users manage own workout locations" on public.workout_locations for all using (auth.uid() = user_id);
 
 -- Generic user_id policies (covers most tables)
 create policy "Users manage own preferences" on public.user_preferences for all using (auth.uid() = user_id);

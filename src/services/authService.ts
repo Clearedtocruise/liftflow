@@ -1,6 +1,10 @@
+import * as Linking from 'expo-linking';
+
 import { mapProfile } from '@/lib/db-mappers';
 import { isSupabaseConfigured, supabase } from '@/supabase/client';
 import type { PasswordResetPayload, SignInPayload, SignUpPayload, UserProfile } from '@/types/user';
+
+const PASSWORD_RESET_REDIRECT = Linking.createURL('reset-password');
 
 async function fetchProfile(userId: string, email: string, metadata?: Record<string, unknown>): Promise<UserProfile> {
   const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
@@ -69,8 +73,47 @@ export const authService = {
     if (!isSupabaseConfigured) {
       throw new Error('Supabase is not configured. Add credentials to .env');
     }
-    const { error } = await supabase.auth.resetPasswordForEmail(email);
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: PASSWORD_RESET_REDIRECT,
+    });
     if (error) throw error;
+  },
+
+  async updatePassword(newPassword: string): Promise<void> {
+    if (!isSupabaseConfigured) {
+      throw new Error('Supabase is not configured. Add credentials to .env');
+    }
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) throw error;
+  },
+
+  async deleteAccount(): Promise<void> {
+    if (!isSupabaseConfigured) {
+      throw new Error('Supabase is not configured. Add credentials to .env');
+    }
+
+    const { data: sessionData } = await supabase.auth.getSession();
+    const userId = sessionData.session?.user?.id;
+    if (!userId) throw new Error('Not signed in');
+
+    // Soft-delete profile marker before auth deletion
+    await supabase.from('profiles').update({ deleted_at: new Date().toISOString() }).eq('id', userId);
+
+    const token = (await supabase.auth.getSession()).data.session?.access_token;
+    const response = await fetch(
+      `${process.env.EXPO_PUBLIC_API_URL ?? 'https://liftflow-api.onrender.com'}/api/user/account`,
+      {
+        method: 'DELETE',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      },
+    );
+
+    if (!response.ok) {
+      const body = (await response.json().catch(() => ({}))) as { message?: string };
+      throw new Error(body.message ?? 'Account deletion failed');
+    }
+
+    await supabase.auth.signOut();
   },
 
   async getSession(): Promise<UserProfile | null> {

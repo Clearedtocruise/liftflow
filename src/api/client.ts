@@ -93,6 +93,76 @@ export const api = {
     apiClient.get<import('@/types').SuggestedMuscleGroups>(`/api/training/suggest-muscles?userId=${userId}`, token),
   assessRecovery: (userId: string, token?: string) =>
     apiClient.get<import('@/types').RecoveryAssessment>(`/api/training/recovery?userId=${userId}`, token),
+  submitRecoveryCheckIn: (
+    body: {
+      userId: string;
+      sleepHours?: number;
+      sleepQuality?: number;
+      energyLevel?: number;
+      stressLevel?: number;
+      sorenessLevel?: number;
+    },
+    token?: string,
+  ) => apiClient.post<import('@/types/coaching').DailyRecoveryCheckIn>('/api/training/recovery/check-in', body, token),
+  getRecoveryToday: (userId: string, token?: string) =>
+    apiClient.get<Record<string, unknown> | null>(`/api/training/recovery/today?userId=${userId}`, token),
+  getRecoveryTrend: (userId: string, token?: string) =>
+    apiClient.get<import('@/types/coaching').RecoveryTrendPoint[]>(`/api/training/recovery/trend?userId=${userId}`, token),
+  submitWeeklyCheckIn: (
+    body: {
+      userId: string;
+      weightKg?: number;
+      waistCm?: number;
+      compliancePct?: number;
+      energyScore?: number;
+      sleepScore?: number;
+    },
+    token?: string,
+  ) => apiClient.post<import('@/types/coaching').WeeklyCoachCheckIn>('/api/training/weekly-check-in', body, token),
+  getWeeklyCheckInTrend: (userId: string, token?: string) =>
+    apiClient.get<import('@/types/coaching').WeeklyCoachCheckIn[]>(
+      `/api/training/weekly-check-in/trend?userId=${userId}`,
+      token,
+    ),
+  getLimitations: (userId: string, token?: string) =>
+    apiClient.get<import('@/types/coaching').TrainingLimitation[]>(
+      `/api/training/limitations?userId=${userId}`,
+      token,
+    ),
+  createLimitation: (body: Record<string, unknown>, token?: string) =>
+    apiClient.post<import('@/types/coaching').TrainingLimitation>('/api/training/limitations', body, token),
+  getAdaptiveMacroTargets: (userId: string, token?: string) =>
+    apiClient.post<import('@/types/coaching').AdaptiveMacroTargets>(
+      '/api/nutrition/adaptive-targets',
+      { userId },
+      token,
+    ),
+  generateDailyMealPlan: (
+    body: { userId: string; date?: string; dietaryStyle?: string },
+    token?: string,
+  ) => apiClient.post<import('@/types/coaching').DailyMealPlan>('/api/nutrition/daily-plan', body, token),
+
+  generateProgram: (body: import('@/types').CreateProgramPayload & { userId: string }, token?: string) =>
+    apiClient.post<{ program: Record<string, unknown>; plannedCount: number }>(
+      '/api/training/programs/generate',
+      body,
+      token,
+    ),
+  getProgramDashboard: (userId: string, token?: string) =>
+    apiClient.get<Record<string, unknown> | null>(`/api/training/programs/dashboard?userId=${userId}`, token),
+  adaptProgram: (userId: string, token?: string) =>
+    apiClient.post<{ adapted: boolean; changes: string[] }>('/api/training/programs/adapt', { userId }, token),
+  getPlannedWorkoutsRange: (userId: string, from: string, to: string, token?: string) =>
+    apiClient.get<Record<string, unknown>[]>(
+      `/api/training/programs/planned?userId=${userId}&from=${from}&to=${to}`,
+      token,
+    ),
+  reschedulePlannedWorkout: (id: string, scheduledDate: string, token?: string) =>
+    apiClient.request<Record<string, unknown>>(`/api/training/programs/planned/${id}/reschedule`, {
+      method: 'PATCH',
+      body: { scheduledDate },
+      token,
+    }),
 
   // Nutrition
   generateMealPlan: (userId: string, token?: string) =>
@@ -101,4 +171,30 @@ export const api = {
   // Integrations
   syncHealthKit: (token?: string) =>
     apiClient.post<{ synced: number }>('/api/integrations/healthkit/sync', {}, token),
+
+  // Apple Watch workout assistant
+  watchSupportedExercises: () => apiClient.get<{ exercises: string[] }>('/api/watch/supported-exercises'),
+  watchProcessMotion: (
+    body: {
+      exerciseName: string;
+      samples: { recordedAt: number; accelerometer: { x: number; y: number; z: number }; gyroscope?: { x: number; y: number; z: number } }[];
+    },
+    token?: string,
+  ) => apiClient.post<{ detectedReps: number; confidence: number; needsConfirmation: boolean; spokenPrompt?: string }>(
+    '/api/watch/motion',
+    body,
+    token,
+  ),
+  watchVoiceCommand: (
+    body: {
+      transcript: string;
+      exerciseId?: string;
+      exerciseName?: string;
+      currentRep?: number;
+      targetReps?: number;
+      targetSets?: number;
+      setNumber?: number;
+    },
+    token?: string,
+  ) => apiClient.post<{ spokenResponse: string; repCount?: number }>('/api/watch/voice', body, token),
 } as const;

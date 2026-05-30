@@ -1,4 +1,8 @@
+import type { EquipmentId, TrainingGoalId, TrainingLocationId } from '@/constants/trainingProfile';
 import type { BaseEntity, ConfirmationMode, PreferredUnits, TrainingExperience } from './common';
+
+export type TrainingLocation = TrainingLocationId;
+export type TrainingGoal = TrainingGoalId;
 
 export type UserProfile = BaseEntity & {
   email: string;
@@ -14,6 +18,11 @@ export type UserProfile = BaseEntity & {
   preferredUnits: PreferredUnits;
   confirmationMode: ConfirmationMode;
   timezone?: string;
+  trainingLocation?: TrainingLocation;
+  /** User's gym name, e.g. "Gold's Gym Downtown" */
+  primaryGymName?: string;
+  availableEquipment?: EquipmentId[];
+  primaryTrainingGoal?: TrainingGoal;
   onboardingCompleted: boolean;
   updatedAt?: string;
 };

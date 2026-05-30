@@ -32,6 +32,10 @@ type ProfileRow = {
   preferred_units: string;
   confirmation_mode: string;
   timezone: string | null;
+  training_location: string | null;
+  primary_gym_name: string | null;
+  available_equipment: string[] | null;
+  primary_training_goal: string | null;
   onboarding_completed: boolean;
   created_at: string;
   updated_at: string;
@@ -53,6 +57,10 @@ export function mapProfile(row: ProfileRow): UserProfile {
     preferredUnits: row.preferred_units as UserProfile['preferredUnits'],
     confirmationMode: row.confirmation_mode as UserProfile['confirmationMode'],
     timezone: row.timezone ?? undefined,
+    trainingLocation: (row.training_location as UserProfile['trainingLocation']) ?? undefined,
+    primaryGymName: row.primary_gym_name ?? undefined,
+    availableEquipment: (row.available_equipment ?? undefined) as UserProfile['availableEquipment'],
+    primaryTrainingGoal: (row.primary_training_goal as UserProfile['primaryTrainingGoal']) ?? undefined,
     onboardingCompleted: row.onboarding_completed,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -263,12 +271,21 @@ export function mapSession(row: SessionRow): WorkoutSession {
   };
 }
 
-export function mapHistoryItem(row: SessionRow): WorkoutHistoryItem {
+type HistoryExerciseRow = {
+  id: string;
+  workout_sets?: Array<{ is_pr: boolean | null }> | null;
+};
+
+export function mapHistoryItem(row: SessionRow & { workout_exercises?: HistoryExerciseRow[] | null }): WorkoutHistoryItem {
   const durationMinutes = row.duration_seconds
     ? Math.round(row.duration_seconds / 60)
     : row.ended_at
       ? Math.max(1, Math.round((new Date(row.ended_at).getTime() - new Date(row.started_at).getTime()) / 60000))
       : 0;
+
+  const prCount = (row.workout_exercises ?? []).reduce((count, exercise) => {
+    return count + (exercise.workout_sets ?? []).filter((set) => set.is_pr).length;
+  }, 0);
 
   return {
     id: row.id,
@@ -278,6 +295,7 @@ export function mapHistoryItem(row: SessionRow): WorkoutHistoryItem {
     exerciseCount: row.workout_exercises?.length ?? 0,
     totalSets: row.total_sets ?? 0,
     totalVolume: row.total_volume ?? 0,
+    prCount: prCount > 0 ? prCount : undefined,
     status: row.status as WorkoutHistoryItem['status'],
   };
 }

@@ -6,9 +6,10 @@ type CardProps = ViewProps & {
   elevated?: boolean;
   accent?: boolean;
   onPress?: () => void;
+  onLongPress?: () => void;
 };
 
-export function Card({ elevated, accent, onPress, style, children, ...rest }: CardProps) {
+export function Card({ elevated, accent, onPress, onLongPress, style, children, ...rest }: CardProps) {
   const content = (
     <View
       style={[
@@ -22,10 +23,11 @@ export function Card({ elevated, accent, onPress, style, children, ...rest }: Ca
     </View>
   );
 
-  if (onPress) {
+  if (onPress || onLongPress) {
     return (
       <Pressable
         onPress={onPress}
+        onLongPress={onLongPress}
         style={({ pressed }) => [pressed && styles.pressed]}
         accessibilityRole="button">
         {content}

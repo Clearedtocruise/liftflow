@@ -133,8 +133,19 @@ export type CreateSetPayload = {
   durationSeconds?: number;
 };
 
+export type UpdateSetPayload = {
+  weight?: number;
+  reps?: number;
+  type?: SetType;
+  rpe?: number;
+  notes?: string;
+};
+
 export type StartSessionPayload = {
   name: string;
   templateId?: string;
   plannedWorkoutId?: string;
+  gymName?: string;
+  trainingLocation?: string;
+  workoutLocationId?: string;
 };

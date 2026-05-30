@@ -1,5 +1,13 @@
+import { answerSmartCoachQuestion, loadCoachContext } from './coachContext.js';
 import { getOpenAI, hasOpenAI } from './openai.js';
 import { requireAdmin } from './supabase.js';
+import {
+    buildAdaptiveWorkoutPlan,
+    filterExerciseLibraryForPrompt,
+    loadAvailableExercises,
+    loadUserTrainingProfile,
+    type GeneratedWorkoutPlan,
+} from './workoutPlanner.js';
 
 const MUSCLE_GROUPS = ['chest', 'back', 'shoulders', 'legs', 'arms', 'core'] as const;
 
@@ -172,8 +180,18 @@ async function sessionCount(userId: string): Promise<boolean> {
 }
 
 export async function coachResponse(context: string, message: string, userId: string) {
+  const coachCtx = await loadCoachContext(userId);
+  const smartAnswer = answerSmartCoachQuestion(message, coachCtx);
   const recovery = await assessRecovery(userId);
   const muscles = await suggestMuscleGroups(userId);
+
+  if (smartAnswer && !hasOpenAI()) {
+    return {
+      response: `${smartAnswer} (Not medical advice — consult a professional for injury or pain.)`,
+      citations: [],
+      modelVersion: 'heuristic-v2',
+    };
+  }
 
   if (hasOpenAI()) {
     const openai = getOpenAI()!;
@@ -183,17 +201,17 @@ export async function coachResponse(context: string, message: string, userId: st
         {
           role: 'system',
           content:
-            'You are LiftFlow AI coach. Give concise, evidence-based fitness advice. Reference recovery and muscle group data when relevant.',
+            'You are LiftFlow AI coach. Give concise, evidence-based fitness advice. Use workout history, recovery score, limitations, and nutrition data. NEVER diagnose medical conditions. Recommend consulting clinicians for injury/pain.',
         },
         {
           role: 'user',
-          content: `Context: ${context}. Recovery: ${JSON.stringify(recovery)}. Muscles: ${JSON.stringify(muscles)}. Question: ${message}`,
+          content: `Context: ${context}. Coach data: ${JSON.stringify(coachCtx)}. Recovery: ${JSON.stringify(recovery)}. Muscles: ${JSON.stringify(muscles)}. Question: ${message}${smartAnswer ? `. Heuristic hint: ${smartAnswer}` : ''}`,
         },
       ],
     });
 
     return {
-      response: completion.choices[0]?.message?.content ?? 'Continue with your planned training.',
+      response: completion.choices[0]?.message?.content ?? smartAnswer ?? 'Continue with your planned training.',
       citations: [],
       modelVersion: 'gpt-4o-mini',
       tokensUsed: completion.usage?.total_tokens,
@@ -201,9 +219,9 @@ export async function coachResponse(context: string, message: string, userId: st
   }
 
   return {
-    response: `${recovery.aiAnalysis} Suggested focus: ${muscles.primaryGroups.join(', ')}.`,
+    response: smartAnswer ?? `${recovery.aiAnalysis} Suggested focus: ${muscles.primaryGroups.join(', ')}.`,
     citations: [],
-    modelVersion: 'heuristic-v1',
+    modelVersion: 'heuristic-v2',
   };
 }
 
@@ -245,57 +263,31 @@ export function generateWeeklyMealPlan(proteinG = 180, calories = 2400) {
   };
 }
 
-export type GeneratedWorkoutExercise = {
-  name: string;
-  sets: number;
-  reps: string;
-  weightLbs?: number;
-  restSeconds: number;
-  notes?: string;
-};
-
-export type GeneratedWorkoutPlan = {
-  name: string;
-  rationale: string;
-  muscleGroups: string[];
-  exercises: GeneratedWorkoutExercise[];
-  estimatedMinutes: number;
-  aiGenerated: boolean;
-};
+export type { GeneratedWorkoutExercise, GeneratedWorkoutPlan } from './workoutPlanner.js';
 
 export async function generateWorkoutPlan(userId: string): Promise<GeneratedWorkoutPlan> {
-  const db = requireAdmin();
   const muscles = await suggestMuscleGroups(userId);
   const recovery = await assessRecovery(userId);
+  const profile = await loadUserTrainingProfile(userId);
+  const availableExercises = await loadAvailableExercises(userId);
+  const heuristicPlan = await buildAdaptiveWorkoutPlan(userId, muscles.primaryGroups, muscles.rationale);
 
-  const { data: exercises } = await db
-    .from('exercises')
-    .select('name, muscle_groups, equipment')
-    .eq('is_system', true)
-    .limit(16);
-
-  const { data: profile } = await db.from('profiles').select('training_experience, weight_kg').eq('id', userId).maybeSingle();
-
-  const exerciseList = (exercises ?? []).map((e) => `${e.name} (${(e.muscle_groups ?? []).join(', ')})`).join('; ');
-  const experience = profile?.training_experience ?? 'beginner';
-
-  const basePlan: GeneratedWorkoutPlan = {
-    name: `${muscles.primaryGroups.join(' & ')} Workout`,
-    rationale: muscles.rationale,
-    muscleGroups: muscles.primaryGroups,
-    exercises: [
-      { name: 'Barbell Bench Press', sets: 4, reps: '6-8', weightLbs: 135, restSeconds: 120 },
-      { name: 'Barbell Row', sets: 4, reps: '8-10', weightLbs: 115, restSeconds: 90 },
-      { name: 'Overhead Press', sets: 3, reps: '8-10', weightLbs: 65, restSeconds: 90 },
-      { name: 'Romanian Deadlift', sets: 3, reps: '10-12', weightLbs: 135, restSeconds: 90 },
-    ],
-    estimatedMinutes: 55,
-    aiGenerated: false,
-  };
+  if (availableExercises.length === 0) {
+    return {
+      ...heuristicPlan,
+      rationale: `${recovery.aiAnalysis} ${heuristicPlan.rationale}`,
+    };
+  }
 
   if (!hasOpenAI()) {
-    return { ...basePlan, rationale: `${recovery.aiAnalysis} ${muscles.rationale}` };
+    return {
+      ...heuristicPlan,
+      rationale: `${recovery.aiAnalysis} ${heuristicPlan.rationale}`,
+    };
   }
+
+  const allowedNames = new Set(availableExercises.map((e) => e.name.toLowerCase()));
+  const exerciseList = filterExerciseLibraryForPrompt(availableExercises);
 
   const openai = getOpenAI()!;
   const completion = await openai.chat.completions.create({
@@ -303,7 +295,7 @@ export async function generateWorkoutPlan(userId: string): Promise<GeneratedWork
     messages: [
       {
         role: 'system',
-        content: `You are an expert strength coach. Return JSON: { "name": string, "rationale": string, "muscleGroups": string[], "estimatedMinutes": number, "exercises": [{ "name": string, "sets": number, "reps": string, "weightLbs": number, "restSeconds": number, "notes": string }] }. Use only exercises from the library when possible. Tailor to ${experience} level.`,
+        content: `You are an expert strength coach. Return JSON: { "name": string, "rationale": string, "muscleGroups": string[], "estimatedMinutes": number, "exercises": [{ "name": string, "sets": number, "reps": string, "weightLbs": number, "restSeconds": number, "notes": string }] }. CRITICAL: Use ONLY exercise names from the provided library (exact names). Respect equipment constraints. Prefer exercises NOT repeated from last week when alternatives exist. Goal: ${profile.primaryTrainingGoal}. Experience: ${profile.trainingExperience ?? 'beginner'}.`,
       },
       {
         role: 'user',
@@ -311,8 +303,12 @@ export async function generateWorkoutPlan(userId: string): Promise<GeneratedWork
           targetMuscles: muscles.primaryGroups,
           recovery: recovery.status,
           recoveryAdvice: recovery.aiAnalysis,
+          trainingGoal: profile.primaryTrainingGoal,
+          trainingLocation: profile.trainingLocation,
+          availableEquipment: profile.availableEquipment,
           exerciseLibrary: exerciseList,
-          bodyWeightKg: profile?.weight_kg,
+          suggestedRotation: heuristicPlan.exercises.map((e) => e.name),
+          bodyWeightKg: profile.weightKg,
         }),
       },
     ],
@@ -321,13 +317,24 @@ export async function generateWorkoutPlan(userId: string): Promise<GeneratedWork
 
   try {
     const parsed = JSON.parse(completion.choices[0]?.message?.content ?? '{}') as GeneratedWorkoutPlan;
-    if (parsed.exercises?.length) {
+    const filtered =
+      parsed.exercises?.filter((e) => allowedNames.has(e.name.toLowerCase())) ?? [];
+
+    if (filtered.length >= 3) {
       return {
-        name: parsed.name ?? basePlan.name,
-        rationale: parsed.rationale ?? muscles.rationale,
+        name: parsed.name ?? heuristicPlan.name,
+        rationale: parsed.rationale ?? heuristicPlan.rationale,
         muscleGroups: parsed.muscleGroups ?? muscles.primaryGroups,
-        exercises: parsed.exercises,
-        estimatedMinutes: parsed.estimatedMinutes ?? 55,
+        exercises: filtered.map((exercise, index) => ({
+          ...exercise,
+          ...(heuristicPlan.exercises[index]?.weightLbs && !exercise.weightLbs
+            ? { weightLbs: heuristicPlan.exercises[index].weightLbs }
+            : {}),
+          ...(heuristicPlan.exercises[index]?.notes && !exercise.notes
+            ? { notes: heuristicPlan.exercises[index].notes }
+            : {}),
+        })),
+        estimatedMinutes: parsed.estimatedMinutes ?? heuristicPlan.estimatedMinutes,
         aiGenerated: true,
       };
     }
@@ -335,7 +342,11 @@ export async function generateWorkoutPlan(userId: string): Promise<GeneratedWork
     // fall through
   }
 
-  return { ...basePlan, aiGenerated: true, rationale: muscles.rationale };
+  return {
+    ...heuristicPlan,
+    aiGenerated: true,
+    rationale: `${recovery.aiAnalysis} ${heuristicPlan.rationale}`,
+  };
 }
 
 export async function synthesizeSpeech(text: string): Promise<Buffer | null> {

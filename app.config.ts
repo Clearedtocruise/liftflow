@@ -20,6 +20,8 @@ const config: ExpoConfig = {
       NSPhotoLibraryUsageDescription: 'LiftFlow saves progress photos to track your transformation.',
       NSHealthShareUsageDescription: 'LiftFlow reads steps, weight, heart rate, and workouts from Apple Health to personalize coaching.',
       NSHealthUpdateUsageDescription: 'LiftFlow may write workout data to Apple Health when you log sessions.',
+      NSLocationWhenInUseUsageDescription:
+        'LiftFlow uses your location to detect when you arrive at a saved gym and suggest starting a workout.',
       ITSAppUsesNonExemptEncryption: false,
     },
   },
@@ -27,6 +29,8 @@ const config: ExpoConfig = {
     package: 'com.liftflow.app',
     versionCode: 1,
     permissions: [
+      'android.permission.ACCESS_COARSE_LOCATION',
+      'android.permission.ACCESS_FINE_LOCATION',
       'android.permission.health.READ_STEPS',
       'android.permission.health.READ_WEIGHT',
       'android.permission.health.READ_HEART_RATE',
@@ -55,6 +59,13 @@ const config: ExpoConfig = {
       {
         NSHealthShareUsageDescription: 'LiftFlow reads steps, weight, heart rate, and workouts from Apple Health.',
         NSHealthUpdateUsageDescription: 'LiftFlow writes workout data to Apple Health when you log sessions.',
+      },
+    ],
+    [
+      'expo-location',
+      {
+        locationWhenInUsePermission:
+          'LiftFlow uses your location to detect when you arrive at a saved gym and suggest starting a workout.',
       },
     ],
     [

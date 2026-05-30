@@ -11,6 +11,8 @@ type AuthContextValue = {
   signUp: (payload: SignUpPayload) => Promise<void>;
   signOut: () => Promise<void>;
   resetPassword: (payload: PasswordResetPayload) => Promise<void>;
+  updatePassword: (password: string) => Promise<void>;
+  deleteAccount: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 };
 
@@ -54,6 +56,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await authService.resetPassword(payload);
   }, []);
 
+  const updatePassword = useCallback(async (password: string) => {
+    await authService.updatePassword(password);
+  }, []);
+
+  const deleteAccount = useCallback(async () => {
+    await authService.deleteAccount();
+    setUser(null);
+  }, []);
+
   const refreshProfile = useCallback(async () => {
     const profile = await authService.getSession();
     setUser(profile);
@@ -68,9 +79,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signUp,
       signOut,
       resetPassword,
+      updatePassword,
+      deleteAccount,
       refreshProfile,
     }),
-    [user, isLoading, signIn, signUp, signOut, resetPassword, refreshProfile],
+    [user, isLoading, signIn, signUp, signOut, resetPassword, updatePassword, deleteAccount, refreshProfile],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

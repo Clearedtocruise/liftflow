@@ -5,7 +5,7 @@ import { LiftFlowColors } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 
 export default function Index() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { user, isAuthenticated, isLoading } = useAuth();
 
   if (isLoading) {
     return (
@@ -16,6 +16,9 @@ export default function Index() {
   }
 
   if (isAuthenticated) {
+    if (user && !user.onboardingCompleted) {
+      return <Redirect href="/(onboarding)/legal" />;
+    }
     return <Redirect href="/(tabs)/dashboard" />;
   }
 

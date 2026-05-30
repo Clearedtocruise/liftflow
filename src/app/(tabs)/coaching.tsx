@@ -1,26 +1,70 @@
+import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, RefreshControl, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 
+import { RecoveryCheckInForm } from '@/components/coaching/RecoveryCheckInForm';
+import { RecoveryScoreCard } from '@/components/coaching/RecoveryScoreCard';
+import { VoiceCoachPanel } from '@/components/coaching/VoiceCoachPanel';
 import { Card } from '@/components/layout/Card';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { SectionHeader } from '@/components/layout/SectionHeader';
+import { PremiumGate } from '@/components/subscription/PremiumGate';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
+import { useSubscription } from '@/hooks/useSubscription';
 import { aiService } from '@/services/aiService';
+import { nutritionService } from '@/services/nutritionService';
+import { recoveryService } from '@/services/recoveryService';
 import type { AIRecommendation } from '@/types';
+import type { DailyRecoveryCheckIn, RecoveryTrendPoint } from '@/types/coaching';
+
+const SMART_QUESTIONS = [
+  'What weight should I use?',
+  'What did I do last time?',
+  'Why did you choose this exercise?',
+  'What should I eat after this workout?',
+  'Why is today a recovery day?',
+  'Why did my calories change?',
+  'Why did my workout change?',
+  'Why am I in a deload?',
+  'What is my next phase?',
+];
 
 export default function CoachingScreen() {
   const { user } = useAuth();
+  const { isPremium } = useSubscription();
   const [recommendations, setRecommendations] = useState<AIRecommendation[]>([]);
+  const [checkIn, setCheckIn] = useState<DailyRecoveryCheckIn | null>(null);
+  const [trend, setTrend] = useState<RecoveryTrendPoint[]>([]);
+  const [macroRationale, setMacroRationale] = useState<string | null>(null);
+  const [macroError, setMacroError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [generatedWorkout, setGeneratedWorkout] = useState<string | null>(null);
+  const [generating, setGenerating] = useState(false);
+  const [coachAnswer, setCoachAnswer] = useState<string | null>(null);
+  const [asking, setAsking] = useState(false);
 
   const load = useCallback(async () => {
     if (!user) return;
-    const result = await aiService.getRecommendations(user.id);
-    if (result.success) setRecommendations(result.data);
+    const [recs, today, trendRes, macros] = await Promise.all([
+      aiService.getRecommendations(user.id),
+      recoveryService.getToday(user.id),
+      recoveryService.getTrend(user.id),
+      nutritionService.getAdaptiveTargets(user.id),
+    ]);
+    if (recs.success) setRecommendations(recs.data);
+    if (today.success && today.data) setCheckIn(today.data);
+    if (trendRes.success) setTrend(trendRes.data);
+    if (macros.success) {
+      setMacroRationale(macros.data.rationale);
+      setMacroError(null);
+    } else {
+      setMacroRationale(null);
+      setMacroError(macros.error || 'Adaptive nutrition is unavailable. Check your connection or try again later.');
+    }
     setLoading(false);
     setRefreshing(false);
   }, [user]);
@@ -30,10 +74,50 @@ export default function CoachingScreen() {
   }, [load]);
 
   async function handleRefresh() {
-    if (!user) return;
+    if (!user || !isPremium) return;
     setRefreshing(true);
     await aiService.refreshCoaching(user.id);
     load();
+  }
+
+  async function handleGenerateWorkout() {
+    if (!user) return;
+    setGenerating(true);
+    const result = await aiService.generateWorkoutPlan(user.id);
+    setGenerating(false);
+    if (result.success) {
+      const exercises = (result.data.metadata as { exercises?: { name: string; sets: number; reps: string }[] })?.exercises ?? [];
+      const summary = exercises.map((e) => `${e.name}: ${e.sets}×${e.reps}`).join('\n');
+      setGeneratedWorkout(`${result.data.name}\n\n${result.data.aiRationale}\n\n${summary}`);
+      Alert.alert('Workout generated', result.data.name);
+    } else {
+      Alert.alert('Generation failed', result.error ?? '');
+    }
+  }
+
+  async function handleSmartQuestion(question: string) {
+    if (!user) return;
+    setAsking(true);
+    const result = await aiService.askCoach(user.id, { context: 'general', message: question });
+    setAsking(false);
+    if (result.success) setCoachAnswer(result.data.response);
+    else Alert.alert('Coach unavailable', result.error);
+  }
+
+  async function handleDailyMealPlan() {
+    if (!user) return;
+    const result = await nutritionService.generateDailyPlan(user.id, 'high_protein');
+    if (result.success) {
+      Alert.alert(
+        'Daily meal plan',
+        `${result.data.meals.map((m) => `${m.mealType}: ${m.name}`).join('\n')}\n\n${result.data.rationale}`,
+      );
+    } else {
+      Alert.alert(
+        'Meal plan unavailable',
+        result.error || 'Could not generate your daily meal plan. The nutrition service may be offline.',
+      );
+    }
   }
 
   if (loading) {
@@ -46,7 +130,9 @@ export default function CoachingScreen() {
 
   return (
     <ScreenContainer
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={LiftFlowColors.accent} />}>
+      refreshControl={
+        isPremium ? <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={LiftFlowColors.accent} /> : undefined
+      }>
       <View style={styles.header}>
         <AppText variant="title">AI Coaching</AppText>
         <AppText variant="body" color="textSecondary">
@@ -54,13 +140,94 @@ export default function CoachingScreen() {
         </AppText>
       </View>
 
-      <PrimaryButton label="Refresh Recommendations" onPress={handleRefresh} variant="secondary" />
+      <RecoveryScoreCard checkIn={checkIn} trend={trend} />
 
-      <SectionHeader title="Recommendations" subtitle="Based on your training load" />
+      <View style={styles.linkRow}>
+        <PrimaryButton label="Daily Check-in" onPress={() => router.push('/(features)/recovery-check-in')} variant="secondary" />
+        <PrimaryButton label="Weekly Check-in" onPress={() => router.push('/(features)/weekly-check-in')} variant="secondary" />
+        <PrimaryButton label="Limitations" onPress={() => router.push('/(features)/limitations')} variant="secondary" />
+      </View>
+
+      {!checkIn ? <RecoveryCheckInForm userId={user!.id} onComplete={(r) => { setCheckIn(r); load(); }} /> : null}
+
+      {macroRationale ? (
+        <Card style={styles.macroCard}>
+          <AppText variant="caption" color="accent">
+            Workout-aware nutrition
+          </AppText>
+          <AppText variant="footnote" color="textSecondary">
+            {macroRationale}
+          </AppText>
+          <PrimaryButton label="Generate today's meals" onPress={handleDailyMealPlan} variant="secondary" />
+        </Card>
+      ) : macroError ? (
+        <Card style={styles.macroCard}>
+          <AppText variant="caption" color="accent">
+            Workout-aware nutrition
+          </AppText>
+          <AppText variant="footnote" color="textSecondary">
+            {macroError}
+          </AppText>
+          <PrimaryButton
+            label="Retry nutrition targets"
+            onPress={() => {
+              setLoading(true);
+              load();
+            }}
+            variant="secondary"
+          />
+        </Card>
+      ) : null}
+
+      <SectionHeader title="Smart Coach Questions" />
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.questionRow}>
+        {SMART_QUESTIONS.map((q) => (
+          <Pressable key={q} style={styles.questionChip} onPress={() => handleSmartQuestion(q)} disabled={asking}>
+            <AppText variant="caption">{q}</AppText>
+          </Pressable>
+        ))}
+      </ScrollView>
+      {coachAnswer ? (
+        <Card style={styles.answerCard}>
+          <AppText variant="body">{coachAnswer}</AppText>
+        </Card>
+      ) : null}
+
+      <PremiumGate featureName="Voice coaching">
+        <VoiceCoachPanel />
+      </PremiumGate>
+
+      <PremiumGate featureName="AI workout generation">
+        <Card style={styles.actionCard}>
+          <AppText variant="bodyBold">Generate today&apos;s workout</AppText>
+          <AppText variant="caption" color="textSecondary">
+            Uses recovery score, limitations, and exercise history.
+          </AppText>
+          <PrimaryButton
+            label={generating ? 'Generating…' : 'Generate AI Workout'}
+            onPress={handleGenerateWorkout}
+            variant="secondary"
+            disabled={generating}
+          />
+          {generatedWorkout ? (
+            <AppText variant="footnote" color="textSecondary" style={styles.workoutPreview}>
+              {generatedWorkout}
+            </AppText>
+          ) : null}
+        </Card>
+      </PremiumGate>
+
+      {isPremium ? (
+        <PrimaryButton label="Refresh Recommendations" onPress={handleRefresh} variant="secondary" />
+      ) : (
+        <PremiumGate featureName="AI recommendations refresh" />
+      )}
+
+      <SectionHeader title="Recommendations" subtitle="Based on recovery, load, and goals" />
 
       {recommendations.length === 0 ? (
         <AppText variant="body" color="textSecondary">
-          Complete a few workouts to unlock personalized coaching.
+          Complete a check-in and a few workouts to unlock personalized coaching.
         </AppText>
       ) : (
         recommendations.map((rec) => (
@@ -91,12 +258,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: LiftFlowColors.background,
   },
-  header: {
-    gap: Spacing.xs,
-    marginBottom: Spacing.xxl,
+  header: { gap: Spacing.xs, marginBottom: Spacing.xxl },
+  linkRow: { gap: Spacing.sm, marginBottom: Spacing.xl },
+  macroCard: { gap: Spacing.sm, marginBottom: Spacing.xl },
+  questionRow: { gap: Spacing.sm, marginBottom: Spacing.md },
+  questionChip: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: 999,
+    backgroundColor: LiftFlowColors.surfaceElevated,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: LiftFlowColors.border,
   },
-  recCard: {
-    gap: Spacing.sm,
-    marginBottom: Spacing.md,
-  },
+  answerCard: { marginBottom: Spacing.xl },
+  recCard: { gap: Spacing.sm, marginBottom: Spacing.md },
+  actionCard: { gap: Spacing.sm, marginBottom: Spacing.xl },
+  workoutPreview: { marginTop: Spacing.sm, lineHeight: 18 },
 });

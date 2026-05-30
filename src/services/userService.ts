@@ -29,6 +29,10 @@ export const userService: IUserService = {
       if (updates.preferredUnits !== undefined) payload.preferred_units = updates.preferredUnits;
       if (updates.confirmationMode !== undefined) payload.confirmation_mode = updates.confirmationMode;
       if (updates.timezone !== undefined) payload.timezone = updates.timezone;
+      if (updates.trainingLocation !== undefined) payload.training_location = updates.trainingLocation;
+      if (updates.primaryGymName !== undefined) payload.primary_gym_name = updates.primaryGymName;
+      if (updates.availableEquipment !== undefined) payload.available_equipment = updates.availableEquipment;
+      if (updates.primaryTrainingGoal !== undefined) payload.primary_training_goal = updates.primaryTrainingGoal;
       if (updates.onboardingCompleted !== undefined) payload.onboarding_completed = updates.onboardingCompleted;
 
       const { data, error } = await supabase.from('profiles').update(payload).eq('id', userId).select('*').single();
