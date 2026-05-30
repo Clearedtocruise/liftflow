@@ -1,41 +1,62 @@
-import { router } from 'expo-router';
-import { useState } from 'react';
-import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { AuthFormContainer } from '@/components/auth/AuthFormContainer';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { TextField } from '@/components/layout/TextField';
 import { AppText, textStyles } from '@/components/ui/AppText';
 import { Spacing } from '@/constants/theme';
+import { mapAuthError } from '@/lib/authErrors';
 import { useAuth } from '@/hooks/useAuth';
 
 export default function LoginScreen() {
   const { signIn } = useAuth();
+  const params = useLocalSearchParams<{ verified?: string; authError?: string }>();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [banner, setBanner] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (params.verified === '1') {
+      setBanner('Email verified. You can now sign in.');
+    }
+    if (params.authError) {
+      setError(String(params.authError));
+    }
+  }, [params.authError, params.verified]);
 
   async function handleLogin() {
+    if (loading) return;
+
     if (!email || !password) {
-      Alert.alert('Missing fields', 'Enter your email and password.');
+      setError('Enter your email and password.');
       return;
     }
 
+    setError(null);
+    setBanner(null);
     setLoading(true);
     try {
       await signIn({ email, password });
-      router.replace('/(tabs)/workout');
-    } catch {
-      Alert.alert('Sign in failed', 'Check your credentials and try again.');
+      router.replace('/');
+    } catch (err) {
+      setError(mapAuthError(err, 'login'));
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <AuthFormContainer
-      title="LiftFlow"
-      subtitle="Your intelligent workout companion. Log in to continue.">
+    <AuthFormContainer title="LiftFlow" subtitle="Your intelligent workout companion. Log in to continue.">
+      {banner ? (
+        <AppText variant="footnote" color="accent" style={styles.banner}>
+          {banner}
+        </AppText>
+      ) : null}
+
       <TextField
         label="Email"
         value={email}
@@ -44,6 +65,7 @@ export default function LoginScreen() {
         textContentType="emailAddress"
         autoComplete="email"
         placeholder="you@example.com"
+        editable={!loading}
       />
       <TextField
         label="Password"
@@ -53,21 +75,28 @@ export default function LoginScreen() {
         textContentType="password"
         autoComplete="password"
         placeholder="••••••••"
+        editable={!loading}
       />
 
-      <Pressable onPress={() => router.push('/(auth)/forgot-password')} style={styles.forgot}>
+      {error ? (
+        <AppText variant="footnote" color="error" style={styles.error}>
+          {error}
+        </AppText>
+      ) : null}
+
+      <Pressable onPress={() => router.push('/(auth)/forgot-password')} style={styles.forgot} disabled={loading}>
         <AppText variant="footnote" style={textStyles.link}>
           Forgot password?
         </AppText>
       </Pressable>
 
-      <PrimaryButton label="Log In" onPress={handleLogin} loading={loading} size="large" />
+      <PrimaryButton label="Log In" onPress={handleLogin} loading={loading} disabled={loading} size="large" />
 
       <View style={styles.footer}>
         <AppText variant="footnote" color="textSecondary">
           New to LiftFlow?{' '}
         </AppText>
-        <Pressable onPress={() => router.push('/(auth)/signup')}>
+        <Pressable onPress={() => router.push('/(auth)/signup')} disabled={loading}>
           <AppText variant="footnote" style={textStyles.link}>
             Create account
           </AppText>
@@ -78,6 +107,12 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
+  banner: {
+    lineHeight: 20,
+  },
+  error: {
+    lineHeight: 20,
+  },
   forgot: {
     alignSelf: 'flex-end',
     marginTop: -Spacing.sm,

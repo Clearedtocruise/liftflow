@@ -1,10 +1,12 @@
-import * as Linking from 'expo-linking';
-
+import { mapAuthError } from '@/lib/authErrors';
+import { getEmailConfirmRedirectUrl, getPasswordResetRedirectUrl } from '@/lib/authRedirects';
 import { mapProfile } from '@/lib/db-mappers';
 import { isSupabaseConfigured, supabase } from '@/supabase/client';
 import type { PasswordResetPayload, SignInPayload, SignUpPayload, UserProfile } from '@/types/user';
 
-const PASSWORD_RESET_REDIRECT = Linking.createURL('reset-password');
+export type SignUpResult =
+  | { status: 'session'; profile: UserProfile }
+  | { status: 'email_confirmation'; email: string };
 
 async function fetchProfile(userId: string, email: string, metadata?: Record<string, unknown>): Promise<UserProfile> {
   const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
@@ -25,7 +27,7 @@ async function fetchProfile(userId: string, email: string, metadata?: Record<str
 }
 
 export const authService = {
-  async signUp({ email, password, displayName }: SignUpPayload): Promise<UserProfile> {
+  async signUp({ email, password, displayName }: SignUpPayload): Promise<SignUpResult> {
     if (!isSupabaseConfigured) {
       throw new Error('Supabase is not configured. Add credentials to .env');
     }
@@ -33,23 +35,29 @@ export const authService = {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { display_name: displayName } },
+      options: {
+        data: { display_name: displayName },
+        emailRedirectTo: getEmailConfirmRedirectUrl(),
+      },
     });
 
-    if (error) throw error;
-    if (!data.user) throw new Error('Sign up failed');
+    if (error) {
+      throw Object.assign(error, { message: mapAuthError(error, 'signup') });
+    }
+    if (!data.user) {
+      throw new Error(mapAuthError(new Error('Sign up failed'), 'signup'));
+    }
 
     if (!data.session) {
-      throw new Error(
-        'Account created. Check your email to confirm, or disable email confirmation in Supabase Auth settings for testing.',
-      );
+      return { status: 'email_confirmation', email };
     }
 
     if (displayName) {
       await supabase.from('profiles').update({ display_name: displayName }).eq('id', data.user.id);
     }
 
-    return fetchProfile(data.user.id, data.user.email ?? email, data.user.user_metadata);
+    const profile = await fetchProfile(data.user.id, data.user.email ?? email, data.user.user_metadata);
+    return { status: 'session', profile };
   },
 
   async signIn({ email, password }: SignInPayload): Promise<UserProfile> {
@@ -58,8 +66,12 @@ export const authService = {
     }
 
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw error;
-    if (!data.user) throw new Error('Sign in failed');
+    if (error) {
+      throw Object.assign(error, { message: mapAuthError(error, 'login') });
+    }
+    if (!data.user) {
+      throw new Error(mapAuthError(new Error('Sign in failed'), 'login'));
+    }
 
     return fetchProfile(data.user.id, data.user.email ?? email, data.user.user_metadata);
   },
@@ -74,9 +86,11 @@ export const authService = {
       throw new Error('Supabase is not configured. Add credentials to .env');
     }
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: PASSWORD_RESET_REDIRECT,
+      redirectTo: getPasswordResetRedirectUrl(),
     });
-    if (error) throw error;
+    if (error) {
+      throw Object.assign(error, { message: mapAuthError(error, 'reset') });
+    }
   },
 
   async updatePassword(newPassword: string): Promise<void> {
@@ -96,7 +110,6 @@ export const authService = {
     const userId = sessionData.session?.user?.id;
     if (!userId) throw new Error('Not signed in');
 
-    // Soft-delete profile marker before auth deletion
     await supabase.from('profiles').update({ deleted_at: new Date().toISOString() }).eq('id', userId);
 
     const token = (await supabase.auth.getSession()).data.session?.access_token;

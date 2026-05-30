@@ -1,3 +1,5 @@
+import '@/lib/disableWebErrorOverlay';
+
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { StyleSheet } from 'react-native';

@@ -4,6 +4,7 @@ import './loadEnv.js';
 
 import { hasOpenAI } from './lib/openai.js';
 import { supabaseAdmin } from './lib/supabase.js';
+import { authRouter } from './routes/auth.js';
 import { aiRouter } from './routes/ai.js';
 import { analyticsRouter } from './routes/analytics.js';
 import { bodyRouter } from './routes/body.js';
@@ -30,6 +31,7 @@ app.use(express.json({ limit: '10mb' }));
 
 // Health
 app.use('/health', healthRouter);
+app.use('/auth', authRouter);
 app.use('/legal', legalRouter);
 
 // Legacy parse route (redirect to voice)

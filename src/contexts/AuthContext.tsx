@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
-import { authService } from '@/services/authService';
+import { useAuthDeepLink } from '@/hooks/useAuthDeepLink';
+import { authService, type SignUpResult } from '@/services/authService';
 import type { PasswordResetPayload, SignInPayload, SignUpPayload, UserProfile } from '@/types/user';
 
 type AuthContextValue = {
@@ -8,7 +9,7 @@ type AuthContextValue = {
   isLoading: boolean;
   isAuthenticated: boolean;
   signIn: (payload: SignInPayload) => Promise<void>;
-  signUp: (payload: SignUpPayload) => Promise<void>;
+  signUp: (payload: SignUpPayload) => Promise<SignUpResult>;
   signOut: () => Promise<void>;
   resetPassword: (payload: PasswordResetPayload) => Promise<void>;
   updatePassword: (password: string) => Promise<void>;
@@ -21,6 +22,8 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  useAuthDeepLink();
 
   useEffect(() => {
     authService
@@ -43,8 +46,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signUp = useCallback(async (payload: SignUpPayload) => {
-    const profile = await authService.signUp(payload);
-    setUser(profile);
+    const result = await authService.signUp(payload);
+    if (result.status === 'session') {
+      setUser(result.profile);
+    }
+    return result;
   }, []);
 
   const signOut = useCallback(async () => {

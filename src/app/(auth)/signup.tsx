@@ -1,12 +1,13 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { AuthFormContainer } from '@/components/auth/AuthFormContainer';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { TextField } from '@/components/layout/TextField';
 import { AppText, textStyles } from '@/components/ui/AppText';
 import { Spacing } from '@/constants/theme';
+import { mapAuthError } from '@/lib/authErrors';
 import { useAuth } from '@/hooks/useAuth';
 
 export default function SignUpScreen() {
@@ -15,23 +16,52 @@ export default function SignUpScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [successEmail, setSuccessEmail] = useState<string | null>(null);
 
   async function handleSignUp() {
+    if (loading) return;
+
     if (!email || !password) {
-      Alert.alert('Missing fields', 'Enter your email and password.');
+      setError('Enter your email and password.');
       return;
     }
 
+    setError(null);
     setLoading(true);
     try {
-      await signUp({ email, password, displayName: displayName || undefined });
-      router.replace('/(tabs)/workout');
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Could not create your account. Try again.';
-      Alert.alert('Sign up failed', message);
+      const result = await signUp({ email, password, displayName: displayName || undefined });
+      if (result.status === 'email_confirmation') {
+        setSuccessEmail(result.email);
+        return;
+      }
+      router.replace('/');
+    } catch (err) {
+      setError(mapAuthError(err, 'signup'));
     } finally {
       setLoading(false);
     }
+  }
+
+  if (successEmail) {
+    return (
+      <AuthFormContainer
+        title="Account Created"
+        subtitle="Check your email to verify your account before signing in.">
+        <View style={styles.successBox}>
+          <AppText variant="body" color="textPrimary">
+            We sent a verification link to:
+          </AppText>
+          <AppText variant="bodyBold" color="accent">
+            {successEmail}
+          </AppText>
+          <AppText variant="footnote" color="textSecondary" style={styles.successHint}>
+            Open the link on your phone, then return here to log in. If you do not see the email, check spam.
+          </AppText>
+        </View>
+        <PrimaryButton label="Go to Login" onPress={() => router.replace('/(auth)/login')} size="large" />
+      </AuthFormContainer>
+    );
   }
 
   return (
@@ -44,6 +74,7 @@ export default function SignUpScreen() {
         onChangeText={setDisplayName}
         placeholder="Optional"
         autoComplete="name"
+        editable={!loading}
       />
       <TextField
         label="Email"
@@ -53,6 +84,7 @@ export default function SignUpScreen() {
         textContentType="emailAddress"
         autoComplete="email"
         placeholder="you@example.com"
+        editable={!loading}
       />
       <TextField
         label="Password"
@@ -62,20 +94,27 @@ export default function SignUpScreen() {
         textContentType="newPassword"
         autoComplete="new-password"
         placeholder="At least 8 characters"
+        editable={!loading}
       />
 
+      {error ? (
+        <AppText variant="footnote" color="error" style={styles.error}>
+          {error}
+        </AppText>
+      ) : null}
+
       <AppText variant="caption" color="textTertiary" style={styles.disclaimer}>
-        By creating an account, you agree that LiftFlow provides informational coaching only
-        and is not medical advice. Exercise at your own risk.
+        By creating an account, you agree that LiftFlow provides informational coaching only and is not medical advice.
+        Exercise at your own risk.
       </AppText>
 
-      <PrimaryButton label="Create Account" onPress={handleSignUp} loading={loading} size="large" />
+      <PrimaryButton label="Create Account" onPress={handleSignUp} loading={loading} disabled={loading} size="large" />
 
       <View style={styles.footer}>
         <AppText variant="footnote" color="textSecondary">
           Already have an account?{' '}
         </AppText>
-        <Pressable onPress={() => router.push('/(auth)/login')}>
+        <Pressable onPress={() => router.push('/(auth)/login')} disabled={loading}>
           <AppText variant="footnote" style={textStyles.link}>
             Log in
           </AppText>
@@ -88,6 +127,16 @@ export default function SignUpScreen() {
 const styles = StyleSheet.create({
   disclaimer: {
     lineHeight: 18,
+  },
+  error: {
+    lineHeight: 20,
+  },
+  successBox: {
+    gap: Spacing.sm,
+  },
+  successHint: {
+    lineHeight: 18,
+    marginTop: Spacing.xs,
   },
   footer: {
     flexDirection: 'row',
