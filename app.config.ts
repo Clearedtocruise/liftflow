@@ -15,14 +15,25 @@ const config: ExpoConfig = {
     bundleIdentifier: 'com.liftflow.app',
     buildNumber: '1',
     infoPlist: {
-      NSMicrophoneUsageDescription: 'LiftFlow uses the microphone for voice workout logging.',
-      NSSpeechRecognitionUsageDescription: 'LiftFlow converts speech to workout sets.',
+      NSMicrophoneUsageDescription: 'LiftFlow uses the microphone for voice workout logging and AI coaching.',
+      NSSpeechRecognitionUsageDescription: 'LiftFlow converts speech to workout sets and coaching questions.',
       NSPhotoLibraryUsageDescription: 'LiftFlow saves progress photos to track your transformation.',
+      NSHealthShareUsageDescription: 'LiftFlow reads steps, weight, heart rate, and workouts from Apple Health to personalize coaching.',
+      NSHealthUpdateUsageDescription: 'LiftFlow may write workout data to Apple Health when you log sessions.',
+      ITSAppUsesNonExemptEncryption: false,
     },
   },
   android: {
     package: 'com.liftflow.app',
     versionCode: 1,
+    permissions: [
+      'android.permission.health.READ_STEPS',
+      'android.permission.health.READ_WEIGHT',
+      'android.permission.health.READ_HEART_RATE',
+      'android.permission.health.READ_ACTIVE_CALORIES_BURNED',
+      'android.permission.health.READ_DISTANCE',
+      'android.permission.health.READ_EXERCISE',
+    ],
     adaptiveIcon: {
       backgroundColor: '#E6F4FE',
       foregroundImage: './assets/images/android-icon-foreground.png',
@@ -37,7 +48,23 @@ const config: ExpoConfig = {
   },
   plugins: [
     'expo-router',
+    'expo-dev-client',
     'expo-speech-recognition',
+    [
+      '@kingstinct/react-native-healthkit',
+      {
+        NSHealthShareUsageDescription: 'LiftFlow reads steps, weight, heart rate, and workouts from Apple Health.',
+        NSHealthUpdateUsageDescription: 'LiftFlow writes workout data to Apple Health when you log sessions.',
+      },
+    ],
+    [
+      'expo-notifications',
+      {
+        icon: './assets/images/icon.png',
+        color: '#6366F1',
+        sounds: [],
+      },
+    ],
     [
       'expo-splash-screen',
       {
@@ -55,10 +82,14 @@ const config: ExpoConfig = {
   extra: {
     apiUrl,
     eas: {
-      projectId: process.env.EAS_PROJECT_ID,
+      projectId: '62d95ef4-66d9-4638-8e66-93d27e1fb48d',
     },
+    supportUrl: 'https://liftflow-api.onrender.com/legal/support',
+    privacyPolicyUrl: 'https://liftflow-api.onrender.com/legal/privacy',
+    termsUrl: 'https://liftflow-api.onrender.com/legal/terms',
+    subscriptionTermsUrl: 'https://liftflow-api.onrender.com/legal/subscription-terms',
   },
-  owner: process.env.EXPO_OWNER,
+  owner: 'liftflow1',
 };
 
 export default config;

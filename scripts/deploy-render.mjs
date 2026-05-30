@@ -58,6 +58,12 @@ function buildEnvVars() {
   if (openai && !openai.includes('your-openai-api-key')) {
     vars.push({ key: 'OPENAI_API_KEY', value: openai });
   }
+  const stravaId = env.STRAVA_CLIENT_ID ?? '';
+  const stravaSecret = env.STRAVA_CLIENT_SECRET ?? '';
+  const stravaRedirect = env.STRAVA_REDIRECT_URI ?? 'https://liftflow-api.onrender.com/api/integrations/strava/callback';
+  if (stravaId) vars.push({ key: 'STRAVA_CLIENT_ID', value: stravaId });
+  if (stravaSecret) vars.push({ key: 'STRAVA_CLIENT_SECRET', value: stravaSecret });
+  if (stravaRedirect) vars.push({ key: 'STRAVA_REDIRECT_URI', value: stravaRedirect });
   return vars.filter((v) => v.value);
 }
 
