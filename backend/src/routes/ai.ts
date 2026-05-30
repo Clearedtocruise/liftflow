@@ -5,7 +5,9 @@ import {
     coachResponse,
     generateRecommendations,
     generateWeeklyMealPlan,
+    generateWorkoutPlan,
     suggestMuscleGroups,
+    synthesizeSpeech,
 } from '../lib/aiCoach.js';
 import { requireAdmin } from '../lib/supabase.js';
 
@@ -110,6 +112,59 @@ aiRouter.get('/progression/:exerciseId', async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ message: error instanceof Error ? error.message : 'Progression failed' });
+  }
+});
+
+aiRouter.post('/workout/generate', async (req, res) => {
+  try {
+    const { userId } = req.body as { userId?: string };
+    if (!userId) {
+      res.status(400).json({ message: 'userId is required' });
+      return;
+    }
+
+    const plan = await generateWorkoutPlan(userId);
+    const db = requireAdmin();
+
+    const { data, error } = await db
+      .from('planned_workouts')
+      .insert({
+        user_id: userId,
+        name: plan.name,
+        scheduled_date: new Date().toISOString().slice(0, 10),
+        status: 'planned',
+        suggested_muscle_groups: plan.muscleGroups,
+        ai_rationale: plan.rationale,
+        metadata: { exercises: plan.exercises, estimatedMinutes: plan.estimatedMinutes, aiGenerated: plan.aiGenerated },
+      })
+      .select('*')
+      .single();
+
+    if (error) throw error;
+
+    res.json({ ...plan, id: data.id, scheduledDate: data.scheduled_date });
+  } catch (error) {
+    res.status(500).json({ message: error instanceof Error ? error.message : 'Workout generation failed' });
+  }
+});
+
+aiRouter.post('/tts', async (req, res) => {
+  try {
+    const { text } = req.body as { text?: string };
+    if (!text?.trim()) {
+      res.status(400).json({ message: 'text is required' });
+      return;
+    }
+
+    const audio = await synthesizeSpeech(text.trim());
+    if (!audio) {
+      res.status(503).json({ message: 'OpenAI TTS unavailable — client will use device speech' });
+      return;
+    }
+
+    res.json({ audioBase64: audio.toString('base64'), format: 'mp3' });
+  } catch (error) {
+    res.status(500).json({ message: error instanceof Error ? error.message : 'TTS failed' });
   }
 });
 

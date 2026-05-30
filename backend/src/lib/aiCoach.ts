@@ -244,3 +244,108 @@ export function generateWeeklyMealPlan(proteinG = 180, calories = 2400) {
     meals,
   };
 }
+
+export type GeneratedWorkoutExercise = {
+  name: string;
+  sets: number;
+  reps: string;
+  weightLbs?: number;
+  restSeconds: number;
+  notes?: string;
+};
+
+export type GeneratedWorkoutPlan = {
+  name: string;
+  rationale: string;
+  muscleGroups: string[];
+  exercises: GeneratedWorkoutExercise[];
+  estimatedMinutes: number;
+  aiGenerated: boolean;
+};
+
+export async function generateWorkoutPlan(userId: string): Promise<GeneratedWorkoutPlan> {
+  const db = requireAdmin();
+  const muscles = await suggestMuscleGroups(userId);
+  const recovery = await assessRecovery(userId);
+
+  const { data: exercises } = await db
+    .from('exercises')
+    .select('name, muscle_groups, equipment')
+    .eq('is_system', true)
+    .limit(16);
+
+  const { data: profile } = await db.from('profiles').select('training_experience, weight_kg').eq('id', userId).maybeSingle();
+
+  const exerciseList = (exercises ?? []).map((e) => `${e.name} (${(e.muscle_groups ?? []).join(', ')})`).join('; ');
+  const experience = profile?.training_experience ?? 'beginner';
+
+  const basePlan: GeneratedWorkoutPlan = {
+    name: `${muscles.primaryGroups.join(' & ')} Workout`,
+    rationale: muscles.rationale,
+    muscleGroups: muscles.primaryGroups,
+    exercises: [
+      { name: 'Barbell Bench Press', sets: 4, reps: '6-8', weightLbs: 135, restSeconds: 120 },
+      { name: 'Barbell Row', sets: 4, reps: '8-10', weightLbs: 115, restSeconds: 90 },
+      { name: 'Overhead Press', sets: 3, reps: '8-10', weightLbs: 65, restSeconds: 90 },
+      { name: 'Romanian Deadlift', sets: 3, reps: '10-12', weightLbs: 135, restSeconds: 90 },
+    ],
+    estimatedMinutes: 55,
+    aiGenerated: false,
+  };
+
+  if (!hasOpenAI()) {
+    return { ...basePlan, rationale: `${recovery.aiAnalysis} ${muscles.rationale}` };
+  }
+
+  const openai = getOpenAI()!;
+  const completion = await openai.chat.completions.create({
+    model: 'gpt-4o-mini',
+    messages: [
+      {
+        role: 'system',
+        content: `You are an expert strength coach. Return JSON: { "name": string, "rationale": string, "muscleGroups": string[], "estimatedMinutes": number, "exercises": [{ "name": string, "sets": number, "reps": string, "weightLbs": number, "restSeconds": number, "notes": string }] }. Use only exercises from the library when possible. Tailor to ${experience} level.`,
+      },
+      {
+        role: 'user',
+        content: JSON.stringify({
+          targetMuscles: muscles.primaryGroups,
+          recovery: recovery.status,
+          recoveryAdvice: recovery.aiAnalysis,
+          exerciseLibrary: exerciseList,
+          bodyWeightKg: profile?.weight_kg,
+        }),
+      },
+    ],
+    response_format: { type: 'json_object' },
+  });
+
+  try {
+    const parsed = JSON.parse(completion.choices[0]?.message?.content ?? '{}') as GeneratedWorkoutPlan;
+    if (parsed.exercises?.length) {
+      return {
+        name: parsed.name ?? basePlan.name,
+        rationale: parsed.rationale ?? muscles.rationale,
+        muscleGroups: parsed.muscleGroups ?? muscles.primaryGroups,
+        exercises: parsed.exercises,
+        estimatedMinutes: parsed.estimatedMinutes ?? 55,
+        aiGenerated: true,
+      };
+    }
+  } catch {
+    // fall through
+  }
+
+  return { ...basePlan, aiGenerated: true, rationale: muscles.rationale };
+}
+
+export async function synthesizeSpeech(text: string): Promise<Buffer | null> {
+  if (!hasOpenAI()) return null;
+  const openai = getOpenAI()!;
+  const trimmed = text.slice(0, 4096);
+  const mp3 = await openai.audio.speech.create({
+    model: 'tts-1',
+    voice: 'nova',
+    input: trimmed,
+  });
+  return Buffer.from(await mp3.arrayBuffer());
+}
