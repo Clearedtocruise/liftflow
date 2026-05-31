@@ -34,6 +34,8 @@ export const FEATURES: FeatureDefinition[] = [
   // Phase 1
   { id: 'workout-planning', title: 'Workout Planning', description: 'Schedule and plan upcoming sessions', phase: 'phase1', category: 'training', route: '/(features)/workout-planning', icon: 'calendar' },
   { id: 'training-phases', title: 'Training Phases', description: 'Hypertrophy, strength, deload cycles', phase: 'phase1', category: 'training', route: '/(features)/training-phases', icon: 'chart.line.uptrend.xyaxis' },
+  { id: 'coach-chat', title: 'LiftFlow Coach', description: 'Conversational AI coaching with memory', phase: 'phase1', category: 'ai', route: '/(features)/coach-chat', icon: 'bubble.left.and.bubble.right.fill' },
+  { id: 'nutrition-intelligence', title: 'Nutrition Intelligence', description: 'AI macros, meals, and grocery plans', phase: 'phase1', category: 'nutrition', route: '/(features)/nutrition-intelligence', icon: 'leaf.circle.fill' },
   { id: 'suggested-workouts', title: 'Suggested Workouts', description: 'AI-generated workout recommendations', phase: 'phase1', category: 'ai', route: '/(features)/suggested-workouts', icon: 'sparkles' },
   { id: 'suggested-muscles', title: 'Suggested Muscle Groups', description: 'Recovery-aware muscle targeting', phase: 'phase1', category: 'ai', route: '/(features)/suggested-muscles', icon: 'figure.strengthtraining.traditional' },
   { id: 'recovery-analysis', title: 'Recovery Analysis', description: 'Fatigue and readiness assessment', phase: 'phase1', category: 'ai', route: '/(features)/recovery-analysis', icon: 'bed.double.fill' },
@@ -45,6 +47,7 @@ export const FEATURES: FeatureDefinition[] = [
   { id: 'workout-density', title: 'Workout Density', description: 'Volume and rest efficiency metrics', phase: 'phase1', category: 'analytics', route: '/(features)/workout-density', icon: 'gauge.with.needle.fill' },
 
   // Phase 2
+  { id: 'peak-music', title: 'Peak Music Sync', description: 'Sync song peaks with rest timers', phase: 'phase2', category: 'integrations', route: '/(features)/peak-music-settings', icon: 'music.note' },
   { id: 'cardio-tracking', title: 'Cardio Tracking', description: 'Run, cycle, HIIT, and more', phase: 'phase2', category: 'workout', route: '/(features)/cardio-tracking', icon: 'figure.run' },
   { id: 'heart-rate', title: 'Heart Rate Tracking', description: 'HR during workouts and rest', phase: 'phase2', category: 'integrations', route: '/(features)/heart-rate', icon: 'heart.fill' },
   { id: 'healthkit', title: 'Apple HealthKit', description: 'Sync health and fitness data', phase: 'phase2', category: 'integrations', route: '/(features)/healthkit', icon: 'heart.text.square.fill' },

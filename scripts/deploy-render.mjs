@@ -191,6 +191,33 @@ async function waitForHealth(maxAttempts = 40, intervalMs = 15000) {
   throw new Error(`Health check failed after ${maxAttempts} attempts: ${HEALTH_URL}`);
 }
 
+async function verifyIntelligenceRoutes(baseUrl) {
+  const testUser = '00000000-0000-0000-0000-000000000001';
+  const checks = [
+    [`${baseUrl}/api/training/recovery/intelligence?userId=${testUser}`, 'GET'],
+    [`${baseUrl}/api/nutrition/intelligence?userId=${testUser}`, 'GET'],
+  ];
+  const results = [];
+  for (const [url, method] of checks) {
+    const res = await fetch(url, { method });
+    const text = await res.text();
+    const ok = res.status !== 404 && !text.includes('Cannot GET');
+    results.push({ url, status: res.status, ok });
+  }
+  const converse = await fetch(`${baseUrl}/api/ai/converse`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userId: testUser, message: 'deploy verify' }),
+  });
+  const converseText = await converse.text();
+  results.push({
+    url: '/api/ai/converse',
+    status: converse.status,
+    ok: converse.status !== 404 && !converseText.includes('Cannot POST'),
+  });
+  return results;
+}
+
 async function main() {
   console.log('=== LiftFlow Render Deploy ===\n');
 
@@ -218,15 +245,20 @@ async function main() {
   console.log(`Service URL: https://${service.slug ?? SERVICE_NAME}.onrender.com`);
   console.log(`Health: HTTP ${health.status}`, JSON.stringify(health.data));
 
-  const verifyUrl = `https://${service.slug ?? SERVICE_NAME}.onrender.com/api/training/programs/dashboard?userId=test`;
-  try {
-    const routeCheck = await fetch(verifyUrl);
-    if (routeCheck.status === 404) {
-      console.warn('\nWARNING: Sprint 2/3 routes return 404 on production.');
-      console.warn('Render deploys from GitHub main — push local backend changes, then re-run deploy:render');
-    }
-  } catch {
-    /* ignore */
+  const baseUrl = `https://${service.slug ?? SERVICE_NAME}.onrender.com`;
+  console.log('\nVerifying intelligence routes (may take 1–2 min after deploy)...');
+  await new Promise((r) => setTimeout(r, 30000));
+  const routes = await verifyIntelligenceRoutes(baseUrl);
+  for (const r of routes) {
+    console.log(`  ${r.ok ? '✓' : '✗'} ${r.url} — HTTP ${r.status}`);
+  }
+  const allOk = routes.every((r) => r.ok);
+  if (!allOk) {
+    console.warn('\nWARNING: Intelligence routes return 404 on production.');
+    console.warn('Render deploys from GitHub main — commit + push backend changes, then re-run deploy:render');
+  }
+  if (health.data?.openai === 'missing') {
+    console.warn('\nWARNING: OPENAI_API_KEY not set on Render — add to .env and re-run deploy:render');
   }
 }
 

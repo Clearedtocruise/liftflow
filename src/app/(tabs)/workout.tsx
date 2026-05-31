@@ -10,6 +10,7 @@ import { ManualSetEntry } from '@/components/workout/ManualSetEntry';
 import { MicrophoneButton } from '@/components/workout/MicrophoneButton';
 import { QuickCorrectionButtons } from '@/components/workout/QuickCorrectionButtons';
 import { RestTimerSection } from '@/components/workout/RestTimerSection';
+import { SmartProgressionCard } from '@/components/workout/SmartProgressionCard';
 import { SetEditModal } from '@/components/workout/SetEditModal';
 import { StartWorkoutPrompt } from '@/components/workout/StartWorkoutPrompt';
 import { VoiceConfirmModal } from '@/components/workout/VoiceConfirmModal';
@@ -20,12 +21,18 @@ import { DEFAULT_REST_SECONDS } from '@/constants/workout';
 import { useAuth } from '@/hooks/useAuth';
 import { useNearbyWorkoutLocation } from '@/hooks/useNearbyWorkoutLocation';
 import { useUnits } from '@/hooks/useUnits';
-import { useVoiceLogging } from '@/hooks/useVoiceLogging';
+import { useVoiceRecognition } from '@/hooks/useVoiceRecognition';
+import { useVoiceSettings } from '@/hooks/useVoiceSettings';
 import { useWorkoutLocations } from '@/hooks/useWorkoutLocations';
 import { formatWorkoutWeightForInput, normalizeVoiceWeightToKg, weightStepKg } from '@/lib/unitConversion';
+import { speakVoiceConfirmation } from '@/lib/voice';
 import { coachActivationService } from '@/services/coachActivationService';
+import { conversationalCoachService } from '@/services/conversationalCoachService';
+import { recoveryService } from '@/services/recoveryService';
+import { voiceCoachingService } from '@/services/voiceCoachingService';
+import { workoutRecommendationService } from '@/services/workoutRecommendationService';
 import { socialShareService } from '@/services/socialShareService';
-import { voiceService } from '@/services/voiceService';
+import { processVoiceTranscript, voiceService } from '@/services/voiceService';
 import { useWorkoutSession } from '@/state/workout/WorkoutSessionContext';
 import type { ParsedVoiceCommand, WorkoutSet } from '@/types';
 
@@ -68,39 +75,30 @@ export default function WorkoutScreen() {
   const [starting, setStarting] = useState(false);
   const [editSet, setEditSet] = useState<WorkoutSet | null>(null);
   const [editExerciseName, setEditExerciseName] = useState('');
+  const [activeExerciseName, setActiveExerciseName] = useState<string | undefined>();
+  const [recoveryScore, setRecoveryScore] = useState<number | undefined>();
 
-  const { transcript, isListening, startListening, stopListening, clearTranscript } = useVoiceLogging();
+  const { settings: voiceSettings } = useVoiceSettings(user?.id);
 
-  useEffect(() => {
-    setListening(isListening);
-  }, [isListening, setListening]);
+  const handleParseTranscript = async (text: string) => {
+    if (!user || !session || session.status === 'paused' || !text.trim()) return;
 
-  async function handleStartWorkout() {
-    if (!user) return;
-    const location = pickDefaultLocation(locations, selectedId);
-    setStarting(true);
-    const started = await startSession({
-      name: buildWorkoutSessionName(user, location),
-      gymName: location?.name ?? user.primaryGymName ?? undefined,
-      trainingLocation: location?.locationType ?? user.trainingLocation,
-      workoutLocationId: location?.id,
-    });
-    setStarting(false);
-    if (!started) Alert.alert('Could not start', 'Unable to start workout session.');
-  }
+    const activeEx =
+      activeExerciseName ??
+      session.exercises.find((e) => e.isActive)?.exercise?.name ??
+      session.exercises[session.exercises.length - 1]?.exercise?.name;
 
-  useEffect(() => {
-    if (!isListening && transcript.trim() && session) {
-      handleParseTranscript(transcript);
-    }
-  }, [isListening, transcript]);
-
-  async function handleParseTranscript(text: string) {
-    if (!user || !session || session.status === 'paused') return;
-
-    const parseResult = await voiceService.parseCommand({
+    const parseResult = await processVoiceTranscript(user.id, {
       transcript: text,
       sessionId: session.id,
+      context: {
+        activeExerciseName: activeEx,
+        lastWeight: lastLoggedSet?.weight,
+        lastReps: lastLoggedSet?.reps,
+        preferredWeightUnit: units.preferredWeightUnit,
+        confirmationMode: voiceSettings.confirmationMode,
+        autoLog: voiceSettings.autoLog,
+      },
     });
 
     if (!parseResult.success) {
@@ -129,12 +127,162 @@ export default function WorkoutScreen() {
         await voiceService.confirmEntry(logResult.data.id);
       }
     }
+  };
+
+  const {
+    transcript,
+    interimTranscript,
+    isListening,
+    clearTranscript,
+    handlePressIn,
+    handlePressOut,
+    handleMicPress,
+  } = useVoiceRecognition({
+    enabled: !!session && session.status !== 'paused',
+    inputMode: voiceSettings.inputMode,
+    onFinalTranscript: handleParseTranscript,
+  });
+
+  useEffect(() => {
+    setListening(isListening);
+  }, [isListening, setListening]);
+
+  useEffect(() => {
+    if (!user?.id || !session) return;
+    recoveryService.getIntelligence(user.id).then((result) => {
+      if (result.success) setRecoveryScore(result.data.recoveryScore);
+    });
+  }, [user?.id, session?.id]);
+
+  async function handleStartWorkout() {
+    if (!user) return;
+    const location = pickDefaultLocation(locations, selectedId);
+    setStarting(true);
+    const started = await startSession({
+      name: buildWorkoutSessionName(user, location),
+      gymName: location?.name ?? user.primaryGymName ?? undefined,
+      trainingLocation: location?.locationType ?? user.trainingLocation,
+      workoutLocationId: location?.id,
+    });
+    setStarting(false);
+    if (!started) Alert.alert('Could not start', 'Unable to start workout session.');
   }
 
   async function saveParsedSet(command: ParsedVoiceCommand) {
     if (!user || !session || session.status === 'paused') return;
 
+    if (command.intent === 'undo_last_set' || command.intent === 'delete_last_set') {
+      if (!lastLoggedSet) {
+        Alert.alert('Nothing to undo', 'Log a set first.');
+        return;
+      }
+      await deleteSet(lastLoggedSet.id);
+      speakVoiceConfirmation(command, voiceSettings.voiceFeedback, units.weightLabel);
+      clearTranscript();
+      setConfirmVisible(false);
+      setParsed(null);
+      return;
+    }
+
+    if (command.intent === 'next_set' || command.intent === 'completed_set') {
+      await skipRestTimer();
+      speakVoiceConfirmation(command, voiceSettings.voiceFeedback, units.weightLabel);
+      clearTranscript();
+      setConfirmVisible(false);
+      setParsed(null);
+      return;
+    }
+
+    if (command.intent === 'declare_exercise' && command.exercise) {
+      setActiveExerciseName(command.exercise);
+      await addExerciseByName(command.exercise);
+      speakVoiceConfirmation(command, voiceSettings.voiceFeedback, units.weightLabel);
+      clearTranscript();
+      setConfirmVisible(false);
+      setParsed(null);
+      return;
+    }
+
+    if (command.intent === 'recovery_query') {
+      const intel = await recoveryService.getIntelligence(user.id);
+      if (!intel.success) {
+        Alert.alert('Recovery unavailable', intel.error);
+        return;
+      }
+      const enriched = {
+        ...command,
+        recoveryVoiceLine: intel.data.voiceRecoveryLine,
+      };
+      speakVoiceConfirmation(enriched, voiceSettings.voiceFeedback, units.weightLabel);
+      Alert.alert(
+        'Recovery',
+        `${intel.data.recoveryStatusLabel} · ${intel.data.trainingRecommendationLabel}\n\n${intel.data.voiceRecoveryLine}`,
+      );
+      clearTranscript();
+      setConfirmVisible(false);
+      setParsed(null);
+      return;
+    }
+
+    if (command.intent === 'coach_query') {
+      const coach = await conversationalCoachService.ask(user.id, {
+        context: 'workout',
+        message: command.rawText,
+        includeHistory: true,
+        detailLevel: 'voice',
+      });
+      if (!coach.success) {
+        Alert.alert('Coach unavailable', coach.error);
+        return;
+      }
+      await voiceCoachingService.speakLine(coach.data.voiceLine);
+      Alert.alert('LiftFlow Coach', coach.data.detailedAnswer);
+      clearTranscript();
+      setConfirmVisible(false);
+      setParsed(null);
+      return;
+    }
+
+    if (command.intent === 'train_today_query' || command.intent === 'build_workout') {
+      const rec = await workoutRecommendationService.getDaily(user.id);
+      if (!rec.success) {
+        Alert.alert('Recommendations unavailable', rec.error);
+        return;
+      }
+      const enriched = {
+        ...command,
+        trainTodayVoiceLine: rec.data.voiceTrainTodayLine,
+        buildWorkoutVoiceLine: rec.data.voiceBuildWorkoutLine,
+      };
+      speakVoiceConfirmation(enriched, voiceSettings.voiceFeedback, units.weightLabel);
+      const today = rec.data.today;
+      const exerciseSummary = today.workout
+        ? today.workout.exercises.map((e) => `${e.name} ${e.sets}×${e.reps}`).join('\n')
+        : today.voiceLine;
+      Alert.alert(
+        command.intent === 'build_workout' ? 'Your Workout' : 'Train Today',
+        `${today.sessionLabel ?? (today.isRestDay ? 'Rest Day' : 'Session')}\n\n${exerciseSummary}\n\n${today.whySelected[0] ?? ''}`,
+      );
+      clearTranscript();
+      setConfirmVisible(false);
+      setParsed(null);
+      return;
+    }
+
     if (command.intent === 'feedback' || command.intent === 'adjust_weight') {
+      if (command.targetWeight != null && lastLoggedSet) {
+        const kg = normalizeVoiceWeightToKg(
+          command.targetWeight,
+          command.rawText,
+          command.weightUnit ?? units.preferredWeightUnit,
+        );
+        await updateSet(lastLoggedSet.id, { weight: kg });
+        speakVoiceConfirmation(command, voiceSettings.voiceFeedback, units.weightLabel);
+        clearTranscript();
+        setConfirmVisible(false);
+        setParsed(null);
+        return;
+      }
       const coachNote =
         command.feedback === 'easy'
           ? 'Noted — consider increasing weight on your next set.'
@@ -152,7 +300,7 @@ export default function WorkoutScreen() {
       return;
     }
 
-    let exerciseName = command.exercise;
+    let exerciseName = command.exercise ?? activeExerciseName;
     if (!exerciseName && session.exercises.length > 0) {
       const active = session.exercises.find((e) => e.isActive) ?? session.exercises[session.exercises.length - 1];
       exerciseName = active?.exercise?.name;
@@ -178,12 +326,14 @@ export default function WorkoutScreen() {
     });
 
     if (logged) {
+      setActiveExerciseName(exerciseName);
       if (logged.isPr) {
         Alert.alert(
           'New PR!',
           `${exerciseName}: ${formatWorkoutWeightForInput(logged.weight, units.preferredWeightUnit)} ${units.weightLabel} × ${logged.reps}`,
         );
       }
+      speakVoiceConfirmation(command, voiceSettings.voiceFeedback, units.weightLabel);
       clearTranscript();
       setConfirmVisible(false);
       setParsed(null);
@@ -237,13 +387,12 @@ export default function WorkoutScreen() {
     }
   }
 
-  async function handleMicPress() {
+  async function onMicPress() {
     if (session?.status === 'paused') {
       Alert.alert('Workout paused', 'Resume the workout to log sets.');
       return;
     }
-    if (isListening) stopListening();
-    else await startListening();
+    await handleMicPress();
   }
 
   async function handleConfirm() {
@@ -325,6 +474,16 @@ export default function WorkoutScreen() {
 
   const isPaused = session.status === 'paused';
   const restActive = restSecondsRemaining !== null && restSecondsRemaining > 0;
+  const focusExercise =
+    session.exercises.find((e) => e.exercise?.name === activeExerciseName) ??
+    session.exercises.find((e) => e.isActive) ??
+    session.exercises[session.exercises.length - 1];
+  const focusExerciseSets =
+    focusExercise?.sets.map((s) => ({
+      weightKg: s.weight ?? 0,
+      reps: s.reps ?? 0,
+      setNumber: s.setNumber,
+    })) ?? [];
 
   return (
     <View style={styles.root}>
@@ -366,6 +525,17 @@ export default function WorkoutScreen() {
           onSkip={skipRestTimer}
         />
 
+        {user && focusExercise?.exercise?.id ? (
+          <SmartProgressionCard
+            userId={user.id}
+            exerciseId={focusExercise.exercise.id}
+            exerciseName={focusExercise.exercise.name}
+            sessionId={session.id}
+            currentSessionSets={focusExerciseSets}
+            recoveryScore={recoveryScore}
+          />
+        ) : null}
+
         <SectionHeader title="Manual Log" subtitle="Enter weight, reps, and exercise" />
         <ManualSetEntry
           exercises={session.exercises}
@@ -399,7 +569,15 @@ export default function WorkoutScreen() {
       </ScreenContainer>
 
       <View style={styles.micDock}>
-        <MicrophoneButton onPress={handleMicPress} isListening={isListening} />
+        <MicrophoneButton
+          onPress={onMicPress}
+          onPressIn={handlePressIn}
+          onPressOut={handlePressOut}
+          isListening={isListening}
+          disabled={isPaused}
+          inputMode={voiceSettings.inputMode}
+          interimTranscript={interimTranscript}
+        />
       </View>
 
       <VoiceConfirmModal

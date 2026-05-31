@@ -10,6 +10,7 @@ export { limitationService } from './limitationService';
 export { notificationService } from './notificationService';
 export { nutritionService } from './nutritionService';
 export { recoveryService } from './recoveryService';
+export { progressionService } from './progressionService';
 export { socialShareService } from './socialShareService';
 export { subscriptionService } from './subscriptionService';
 export { trainingService } from './trainingService';

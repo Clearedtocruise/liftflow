@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { router } from 'expo-router';
 
 import { Card } from '@/components/layout/Card';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
@@ -12,6 +13,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { useUnits } from '@/hooks/useUnits';
 import { useVoiceLogging } from '@/hooks/useVoiceLogging';
 import { parseNutritionVoice } from '@/lib/nutritionVoice';
+import { parseVoiceCommandLocal } from '@/lib/voice/parseVoiceCommand';
+import { nutritionIntelligenceService } from '@/services/nutritionIntelligenceService';
 import { nutritionService } from '@/services/nutritionService';
 import type { DailyNutritionSummary, GroceryList, Meal, MealType, NutritionGoals } from '@/types';
 
@@ -80,10 +83,29 @@ export default function NutritionScreen() {
   }
 
   async function handleVoiceLog(text: string) {
-    const parsed = parseNutritionVoice(text);
     clearTranscript();
+    const command = parseVoiceCommandLocal(text, {});
+    if (command?.intent === 'nutrition_query' || command?.intent === 'grocery_list_query') {
+      if (!user) return;
+      const result = await nutritionIntelligenceService.getIntelligence(user.id);
+      if (!result.success) {
+        Alert.alert('Nutrition unavailable', result.error);
+        return;
+      }
+      const line =
+        command.intent === 'grocery_list_query'
+          ? result.data.voiceGroceryLine
+          : result.data.voiceEatTodayLine;
+      Alert.alert(command.intent === 'grocery_list_query' ? 'Shopping list' : 'Eat today', line);
+      return;
+    }
+
+    const parsed = parseNutritionVoice(text);
     if (!parsed) {
-      Alert.alert('Could not parse', 'Try: "Protein shake 250 calories 30g protein" or "Creatine supplement"');
+      Alert.alert(
+        'Could not parse',
+        'Try: "What should I eat today?", "Build my shopping list", or "Protein shake 250 calories 30g protein"',
+      );
       return;
     }
     applyParsedEntry(parsed);
@@ -177,6 +199,11 @@ export default function NutritionScreen() {
         <AppText variant="body" color="textSecondary">
           Track macros, meals, and supplements
         </AppText>
+        <PrimaryButton
+          label="Nutrition Intelligence"
+          onPress={() => router.push('/(features)/nutrition-intelligence')}
+          variant="secondary"
+        />
       </View>
 
       <View style={styles.macroRow}>

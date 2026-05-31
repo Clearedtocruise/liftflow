@@ -9,6 +9,10 @@ import {
     suggestMuscleGroups,
     synthesizeSpeech,
 } from '../lib/aiCoach.js';
+import {
+    converseWithCoach,
+    loadConversationalCoachHistory,
+} from '../lib/conversationalCoachEngine.js';
 import { requireAdmin } from '../lib/supabase.js';
 
 export const aiRouter = Router();
@@ -34,6 +38,48 @@ aiRouter.post('/coach', async (req, res) => {
     res.json(result);
   } catch (error) {
     res.status(500).json({ message: error instanceof Error ? error.message : 'Coach failed' });
+  }
+});
+
+aiRouter.post('/converse', async (req, res) => {
+  try {
+    const { userId, message, context, includeHistory, detailLevel } = req.body as {
+      userId?: string;
+      message?: string;
+      context?: string;
+      includeHistory?: boolean;
+      detailLevel?: 'short' | 'detailed' | 'voice';
+    };
+
+    if (!userId || !message?.trim()) {
+      res.status(400).json({ message: 'userId and message are required' });
+      return;
+    }
+
+    const result = await converseWithCoach(userId, message.trim(), {
+      context,
+      includeHistory,
+      detailLevel,
+    });
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ message: error instanceof Error ? error.message : 'Conversational coach failed' });
+  }
+});
+
+aiRouter.get('/converse/history', async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    if (!userId) {
+      res.status(400).json({ message: 'userId query param required' });
+      return;
+    }
+
+    const limit = Number(req.query.limit ?? 20);
+    const history = await loadConversationalCoachHistory(userId, limit);
+    res.json(history);
+  } catch (error) {
+    res.status(500).json({ message: error instanceof Error ? error.message : 'Coach history failed' });
   }
 });
 

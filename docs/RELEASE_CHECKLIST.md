@@ -1,101 +1,127 @@
-# LiftFlow — Final Release Checklist
+# LiftFlow — Release Candidate Checklist (Sprint 7.9)
 
-## 1. Supabase Auth (Testing)
+## Pre-flight validation
+
+Run the full RC gate:
+
+```bash
+npm run validate:sprint79
+```
+
+Target: **100/100** with zero FAIL areas.
+
+| Check | Command |
+|-------|---------|
+| Sprint regression (7.0–7.6, 7.X) | Included in `validate:sprint79` |
+| Smart progression (7.1) | `npm run validate:sprint71` |
+| Local API E2E | `npm run test:local-api` |
+| Cross-feature integration | `npm run test:integration` |
+| HealthKit dev build (static) | `npm run verify:healthkit` |
+| Gym types (migration 010) | `npm run verify:gym-types` |
+
+---
+
+## 1. Supabase
 
 - [ ] Add `SUPABASE_ACCESS_TOKEN` to `.env` ([create token](https://supabase.com/dashboard/account/tokens))
-- [ ] Run `npm run configure:auth` (sets autoconfirm + raises email rate limits)
-- [ ] **Manual fallback:** Dashboard → Authentication → Providers → Email → **disable Confirm email**
-- [ ] Dashboard → Authentication → Rate Limits → raise email/signup limits
+- [ ] Apply migration 010: `npm run migrate:010` (or SQL Editor → `010_coach_onboarding.sql`)
+- [ ] Verify: `npm run verify:gym-types` → **5/5 PASS**
+- [ ] Apply migration 012 (health sync) if not applied
+- [ ] Run `npm run configure:auth` for beta testing (autoconfirm email)
+
+---
 
 ## 2. Backend (Render)
 
-- [ ] Push repo to GitHub
-- [ ] [Render Dashboard](https://dashboard.render.com) → **New Blueprint** → select `render.yaml`
-- [ ] Set env vars on Render:
+- [ ] Commit and push backend Sprint 7.2–7.6 + 7.1 routes to `main`
+- [ ] Set Render env vars:
   - `SUPABASE_URL`
   - `SUPABASE_SERVICE_ROLE_KEY`
-  - `OPENAI_API_KEY`
+  - `OPENAI_API_KEY` (required for full AI coach + TTS)
+- [ ] Deploy: `npm run deploy:render`
 - [ ] Confirm health: `https://liftflow-api.onrender.com/health`
-  - Expect: `{ "status": "ok", "openai": "configured", "supabase": "configured" }`
+  - Expect: `{ "openai": "configured", "supabase": "configured" }`
+- [ ] Confirm intelligence routes (non-404):
+  - `GET /api/training/recovery/intelligence?userId=…`
+  - `GET /api/nutrition/intelligence?userId=…`
+  - `POST /api/ai/converse`
+  - `POST /api/training/progression/smart`
 
-## 3. Mobile Environment
+---
 
-- [ ] Set in `.env` (and EAS secrets for CI builds):
+## 3. Mobile environment
+
+- [ ] `.env` / EAS secrets:
   ```
   EXPO_PUBLIC_API_URL=https://liftflow-api.onrender.com
   EXPO_PUBLIC_SUPABASE_URL=https://jaajsalblkjtmrapijbe.supabase.co
   EXPO_PUBLIC_SUPABASE_ANON_KEY=<anon-key>
   ```
-- [ ] Run `npm run verify:release` — all checks PASS
+- [ ] `npm run verify:release` — all checks PASS
 
-## 4. OpenAI
+---
 
-- [ ] Add real `OPENAI_API_KEY` to Render service env (not committed to git)
-- [ ] Verify `/api/body/estimate-body-fat` returns real analysis (not demo fallback)
-- [ ] Verify `/api/ai/coach` returns coaching responses
+## 4. OpenAI end-to-end
 
-## 5. EAS / Expo Account
+- [ ] `OPENAI_API_KEY` on Render (not in git)
+- [ ] `POST /api/ai/converse` returns GPT response (not heuristic-only)
+- [ ] `POST /api/ai/tts` returns audio or 503 with fallback message
+- [ ] Conversational coach in app references recovery + nutrition context
 
-- [ ] `npm install -g eas-cli`
-- [ ] `eas login`
-- [ ] `eas init` (links project, sets `EAS_PROJECT_ID` in app.config.ts extra)
-- [ ] Apple Developer account enrolled ($99/yr)
-- [ ] Google Play Console account (for Play Store; APK works without)
+---
 
-## 6. TestFlight (iOS)
+## 5. HealthKit (physical iPhone — not Expo Go)
 
-```bash
-eas build --platform ios --profile production
-eas submit --platform ios --profile production
-```
+- [ ] `npm run build:ios:dev` (dev client with HealthKit entitlements)
+- [ ] Install on physical iPhone
+- [ ] Settings → Health Sync → grant permissions
+- [ ] Dashboard recovery card shows synced HRV/sleep (if Apple Health has data)
 
-- [ ] Update `eas.json` → `submit.production.ios.appleTeamId`
-- [ ] Add testers in App Store Connect → TestFlight
-- [ ] Install on physical iPhone via TestFlight
+---
 
-## 7. APK (Android)
+## 6. Integration smoke (device or simulator + production API)
 
-```bash
-eas build --platform android --profile preview
-```
+- [ ] Start workout → smart progression card shows recommendation
+- [ ] Recovery intelligence loads on coaching tab
+- [ ] Nutrition intelligence loads on nutrition tab
+- [ ] Ask coach: “What should I train today?” — uses recovery + recommendations
+- [ ] Voice log a set → rest timer → finish workout
 
-- [ ] Download APK from EAS build page
-- [ ] Install on physical Android device (enable unknown sources)
-- [ ] Or use internal distribution link from EAS
+---
 
-## 8. Physical Device Verification
-
-### iPhone
-- [ ] Sign up / log in
-- [ ] Profile + nutrition_goals created (Settings shows user email)
-- [ ] Start workout → voice log a set ("Bench press 135 for 8")
-- [ ] Finish workout → no auto-restart of session
-- [ ] History shows completed workout
-- [ ] Progress tab → upload photo → appears in gallery
-- [ ] Log out → returns to login screen
-
-### Android
-- [ ] Same checklist as iPhone
-- [ ] Microphone permission granted for voice logging
-- [ ] Photo library permission for progress photos
-
-## 9. Pre-Production Blockers
-
-| Item | Status | Action |
-|------|--------|--------|
-| Email rate limits | Manual | Run `configure:auth` script |
-| Render backend live | Deploy | Connect GitHub → Blueprint |
-| OpenAI key on Render | Env var | Set in Render dashboard |
-| EAS project linked | One-time | `eas init` |
-| Apple Team ID | Config | Update `eas.json` submit section |
-| Package version drift | Optional | Align Expo SDK 54 package versions |
-
-## 10. Quick Commands
+## 7. TestFlight / App Store
 
 ```bash
-npm run configure:auth      # Supabase auth for testing
-npm run verify:release      # Pre-flight checks
-npm run build:ios           # TestFlight build
-npm run build:android:apk   # APK build
-cd backend && npm run dev   # Local API (dev only)
+npm run build:ios          # TestFlight
+npm run build:android:apk  # Android APK
 ```
+
+- [ ] App Store Connect listing (screenshots, privacy, age rating)
+- [ ] RevenueCat IAP linked (`EXPO_PUBLIC_REVENUECAT_IOS_API_KEY`)
+- [ ] TestFlight internal testers invited
+
+---
+
+## 8. Quick commands
+
+```bash
+npm run validate:sprint79       # RC gate (target 100/100)
+npm run migrate:010             # Gym type constraints
+npm run test:local-api          # Local backend route E2E
+npm run deploy:render           # Production deploy + route verify
+npm run configure:auth          # Supabase auth for beta
+cd backend && npm run dev       # Local API only
+```
+
+---
+
+## Blocker resolution (Sprint 7.8 → 7.9)
+
+| Blocker | Resolution |
+|---------|------------|
+| Production 404 on intelligence routes | Push `main` + `deploy:render` |
+| OPENAI missing on Render | Set env var + redeploy |
+| Smart progression partial | Shipped: API + service + workout UI |
+| Migration 010 gym types | `npm run migrate:010` |
+
+Report: [BETA_READINESS_SPRINT79.md](./BETA_READINESS_SPRINT79.md)

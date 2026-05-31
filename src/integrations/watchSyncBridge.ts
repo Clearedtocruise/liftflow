@@ -1,6 +1,12 @@
 import { Platform } from 'react-native';
 
 import type { WatchMotionSample, WatchWorkoutAssistantState, WatchWorkoutMessage } from '@/integrations/watch';
+import {
+  parseWatchHeartRate,
+  parseWatchMovement,
+  parseWatchWorkoutDetection,
+  WATCH_MESSAGE_TYPES,
+} from '@/integrations/watch/watchHealthArchitecture';
 import type { IntegrationAvailability, WatchSyncPayload } from './types';
 
 /**
@@ -127,10 +133,19 @@ export async function requestWatchSync(): Promise<{ queued: boolean; error?: str
 }
 
 export function parseIncomingWatchMessage(message: Record<string, unknown>): WatchSyncPayload | null {
-  if (message.type === 'workout_sync' || message.type === 'health_sync') {
+  if (message.type === WATCH_MESSAGE_TYPES.WORKOUT_SYNC || message.type === 'health_sync') {
     return normalizeWatchPayload(message);
   }
   return null;
+}
+
+/** Extended watch messages for Sprint 7.4 architecture (phone-side handlers) */
+export function parseWatchHealthMessage(message: Record<string, unknown>) {
+  return {
+    workoutDetection: parseWatchWorkoutDetection(message),
+    heartRate: parseWatchHeartRate(message),
+    movement: parseWatchMovement(message),
+  };
 }
 
 export function isWorkoutAssistantMessage(message: Record<string, unknown>): boolean {

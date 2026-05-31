@@ -3,6 +3,7 @@ import { fail, fromError, ok } from '@/lib/serviceResult';
 import { getAccessToken, supabase } from '@/supabase/client';
 import type { DailyRecoveryCheckIn, RecoveryTrendPoint } from '@/types/coaching';
 import type { RecoveryStatus, ServiceResult } from '@/types/common';
+import type { RecoveryIntelligenceReport } from '@/types/recoveryIntelligence';
 
 type RecoveryRow = {
   id: string;
@@ -107,6 +108,19 @@ export const recoveryService = {
         token,
       );
       return ok(mapRecovery(remote));
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
+  async getIntelligence(userId: string): Promise<ServiceResult<RecoveryIntelligenceReport>> {
+    try {
+      const token = await getAccessToken();
+      const report = await apiClient.get<RecoveryIntelligenceReport>(
+        `/api/training/recovery/intelligence?userId=${userId}`,
+        token,
+      );
+      return ok(report);
     } catch (e) {
       return fromError(e);
     }

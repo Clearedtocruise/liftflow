@@ -2,6 +2,7 @@ import { Router } from 'express';
 
 import { generateWeeklyMealPlan } from '../lib/aiCoach.js';
 import { loadCoachContext } from '../lib/coachContext.js';
+import { loadNutritionIntelligence } from '../lib/loadNutritionIntelligence.js';
 import { requireAdmin } from '../lib/supabase.js';
 import { resolveRankedGoals, toNutritionGoal } from '../lib/trainingGoals.js';
 import {
@@ -11,6 +12,20 @@ import {
 } from '../lib/workoutAwareNutrition.js';
 
 export const nutritionRouter = Router();
+
+nutritionRouter.get('/intelligence', async (req, res) => {
+  try {
+    const userId = req.query.userId as string | undefined;
+    if (!userId) {
+      res.status(400).json({ message: 'userId is required' });
+      return;
+    }
+    const report = await loadNutritionIntelligence(userId);
+    res.json(report);
+  } catch (error) {
+    res.status(500).json({ message: error instanceof Error ? error.message : 'Nutrition intelligence failed' });
+  }
+});
 
 nutritionRouter.post('/meal-plan/generate', async (req, res) => {
   try {

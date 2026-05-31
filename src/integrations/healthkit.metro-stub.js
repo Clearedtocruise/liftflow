@@ -3,5 +3,6 @@ module.exports = {
   isHealthDataAvailableAsync: async () => false,
   requestAuthorization: async () => false,
   queryQuantitySamples: async () => [],
+  queryCategorySamples: async () => [],
   queryWorkoutSamples: async () => [],
 };

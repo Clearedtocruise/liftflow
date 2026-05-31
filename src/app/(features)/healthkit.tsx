@@ -1,31 +1,43 @@
 import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Platform, StyleSheet } from 'react-native';
+import { Alert, Platform, StyleSheet, View } from 'react-native';
 
 import { Card } from '@/components/layout/Card';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { SectionHeader } from '@/components/layout/SectionHeader';
 import { AppText } from '@/components/ui/AppText';
+import { HEALTH_DATA_LABELS } from '@/integrations/healthConstants';
 import { Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
+import { useHealthSync } from '@/hooks/useHealthSync';
 import { integrationService } from '@/services/integrationService';
 import type { IntegrationConnection } from '@/types/integrations';
 
 export default function HealthKitScreen() {
   const { user } = useAuth();
   const [connections, setConnections] = useState<IntegrationConnection[]>([]);
-  const [syncing, setSyncing] = useState(false);
+  const {
+    status,
+    permission,
+    syncing,
+    lastReport,
+    error,
+    supportedTypes,
+    requestPermissions,
+    sync,
+    refreshStatus,
+  } = useHealthSync({ userId: user?.id });
 
-  const refresh = useCallback(async () => {
+  const refreshConnections = useCallback(async () => {
     if (!user) return;
     const result = await integrationService.getConnections(user.id);
     if (result.success) setConnections(result.data);
   }, [user]);
 
   useEffect(() => {
-    refresh();
-  }, [refresh]);
+    refreshConnections();
+  }, [refreshConnections]);
 
   const healthAvailability =
     Platform.OS === 'ios' ? integrationService.getHealthKitAvailability() : integrationService.getHealthConnectAvailability();
@@ -34,16 +46,24 @@ export default function HealthKitScreen() {
 
   const isConnected = (provider: string) => connections.find((c) => c.provider === provider)?.isConnected ?? false;
 
+  async function handleRequestPermissions() {
+    const result = await requestPermissions();
+    if (result === 'authorized') Alert.alert('Permissions', 'Apple Health access granted.');
+    else if (result === 'denied') Alert.alert('Permissions', 'Apple Health access was denied. Enable in Settings → Health → LiftFlow.');
+    else Alert.alert('Unavailable', status?.availabilityReason ?? 'Health data not available.');
+  }
+
   async function handleHealthSync() {
     if (!user) return;
-    setSyncing(true);
-    const result = await integrationService.syncHealth(user.id);
-    setSyncing(false);
-    if (result.success) {
-      Alert.alert('Sync complete', `Imported ${result.data.synced} records (${result.data.dataTypes.join(', ') || 'none'}).`);
-      refresh();
-    } else {
-      Alert.alert('Sync failed', result.error ?? 'Could not sync health data.');
+    const report = await sync(30);
+    if (report) {
+      Alert.alert(
+        'Sync complete',
+        `Saved ${report.synced} records (${report.inserted} new, ${report.updated} updated, ${report.conflicts} conflicts resolved). Types: ${report.dataTypes.join(', ') || 'none'}.`,
+      );
+      refreshConnections();
+    } else if (error) {
+      Alert.alert('Sync failed', error);
     }
   }
 
@@ -51,17 +71,15 @@ export default function HealthKitScreen() {
     if (!user) return;
     const result = await integrationService.connectStrava(user.id);
     if (!result.success) Alert.alert('Strava', result.error ?? 'Connection failed');
-    else refresh();
+    else refreshConnections();
   }
 
   async function handleStravaSync() {
     if (!user) return;
-    setSyncing(true);
     const result = await integrationService.syncStrava(user.id);
-    setSyncing(false);
     if (result.success) Alert.alert('Strava', `Imported ${result.data.imported} activities.`);
     else Alert.alert('Strava sync failed', result.error ?? '');
-    refresh();
+    refreshConnections();
   }
 
   async function handleWatchSync() {
@@ -72,39 +90,56 @@ export default function HealthKitScreen() {
 
   return (
     <ScreenContainer>
-      <AppText variant="title">Integrations</AppText>
+      <AppText variant="title">Apple Health & Watch</AppText>
       <AppText variant="body" color="textSecondary" style={styles.subtitle}>
-        Sync health data, workouts, and cardio from connected services.
+        Sync heart rate, HRV, sleep, workouts, steps, weight, and calories into LiftFlow recovery intelligence.
       </AppText>
 
       <SectionHeader title={Platform.OS === 'ios' ? 'Apple Health' : 'Health Connect'} />
       <Card style={styles.card}>
         <AppText variant="body">
           {healthAvailability.available
-            ? 'Ready to sync steps, weight, calories, heart rate, workouts, distance, and exercise minutes.'
+            ? 'Production sync with permission flow, conflict resolution, and deduplicated storage.'
             : healthAvailability.reason}
         </AppText>
         <AppText variant="caption" color="textSecondary">
           Connected: {isConnected(Platform.OS === 'ios' ? 'apple_healthkit' : 'google_fit') ? 'Yes' : 'No'}
+          {status?.lastSyncAt ? ` · Last sync ${new Date(status.lastSyncAt).toLocaleString()}` : ''}
         </AppText>
+        <AppText variant="caption" color="textTertiary">
+          Permission: {permission}
+        </AppText>
+
+        <View style={styles.typeGrid}>
+          {supportedTypes.map((type) => (
+            <View key={type} style={styles.typeChip}>
+              <AppText variant="caption">{HEALTH_DATA_LABELS[type as keyof typeof HEALTH_DATA_LABELS] ?? type}</AppText>
+            </View>
+          ))}
+        </View>
+
+        <PrimaryButton label="Request Health Permissions" onPress={handleRequestPermissions} variant="secondary" />
         <PrimaryButton label={syncing ? 'Syncing…' : 'Sync Health Data'} onPress={handleHealthSync} disabled={syncing} />
+        {lastReport ? (
+          <AppText variant="footnote" color="textSecondary">
+            Last sync: {lastReport.synced} saved · {lastReport.skipped} skipped · {lastReport.conflicts} conflicts
+          </AppText>
+        ) : null}
       </Card>
 
       {Platform.OS === 'ios' ? (
         <>
-          <SectionHeader title="Apple Watch Workout Assistant" />
-          <PrimaryButton
-            label="Open Watch Workout Assistant"
-            onPress={() => router.push('/(features)/apple-watch')}
-            variant="secondary"
-          />
-          <SectionHeader title="Apple Watch Sync" />
+          <SectionHeader title="Apple Watch Architecture" subtitle="Phone-side — native Watch app not deployed yet" />
           <Card style={styles.card}>
             <AppText variant="body">
-              {watchAvailability.available
-                ? 'Sync workouts, heart rate, calories, steps, and active sessions from your Watch.'
-                : watchAvailability.reason}
+              Workout detection, movement classification, and heart rate monitoring are wired on the phone. A future
+              watchOS companion will stream {`workout_detection`}, {`heart_rate_sample`}, and {`movement_event`}{' '}
+              messages via WatchConnectivity.
             </AppText>
+            <AppText variant="caption" color="textSecondary">
+              {watchAvailability.available ? 'WatchConnectivity module available.' : watchAvailability.reason}
+            </AppText>
+            <PrimaryButton label="Open Watch Workout Assistant" onPress={() => router.push('/(features)/apple-watch')} variant="secondary" />
             <PrimaryButton label="Request Watch Sync" onPress={handleWatchSync} variant="secondary" />
           </Card>
         </>
@@ -120,6 +155,7 @@ export default function HealthKitScreen() {
         <PrimaryButton label="Sync Strava Activities" onPress={handleStravaSync} disabled={syncing} />
       </Card>
 
+      <PrimaryButton label="Refresh Status" onPress={() => { refreshStatus(); refreshConnections(); }} variant="secondary" />
       <PrimaryButton label="Back" onPress={() => router.back()} variant="secondary" />
     </ScreenContainer>
   );
@@ -132,5 +168,16 @@ const styles = StyleSheet.create({
   card: {
     gap: Spacing.md,
     marginBottom: Spacing.xl,
+  },
+  typeGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.xs,
+  },
+  typeChip: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.06)',
   },
 });

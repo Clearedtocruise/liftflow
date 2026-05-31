@@ -20,6 +20,7 @@ import { useUnits } from '@/hooks/useUnits';
 import { useWorkoutLocations } from '@/hooks/useWorkoutLocations';
 import { analyticsService } from '@/services/analyticsService';
 import { nutritionService } from '@/services/nutritionService';
+import { recoveryService } from '@/services/recoveryService';
 import { trainingService } from '@/services/trainingService';
 import { useWorkoutSession } from '@/state/workout/WorkoutSessionContext';
 import type { DashboardSummary, NutritionGoals, PlannedWorkout, ProgramDashboard } from '@/types';
@@ -31,6 +32,8 @@ export default function DashboardScreen() {
   const { startSessionFromPlanned } = useWorkoutSession();
   const { locations, selectedId } = useWorkoutLocations(user?.id);
   const [data, setData] = useState<DashboardSummary | null>(null);
+  const [recoveryScore, setRecoveryScore] = useState<number | null>(null);
+  const [recoveryStatusLabel, setRecoveryStatusLabel] = useState<string | null>(null);
   const [program, setProgram] = useState<ProgramDashboard | null>(null);
   const [nutritionGoals, setNutritionGoals] = useState<NutritionGoals | null>(null);
   const [loading, setLoading] = useState(true);
@@ -39,14 +42,19 @@ export default function DashboardScreen() {
 
   const load = useCallback(async () => {
     if (!user) return;
-    const [dashResult, programResult, goalsResult] = await Promise.all([
+    const [dashResult, programResult, goalsResult, intelResult] = await Promise.all([
       analyticsService.getDashboard(user.id),
       trainingService.getDashboard(user.id),
       nutritionService.getGoals(user.id),
+      recoveryService.getIntelligence(user.id),
     ]);
     if (dashResult.success) setData(dashResult.data);
     if (programResult.success) setProgram(programResult.data);
     if (goalsResult.success) setNutritionGoals(goalsResult.data);
+    if (intelResult.success) {
+      setRecoveryScore(intelResult.data.recoveryScore);
+      setRecoveryStatusLabel(intelResult.data.recoveryStatusLabel);
+    }
     setLoading(false);
     setRefreshing(false);
   }, [user]);
@@ -56,15 +64,18 @@ export default function DashboardScreen() {
   }, [load]);
 
   const nextPlanned = program?.nextWorkout;
-  const recoveryScore = data?.recoveryStatus === 'optimal' ? 88 : data?.recoveryStatus === 'moderate' ? 72 : 65;
-  const readinessScore = Math.min(95, recoveryScore - 4 + (data?.streak ?? 0));
+  const displayRecoveryScore =
+    recoveryScore ??
+    (data?.recoveryStatus === 'optimal' ? 88 : data?.recoveryStatus === 'moderate' ? 72 : 65);
+  const readinessScore = Math.min(95, displayRecoveryScore - 4 + (data?.streak ?? 0));
   const coachMessage =
     user?.metadata?.coachActivation?.coachMessage ??
-    (recoveryScore >= 80
+    (displayRecoveryScore >= 80
       ? 'Recovery is high today. Increase training volume by 5% if warm-ups feel strong.'
       : 'Prioritize quality over volume today. Keep intensity moderate.');
   const coachHeadline =
-    recoveryScore >= 80 ? 'Recovery is high today.' : 'Prioritize quality over volume today.';
+    recoveryStatusLabel ??
+    (displayRecoveryScore >= 80 ? 'Recovery is high today.' : 'Prioritize quality over volume today.');
   const proteinTarget = nutritionGoals?.proteinG ?? 0;
   const calorieTarget = nutritionGoals?.dailyCalories ?? 0;
   const firstName = user?.displayName?.split(' ')[0] ?? 'Athlete';
@@ -114,7 +125,7 @@ export default function DashboardScreen() {
             Recovery & Readiness
           </AppText>
           <View style={styles.gaugeRow}>
-            <RingGauge label="Recovery" value={recoveryScore} color={LiftFlowColors.success} />
+            <RingGauge label="Recovery" value={displayRecoveryScore} color={LiftFlowColors.success} />
             <RingGauge label="Readiness" value={readinessScore} color={LiftFlowColors.accent} />
           </View>
         </Card>

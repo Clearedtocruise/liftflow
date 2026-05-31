@@ -1,4 +1,5 @@
 import { answerSmartCoachQuestion, loadCoachContext } from './coachContext.js';
+import { loadRecoveryIntelligence } from './loadRecoveryIntelligence.js';
 import { getOpenAI, hasOpenAI } from './openai.js';
 import { requireAdmin } from './supabase.js';
 import {
@@ -46,36 +47,32 @@ export async function suggestMuscleGroups(userId: string) {
 }
 
 export async function assessRecovery(userId: string) {
-  const db = requireAdmin();
-  const threeDaysAgo = new Date();
-  threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+  const report = await loadRecoveryIntelligence(userId);
 
-  const { data: recent } = await db
-    .from('workout_sessions')
-    .select('started_at, total_volume, total_sets')
-    .eq('user_id', userId)
-    .eq('status', 'completed')
-    .gte('started_at', threeDaysAgo.toISOString());
-
-  const sessionCount = recent?.length ?? 0;
-  const totalVolume = (recent ?? []).reduce((s, r) => s + Number(r.total_volume ?? 0), 0);
-
-  let status: 'optimal' | 'moderate' | 'fatigued' | 'overreached' | 'unknown' = 'optimal';
-  if (sessionCount >= 4 || totalVolume > 50000) status = 'fatigued';
-  else if (sessionCount >= 3) status = 'moderate';
-  else if (sessionCount === 0) status = 'optimal';
+  const legacyStatus =
+    report.recoveryStatus === 'fully_recovered'
+      ? 'optimal'
+      : report.recoveryStatus === 'recovering'
+        ? 'moderate'
+        : report.recoveryStatus === 'fatigued'
+          ? 'fatigued'
+          : 'overreached';
 
   return {
-    status,
-    assessedAt: new Date().toISOString(),
-    sleepHours: undefined,
-    sorenessScore: sessionCount >= 4 ? 7 : 4,
-    energyScore: sessionCount >= 4 ? 5 : 8,
-    muscleGroups: [],
-    aiAnalysis: sessionCount >= 4
-      ? 'High training load in last 72 hours. Recommend a recovery day or light mobility work.'
-      : 'Training load is manageable. Good window for progressive overload.',
-    recommendations: status === 'fatigued' ? ['Take a rest day', 'Focus on sleep and protein'] : ['Train as planned'],
+    status: legacyStatus,
+    assessedAt: report.assessedAt,
+    sleepHours: report.factors.sleepHours,
+    sorenessScore: report.factors.sorenessLevel ?? (report.recoveryScore < 60 ? 6 : 4),
+    energyScore: Math.round(report.factors.subjectiveScore / 10),
+    muscleGroups: report.suggestedMuscleGroups,
+    recoveryScore: report.recoveryScore,
+    recoveryStatus: report.recoveryStatus,
+    recoveryStatusLabel: report.recoveryStatusLabel,
+    trainingRecommendation: report.trainingRecommendation,
+    trainingRecommendationLabel: report.trainingRecommendationLabel,
+    aiAnalysis: report.rationale,
+    recommendations: [report.trainingRecommendationLabel],
+    intelligence: report,
   };
 }
 

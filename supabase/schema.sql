@@ -72,7 +72,13 @@ create table public.profiles (
   preferred_water_unit text not null default 'oz' check (preferred_water_unit in ('oz', 'L')),
   confirmation_mode public.confirmation_mode not null default 'smart',
   timezone text default 'UTC',
-  training_location text check (training_location in ('home_gym', 'commercial_gym')),
+  training_location text check (training_location in (
+    'home_gym',
+    'garage_gym',
+    'commercial_gym',
+    'planet_fitness',
+    'full_gym'
+  )),
   primary_gym_name text,
   available_equipment text[] not null default '{}',
   primary_training_goal text check (primary_training_goal in ('fat_loss', 'muscle_gain', 'strength', 'general_fitness')),

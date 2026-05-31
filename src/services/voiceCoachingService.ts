@@ -78,4 +78,16 @@ export const voiceCoachingService = {
     Speech.stop();
     sound?.stopAsync().catch(() => undefined);
   },
+
+  async speakLine(text: string): Promise<boolean> {
+    const playedOpenAi = await playOpenAiSpeech(text);
+    if (!playedOpenAi) {
+      Speech.speak(text, {
+        language: 'en-US',
+        rate: Platform.OS === 'ios' ? 0.52 : 0.9,
+        pitch: 1.0,
+      });
+    }
+    return playedOpenAi;
+  },
 };

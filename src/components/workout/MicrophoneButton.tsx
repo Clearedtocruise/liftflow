@@ -4,53 +4,89 @@ import { AppSymbol, SYMBOL_FALLBACKS } from '@/components/ui/AppSymbol';
 
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Radius, Spacing, TouchTarget } from '@/constants/theme';
+import type { VoiceInputMode } from '@/types/voice';
 
 type MicrophoneButtonProps = {
   onPress?: () => void;
+  onPressIn?: () => void;
+  onPressOut?: () => void;
   isListening?: boolean;
+  disabled?: boolean;
+  inputMode?: VoiceInputMode;
+  interimTranscript?: string;
 };
 
-export function MicrophoneButton({ onPress, isListening }: MicrophoneButtonProps) {
+function hintText(inputMode: VoiceInputMode, isListening: boolean): string {
+  if (inputMode === 'push_to_talk') {
+    return isListening ? 'Release to log…' : 'Hold to log a set';
+  }
+  if (inputMode === 'continuous') {
+    return isListening ? 'Listening continuously…' : 'Tap for continuous listening';
+  }
+  return isListening ? 'Listening…' : 'Tap to log a set';
+}
+
+export function MicrophoneButton({
+  onPress,
+  onPressIn,
+  onPressOut,
+  isListening,
+  disabled,
+  inputMode = 'push_to_talk',
+  interimTranscript,
+}: MicrophoneButtonProps) {
+  const usePushToTalk = inputMode === 'push_to_talk';
+
   return (
     <View style={styles.wrapper}>
       <View style={[styles.glow, isListening && styles.glowActive]} />
       <Pressable
-        onPress={onPress}
+        onPress={usePushToTalk ? undefined : onPress}
+        onPressIn={usePushToTalk ? onPressIn : undefined}
+        onPressOut={usePushToTalk ? onPressOut : undefined}
+        disabled={disabled}
         style={({ pressed }) => [
           styles.button,
           isListening && styles.buttonActive,
-          pressed && styles.pressed,
+          disabled && styles.buttonDisabled,
+          pressed && !disabled && styles.pressed,
         ]}
         accessibilityRole="button"
-        accessibilityLabel="Start voice logging">
+        accessibilityLabel={hintText(inputMode, !!isListening)}>
         <View style={styles.innerRing}>
           <AppSymbol
             name="mic.fill"
             fallback={SYMBOL_FALLBACKS['mic.fill']}
-            size={36}
+            size={42}
             tintColor={isListening ? LiftFlowColors.background : LiftFlowColors.accent}
           />
         </View>
       </Pressable>
       <AppText variant="footnote" color="textSecondary" align="center">
-        {isListening ? 'Listening…' : 'Tap to log a set'}
+        {hintText(inputMode, !!isListening)}
       </AppText>
+      {interimTranscript ? (
+        <AppText variant="caption" color="accent" align="center" numberOfLines={2}>
+          "{interimTranscript}"
+        </AppText>
+      ) : null}
     </View>
   );
 }
 
-const BUTTON_SIZE = 88;
+const BUTTON_SIZE = 104;
 
 const styles = StyleSheet.create({
   wrapper: {
     alignItems: 'center',
-    gap: Spacing.md,
+    gap: Spacing.sm,
+    maxWidth: 280,
   },
   glow: {
     position: 'absolute',
     top: 0,
-    width: BUTTON_SIZE + 24,
-    height: BUTTON_SIZE + 24,
+    width: BUTTON_SIZE + 28,
+    height: BUTTON_SIZE + 28,
     borderRadius: Radius.full,
     backgroundColor: LiftFlowColors.microphoneGlow,
     opacity: 0.5,
@@ -79,6 +115,9 @@ const styles = StyleSheet.create({
   buttonActive: {
     backgroundColor: LiftFlowColors.accent,
     borderColor: LiftFlowColors.accent,
+  },
+  buttonDisabled: {
+    opacity: 0.45,
   },
   innerRing: {
     alignItems: 'center',

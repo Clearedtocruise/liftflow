@@ -79,11 +79,14 @@ async function main() {
       'computeUserOutcome',
       'runOutcomeEngineForAllUsers',
       'computePopulationAggregates',
-      'getFounderDashboardData',
     ];
-    const missingFns = fns.filter((f) => !src.includes(`function ${f}`) && !src.includes(`${f}(`));
+    const founderPath = path.join(root, 'backend/src/lib/founderDashboard.ts');
+    const founderSrc = fs.existsSync(founderPath) ? fs.readFileSync(founderPath, 'utf8') : '';
+    const missingFns = fns.filter((f) => !src.includes(`${f}(`));
+    const hasFounderData = founderSrc.includes('getFounderDashboardData');
     if (missingFns.length) fail('Outcome engine exports', missingFns.join(', '));
-    else pass('Outcome engine module', fns.join(', '));
+    else if (!hasFounderData) fail('Founder dashboard data', 'getFounderDashboardData missing');
+    else pass('Outcome engine module', fns.join(', ') + ', getFounderDashboardData');
   } else {
     fail('Outcome engine module', 'missing');
   }

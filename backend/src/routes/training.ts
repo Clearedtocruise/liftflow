@@ -2,6 +2,9 @@ import { Router } from 'express';
 
 import { adaptActiveProgram } from '../lib/adaptiveProgram.js';
 import { assessRecovery, suggestMuscleGroups } from '../lib/aiCoach.js';
+import { loadSmartProgression } from '../lib/loadSmartProgression.js';
+import { loadRecoveryIntelligence } from '../lib/loadRecoveryIntelligence.js';
+import { loadWorkoutRecommendations } from '../lib/loadWorkoutRecommendations.js';
 import { activateCoachSystem } from '../lib/coachActivation.js';
 import {
     answerSmartCoachQuestion,
@@ -76,6 +79,71 @@ trainingRouter.get('/recovery/today', async (req, res) => {
     res.json(data ?? null);
   } catch (error) {
     res.status(500).json({ message: error instanceof Error ? error.message : 'Recovery today failed' });
+  }
+});
+
+trainingRouter.get('/recommendations/daily', async (req, res) => {
+  try {
+    const userId = req.query.userId as string | undefined;
+    if (!userId) {
+      res.status(400).json({ message: 'userId query param required' });
+      return;
+    }
+    res.json(await loadWorkoutRecommendations(userId));
+  } catch (error) {
+    res.status(500).json({ message: error instanceof Error ? error.message : 'Workout recommendations failed' });
+  }
+});
+
+trainingRouter.get('/recovery/intelligence', async (req, res) => {
+  try {
+    const userId = req.query.userId as string | undefined;
+    if (!userId) {
+      res.status(400).json({ message: 'userId query param required' });
+      return;
+    }
+    res.json(await loadRecoveryIntelligence(userId));
+  } catch (error) {
+    res.status(500).json({ message: error instanceof Error ? error.message : 'Recovery intelligence failed' });
+  }
+});
+
+trainingRouter.post('/progression/smart', async (req, res) => {
+  try {
+    const { userId, exerciseId, sessionId, currentSessionSets } = req.body as {
+      userId?: string;
+      exerciseId?: string;
+      sessionId?: string;
+      currentSessionSets?: Array<{ weightKg: number; reps: number; setNumber?: number; isFailure?: boolean }>;
+    };
+
+    if (!userId || !exerciseId) {
+      res.status(400).json({ message: 'userId and exerciseId are required' });
+      return;
+    }
+
+    res.json(
+      await loadSmartProgression(userId, exerciseId, {
+        sessionId,
+        currentSessionSets,
+      }),
+    );
+  } catch (error) {
+    res.status(500).json({ message: error instanceof Error ? error.message : 'Smart progression failed' });
+  }
+});
+
+trainingRouter.get('/progression/:exerciseId', async (req, res) => {
+  try {
+    const userId = req.query.userId as string | undefined;
+    const { exerciseId } = req.params;
+    if (!userId) {
+      res.status(400).json({ message: 'userId query param required' });
+      return;
+    }
+    res.json(await loadSmartProgression(userId, exerciseId));
+  } catch (error) {
+    res.status(500).json({ message: error instanceof Error ? error.message : 'Smart progression failed' });
   }
 });
 

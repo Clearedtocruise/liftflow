@@ -4,10 +4,16 @@ export * from './coachActivation';
 export * from './coaching';
 export * from './common';
 export * from './integrations';
+export * from './conversationalCoach';
 export * from './nutrition';
-export * from './platform';
+export * from './nutritionIntelligence';
+export * from './peakMusic';
+export * from './progression';
+export * from './recoveryIntelligence';
+export * from './workoutRecommendation';
 export * from './training';
 export * from './user';
+export * from './voice';
 export * from './workout';
 export * from './workoutLocation';
 

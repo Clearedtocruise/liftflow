@@ -108,6 +108,21 @@ export const api = {
     apiClient.get<Record<string, unknown> | null>(`/api/training/recovery/today?userId=${userId}`, token),
   getRecoveryTrend: (userId: string, token?: string) =>
     apiClient.get<import('@/types/coaching').RecoveryTrendPoint[]>(`/api/training/recovery/trend?userId=${userId}`, token),
+  getRecoveryIntelligence: (userId: string, token?: string) =>
+    apiClient.get<import('@/types/recoveryIntelligence').RecoveryIntelligenceReport>(
+      `/api/training/recovery/intelligence?userId=${userId}`,
+      token,
+    ),
+  getNutritionIntelligence: (userId: string, token?: string) =>
+    apiClient.get<import('@/types/nutritionIntelligence').NutritionIntelligenceReport>(
+      `/api/nutrition/intelligence?userId=${userId}`,
+      token,
+    ),
+  getDailyWorkoutRecommendations: (userId: string, token?: string) =>
+    apiClient.get<import('@/types/workoutRecommendation').WorkoutRecommendationReport>(
+      `/api/training/recommendations/daily?userId=${userId}`,
+      token,
+    ),
   submitWeeklyCheckIn: (
     body: {
       userId: string;
@@ -175,6 +190,20 @@ export const api = {
       body: { scheduledDate },
       token,
     }),
+  postSmartProgression: (
+    body: {
+      userId: string;
+      exerciseId: string;
+      sessionId?: string;
+      currentSessionSets?: import('@/types/progression').ProgressionSetRecord[];
+    },
+    token?: string,
+  ) =>
+    apiClient.post<import('@/types/progression').SmartProgressionRecommendation>(
+      '/api/training/progression/smart',
+      body,
+      token,
+    ),
 
   // Nutrition
   generateMealPlan: (userId: string, token?: string) =>

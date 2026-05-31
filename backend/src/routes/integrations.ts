@@ -1,5 +1,7 @@
 import { Router } from 'express';
 
+import { mergeIncomingHealthSamples } from '../lib/healthSyncEngine.js';
+import { applyHealthToRecoveryCheckIn, loadHealthContext } from '../lib/loadHealthContext.js';
 import {
     buildStravaAuthUrl,
     exchangeStravaCode,
@@ -33,29 +35,87 @@ integrationsRouter.post('/healthkit/sync', requireUser, async (req: AuthedReques
     const { samples } = req.body as { samples?: { dataType: string; externalId?: string; value: Record<string, unknown>; recordedAt: string }[] };
 
     if (!Array.isArray(samples) || samples.length === 0) {
-      res.json({ synced: 0 });
+      res.json({ synced: 0, inserted: 0, updated: 0, skipped: 0, conflicts: 0 });
       return;
     }
 
-    const rows = samples.map((s) => ({
+    const since = new Date();
+    since.setDate(since.getDate() - 30);
+    const { data: existingRows } = await db
+      .from('healthkit_sync_records')
+      .select('id, user_id, data_type, external_id, value, recorded_at, synced_at')
+      .eq('user_id', userId)
+      .gte('recorded_at', since.toISOString());
+
+    const incoming = samples.map((s) => ({
+      dataType: s.dataType,
+      externalId: s.externalId ?? null,
+      value: s.value,
+      recordedAt: s.recordedAt,
+    }));
+
+    const { rows, stats } = mergeIncomingHealthSamples(
+      (existingRows ?? []).map((row) => ({
+        id: row.id,
+        user_id: row.user_id,
+        synced_at: row.synced_at,
+        dataType: row.data_type,
+        externalId: row.external_id,
+        value: row.value as Record<string, unknown>,
+        recordedAt: row.recorded_at,
+      })),
+      incoming,
+    );
+
+    const insertRows = rows.map((s) => ({
       user_id: userId,
       data_type: s.dataType,
-      external_id: s.externalId ?? null,
+      external_id: s.externalId,
       value: s.value,
       recorded_at: s.recordedAt,
     }));
 
-    const { error } = await db.from('healthkit_sync_records').insert(rows);
-    if (error) throw error;
+    if (insertRows.length > 0) {
+      const { error } = await db.from('healthkit_sync_records').upsert(insertRows, {
+        onConflict: 'user_id,data_type,external_id',
+        ignoreDuplicates: false,
+      });
+      if (error) {
+        await db.from('healthkit_sync_records').insert(insertRows);
+      }
+    }
 
     await db.from('integration_connections').upsert(
       { user_id: userId, provider: 'apple_healthkit', is_connected: true, last_sync_at: new Date().toISOString(), sync_status: 'synced' },
       { onConflict: 'user_id,provider' },
     );
 
-    res.json({ synced: rows.length });
+    const context = await loadHealthContext(userId);
+    await applyHealthToRecoveryCheckIn(userId, new Date().toISOString().slice(0, 10), context);
+
+    res.json({ synced: insertRows.length, ...stats });
   } catch (error) {
     res.status(500).json({ message: error instanceof Error ? error.message : 'HealthKit sync failed' });
+  }
+});
+
+integrationsRouter.get('/health/context', requireUser, async (req: AuthedRequest, res) => {
+  try {
+    const userId = req.userId!;
+    res.json(await loadHealthContext(userId));
+  } catch (error) {
+    res.status(500).json({ message: error instanceof Error ? error.message : 'Health context failed' });
+  }
+});
+
+integrationsRouter.post('/health/context/refresh', requireUser, async (req: AuthedRequest, res) => {
+  try {
+    const userId = req.userId!;
+    const context = await loadHealthContext(userId);
+    await applyHealthToRecoveryCheckIn(userId, new Date().toISOString().slice(0, 10), context);
+    res.json(context);
+  } catch (error) {
+    res.status(500).json({ message: error instanceof Error ? error.message : 'Health refresh failed' });
   }
 });
 

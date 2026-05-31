@@ -21,16 +21,21 @@ import { useAuth } from '@/hooks/useAuth';
 import { useSubscription } from '@/hooks/useSubscription';
 import { useUnits } from '@/hooks/useUnits';
 import { resolveUnitPreferences } from '@/lib/unitConversion';
+import { coachingPrefsPatch } from '@/lib/voice/voicePreferences';
 import { deviceLocationService } from '@/services/deviceLocationService';
 import { exportService } from '@/services/exportService';
 import { userService } from '@/services/userService';
 import type { ConfirmationMode } from '@/types/common';
+import type { VoiceInputMode } from '@/types/voice';
 
 export default function SettingsScreen() {
   const { user, signOut, refreshProfile, deleteAccount } = useAuth();
   const units = useUnits();
   const { isPremium } = useSubscription();
   const [confirmationMode, setConfirmationMode] = useState<ConfirmationMode>('smart');
+  const [voiceAutoLog, setVoiceAutoLog] = useState(true);
+  const [voiceFeedback, setVoiceFeedback] = useState(true);
+  const [voiceInputMode, setVoiceInputMode] = useState<VoiceInputMode>('push_to_talk');
   const [exporting, setExporting] = useState(false);
   const [locationDetection, setLocationDetection] = useState(true);
   const [locationPermission, setLocationPermission] = useState<string>('—');
@@ -40,6 +45,13 @@ export default function SettingsScreen() {
     userService.getPreferences(user.id).then((result) => {
       if (result.success) {
         setLocationDetection(isWorkoutLocationDetectionEnabled(result.data.privacySettings));
+        setVoiceFeedback(result.data.voiceFeedback ?? true);
+        const coaching = result.data.coachingPreferences ?? {};
+        setVoiceAutoLog(coaching.voiceAutoLog !== false);
+        const mode = coaching.voiceInputMode;
+        if (mode === 'tap_toggle' || mode === 'continuous' || mode === 'push_to_talk') {
+          setVoiceInputMode(mode);
+        }
       }
     });
     deviceLocationService.getPermissionStatus().then((status) => {
@@ -60,6 +72,19 @@ export default function SettingsScreen() {
       privacySettings: { ...current, [PRIVACY_WORKOUT_LOCATION_DETECTION]: next },
     });
   }, [user, locationDetection]);
+
+  const saveVoiceInputMode = useCallback(
+    async (mode: VoiceInputMode) => {
+      setVoiceInputMode(mode);
+      if (!user) return;
+      const prefs = await userService.getPreferences(user.id);
+      const coaching = prefs.success ? prefs.data.coachingPreferences ?? {} : {};
+      await userService.updatePreferences(user.id, {
+        coachingPreferences: { ...coaching, ...coachingPrefsPatch({ inputMode: mode }) },
+      });
+    },
+    [user],
+  );
 
   const handleConfirmationChange = useCallback(
     async (mode: ConfirmationMode) => {
@@ -125,6 +150,51 @@ export default function SettingsScreen() {
 
       <SectionHeader title="Voice & Logging" />
       <ConfirmationModePicker value={confirmationMode} onChange={handleConfirmationChange} />
+      <Card style={styles.group}>
+        <SettingsRow
+          label="Auto-log high confidence"
+          value={voiceAutoLog ? 'On' : 'Off'}
+          onPress={async () => {
+            if (!user) return;
+            const next = !voiceAutoLog;
+            setVoiceAutoLog(next);
+            const prefs = await userService.getPreferences(user.id);
+            const coaching = prefs.success ? prefs.data.coachingPreferences ?? {} : {};
+            await userService.updatePreferences(user.id, {
+              coachingPreferences: { ...coaching, voiceAutoLog: next },
+            });
+          }}
+        />
+        <SettingsRow
+          label="Voice feedback (spoken)"
+          value={voiceFeedback ? 'On' : 'Off'}
+          onPress={async () => {
+            if (!user) return;
+            const next = !voiceFeedback;
+            setVoiceFeedback(next);
+            await userService.updatePreferences(user.id, { voiceFeedback: next });
+          }}
+        />
+        <SettingsRow
+          label="Mic input mode"
+          value={
+            voiceInputMode === 'push_to_talk'
+              ? 'Push-to-talk'
+              : voiceInputMode === 'continuous'
+                ? 'Continuous'
+                : 'Tap toggle'
+          }
+          onPress={() => {
+            Alert.alert('Voice input mode', 'Choose how the workout microphone activates', [
+              { text: 'Push-to-talk (default)', onPress: () => saveVoiceInputMode('push_to_talk') },
+              { text: 'Tap toggle', onPress: () => saveVoiceInputMode('tap_toggle') },
+              { text: 'Continuous', onPress: () => saveVoiceInputMode('continuous') },
+              { text: 'Cancel', style: 'cancel' },
+            ]);
+          }}
+        />
+        <SettingsRow label="Wake phrase" value="Coming soon" />
+      </Card>
 
       <View style={styles.sectionGap}>
         <SectionHeader title="Location" subtitle="Detect when you arrive at a saved gym" />

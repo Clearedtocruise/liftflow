@@ -2,9 +2,12 @@ import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 
+import { NutritionIntelligenceDashboard } from '@/components/nutrition/NutritionIntelligenceDashboard';
+import { ConversationalCoachPanel } from '@/components/coaching/ConversationalCoachPanel';
 import { RecoveryCheckInForm } from '@/components/coaching/RecoveryCheckInForm';
+import { RecoveryIntelligenceDashboard } from '@/components/recovery/RecoveryIntelligenceDashboard';
+import { WorkoutRecommendationPanel } from '@/components/workout/WorkoutRecommendationPanel';
 import { RecoveryScoreCard } from '@/components/coaching/RecoveryScoreCard';
-import { VoiceCoachPanel } from '@/components/coaching/VoiceCoachPanel';
 import { Card } from '@/components/layout/Card';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
@@ -15,28 +18,26 @@ import { LiftFlowColors, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 import { useSubscription } from '@/hooks/useSubscription';
 import { aiService } from '@/services/aiService';
+import { conversationalCoachService } from '@/services/conversationalCoachService';
+import { nutritionIntelligenceService } from '@/services/nutritionIntelligenceService';
 import { nutritionService } from '@/services/nutritionService';
 import { recoveryService } from '@/services/recoveryService';
+import { workoutRecommendationService } from '@/services/workoutRecommendationService';
 import type { AIRecommendation } from '@/types';
 import type { DailyRecoveryCheckIn, RecoveryTrendPoint } from '@/types/coaching';
-
-const SMART_QUESTIONS = [
-  'What weight should I use?',
-  'What did I do last time?',
-  'Why did you choose this exercise?',
-  'What should I eat after this workout?',
-  'Why is today a recovery day?',
-  'Why did my calories change?',
-  'Why did my workout change?',
-  'Why am I in a deload?',
-  'What is my next phase?',
-];
+import type { NutritionIntelligenceReport } from '@/types/nutritionIntelligence';
+import type { RecoveryIntelligenceReport } from '@/types/recoveryIntelligence';
+import { COACH_STARTER_QUESTIONS } from '@/types/conversationalCoach';
+import type { WorkoutRecommendationReport } from '@/types/workoutRecommendation';
 
 export default function CoachingScreen() {
   const { user } = useAuth();
   const { isPremium } = useSubscription();
   const [recommendations, setRecommendations] = useState<AIRecommendation[]>([]);
   const [checkIn, setCheckIn] = useState<DailyRecoveryCheckIn | null>(null);
+  const [intelligence, setIntelligence] = useState<RecoveryIntelligenceReport | null>(null);
+  const [workoutRec, setWorkoutRec] = useState<WorkoutRecommendationReport | null>(null);
+  const [nutritionIntel, setNutritionIntel] = useState<NutritionIntelligenceReport | null>(null);
   const [trend, setTrend] = useState<RecoveryTrendPoint[]>([]);
   const [macroRationale, setMacroRationale] = useState<string | null>(null);
   const [macroError, setMacroError] = useState<string | null>(null);
@@ -49,15 +50,21 @@ export default function CoachingScreen() {
 
   const load = useCallback(async () => {
     if (!user) return;
-    const [recs, today, trendRes, macros] = await Promise.all([
+    const [recs, today, trendRes, macros, intel, workoutRecommendation, nutritionReport] = await Promise.all([
       aiService.getRecommendations(user.id),
       recoveryService.getToday(user.id),
       recoveryService.getTrend(user.id),
       nutritionService.getAdaptiveTargets(user.id),
+      recoveryService.getIntelligence(user.id),
+      workoutRecommendationService.getDaily(user.id),
+      nutritionIntelligenceService.getIntelligence(user.id),
     ]);
     if (recs.success) setRecommendations(recs.data);
     if (today.success && today.data) setCheckIn(today.data);
     if (trendRes.success) setTrend(trendRes.data);
+    if (intel.success) setIntelligence(intel.data);
+    if (workoutRecommendation.success) setWorkoutRec(workoutRecommendation.data);
+    if (nutritionReport.success) setNutritionIntel(nutritionReport.data);
     if (macros.success) {
       setMacroRationale(macros.data.rationale);
       setMacroError(null);
@@ -98,9 +105,14 @@ export default function CoachingScreen() {
   async function handleSmartQuestion(question: string) {
     if (!user) return;
     setAsking(true);
-    const result = await aiService.askCoach(user.id, { context: 'general', message: question });
+    const result = await conversationalCoachService.ask(user.id, {
+      context: 'general',
+      message: question,
+      includeHistory: true,
+      detailLevel: 'detailed',
+    });
     setAsking(false);
-    if (result.success) setCoachAnswer(result.data.response);
+    if (result.success) setCoachAnswer(result.data.detailedAnswer);
     else Alert.alert('Coach unavailable', result.error);
   }
 
@@ -142,7 +154,17 @@ export default function CoachingScreen() {
 
       <RecoveryScoreCard checkIn={checkIn} trend={trend} />
 
+      {intelligence ? <RecoveryIntelligenceDashboard report={intelligence} compact /> : null}
+
+      {workoutRec ? <WorkoutRecommendationPanel report={workoutRec} compact /> : null}
+
+      {nutritionIntel ? <NutritionIntelligenceDashboard report={nutritionIntel} compact /> : null}
+
       <View style={styles.linkRow}>
+        <PrimaryButton label="Today's Workout" onPress={() => router.push('/(features)/suggested-workouts')} variant="secondary" />
+        <PrimaryButton label="Nutrition Intelligence" onPress={() => router.push('/(features)/nutrition-intelligence')} variant="secondary" />
+        <PrimaryButton label="Coach Chat" onPress={() => router.push('/(features)/coach-chat')} variant="secondary" />
+        <PrimaryButton label="Recovery Dashboard" onPress={() => router.push('/(features)/recovery-analysis')} variant="secondary" />
         <PrimaryButton label="Daily Check-in" onPress={() => router.push('/(features)/recovery-check-in')} variant="secondary" />
         <PrimaryButton label="Weekly Check-in" onPress={() => router.push('/(features)/weekly-check-in')} variant="secondary" />
         <PrimaryButton label="Limitations" onPress={() => router.push('/(features)/limitations')} variant="secondary" />
@@ -181,9 +203,9 @@ export default function CoachingScreen() {
 
       <SectionHeader title="Smart Coach Questions" />
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.questionRow}>
-        {SMART_QUESTIONS.map((q) => (
-          <Pressable key={q} style={styles.questionChip} onPress={() => handleSmartQuestion(q)} disabled={asking}>
-            <AppText variant="caption">{q}</AppText>
+        {COACH_STARTER_QUESTIONS.map((q) => (
+          <Pressable key={q.topic} style={styles.questionChip} onPress={() => handleSmartQuestion(q.label)} disabled={asking}>
+            <AppText variant="caption">{q.label}</AppText>
           </Pressable>
         ))}
       </ScrollView>
@@ -194,7 +216,7 @@ export default function CoachingScreen() {
       ) : null}
 
       <PremiumGate featureName="Voice coaching">
-        <VoiceCoachPanel />
+        <ConversationalCoachPanel compact context="general" />
       </PremiumGate>
 
       <PremiumGate featureName="AI workout generation">

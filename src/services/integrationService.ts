@@ -98,27 +98,14 @@ export const integrationService = {
   getWatchAvailability,
 
   async syncAppleHealth(userId: string, sinceDays = 30): Promise<ServiceResult<HealthSyncResult>> {
-    try {
-      const deviceResult = await syncHealthKitFromDevice(sinceDays);
-      if (deviceResult.errors.length > 0 && deviceResult.samples.length === 0) {
-        return fail(deviceResult.errors.join('; '));
-      }
-
-      const samples = deviceResult.samples;
-      const persisted = await persistHealthSamples(userId, samples, 'apple_healthkit');
-
-      // Sync weight to profile
-      const latestWeight = samples.filter((s) => s.dataType === 'weight').sort((a, b) => b.recordedAt.localeCompare(a.recordedAt))[0];
-      if (latestWeight && typeof latestWeight.value.kg === 'number') {
-        await supabase.from('profiles').update({ weight_kg: latestWeight.value.kg }).eq('id', userId);
-      }
-
-      await updateConnection(userId, 'apple_healthkit', { isConnected: true, syncStatus: 'synced' });
-
-      return ok({ synced: persisted, dataTypes: deviceResult.dataTypes, errors: deviceResult.errors });
-    } catch (e) {
-      return fromError(e);
-    }
+    const { healthService } = await import('@/services/healthService');
+    const result = await healthService.sync(userId, sinceDays);
+    if (!result.success) return fail(result.error);
+    return ok({
+      synced: result.data.synced,
+      dataTypes: result.data.dataTypes,
+      errors: result.data.errors,
+    });
   },
 
   async syncHealthConnect(userId: string, sinceDays = 30): Promise<ServiceResult<HealthSyncResult>> {
