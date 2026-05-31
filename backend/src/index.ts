@@ -4,9 +4,9 @@ import './loadEnv.js';
 
 import { hasOpenAI } from './lib/openai.js';
 import { supabaseAdmin } from './lib/supabase.js';
-import { authRouter } from './routes/auth.js';
 import { aiRouter } from './routes/ai.js';
 import { analyticsRouter } from './routes/analytics.js';
+import { authRouter } from './routes/auth.js';
 import { bodyRouter } from './routes/body.js';
 import { cardioRouter } from './routes/cardio.js';
 import { exportRouter } from './routes/export.js';

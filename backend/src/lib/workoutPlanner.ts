@@ -1,8 +1,10 @@
+import { expandEquipmentRequirements } from './equipmentCatalog.js';
 import {
     applySubstitutionsToExercises,
     type LimitationContext,
 } from './exerciseSubstitution.js';
 import { requireAdmin } from './supabase.js';
+import { blendWorkoutPreset, resolveRankedGoals, toPlannerGoal } from './trainingGoals.js';
 
 export type GeneratedWorkoutExercise = {
   name: string;
@@ -41,6 +43,7 @@ export type UserTrainingProfile = {
   trainingLocation?: string | null;
   availableEquipment: string[];
   primaryTrainingGoal: TrainingGoal;
+  fitnessGoals: string[];
   trainingExperience?: string | null;
   weightKg?: number | null;
 };
@@ -81,10 +84,7 @@ const GOAL_PRESETS: Record<
 };
 
 export function expandAvailableEquipment(raw: string[]): Set<string> {
-  if (raw.includes('full_gym')) {
-    return new Set(ALL_EQUIPMENT);
-  }
-  return new Set(raw);
+  return expandEquipmentRequirements(raw);
 }
 
 export function exerciseMeetsEquipment(exercise: ExerciseRecord, available: Set<string>): boolean {
@@ -160,14 +160,17 @@ export async function loadUserTrainingProfile(userId: string): Promise<UserTrain
   const db = requireAdmin();
   const { data } = await db
     .from('profiles')
-    .select('training_location, available_equipment, primary_training_goal, training_experience, weight_kg')
+    .select('training_location, available_equipment, primary_training_goal, fitness_goals, training_experience, weight_kg')
     .eq('id', userId)
     .maybeSingle();
+
+  const ranked = resolveRankedGoals(data?.fitness_goals, data?.primary_training_goal);
 
   return {
     trainingLocation: data?.training_location,
     availableEquipment: data?.available_equipment?.length ? data.available_equipment : ['full_gym'],
-    primaryTrainingGoal: (data?.primary_training_goal as TrainingGoal) ?? 'general_fitness',
+    primaryTrainingGoal: toPlannerGoal(ranked[0]) as TrainingGoal,
+    fitnessGoals: ranked,
     trainingExperience: data?.training_experience,
     weightKg: data?.weight_kg,
   };
@@ -224,28 +227,71 @@ export async function getRecentExerciseSlugs(userId: string, days = 21): Promise
   return lastUsed;
 }
 
-type SetHistory = { weight: number; reps: number; loggedAt: Date };
+type SetHistory = {
+  weight: number;
+  reps: number;
+  loggedAt: Date;
+  sessions?: Array<{ weight: number; reps: number; hitTarget: boolean }>;
+};
 
 export async function getLastPerformanceBySlug(userId: string): Promise<Map<string, SetHistory>> {
   const db = requireAdmin();
   const { data } = await db
     .from('workout_sets')
-    .select('weight, reps, logged_at, workout_exercises!inner(exercises(slug), workout_sessions!inner(user_id, status))')
+    .select(
+      'weight, reps, logged_at, workout_exercise_id, workout_exercises!inner(exercises(slug), suggested_reps, workout_sessions!inner(id, user_id, status, started_at))',
+    )
     .eq('workout_exercises.workout_sessions.user_id', userId)
     .eq('workout_exercises.workout_sessions.status', 'completed')
     .not('weight', 'is', null)
     .not('reps', 'is', null)
     .order('logged_at', { ascending: false })
-    .limit(200);
+    .limit(400);
+
+  const bySlugSessions = new Map<string, Map<string, { weight: number; reps: number; targetReps: number }>>();
+
+  for (const row of data ?? []) {
+    const we = (row as {
+      workout_exercises?: {
+        suggested_reps?: string;
+        exercises?: { slug?: string };
+        workout_sessions?: { id?: string };
+      };
+    }).workout_exercises;
+    const slug = we?.exercises?.slug;
+    const sessionId = we?.workout_sessions?.id;
+    if (!slug || !sessionId) continue;
+
+    const targetReps = parseInt(String(we?.suggested_reps ?? '8').match(/\d+/)?.[0] ?? '8', 10);
+    const sessionMap = bySlugSessions.get(slug) ?? new Map();
+    if (!sessionMap.has(sessionId)) {
+      sessionMap.set(sessionId, {
+        weight: Number(row.weight),
+        reps: Number(row.reps),
+        targetReps,
+      });
+    } else {
+      const existing = sessionMap.get(sessionId)!;
+      existing.reps = Math.max(existing.reps, Number(row.reps));
+      existing.weight = Math.max(existing.weight, Number(row.weight));
+    }
+    bySlugSessions.set(slug, sessionMap);
+  }
 
   const map = new Map<string, SetHistory>();
-  for (const row of data ?? []) {
-    const slug = (row as { workout_exercises?: { exercises?: { slug?: string } } }).workout_exercises?.exercises?.slug;
-    if (!slug || map.has(slug)) continue;
+  for (const [slug, sessionMap] of bySlugSessions) {
+    const sessions = [...sessionMap.values()].slice(0, 2).map((s) => ({
+      weight: s.weight,
+      reps: s.reps,
+      hitTarget: s.reps >= s.targetReps,
+    }));
+    const latest = sessions[0];
+    if (!latest) continue;
     map.set(slug, {
-      weight: Number(row.weight),
-      reps: Number(row.reps),
-      loggedAt: new Date(row.logged_at),
+      weight: latest.weight,
+      reps: latest.reps,
+      loggedAt: new Date(),
+      sessions,
     });
   }
   return map;
@@ -373,7 +419,18 @@ export async function buildAdaptiveWorkoutPlan(
   options?: BuildWorkoutPlanOptions,
 ): Promise<GeneratedWorkoutPlan> {
   const profile = await loadUserTrainingProfile(userId);
-  const preset = GOAL_PRESETS[profile.primaryTrainingGoal];
+  const basePreset = GOAL_PRESETS[profile.primaryTrainingGoal];
+  const preset = blendWorkoutPreset(
+    {
+      sets: basePreset.sets,
+      reps: basePreset.reps,
+      restSeconds: basePreset.restSeconds,
+      exerciseCount: basePreset.exerciseCount,
+      includeMobilityFinisher: false,
+      rationaleTags: [],
+    },
+    profile.fitnessGoals,
+  );
   const pool = await loadAvailableExercises(userId, options?.equipmentOverride);
   const recentSlugs = await getRecentExerciseSlugs(userId);
   const performance = await getLastPerformanceBySlug(userId);
@@ -430,6 +487,21 @@ export async function buildAdaptiveWorkoutPlan(
 
   exercises = applySubstitutionsToExercises(exercises, limitations);
 
+  if (preset.includeMobilityFinisher && !exercises.some((e) => e.name === 'Plank')) {
+    exercises.push({
+      name: 'Plank',
+      sets: 2,
+      reps: '45-60 sec',
+      restSeconds: 45,
+      notes: 'Mobility / core finisher',
+    });
+  }
+
+  const goalLabel =
+    preset.rationaleTags.length > 1
+      ? preset.rationaleTags.join(' + ')
+      : profile.primaryTrainingGoal.replace('_', ' ');
+
   const recoveryNote = recoveryMods.recoveryModeActive
     ? ' Recovery Mode — volume and intensity reduced.'
     : recoveryMods.volumeMultiplier < 1
@@ -449,7 +521,7 @@ export async function buildAdaptiveWorkoutPlan(
   return {
     name: recoveryMods.recoveryModeActive
       ? 'Recovery Session'
-      : `${targetMuscles.join(' & ')} — ${profile.primaryTrainingGoal.replace('_', ' ')}`,
+      : `${targetMuscles.join(' & ')} — ${goalLabel}`,
     rationale: `${rationale}${rotationNote}${recoveryNote}${limitationNote}`,
     muscleGroups: targetMuscles,
     exercises,

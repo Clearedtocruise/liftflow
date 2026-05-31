@@ -7,8 +7,8 @@ import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { TextField } from '@/components/layout/TextField';
 import { AppText, textStyles } from '@/components/ui/AppText';
 import { Spacing } from '@/constants/theme';
-import { mapAuthError } from '@/lib/authErrors';
 import { useAuth } from '@/hooks/useAuth';
+import { mapAuthError } from '@/lib/authErrors';
 
 export default function SignUpScreen() {
   const { signUp } = useAuth();
@@ -35,7 +35,7 @@ export default function SignUpScreen() {
         setSuccessEmail(result.email);
         return;
       }
-      router.replace('/');
+      router.replace('/why-liftflow');
     } catch (err) {
       setError(mapAuthError(err, 'signup'));
     } finally {

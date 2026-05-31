@@ -1,30 +1,48 @@
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 
 import { AppText } from '@/components/ui/AppText';
-import { LiftFlowColors, Radius, Spacing, TouchTarget } from '@/constants/theme';
+import { LiftFlowColors, Radius, Shadows, Spacing, TouchTarget } from '@/constants/theme';
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 type SelectableChipProps = {
   label: string;
   selected: boolean;
   onPress: () => void;
+  icon?: string;
 };
 
-export function SelectableChip({ label, selected, onPress }: SelectableChipProps) {
+export function SelectableChip({ label, selected, onPress, icon }: SelectableChipProps) {
+  const scale = useSharedValue(1);
+  const anim = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+
   return (
-    <Pressable
+    <AnimatedPressable
       onPress={onPress}
-      style={({ pressed }) => [
+      onPressIn={() => {
+        scale.value = withSpring(0.96, { damping: 15 });
+      }}
+      onPressOut={() => {
+        scale.value = withSpring(1, { damping: 15 });
+      }}
+      style={[
         styles.chip,
         selected && styles.chipSelected,
-        pressed && styles.chipPressed,
+        anim,
       ]}
       accessibilityRole="button"
       accessibilityState={{ selected }}>
-      <AppText variant="body" color={selected ? 'background' : 'textPrimary'}>
+      {icon ? (
+        <AppText variant="body" style={styles.icon}>
+          {icon}
+        </AppText>
+      ) : null}
+      <AppText variant="body" color={selected ? 'textPrimary' : 'textPrimary'} style={selected ? styles.selectedText : undefined}>
         {label}
       </AppText>
-    </Pressable>
+    </AnimatedPressable>
   );
 }
 
@@ -39,19 +57,26 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
     minHeight: TouchTarget.min,
     paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.sm,
     borderRadius: Radius.full,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 1,
     borderColor: LiftFlowColors.border,
     backgroundColor: LiftFlowColors.surfaceElevated,
   },
   chipSelected: {
-    backgroundColor: LiftFlowColors.accent,
-    borderColor: LiftFlowColors.accent,
+    backgroundColor: LiftFlowColors.primary,
+    borderColor: LiftFlowColors.primary,
+    ...Shadows.glow,
   },
-  chipPressed: {
-    opacity: 0.9,
+  selectedText: {
+    fontWeight: '600',
+  },
+  icon: {
+    fontSize: 16,
   },
 });

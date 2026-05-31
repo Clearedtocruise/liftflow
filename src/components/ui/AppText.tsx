@@ -32,7 +32,7 @@ export function AppText({
 
 export const textStyles = StyleSheet.create({
   link: {
-    color: LiftFlowColors.accent,
+    color: LiftFlowColors.primary,
     fontWeight: '600',
   },
 });

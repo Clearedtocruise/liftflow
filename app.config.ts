@@ -7,11 +7,11 @@ const config: ExpoConfig = {
   slug: 'liftflow',
   version: '1.0.0',
   orientation: 'portrait',
-  icon: './assets/images/icon.png',
+  icon: './assets/branding/liftflow-icon-1024.png',
   scheme: 'liftflow',
   userInterfaceStyle: 'dark',
   ios: {
-    icon: './assets/expo.icon',
+    icon: './assets/branding/liftflow-icon-1024.png',
     bundleIdentifier: 'com.liftflow.app',
     buildNumber: '1',
     infoPlist: {
@@ -39,16 +39,15 @@ const config: ExpoConfig = {
       'android.permission.health.READ_EXERCISE',
     ],
     adaptiveIcon: {
-      backgroundColor: '#E6F4FE',
-      foregroundImage: './assets/images/android-icon-foreground.png',
-      backgroundImage: './assets/images/android-icon-background.png',
-      monochromeImage: './assets/images/android-icon-monochrome.png',
+      backgroundColor: '#080B10',
+      foregroundImage: './assets/branding/liftflow-icon-1024.png',
+      monochromeImage: './assets/branding/liftflow-icon-1024.png',
     },
     predictiveBackGestureEnabled: false,
   },
   web: {
     output: 'static',
-    favicon: './assets/images/favicon.png',
+    favicon: './assets/branding/liftflow-icon-256.png',
   },
   plugins: [
     'expo-router',
@@ -71,18 +70,18 @@ const config: ExpoConfig = {
     [
       'expo-notifications',
       {
-        icon: './assets/images/icon.png',
-        color: '#6366F1',
+        icon: './assets/branding/liftflow-icon-256.png',
+        color: '#1F6BFF',
         sounds: [],
       },
     ],
     [
       'expo-splash-screen',
       {
-        backgroundColor: '#0A0A0B',
+        backgroundColor: '#080B10',
         android: {
-          image: './assets/images/splash-icon.png',
-          imageWidth: 76,
+          image: './assets/branding/liftflow-icon-512.png',
+          imageWidth: 162,
         },
       },
     ],

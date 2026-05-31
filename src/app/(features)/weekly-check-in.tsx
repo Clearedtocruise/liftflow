@@ -8,11 +8,13 @@ import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
+import { useUnits } from '@/hooks/useUnits';
 import { coachCheckInService } from '@/services/coachCheckInService';
 import type { WeeklyCoachCheckIn } from '@/types/coaching';
 
 export default function WeeklyCheckInScreen() {
   const { user } = useAuth();
+  const units = useUnits();
   const [history, setHistory] = useState<WeeklyCoachCheckIn[]>([]);
   const [weight, setWeight] = useState('');
   const [waist, setWaist] = useState('');
@@ -35,8 +37,8 @@ export default function WeeklyCheckInScreen() {
     if (!user) return;
     setSubmitting(true);
     const result = await coachCheckInService.submit(user.id, {
-      weightKg: weight ? parseFloat(weight) : undefined,
-      waistCm: waist ? parseFloat(waist) : undefined,
+      weightKg: units.parseWeight(weight),
+      waistCm: units.parseMeasurement(waist),
       compliancePct: compliance ? parseFloat(compliance) : undefined,
       energyScore: energy ? parseInt(energy, 10) : undefined,
       sleepScore: sleep ? parseInt(sleep, 10) : undefined,
@@ -69,7 +71,7 @@ export default function WeeklyCheckInScreen() {
         <Card style={styles.latest}>
           <AppText variant="bodyBold">Last week</AppText>
           <AppText variant="footnote" color="textSecondary">
-            Weight {latest.weightKg ?? '—'} kg · Compliance {latest.compliancePct ?? '—'}%
+            Weight {latest.weightKg != null ? units.formatWeight(latest.weightKg) : '—'} · Compliance {latest.compliancePct ?? '—'}%
           </AppText>
           {latest.recommendations.map((rec) => (
             <AppText key={rec} variant="footnote" color="textSecondary">
@@ -80,8 +82,8 @@ export default function WeeklyCheckInScreen() {
       ) : null}
 
       <Card style={styles.form}>
-        <Field label="Weight (kg)" value={weight} onChange={setWeight} />
-        <Field label="Waist (cm)" value={waist} onChange={setWaist} />
+        <Field label={`Weight (${units.weightLabel})`} value={weight} onChange={setWeight} />
+        <Field label={`Waist (${units.measurementLabel})`} value={waist} onChange={setWaist} />
         <Field label="Compliance %" value={compliance} onChange={setCompliance} />
         <Field label="Energy (1–10)" value={energy} onChange={setEnergy} />
         <Field label="Sleep (1–10)" value={sleep} onChange={setSleep} />

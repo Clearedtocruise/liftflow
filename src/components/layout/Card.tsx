@@ -1,21 +1,25 @@
+import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, View, type ViewProps } from 'react-native';
 
-import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
+import { LiftFlowColors, Radius, Shadows, Spacing } from '@/constants/theme';
 
 type CardProps = ViewProps & {
   elevated?: boolean;
   accent?: boolean;
+  glow?: boolean;
   onPress?: () => void;
   onLongPress?: () => void;
+  children: ReactNode;
 };
 
-export function Card({ elevated, accent, onPress, onLongPress, style, children, ...rest }: CardProps) {
+export function Card({ elevated, accent, glow, onPress, onLongPress, style, children, ...rest }: CardProps) {
   const content = (
     <View
       style={[
         styles.card,
         elevated && styles.elevated,
         accent && styles.accent,
+        glow && styles.glow,
         style,
       ]}
       {...rest}>
@@ -42,18 +46,24 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: LiftFlowColors.surface,
     borderRadius: Radius.lg,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 1,
     borderColor: LiftFlowColors.border,
     padding: Spacing.lg,
+    ...Shadows.card,
   },
   elevated: {
     backgroundColor: LiftFlowColors.surfaceElevated,
   },
   accent: {
-    borderColor: LiftFlowColors.accentMuted,
-    backgroundColor: LiftFlowColors.accentGlow,
+    borderColor: LiftFlowColors.primary,
+    backgroundColor: LiftFlowColors.primaryGlow,
+  },
+  glow: {
+    borderColor: 'rgba(31, 107, 255, 0.35)',
+    ...Shadows.glow,
   },
   pressed: {
-    opacity: 0.85,
+    opacity: 0.92,
+    transform: [{ scale: 0.99 }],
   },
 });

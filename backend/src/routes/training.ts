@@ -2,6 +2,7 @@ import { Router } from 'express';
 
 import { adaptActiveProgram } from '../lib/adaptiveProgram.js';
 import { assessRecovery, suggestMuscleGroups } from '../lib/aiCoach.js';
+import { activateCoachSystem } from '../lib/coachActivation.js';
 import {
     answerSmartCoachQuestion,
     calculateRecoveryScore,
@@ -9,6 +10,7 @@ import {
     mergeTrainingLoadScore,
 } from '../lib/coachContext.js';
 import { parseLimitationFromVoice } from '../lib/exerciseSubstitution.js';
+import { generatePostWorkoutCoachSummary } from '../lib/postWorkoutCoach.js';
 import {
     generateTrainingProgram,
     getPlannedWorkoutsInRange,
@@ -472,6 +474,33 @@ trainingRouter.post('/coach/ask', async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ message: error instanceof Error ? error.message : 'Coach ask failed' });
+  }
+});
+
+trainingRouter.post('/coach/activate', async (req, res) => {
+  try {
+    const { userId } = req.body as { userId?: string };
+    if (!userId) {
+      res.status(400).json({ message: 'userId is required' });
+      return;
+    }
+    const result = await activateCoachSystem(userId);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ message: error instanceof Error ? error.message : 'Coach activation failed' });
+  }
+});
+
+trainingRouter.post('/coach/post-workout', async (req, res) => {
+  try {
+    const { userId, sessionId } = req.body as { userId?: string; sessionId?: string };
+    if (!userId || !sessionId) {
+      res.status(400).json({ message: 'userId and sessionId are required' });
+      return;
+    }
+    res.json(await generatePostWorkoutCoachSummary(userId, sessionId));
+  } catch (error) {
+    res.status(500).json({ message: error instanceof Error ? error.message : 'Post-workout coach failed' });
   }
 });
 

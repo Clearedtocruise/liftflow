@@ -14,9 +14,13 @@ import {
     PRIVACY_WORKOUT_LOCATION_DETECTION,
 } from '@/constants/locationPreferences';
 import { LiftFlowColors, Spacing } from '@/constants/theme';
-import { getPrimaryGymLabel } from '@/constants/trainingProfile';
+import { summarizeGoals } from '@/constants/trainingGoals';
+import { getPrimaryGymLabel, summarizeEquipment } from '@/constants/trainingProfile';
+import { summarizeUnitPreferences } from '@/constants/units';
 import { useAuth } from '@/hooks/useAuth';
 import { useSubscription } from '@/hooks/useSubscription';
+import { useUnits } from '@/hooks/useUnits';
+import { resolveUnitPreferences } from '@/lib/unitConversion';
 import { deviceLocationService } from '@/services/deviceLocationService';
 import { exportService } from '@/services/exportService';
 import { userService } from '@/services/userService';
@@ -24,6 +28,7 @@ import type { ConfirmationMode } from '@/types/common';
 
 export default function SettingsScreen() {
   const { user, signOut, refreshProfile, deleteAccount } = useAuth();
+  const units = useUnits();
   const { isPremium } = useSubscription();
   const [confirmationMode, setConfirmationMode] = useState<ConfirmationMode>('smart');
   const [exporting, setExporting] = useState(false);
@@ -109,12 +114,13 @@ export default function SettingsScreen() {
   return (
     <ScreenContainer>
       <View style={styles.header}>
-        <AppText variant="title">Settings</AppText>
+        <AppText variant="headline">Settings</AppText>
         {user ? (
-          <AppText variant="body" color="textSecondary">
+          <AppText variant="footnote" color="textSecondary">
             {user.displayName ?? user.email}
           </AppText>
         ) : null}
+        <View style={styles.headerAccent} />
       </View>
 
       <SectionHeader title="Voice & Logging" />
@@ -156,6 +162,36 @@ export default function SettingsScreen() {
           }}
         />
         <SettingsRow
+          label="Training goals"
+          value={
+            user?.fitnessGoals?.length
+              ? summarizeGoals(user.fitnessGoals)
+              : user?.primaryTrainingGoal
+                ? summarizeGoals([user.primaryTrainingGoal])
+                : 'Set goals'
+          }
+          icon={
+            <AppSymbol name="target" fallback="🎯" size={20} tintColor={LiftFlowColors.textSecondary} />
+          }
+          onPress={() => router.push('/(features)/training-goals')}
+        />
+        <SettingsRow
+          label="Units"
+          value={user ? summarizeUnitPreferences(resolveUnitPreferences(user)) : 'Not set'}
+          icon={
+            <AppSymbol name="ruler.fill" fallback="📏" size={20} tintColor={LiftFlowColors.textSecondary} />
+          }
+          onPress={() => router.push('/(features)/unit-preferences')}
+        />
+        <SettingsRow
+          label="Gym equipment"
+          value={user?.availableEquipment?.length ? summarizeEquipment(user.availableEquipment) : 'Set up equipment'}
+          icon={
+            <AppSymbol name="dumbbell.fill" fallback="🏋" size={20} tintColor={LiftFlowColors.textSecondary} />
+          }
+          onPress={() => router.push('/(features)/equipment')}
+        />
+        <SettingsRow
           label="Workout locations"
           value={user ? (getPrimaryGymLabel(user) ?? 'Add gyms') : 'Add gyms'}
           icon={
@@ -171,7 +207,7 @@ export default function SettingsScreen() {
       <Card style={styles.group}>
         <SettingsRow
           label="Weight"
-          value={user?.weightKg ? `${Math.round(user.weightKg * 2.20462)} lbs` : 'Not set'}
+          value={user?.weightKg ? units.formatWeight(user.weightKg) : 'Not set'}
           icon={
             <AppSymbol name="figure.stand" fallback={SYMBOL_FALLBACKS['figure.stand']} size={20} tintColor={LiftFlowColors.textSecondary} />
           }
@@ -298,6 +334,13 @@ const styles = StyleSheet.create({
   header: {
     gap: Spacing.xs,
     marginBottom: Spacing.xxl,
+  },
+  headerAccent: {
+    width: 40,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: LiftFlowColors.primary,
+    marginTop: Spacing.sm,
   },
   sectionGap: {
     marginTop: Spacing.xxl,

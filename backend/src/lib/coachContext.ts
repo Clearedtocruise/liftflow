@@ -3,6 +3,7 @@ import { parseLimitationFromVoice } from './exerciseSubstitution.js';
 import { getProgramDashboard } from './programEngine.js';
 import { calculateRecoveryScore, mergeTrainingLoadScore } from './recoveryScore.js';
 import { requireAdmin } from './supabase.js';
+import { resolveRankedGoals, toNutritionGoal } from './trainingGoals.js';
 import { calculateMacroTargets, inferWorkoutType } from './workoutAwareNutrition.js';
 
 export type CoachContext = {
@@ -82,7 +83,7 @@ export async function loadCoachContext(userId: string): Promise<CoachContext> {
       .order('week_start_date', { ascending: false })
       .limit(1)
       .maybeSingle(),
-    db.from('profiles').select('weight_kg, primary_training_goal').eq('id', userId).maybeSingle(),
+    db.from('profiles').select('weight_kg, primary_training_goal, fitness_goals').eq('id', userId).maybeSingle(),
   ]);
 
   const limitationContexts: LimitationContext[] = (limitations.data ?? []).map((row) => ({
@@ -97,8 +98,10 @@ export async function loadCoachContext(userId: string): Promise<CoachContext> {
   const muscleGroups = plannedToday.data?.suggested_muscle_groups ?? [];
   const workoutType = muscleGroups.length ? inferWorkoutType(muscleGroups) : 'rest';
 
+  const rankedGoals = resolveRankedGoals(profile.data?.fitness_goals, profile.data?.primary_training_goal);
+
   const macroTargets = calculateMacroTargets({
-    goal: (profile.data?.primary_training_goal as 'fat_loss' | 'muscle_gain' | 'strength' | 'general_fitness') ?? 'general_fitness',
+    goal: toNutritionGoal(rankedGoals[0]),
     bodyWeightKg: profile.data?.weight_kg ?? undefined,
     recoveryScore,
     recoveryModeActive: recoveryRow.data?.recovery_mode_active ?? false,

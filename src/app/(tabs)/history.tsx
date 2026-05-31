@@ -63,7 +63,7 @@ export default function HistoryScreen() {
     <ScreenContainer
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={LiftFlowColors.accent} />}>
       <View style={styles.header}>
-        <AppText variant="title">History</AppText>
+        <AppText variant="headline">History</AppText>
         <AppText variant="body" color="textSecondary">
           Track progression over time
         </AppText>

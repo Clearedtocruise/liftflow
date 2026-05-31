@@ -5,6 +5,7 @@ import { Card } from '@/components/layout/Card';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
+import { useUnits } from '@/hooks/useUnits';
 import type { WorkoutExercise } from '@/types';
 
 type ManualSetEntryProps = {
@@ -14,6 +15,7 @@ type ManualSetEntryProps = {
 };
 
 export function ManualSetEntry({ exercises, onLogSet, disabled }: ManualSetEntryProps) {
+  const units = useUnits();
   const [exerciseName, setExerciseName] = useState('');
   const [weight, setWeight] = useState('');
   const [reps, setReps] = useState('');
@@ -29,7 +31,7 @@ export function ManualSetEntry({ exercises, onLogSet, disabled }: ManualSetEntry
     setLogging(true);
     const success = await onLogSet(
       name,
-      weight ? parseFloat(weight) : undefined,
+      weight ? units.parseWeight(weight) : undefined,
       reps ? parseInt(reps, 10) : undefined,
     );
     setLogging(false);
@@ -71,7 +73,7 @@ export function ManualSetEntry({ exercises, onLogSet, disabled }: ManualSetEntry
       <View style={styles.inputRow}>
         <TextInput
           style={[styles.input, styles.inputHalf]}
-          placeholder="Weight"
+          placeholder={`Weight (${units.weightLabel})`}
           placeholderTextColor={LiftFlowColors.textTertiary}
           keyboardType="decimal-pad"
           value={weight}

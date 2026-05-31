@@ -113,6 +113,9 @@ export type ParsedVoiceCommand = {
   type?: SetType;
   confidence?: number;
   rawText: string;
+  intent?: 'log_set' | 'completed_set' | 'adjust_weight' | 'feedback';
+  feedback?: 'easy' | 'hard' | 'failed';
+  weightAdjustment?: 'increase' | 'decrease';
 };
 
 export type VoiceLogEntry = BaseEntity & {

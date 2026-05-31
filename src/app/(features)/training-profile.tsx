@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
+import { EquipmentPicker } from '@/components/equipment/EquipmentPicker';
 import { Card } from '@/components/layout/Card';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
@@ -11,10 +12,11 @@ import { ChipGrid, SelectableChip } from '@/components/onboarding/SelectableChip
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Radius, Spacing, TouchTarget } from '@/constants/theme';
 import {
-    COMMERCIAL_GYM_EQUIPMENT,
-    HOME_GYM_STARTER,
+    EQUIPMENT_PRESETS,
+    summarizeEquipment,
     TRAINING_LOCATIONS,
     type EquipmentId,
+    type EquipmentPresetId,
     type TrainingLocationId,
 } from '@/constants/trainingProfile';
 import { useAuth } from '@/hooks/useAuth';
@@ -33,6 +35,7 @@ export default function TrainingProfileScreen() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [locationType, setLocationType] = useState<TrainingLocationId>('commercial_gym');
+  const [locationEquipment, setLocationEquipment] = useState<EquipmentId[]>([]);
   const [setAsDefault, setSetAsDefault] = useState(false);
   const [pendingCoords, setPendingCoords] = useState<{ latitude: number; longitude: number } | null>(null);
   const [capturingGps, setCapturingGps] = useState(false);
@@ -54,6 +57,7 @@ export default function TrainingProfileScreen() {
     setEditingId(null);
     setName('');
     setLocationType('commercial_gym');
+    setLocationEquipment([]);
     setSetAsDefault(false);
     setPendingCoords(null);
   }
@@ -74,6 +78,7 @@ export default function TrainingProfileScreen() {
     setEditingId(null);
     setName('');
     setLocationType('commercial_gym');
+    setLocationEquipment([...EQUIPMENT_PRESETS.commercial_gym.equipment]);
     setSetAsDefault(locations.length === 0);
     setShowForm(true);
   }
@@ -82,6 +87,7 @@ export default function TrainingProfileScreen() {
     setEditingId(loc.id);
     setName(loc.name);
     setLocationType(loc.locationType);
+    setLocationEquipment(loc.availableEquipment?.length ? [...loc.availableEquipment] : []);
     setSetAsDefault(loc.isDefault);
     setPendingCoords(
       loc.latitude != null && loc.longitude != null
@@ -96,9 +102,11 @@ export default function TrainingProfileScreen() {
       Alert.alert('Name required', 'Enter a name for this gym or training spot.');
       return;
     }
+    if (locationEquipment.length === 0) {
+      Alert.alert('Equipment required', 'Select equipment for this location or apply a preset.');
+      return;
+    }
     setSaving(true);
-    const equipment: EquipmentId[] =
-      locationType === 'commercial_gym' ? [...COMMERCIAL_GYM_EQUIPMENT] : [...HOME_GYM_STARTER];
 
     const coordPayload = pendingCoords
       ? {
@@ -112,14 +120,14 @@ export default function TrainingProfileScreen() {
       ? await workoutLocationService.update(editingId, user.id, {
           name: name.trim(),
           locationType,
-          availableEquipment: equipment,
+          availableEquipment: locationEquipment,
           isDefault: setAsDefault,
           ...coordPayload,
         })
       : await workoutLocationService.create(user.id, {
           name: name.trim(),
           locationType,
-          availableEquipment: equipment,
+          availableEquipment: locationEquipment,
           isDefault: setAsDefault || locations.length === 0,
           ...coordPayload,
         });
@@ -131,7 +139,7 @@ export default function TrainingProfileScreen() {
     }
     resetForm();
     load();
-  }, [user, name, locationType, setAsDefault, editingId, locations.length, load]);
+  }, [user, name, locationType, locationEquipment, setAsDefault, editingId, locations.length, load, pendingCoords]);
 
   async function handleDelete(loc: WorkoutLocation) {
     if (!user) return;
@@ -180,6 +188,9 @@ export default function TrainingProfileScreen() {
                       {loc.isDefault ? ' · Default' : ''}
                       {loc.latitude != null ? ' · GPS saved' : ' · No GPS'}
                     </AppText>
+                    <AppText variant="footnote" color="textTertiary">
+                      {summarizeEquipment(loc.availableEquipment ?? [])}
+                    </AppText>
                   </View>
                 </View>
                 <View style={styles.locActions}>
@@ -221,10 +232,24 @@ export default function TrainingProfileScreen() {
                   key={opt.id}
                   label={opt.label}
                   selected={locationType === opt.id}
-                  onPress={() => setLocationType(opt.id)}
+                  onPress={() => {
+                    setLocationType(opt.id);
+                    const preset: EquipmentPresetId = opt.id === 'commercial_gym' ? 'commercial_gym' : 'home_gym';
+                    if (locationEquipment.length === 0) {
+                      setLocationEquipment([...EQUIPMENT_PRESETS[preset].equipment]);
+                    }
+                  }}
                 />
               ))}
             </ChipGrid>
+            <AppText variant="caption" color="textSecondary">
+              Equipment at this location
+            </AppText>
+            <EquipmentPicker
+              selected={locationEquipment}
+              onChange={(next) => setLocationEquipment(next as EquipmentId[])}
+              disabled={saving}
+            />
             <Pressable
               onPress={() => setSetAsDefault((v) => !v)}
               style={[styles.defaultToggle, setAsDefault && styles.defaultToggleOn]}>

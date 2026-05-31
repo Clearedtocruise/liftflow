@@ -4,7 +4,48 @@ import type { IVoiceService } from '@/services/interfaces';
 import { supabase } from '@/supabase/client';
 import type { ParseVoiceRequest, ParsedVoiceCommand } from '@/types';
 
+function parseCoachingLocally(transcript: string): ParsedVoiceCommand | null {
+  const text = transcript.trim().toLowerCase();
+
+  if (/^(?:completed|finished)\s+(?:the\s+)?set\.?$/.test(text)) {
+    return { intent: 'completed_set', rawText: transcript, confidence: 0.92 };
+  }
+  const gotReps = text.match(/^(?:got|did|hit)\s+(\d+)\s*reps?\.?$/);
+  if (gotReps) {
+    return { intent: 'log_set', reps: parseInt(gotReps[1], 10), rawText: transcript, confidence: 0.88 };
+  }
+  const easy = text.match(/^(.+?)\s+(?:felt|feels?)\s+easy\.?$/);
+  if (easy) {
+    return { intent: 'feedback', exercise: easy[1].trim(), feedback: 'easy', rawText: transcript, confidence: 0.9 };
+  }
+  const hard = text.match(/^(.+?)\s+(?:felt|feels?)\s+(?:hard|heavy)\.?$/);
+  if (hard) {
+    return { intent: 'feedback', exercise: hard[1].trim(), feedback: 'hard', rawText: transcript, confidence: 0.9 };
+  }
+  const failed = text.match(/^(?:failed|missed)\s+(?:at\s+)?(\d+)\s*reps?\.?$/);
+  if (failed) {
+    return {
+      intent: 'feedback',
+      feedback: 'failed',
+      reps: parseInt(failed[1], 10),
+      rawText: transcript,
+      confidence: 0.9,
+    };
+  }
+  if (/^(?:increase|add|go up)\s+(?:the\s+)?weight\.?$/.test(text)) {
+    return { intent: 'adjust_weight', weightAdjustment: 'increase', rawText: transcript, confidence: 0.92 };
+  }
+  if (/^(?:reduce|decrease|lower|drop)\s+(?:the\s+)?weight\.?$/.test(text)) {
+    return { intent: 'adjust_weight', weightAdjustment: 'decrease', rawText: transcript, confidence: 0.92 };
+  }
+
+  return null;
+}
+
 function parseLocally(transcript: string): ParsedVoiceCommand | null {
+  const coaching = parseCoachingLocally(transcript);
+  if (coaching) return coaching;
+
   const text = transcript.trim().toLowerCase();
 
   const patterns = [

@@ -3,6 +3,7 @@ import { Router } from 'express';
 import { generateWeeklyMealPlan } from '../lib/aiCoach.js';
 import { loadCoachContext } from '../lib/coachContext.js';
 import { requireAdmin } from '../lib/supabase.js';
+import { resolveRankedGoals, toNutritionGoal } from '../lib/trainingGoals.js';
 import {
     calculateMacroTargets,
     generateDailyMeals,
@@ -63,12 +64,14 @@ nutritionRouter.post('/adaptive-targets', async (req, res) => {
     const db = requireAdmin();
     const { data: profile } = await db
       .from('profiles')
-      .select('weight_kg, primary_training_goal')
+      .select('weight_kg, primary_training_goal, fitness_goals')
       .eq('id', userId)
       .maybeSingle();
 
+    const ranked = resolveRankedGoals(profile?.fitness_goals, profile?.primary_training_goal);
+
     const targets = calculateMacroTargets({
-      goal: (profile?.primary_training_goal as 'fat_loss' | 'muscle_gain' | 'strength' | 'general_fitness') ?? 'general_fitness',
+      goal: toNutritionGoal(ranked[0]),
       bodyWeightKg: profile?.weight_kg ?? undefined,
       recoveryScore: ctx.recovery.score,
       recoveryModeActive: ctx.recovery.recoveryModeActive,

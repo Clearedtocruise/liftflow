@@ -19,8 +19,11 @@ import { buildWorkoutSessionName, pickDefaultLocation } from '@/constants/traini
 import { DEFAULT_REST_SECONDS } from '@/constants/workout';
 import { useAuth } from '@/hooks/useAuth';
 import { useNearbyWorkoutLocation } from '@/hooks/useNearbyWorkoutLocation';
+import { useUnits } from '@/hooks/useUnits';
 import { useVoiceLogging } from '@/hooks/useVoiceLogging';
 import { useWorkoutLocations } from '@/hooks/useWorkoutLocations';
+import { formatWorkoutWeightForInput, normalizeVoiceWeightToKg, weightStepKg } from '@/lib/unitConversion';
+import { coachActivationService } from '@/services/coachActivationService';
 import { socialShareService } from '@/services/socialShareService';
 import { voiceService } from '@/services/voiceService';
 import { useWorkoutSession } from '@/state/workout/WorkoutSessionContext';
@@ -28,6 +31,7 @@ import type { ParsedVoiceCommand, WorkoutSet } from '@/types';
 
 export default function WorkoutScreen() {
   const { user } = useAuth();
+  const units = useUnits();
   const {
     activeSession: session,
     isLoading: loading,
@@ -128,22 +132,58 @@ export default function WorkoutScreen() {
   }
 
   async function saveParsedSet(command: ParsedVoiceCommand) {
-    if (!user || !session || !command.exercise) return;
+    if (!user || !session || session.status === 'paused') return;
 
-    const workoutExerciseId = await addExerciseByName(command.exercise);
+    if (command.intent === 'feedback' || command.intent === 'adjust_weight') {
+      const coachNote =
+        command.feedback === 'easy'
+          ? 'Noted — consider increasing weight on your next set.'
+          : command.feedback === 'hard'
+            ? 'Noted — keep weight or reduce slightly next set.'
+            : command.feedback === 'failed'
+              ? `Noted — ${command.reps ?? 'missed'} reps. Consider reducing load.`
+              : command.weightAdjustment === 'increase'
+                ? 'Noted — increase weight on your next set.'
+                : 'Noted — reduce weight on your next set.';
+      Alert.alert('AI Coach', coachNote);
+      clearTranscript();
+      setConfirmVisible(false);
+      setParsed(null);
+      return;
+    }
+
+    let exerciseName = command.exercise;
+    if (!exerciseName && session.exercises.length > 0) {
+      const active = session.exercises.find((e) => e.isActive) ?? session.exercises[session.exercises.length - 1];
+      exerciseName = active?.exercise?.name;
+    }
+    if (!exerciseName) {
+      Alert.alert('Which exercise?', 'Say the exercise name or start logging from the active exercise.');
+      return;
+    }
+    const workoutExerciseId = await addExerciseByName(exerciseName);
     if (!workoutExerciseId) {
       Alert.alert('Error', 'Could not add exercise.');
       return;
     }
 
+    const activeExercise = session.exercises.find((e) => e.id === workoutExerciseId);
     const logged = await logSet({
       workoutExerciseId,
-      weight: command.weight,
-      reps: command.reps,
+      weight:
+        command.weight != null
+          ? normalizeVoiceWeightToKg(command.weight, command.rawText, units.preferredWeightUnit)
+          : activeExercise?.suggestedWeight,
+      reps: command.reps ?? parseInt(String(activeExercise?.suggestedReps ?? '8').match(/\d+/)?.[0] ?? '8', 10),
     });
 
     if (logged) {
-      if (logged.isPr) Alert.alert('New PR!', `${command.exercise}: ${logged.weight} × ${logged.reps}`);
+      if (logged.isPr) {
+        Alert.alert(
+          'New PR!',
+          `${exerciseName}: ${formatWorkoutWeightForInput(logged.weight, units.preferredWeightUnit)} ${units.weightLabel} × ${logged.reps}`,
+        );
+      }
       clearTranscript();
       setConfirmVisible(false);
       setParsed(null);
@@ -161,7 +201,10 @@ export default function WorkoutScreen() {
 
     const logged = await logSet({ workoutExerciseId, weight, reps });
     if (logged?.isPr) {
-      Alert.alert('New PR!', `${exerciseName}: ${logged.weight ?? weight} × ${logged.reps ?? reps}`);
+      Alert.alert(
+        'New PR!',
+        `${exerciseName}: ${formatWorkoutWeightForInput(logged.weight, units.preferredWeightUnit)} ${units.weightLabel} × ${logged.reps ?? reps}`,
+      );
     }
     return !!logged;
   }
@@ -174,13 +217,14 @@ export default function WorkoutScreen() {
 
     const weight = lastLoggedSet.weight ?? 0;
     const reps = lastLoggedSet.reps ?? 0;
+    const step = weightStepKg(units.preferredWeightUnit);
 
     switch (id) {
       case 'weight-up':
-        await updateSet(lastLoggedSet.id, { weight: weight + 5 });
+        await updateSet(lastLoggedSet.id, { weight: weight + step });
         break;
       case 'weight-down':
-        await updateSet(lastLoggedSet.id, { weight: Math.max(0, weight - 5) });
+        await updateSet(lastLoggedSet.id, { weight: Math.max(0, weight - step) });
         break;
       case 'reps-up':
         await updateSet(lastLoggedSet.id, { reps: reps + 1 });
@@ -217,19 +261,22 @@ export default function WorkoutScreen() {
 
   async function handleFinishWorkout() {
     const completed = await endSession();
-    if (completed) {
-      Alert.alert(
-        'Workout complete',
-        `Duration: ${Math.round((completed.durationSeconds ?? 0) / 60)} min · ${completed.totalSets ?? 0} sets`,
-        [
-          { text: 'Done', style: 'cancel' },
-          {
-            text: 'Share',
-            onPress: () => socialShareService.shareWorkoutRecap(completed),
-          },
-        ],
-      );
-    }
+    if (!completed || !user) return;
+
+    const coachResult = await coachActivationService.getPostWorkoutSummary(user.id, completed.id);
+    const summary = coachResult.success ? coachResult.data : null;
+
+    const body = summary
+      ? `${summary.workoutSummary}\n\n${summary.recoveryRecommendation}\n\n${summary.nutritionRecommendation}\n\n${summary.progressionRecommendations[0] ?? ''}`
+      : `Duration: ${Math.round((completed.durationSeconds ?? 0) / 60)} min · ${completed.totalSets ?? 0} sets`;
+
+    Alert.alert(summary ? 'Workout Complete — AI Coach' : 'Workout complete', body, [
+      { text: 'Done', style: 'cancel' },
+      {
+        text: 'Share',
+        onPress: () => socialShareService.shareWorkoutRecap(completed),
+      },
+    ]);
   }
 
   function handleCancelWorkout() {
@@ -254,7 +301,7 @@ export default function WorkoutScreen() {
   if (!session) {
     return (
       <ScreenContainer contentContainerStyle={styles.scrollContent}>
-        <AppText variant="title">Workout</AppText>
+        <AppText variant="headline">Workout</AppText>
         <StartWorkoutPrompt
           user={user}
           locations={locations}

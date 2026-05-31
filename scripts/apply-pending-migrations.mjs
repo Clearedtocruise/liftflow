@@ -42,7 +42,16 @@ const projectRef =
   env.SUPABASE_PROJECT_REF ??
   projectRefFromUrl(env.SUPABASE_URL ?? env.EXPO_PUBLIC_SUPABASE_URL);
 
-const MIGRATIONS = ['003_training_profile.sql', '004_primary_gym_name.sql', '005_workout_locations.sql', '006_location_coordinates.sql', '007_sprint2_coach_foundation.sql'];
+const MIGRATIONS = [
+  '003_training_profile.sql',
+  '004_primary_gym_name.sql',
+  '005_workout_locations.sql',
+  '006_location_coordinates.sql',
+  '007_sprint2_coach_foundation.sql',
+  '008_fitness_goals_priority.sql',
+  '009_unit_preferences.sql',
+  '010_coach_onboarding.sql',
+];
 
 async function runSql(query) {
   const res = await fetch(`https://api.supabase.com/v1/projects/${projectRef}/database/query`, {

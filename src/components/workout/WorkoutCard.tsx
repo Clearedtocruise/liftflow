@@ -3,6 +3,8 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { Card } from '@/components/layout/Card';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Spacing } from '@/constants/theme';
+import { useUnits } from '@/hooks/useUnits';
+import { formatWorkoutWeightForInput, weightStepKg } from '@/lib/unitConversion';
 import type { WorkoutExercise, WorkoutSet } from '@/types/workout';
 
 type WorkoutCardProps = {
@@ -11,6 +13,7 @@ type WorkoutCardProps = {
 };
 
 export function WorkoutCard({ exercise, onEditSet }: WorkoutCardProps) {
+  const units = useUnits();
   const lastSet = exercise.sets[exercise.sets.length - 1];
   const exerciseName = exercise.exercise?.name ?? 'Unknown';
 
@@ -45,7 +48,10 @@ export function WorkoutCard({ exercise, onEditSet }: WorkoutCardProps) {
                 Set {set.setNumber}
               </AppText>
               <AppText variant="bodyBold">
-                {set.weight ?? '—'} × {set.reps ?? '—'}
+                {set.weight != null
+                  ? `${formatWorkoutWeightForInput(set.weight, units.preferredWeightUnit)} ${units.weightLabel}`
+                  : '—'}{' '}
+                × {set.reps ?? '—'}
               </AppText>
               {set.isPr ? (
                 <View style={styles.prBadge}>
@@ -70,7 +76,12 @@ export function WorkoutCard({ exercise, onEditSet }: WorkoutCardProps) {
 
       {lastSet ? (
         <AppText variant="caption" color="textSecondary" style={styles.hint}>
-          Suggested: {(lastSet.weight ?? 0) + 5} × 4–6 · Tap a set to edit
+          Suggested:{' '}
+          {formatWorkoutWeightForInput(
+            (lastSet.weight ?? 0) + weightStepKg(units.preferredWeightUnit),
+            units.preferredWeightUnit,
+          )}{' '}
+          {units.weightLabel} × 4–6 · Tap a set to edit
         </AppText>
       ) : null}
     </Card>

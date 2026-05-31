@@ -50,6 +50,12 @@ export type VoiceCommandStatus = 'pending' | 'parsed' | 'confirmed' | 'rejected'
 export type AdPlacement = 'home' | 'history' | 'settings' | 'post_workout';
 export type PhotoAngle = 'front' | 'back' | 'side_left' | 'side_right' | 'custom';
 export type PreferredUnits = 'imperial' | 'metric';
+
+export type HeightUnit = 'ft_in' | 'in' | 'cm';
+export type WeightUnit = 'lb' | 'kg';
+export type DistanceUnit = 'mi' | 'km';
+export type MeasurementUnit = 'in' | 'cm';
+export type WaterUnit = 'oz' | 'L';
 export type PrivacyLevel = 'private' | 'shared' | 'public';
 
 /** Base fields present on all persisted entities */

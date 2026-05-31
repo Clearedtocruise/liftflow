@@ -295,7 +295,7 @@ export async function generateWorkoutPlan(userId: string): Promise<GeneratedWork
     messages: [
       {
         role: 'system',
-        content: `You are an expert strength coach. Return JSON: { "name": string, "rationale": string, "muscleGroups": string[], "estimatedMinutes": number, "exercises": [{ "name": string, "sets": number, "reps": string, "weightLbs": number, "restSeconds": number, "notes": string }] }. CRITICAL: Use ONLY exercise names from the provided library (exact names). Respect equipment constraints. Prefer exercises NOT repeated from last week when alternatives exist. Goal: ${profile.primaryTrainingGoal}. Experience: ${profile.trainingExperience ?? 'beginner'}.`,
+        content: `You are an expert strength coach. Return JSON: { "name": string, "rationale": string, "muscleGroups": string[], "estimatedMinutes": number, "exercises": [{ "name": string, "sets": number, "reps": string, "weightLbs": number, "restSeconds": number, "notes": string }] }. CRITICAL: Use ONLY exercise names from the provided library (exact names). Respect equipment constraints. Prefer exercises NOT repeated from last week when alternatives exist. Primary goal: ${profile.primaryTrainingGoal}. All goals (priority order): ${profile.fitnessGoals.join(', ')}. Experience: ${profile.trainingExperience ?? 'beginner'}.`,
       },
       {
         role: 'user',
@@ -304,6 +304,7 @@ export async function generateWorkoutPlan(userId: string): Promise<GeneratedWork
           recovery: recovery.status,
           recoveryAdvice: recovery.aiAnalysis,
           trainingGoal: profile.primaryTrainingGoal,
+          fitnessGoals: profile.fitnessGoals,
           trainingLocation: profile.trainingLocation,
           availableEquipment: profile.availableEquipment,
           exerciseLibrary: exerciseList,

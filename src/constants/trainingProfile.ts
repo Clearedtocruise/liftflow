@@ -1,23 +1,25 @@
 import type { UserProfile } from '@/types/user';
 import type { WorkoutLocation } from '@/types/workoutLocation';
 
+export {
+    COMMERCIAL_GYM_EQUIPMENT,
+    EQUIPMENT_OPTIONS,
+    EQUIPMENT_PRESETS,
+    HOME_GYM_STARTER,
+    summarizeEquipment
+} from '@/constants/equipmentCatalog';
+export type { EquipmentId, EquipmentPresetId } from '@/constants/equipmentCatalog';
+export { summarizeGoals, toNutritionGoal, TRAINING_GOAL_OPTIONS, type TrainingGoalId } from '@/constants/trainingGoals';
+
 export const TRAINING_LOCATIONS = [
-  { id: 'home_gym', label: 'Home gym' },
-  { id: 'commercial_gym', label: 'Commercial gym' },
+  { id: 'home_gym', label: 'Home Gym' },
+  { id: 'garage_gym', label: 'Garage Gym' },
+  { id: 'planet_fitness', label: 'Planet Fitness' },
+  { id: 'commercial_gym', label: 'Commercial Gym' },
+  { id: 'full_gym', label: 'Full Gym' },
 ] as const;
 
-export const EQUIPMENT_OPTIONS = [
-  { id: 'bodyweight', label: 'Bodyweight' },
-  { id: 'bands', label: 'Bands' },
-  { id: 'dumbbells', label: 'Dumbbells' },
-  { id: 'bench', label: 'Bench' },
-  { id: 'pull_up_bar', label: 'Pull-up bar' },
-  { id: 'barbell', label: 'Barbell' },
-  { id: 'rack', label: 'Rack' },
-  { id: 'machines', label: 'Machines' },
-  { id: 'full_gym', label: 'Full gym' },
-] as const;
-
+/** @deprecated Use TRAINING_GOAL_OPTIONS from trainingGoals */
 export const TRAINING_GOALS = [
   { id: 'fat_loss', label: 'Fat loss' },
   { id: 'muscle_gain', label: 'Muscle gain' },
@@ -26,21 +28,14 @@ export const TRAINING_GOALS = [
 ] as const;
 
 export type TrainingLocationId = (typeof TRAINING_LOCATIONS)[number]['id'];
-export type EquipmentId = (typeof EQUIPMENT_OPTIONS)[number]['id'];
-export type TrainingGoalId = (typeof TRAINING_GOALS)[number]['id'];
 
-/** Commercial gym preset — user can still deselect items. */
-export const COMMERCIAL_GYM_EQUIPMENT: EquipmentId[] = [
-  'full_gym',
-];
-
-export const HOME_GYM_STARTER: EquipmentId[] = ['bodyweight', 'dumbbells', 'bench'];
-
-/** Display label for workout start prompts (named gym → location type fallback). */
 export function getPrimaryGymLabel(profile: Pick<UserProfile, 'primaryGymName' | 'trainingLocation'>): string | null {
   const name = profile.primaryGymName?.trim();
   if (name) return name;
   if (profile.trainingLocation === 'commercial_gym') return 'Commercial Gym';
+  if (profile.trainingLocation === 'planet_fitness') return 'Planet Fitness';
+  if (profile.trainingLocation === 'garage_gym') return 'Garage Gym';
+  if (profile.trainingLocation === 'full_gym') return 'Full Gym';
   if (profile.trainingLocation === 'home_gym') return 'Home Gym';
   return null;
 }

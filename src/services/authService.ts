@@ -1,3 +1,4 @@
+import { DEFAULT_UNIT_PREFERENCES } from '@/constants/units';
 import { mapAuthError } from '@/lib/authErrors';
 import { getEmailConfirmRedirectUrl, getPasswordResetRedirectUrl } from '@/lib/authRedirects';
 import { mapProfile } from '@/lib/db-mappers';
@@ -17,6 +18,7 @@ async function fetchProfile(userId: string, email: string, metadata?: Record<str
       email,
       displayName: (metadata?.display_name as string) ?? undefined,
       preferredUnits: 'imperial',
+      ...DEFAULT_UNIT_PREFERENCES,
       confirmationMode: 'smart',
       onboardingCompleted: false,
       createdAt: new Date().toISOString(),

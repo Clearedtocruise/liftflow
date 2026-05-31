@@ -148,6 +148,18 @@ export const api = {
       body,
       token,
     ),
+  activateCoach: (userId: string, token?: string) =>
+    apiClient.post<import('@/types/coachActivation').CoachActivationResult>(
+      '/api/training/coach/activate',
+      { userId },
+      token,
+    ),
+  postWorkoutCoach: (userId: string, sessionId: string, token?: string) =>
+    apiClient.post<import('@/types/coachActivation').PostWorkoutCoachSummary>(
+      '/api/training/coach/post-workout',
+      { userId, sessionId },
+      token,
+    ),
   getProgramDashboard: (userId: string, token?: string) =>
     apiClient.get<Record<string, unknown> | null>(`/api/training/programs/dashboard?userId=${userId}`, token),
   adaptProgram: (userId: string, token?: string) =>

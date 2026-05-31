@@ -17,6 +17,7 @@ import {
     buildAdaptiveWorkoutPlan,
     getLastPerformanceBySlug,
     loadActiveLimitations,
+    loadRecoveryModifiers,
     type GeneratedWorkoutExercise
 } from './workoutPlanner.js';
 
@@ -123,6 +124,7 @@ export async function generateTrainingProgram(input: CreateProgramInput) {
   const schedule = buildWeeklySchedule(input.programType, input.frequency, input.customSchedule);
   const limitations = await loadActiveLimitations(input.userId);
   const performance = await getLastPerformanceBySlug(input.userId);
+  const recoveryMods = await loadRecoveryModifiers(input.userId);
   const equipment = await resolveProgramEquipment(input.userId, input);
 
   await db.from('training_programs').update({ is_active: false }).eq('user_id', input.userId);
@@ -178,7 +180,12 @@ export async function generateTrainingProgram(input: CreateProgramInput) {
         );
 
         let exercises = scaleExercises(plan.exercises, phaseSpec.volumeMultiplier, phaseSpec.repRangeAdjust);
-        exercises = applyWeeklyProgression(exercises, performance, phaseSpec.intensityMultiplier);
+        exercises = applyWeeklyProgression(
+          exercises,
+          performance,
+          phaseSpec.intensityMultiplier,
+          recoveryMods.volumeMultiplier,
+        );
         exercises = applySubstitutionsToExercises(exercises, limitations as LimitationContext[]);
 
         const { data: template, error: templateError } = await db
@@ -210,7 +217,12 @@ export async function generateTrainingProgram(input: CreateProgramInput) {
         .single();
 
       const exercises = (templateRow?.exercises ?? []) as GeneratedWorkoutExercise[];
-      const progressed = applyWeeklyProgression(exercises, performance, phaseSpec.intensityMultiplier);
+      const progressed = applyWeeklyProgression(
+        exercises,
+        performance,
+        phaseSpec.intensityMultiplier,
+        recoveryMods.volumeMultiplier,
+      );
 
       await db.from('planned_workouts').insert({
         user_id: input.userId,

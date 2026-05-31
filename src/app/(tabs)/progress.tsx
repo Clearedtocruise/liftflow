@@ -9,11 +9,13 @@ import { SectionHeader } from '@/components/layout/SectionHeader';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
+import { useUnits } from '@/hooks/useUnits';
 import { bodyService } from '@/services/bodyService';
 import type { BodyCompositionRecord, PhysiqueProjection, ProgressPhoto } from '@/types';
 
 export default function ProgressScreen() {
   const { user } = useAuth();
+  const units = useUnits();
   const [photos, setPhotos] = useState<ProgressPhoto[]>([]);
   const [measurements, setMeasurements] = useState<BodyCompositionRecord[]>([]);
   const [projections, setProjections] = useState<PhysiqueProjection[]>([]);
@@ -67,12 +69,13 @@ export default function ProgressScreen() {
 
   async function handleSaveMeasurement() {
     if (!user) return;
-    const weightKg = weight ? parseFloat(weight) / 2.20462 : undefined;
+    const weightKg = units.parseWeight(weight);
+    const waistCm = units.parseMeasurement(waist);
     const result = await bodyService.recordComposition(user.id, {
       userId: user.id,
       recordedAt: new Date().toISOString(),
       weightKg,
-      waistCm: waist ? parseFloat(waist) : undefined,
+      waistCm,
       bodyFatPct: bodyFat ? parseFloat(bodyFat) : undefined,
       estimationMethod: 'manual',
     });
@@ -128,7 +131,7 @@ export default function ProgressScreen() {
   return (
     <ScreenContainer>
       <View style={styles.header}>
-        <AppText variant="title">Progress</AppText>
+        <AppText variant="headline">Progress</AppText>
         <AppText variant="body" color="textSecondary">
           Photos, measurements, and projections
         </AppText>
@@ -160,8 +163,8 @@ export default function ProgressScreen() {
 
       <SectionHeader title="Body Measurements" />
       <Card style={styles.form}>
-        <TextInput style={styles.input} placeholder="Weight (lbs)" placeholderTextColor={LiftFlowColors.textTertiary} keyboardType="numeric" value={weight} onChangeText={setWeight} />
-        <TextInput style={styles.input} placeholder="Waist (cm)" placeholderTextColor={LiftFlowColors.textTertiary} keyboardType="numeric" value={waist} onChangeText={setWaist} />
+        <TextInput style={styles.input} placeholder={`Weight (${units.weightLabel})`} placeholderTextColor={LiftFlowColors.textTertiary} keyboardType="numeric" value={weight} onChangeText={setWeight} />
+        <TextInput style={styles.input} placeholder={`Waist (${units.measurementLabel})`} placeholderTextColor={LiftFlowColors.textTertiary} keyboardType="numeric" value={waist} onChangeText={setWaist} />
         <TextInput style={styles.input} placeholder="Body fat %" placeholderTextColor={LiftFlowColors.textTertiary} keyboardType="numeric" value={bodyFat} onChangeText={setBodyFat} />
         <PrimaryButton label="Save Measurement" onPress={handleSaveMeasurement} />
       </Card>
@@ -174,8 +177,8 @@ export default function ProgressScreen() {
                 {new Date(m.recordedAt).toLocaleDateString()}
               </AppText>
               <AppText variant="bodyBold">
-                {m.weightKg ? `${Math.round(m.weightKg * 2.20462)} lbs` : '—'}
-                {m.waistCm ? ` · ${m.waistCm}cm waist` : ''}
+                {m.weightKg ? units.formatWeight(m.weightKg) : '—'}
+                {m.waistCm ? ` · ${units.formatMeasurement(m.waistCm)} waist` : ''}
               </AppText>
             </View>
           ))}

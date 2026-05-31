@@ -193,7 +193,13 @@ export const workoutLocationService = {
 
     const name =
       profile.primaryGymName?.trim() ||
-      (profile.trainingLocation === 'home_gym' ? 'Home Gym' : 'Commercial Gym');
+      ({
+        home_gym: 'Home Gym',
+        garage_gym: 'Garage Gym',
+        planet_fitness: 'Planet Fitness',
+        commercial_gym: 'Commercial Gym',
+        full_gym: 'Full Gym',
+      }[profile.trainingLocation ?? 'commercial_gym'] ?? 'Gym');
 
     return this.create(userId, {
       name,

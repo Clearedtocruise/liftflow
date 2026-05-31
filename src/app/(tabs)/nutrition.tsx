@@ -9,6 +9,7 @@ import { AppText } from '@/components/ui/AppText';
 import { MicrophoneButton } from '@/components/workout/MicrophoneButton';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
+import { useUnits } from '@/hooks/useUnits';
 import { useVoiceLogging } from '@/hooks/useVoiceLogging';
 import { parseNutritionVoice } from '@/lib/nutritionVoice';
 import { nutritionService } from '@/services/nutritionService';
@@ -18,6 +19,7 @@ const MEAL_TYPES: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack', 'pre_wo
 
 export default function NutritionScreen() {
   const { user } = useAuth();
+  const units = useUnits();
   const [goals, setGoals] = useState<NutritionGoals | null>(null);
   const [summary, setSummary] = useState<DailyNutritionSummary | null>(null);
   const [meals, setMeals] = useState<Meal[]>([]);
@@ -171,7 +173,7 @@ export default function NutritionScreen() {
   return (
     <ScreenContainer>
       <View style={styles.header}>
-        <AppText variant="title">Nutrition</AppText>
+        <AppText variant="headline">Nutrition</AppText>
         <AppText variant="body" color="textSecondary">
           Track macros, meals, and supplements
         </AppText>
@@ -183,6 +185,39 @@ export default function NutritionScreen() {
         <MacroCard label="Carbs" current={Math.round(summary?.carbsG ?? 0)} target={goals?.carbsG} unit="g" />
         <MacroCard label="Fat" current={Math.round(summary?.fatG ?? 0)} target={goals?.fatG} unit="g" />
       </View>
+
+      {(user?.metadata?.coachActivation?.supplementRecommendations?.length ?? 0) > 0 ? (
+        <Card style={styles.supplementCard}>
+          <AppText variant="label" color="accent">
+            AI Supplement Guidance
+          </AppText>
+          <AppText variant="footnote" color="textTertiary">
+            Recommendations only — not medical advice.
+          </AppText>
+          {user?.metadata?.coachActivation?.supplementRecommendations?.slice(0, 4).map((rec) => (
+            <View key={rec.name} style={styles.supplementRow}>
+              <AppText variant="bodyBold">{rec.name}</AppText>
+              <AppText variant="footnote" color="textSecondary">
+                {rec.rationale}
+              </AppText>
+            </View>
+          ))}
+        </Card>
+      ) : null}
+
+      {(summary?.waterMl != null || summary?.waterTargetMl != null) ? (
+        <Card style={styles.waterCard}>
+          <AppText variant="caption" color="textSecondary">
+            Water today
+          </AppText>
+          <AppText variant="bodyBold">
+            {units.formatWater(summary?.waterMl ?? 0)}
+            {summary?.waterTargetMl
+              ? ` / ${units.formatWater(summary.waterTargetMl)}`
+              : ''}
+          </AppText>
+        </Card>
+      ) : null}
 
       <SectionHeader title="Log Entry" subtitle="Manual or voice — tap mic below" />
 
@@ -378,6 +413,20 @@ const styles = StyleSheet.create({
   macroCard: {
     width: '47%',
     gap: Spacing.xs,
+  },
+  supplementCard: {
+    gap: Spacing.sm,
+    marginBottom: Spacing.xxl,
+  },
+  supplementRow: {
+    gap: Spacing.xs,
+    paddingTop: Spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: LiftFlowColors.border,
+  },
+  waterCard: {
+    gap: Spacing.xs,
+    marginBottom: Spacing.xxl,
   },
   modeRow: {
     flexDirection: 'row',

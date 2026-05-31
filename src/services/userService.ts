@@ -1,5 +1,6 @@
 import { mapMetric, mapPreferences, mapProfile } from '@/lib/db-mappers';
 import { fail, fromError, ok } from '@/lib/serviceResult';
+import { preferredUnitsFromGranular } from '@/lib/unitConversion';
 import type { IUserService } from '@/services/interfaces';
 import { supabase } from '@/supabase/client';
 
@@ -27,6 +28,40 @@ export const userService: IUserService = {
       if (updates.trainingExperience !== undefined) payload.training_experience = updates.trainingExperience;
       if (updates.fitnessGoals !== undefined) payload.fitness_goals = updates.fitnessGoals;
       if (updates.preferredUnits !== undefined) payload.preferred_units = updates.preferredUnits;
+      if (updates.preferredHeightUnit !== undefined) payload.preferred_height_unit = updates.preferredHeightUnit;
+      if (updates.preferredWeightUnit !== undefined) payload.preferred_weight_unit = updates.preferredWeightUnit;
+      if (updates.preferredDistanceUnit !== undefined) payload.preferred_distance_unit = updates.preferredDistanceUnit;
+      if (updates.preferredMeasurementUnit !== undefined) {
+        payload.preferred_measurement_unit = updates.preferredMeasurementUnit;
+      }
+      if (updates.preferredWaterUnit !== undefined) payload.preferred_water_unit = updates.preferredWaterUnit;
+
+      const granularKeys = [
+        'preferredHeightUnit',
+        'preferredWeightUnit',
+        'preferredDistanceUnit',
+        'preferredMeasurementUnit',
+        'preferredWaterUnit',
+      ] as const;
+      if (granularKeys.some((key) => updates[key] !== undefined) && updates.preferredUnits === undefined) {
+        const merged = {
+          preferredHeightUnit: updates.preferredHeightUnit,
+          preferredWeightUnit: updates.preferredWeightUnit,
+          preferredDistanceUnit: updates.preferredDistanceUnit,
+          preferredMeasurementUnit: updates.preferredMeasurementUnit,
+          preferredWaterUnit: updates.preferredWaterUnit,
+        };
+        const hasAll = granularKeys.every((key) => merged[key] != null);
+        if (hasAll) {
+          payload.preferred_units = preferredUnitsFromGranular({
+            preferredHeightUnit: merged.preferredHeightUnit!,
+            preferredWeightUnit: merged.preferredWeightUnit!,
+            preferredDistanceUnit: merged.preferredDistanceUnit!,
+            preferredMeasurementUnit: merged.preferredMeasurementUnit!,
+            preferredWaterUnit: merged.preferredWaterUnit!,
+          });
+        }
+      }
       if (updates.confirmationMode !== undefined) payload.confirmation_mode = updates.confirmationMode;
       if (updates.timezone !== undefined) payload.timezone = updates.timezone;
       if (updates.trainingLocation !== undefined) payload.training_location = updates.trainingLocation;
@@ -34,6 +69,7 @@ export const userService: IUserService = {
       if (updates.availableEquipment !== undefined) payload.available_equipment = updates.availableEquipment;
       if (updates.primaryTrainingGoal !== undefined) payload.primary_training_goal = updates.primaryTrainingGoal;
       if (updates.onboardingCompleted !== undefined) payload.onboarding_completed = updates.onboardingCompleted;
+      if (updates.metadata !== undefined) payload.metadata = updates.metadata;
 
       const { data, error } = await supabase.from('profiles').update(payload).eq('id', userId).select('*').single();
       if (error) return fail(error.message);

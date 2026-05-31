@@ -4,6 +4,8 @@ import { Modal, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
+import { useUnits } from '@/hooks/useUnits';
+import { formatWorkoutWeightForInput } from '@/lib/unitConversion';
 import type { WorkoutSet } from '@/types';
 
 type SetEditModalProps = {
@@ -16,23 +18,26 @@ type SetEditModalProps = {
 };
 
 export function SetEditModal({ visible, set, exerciseName, onSave, onDelete, onClose }: SetEditModalProps) {
+  const units = useUnits();
   const [weight, setWeight] = useState('');
   const [reps, setReps] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (set) {
-      setWeight(set.weight != null ? String(set.weight) : '');
+      setWeight(
+        set.weight != null ? formatWorkoutWeightForInput(set.weight, units.preferredWeightUnit) : '',
+      );
       setReps(set.reps != null ? String(set.reps) : '');
     }
-  }, [set]);
+  }, [set, units.preferredWeightUnit]);
 
   async function handleSave() {
     if (!set) return;
     setSaving(true);
     await onSave(
       set.id,
-      weight ? parseFloat(weight) : undefined,
+      weight ? units.parseWeight(weight) : undefined,
       reps ? parseInt(reps, 10) : undefined,
     );
     setSaving(false);
@@ -61,7 +66,7 @@ export function SetEditModal({ visible, set, exerciseName, onSave, onDelete, onC
           <View style={styles.inputRow}>
             <View style={styles.field}>
               <AppText variant="caption" color="textSecondary">
-                Weight
+                Weight ({units.weightLabel})
               </AppText>
               <TextInput
                 style={styles.input}

@@ -1,5 +1,6 @@
 export * from './ai';
 export * from './analytics';
+export * from './coachActivation';
 export * from './coaching';
 export * from './common';
 export * from './integrations';

@@ -1,57 +1,143 @@
 import { Platform } from 'react-native';
 
-/** LiftFlow dark premium palette — Apple Fitness / Whoop inspired */
+/** LiftFlow Sprint 5.0 — Premium performance brand system */
 export const LiftFlowColors = {
-  background: '#0A0A0B',
-  backgroundElevated: '#141416',
-  surface: '#1C1C1E',
-  surfaceElevated: '#2C2C2E',
-  surfaceHighlight: '#3A3A3C',
-  border: '#2E2E32',
-  borderSubtle: '#232326',
+  background: '#080B10',
+  backgroundSecondary: '#111318',
+  backgroundElevated: '#111318',
+  surface: '#171B22',
+  surfaceElevated: '#1E2430',
+  surfaceHighlight: '#252C3A',
+  border: 'rgba(255, 255, 255, 0.08)',
+  borderSubtle: 'rgba(255, 255, 255, 0.04)',
 
   textPrimary: '#FFFFFF',
-  textSecondary: '#8E8E93',
-  textTertiary: '#636366',
-  textMuted: '#48484A',
+  textSecondary: '#A6B0C3',
+  textTertiary: '#6B7589',
+  textMuted: '#4A5366',
 
-  accent: '#30D158',
-  accentMuted: '#248A3D',
-  accentGlow: 'rgba(48, 209, 88, 0.18)',
+  primary: '#1F6BFF',
+  primaryMuted: '#1854CC',
+  primaryGlow: 'rgba(31, 107, 255, 0.22)',
 
-  restTimer: '#64D2FF',
-  restTimerMuted: 'rgba(100, 210, 255, 0.15)',
+  accent: '#00E5FF',
+  accentMuted: '#00B8CC',
+  accentGlow: 'rgba(0, 229, 255, 0.15)',
 
-  warning: '#FF9F0A',
-  error: '#FF453A',
-  success: '#30D158',
+  /** @deprecated use primary — kept for gradual migration */
+  legacyAccent: '#1F6BFF',
 
-  microphoneRing: '#30D158',
-  microphoneFill: '#1C1C1E',
-  microphoneGlow: 'rgba(48, 209, 88, 0.35)',
+  success: '#00E5A8',
+  warning: '#FFC857',
+  error: '#FF5B5B',
 
-  tabBar: '#0A0A0B',
-  tabBarBorder: '#1C1C1E',
-  tabInactive: '#636366',
-  tabActive: '#30D158',
+  restTimer: '#00E5FF',
+  restTimerMuted: 'rgba(0, 229, 255, 0.12)',
 
-  overlay: 'rgba(0, 0, 0, 0.72)',
+  gradientStart: '#1F6BFF',
+  gradientEnd: '#00E5FF',
+
+  glass: 'rgba(23, 27, 34, 0.72)',
+  overlay: 'rgba(8, 11, 16, 0.85)',
+
+  microphoneRing: '#1F6BFF',
+  microphoneFill: '#171B22',
+  microphoneGlow: 'rgba(31, 107, 255, 0.35)',
+
+  tabBar: '#080B10',
+  tabBarBorder: '#111318',
+  tabInactive: '#6B7589',
+  tabActive: '#00E5FF',
 } as const;
 
 export type LiftFlowColor = keyof typeof LiftFlowColors;
 
+export const FontFamily = {
+  hero: 'Sora_800ExtraBold',
+  heroBold: 'Sora_700Bold',
+  header: 'Inter_700Bold',
+  headerSemi: 'Inter_600SemiBold',
+  body: 'Inter_400Regular',
+  bodyMedium: 'Inter_500Medium',
+  bodySemi: 'Inter_600SemiBold',
+  label: 'Manrope_500Medium',
+  labelSemi: 'Manrope_600SemiBold',
+  metric: 'Inter_700Bold',
+} as const;
+
 export const Typography = {
-  hero: { fontSize: 34, lineHeight: 40, fontWeight: '700' as const, letterSpacing: 0.2 },
-  title: { fontSize: 28, lineHeight: 34, fontWeight: '700' as const },
-  headline: { fontSize: 22, lineHeight: 28, fontWeight: '600' as const },
-  body: { fontSize: 17, lineHeight: 24, fontWeight: '400' as const },
-  bodyBold: { fontSize: 17, lineHeight: 24, fontWeight: '600' as const },
-  callout: { fontSize: 16, lineHeight: 22, fontWeight: '500' as const },
-  subhead: { fontSize: 15, lineHeight: 20, fontWeight: '500' as const },
-  footnote: { fontSize: 13, lineHeight: 18, fontWeight: '400' as const },
-  caption: { fontSize: 12, lineHeight: 16, fontWeight: '500' as const },
-  metric: { fontSize: 40, lineHeight: 44, fontWeight: '700' as const, letterSpacing: -0.5 },
-  timer: { fontSize: 48, lineHeight: 52, fontWeight: '300' as const, letterSpacing: -1 },
+  hero: {
+    fontSize: 34,
+    lineHeight: 40,
+    fontFamily: FontFamily.hero,
+    letterSpacing: 0.3,
+  },
+  display: {
+    fontSize: 40,
+    lineHeight: 46,
+    fontFamily: FontFamily.hero,
+    letterSpacing: 0.2,
+  },
+  title: {
+    fontSize: 28,
+    lineHeight: 34,
+    fontFamily: FontFamily.header,
+  },
+  headline: {
+    fontSize: 22,
+    lineHeight: 28,
+    fontFamily: FontFamily.headerSemi,
+  },
+  body: {
+    fontSize: 17,
+    lineHeight: 24,
+    fontFamily: FontFamily.body,
+  },
+  bodyBold: {
+    fontSize: 17,
+    lineHeight: 24,
+    fontFamily: FontFamily.bodySemi,
+  },
+  callout: {
+    fontSize: 16,
+    lineHeight: 22,
+    fontFamily: FontFamily.bodyMedium,
+  },
+  subhead: {
+    fontSize: 15,
+    lineHeight: 20,
+    fontFamily: FontFamily.bodyMedium,
+  },
+  footnote: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontFamily: FontFamily.body,
+  },
+  caption: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontFamily: FontFamily.labelSemi,
+    letterSpacing: 0.4,
+  },
+  label: {
+    fontSize: 11,
+    lineHeight: 14,
+    fontFamily: FontFamily.labelSemi,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase' as const,
+  },
+  metric: {
+    fontSize: 40,
+    lineHeight: 44,
+    fontFamily: FontFamily.metric,
+    letterSpacing: -0.5,
+  },
+  timer: {
+    fontSize: 48,
+    lineHeight: 52,
+    fontFamily: FontFamily.body,
+    letterSpacing: -1,
+  },
 } as const;
 
 export const Spacing = {
@@ -64,7 +150,6 @@ export const Spacing = {
   xxxl: 32,
   huge: 48,
   massive: 64,
-  /** @deprecated Legacy template aliases */
   half: 2,
   one: 4,
   two: 8,
@@ -74,28 +159,6 @@ export const Spacing = {
   six: 64,
 } as const;
 
-export const Fonts = Platform.select({
-  ios: {
-    sans: 'system-ui',
-    serif: 'ui-serif',
-    rounded: 'ui-rounded',
-    mono: 'ui-monospace',
-  },
-  default: {
-    sans: 'normal',
-    serif: 'serif',
-    rounded: 'normal',
-    mono: 'monospace',
-  },
-  web: {
-    sans: 'var(--font-display)',
-    serif: 'var(--font-serif)',
-    rounded: 'var(--font-rounded)',
-    mono: 'var(--font-mono)',
-  },
-});
-
-/** Minimum gym-friendly touch target */
 export const TouchTarget = {
   min: 48,
   comfortable: 56,
@@ -111,21 +174,43 @@ export const Radius = {
   full: 9999,
 } as const;
 
+export const Shadows = {
+  card: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  glow: {
+    shadowColor: LiftFlowColors.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+} as const;
+
 export const TabBarHeight = Platform.select({ ios: 84, android: 72, default: 72 }) ?? 72;
 
 export const NavigationTheme = {
   dark: true,
   colors: {
-    primary: LiftFlowColors.accent,
+    primary: LiftFlowColors.primary,
     background: LiftFlowColors.background,
     card: LiftFlowColors.surface,
     text: LiftFlowColors.textPrimary,
     border: LiftFlowColors.border,
-    notification: LiftFlowColors.accent,
+    notification: LiftFlowColors.primary,
   },
 } as const;
 
-/** @deprecated Use LiftFlowColors — kept for legacy template components during migration */
+export const Brand = {
+  taglinePrimary: 'Train Smarter. Progress Faster.',
+  taglineSecondary: 'Recover Faster. Live Better. Earn More.',
+} as const;
+
+/** @deprecated */
 export const Colors = {
   light: {
     text: LiftFlowColors.textPrimary,
@@ -147,3 +232,9 @@ export type ThemeColor = keyof typeof Colors.dark;
 
 export const BottomTabInset = TabBarHeight;
 export const MaxContentWidth = 480;
+
+export const Fonts = Platform.select({
+  ios: { sans: 'System', serif: 'Georgia', rounded: 'System', mono: 'Menlo' },
+  default: { sans: 'normal', serif: 'serif', rounded: 'normal', mono: 'monospace' },
+  web: { sans: 'Inter, system-ui', serif: 'Georgia', rounded: 'system-ui', mono: 'monospace' },
+});
