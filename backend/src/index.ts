@@ -10,11 +10,13 @@ import { authRouter } from './routes/auth.js';
 import { bodyRouter } from './routes/body.js';
 import { cardioRouter } from './routes/cardio.js';
 import { exportRouter } from './routes/export.js';
+import { founderRouter, serveFounderDashboard } from './routes/founder.js';
 import { goalsRouter } from './routes/goals.js';
 import { healthRouter } from './routes/health.js';
 import { integrationsRouter } from './routes/integrations.js';
 import { legalRouter } from './routes/legal.js';
 import { nutritionRouter } from './routes/nutrition.js';
+import { outcomeRouter } from './routes/outcome.js';
 import { parseRouter } from './routes/parse.js';
 import { adsRouter, notificationsRouter, subscriptionsRouter } from './routes/platform.js';
 import { trainingRouter } from './routes/training.js';
@@ -54,6 +56,10 @@ app.use('/api/ads', adsRouter);
 app.use('/api/notifications', notificationsRouter);
 app.use('/api/export', exportRouter);
 app.use('/api/user', userRouter);
+app.use('/api/outcome', outcomeRouter);
+app.use('/api/founder', founderRouter);
+
+app.get('/admin/founder', serveFounderDashboard);
 
 app.listen(PORT, () => {
   console.log(`LiftFlow API listening on port ${PORT}`);
@@ -62,4 +68,5 @@ app.listen(PORT, () => {
   console.log('Routes: /health, /api/voice, /api/ai, /api/workouts, /api/training,');
   console.log('        /api/nutrition, /api/body, /api/analytics, /api/goals,');
   console.log('        /api/integrations, /api/cardio, /api/subscriptions, /api/export');
+  console.log('        /api/outcome, /api/founder, /admin/founder');
 });

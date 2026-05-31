@@ -58,6 +58,8 @@ function buildEnvVars() {
   if (openai && !openai.includes('your-openai-api-key')) {
     vars.push({ key: 'OPENAI_API_KEY', value: openai });
   }
+  const founderKey = env.FOUNDER_ADMIN_KEY ?? process.env.FOUNDER_ADMIN_KEY ?? '';
+  if (founderKey) vars.push({ key: 'FOUNDER_ADMIN_KEY', value: founderKey });
   const stravaId = env.STRAVA_CLIENT_ID ?? '';
   const stravaSecret = env.STRAVA_CLIENT_SECRET ?? '';
   const stravaRedirect = env.STRAVA_REDIRECT_URI ?? 'https://liftflow-api.onrender.com/api/integrations/strava/callback';

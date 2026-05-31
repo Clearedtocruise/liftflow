@@ -1,4 +1,5 @@
 import { generateWeeklyMealPlan } from './aiCoach.js';
+import { captureOutcomeBaseline } from './outcomeEngine.js';
 import { generateTrainingProgram, getProgramDashboard } from './programEngine.js';
 import { inferNutritionGoal, inferProgramFrequency, inferProgramType } from './programSelection.js';
 import { requireAdmin } from './supabase.js';
@@ -205,6 +206,12 @@ export async function activateCoachSystem(userId: string) {
       },
     })
     .eq('id', userId);
+
+  try {
+    await captureOutcomeBaseline(userId);
+  } catch (baselineErr) {
+    console.warn('[coachActivation] outcome baseline capture failed:', baselineErr);
+  }
 
   return {
     programDashboard,

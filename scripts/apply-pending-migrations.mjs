@@ -51,6 +51,7 @@ const MIGRATIONS = [
   '008_fitness_goals_priority.sql',
   '009_unit_preferences.sql',
   '010_coach_onboarding.sql',
+  '011_outcome_intelligence.sql',
 ];
 
 async function runSql(query) {
