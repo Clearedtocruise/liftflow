@@ -8,11 +8,11 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 import {
-  buildDatabaseUrl,
-  loadRootEnv,
-  projectRefFromUrl,
-  runSqlViaManagementApi,
-  runSqlViaPostgres,
+    buildDatabaseUrl,
+    loadRootEnv,
+    projectRefFromUrl,
+    runSqlViaManagementApi,
+    runSqlViaPostgres,
 } from './lib/migration010.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

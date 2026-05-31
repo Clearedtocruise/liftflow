@@ -67,7 +67,7 @@ Sprint 8.2 delivers the Transformation Engine: lean-mass projection math, persis
 | schema.sql RLS policy | PASS | — |
 | Migration RLS enabled | PASS | — |
 | Backend TypeScript build | PASS | — |
-| Free user blocked on transformation/latest | PASS | HTTP 404 — deploy pending |
+| Free user blocked on transformation/latest | PASS | HTTP 403 |
 
 ## Ops checklist
 

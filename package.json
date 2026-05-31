@@ -87,6 +87,7 @@
     "validate:sprint86": "node scripts/validate-sprint86-testflight-rc.mjs",
     "migrate:015": "node scripts/apply-migration-015.mjs",
     "seed:beta-invites": "node scripts/seed-beta-invites.mjs",
+    "verify:sentry": "node scripts/verify-sentry-backend.mjs",
     "deploy:render": "node scripts/deploy-render.mjs",
     "build:ios:dev": "eas build --platform ios --profile development --non-interactive",
     "build:ios": "eas build --platform ios --profile production --non-interactive",

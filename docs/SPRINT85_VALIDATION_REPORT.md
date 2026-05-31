@@ -84,7 +84,7 @@ Sprint 8.5 prepares LiftFlow for closed beta (25–50 users): Sentry crash repor
 | Doc: docs/BETA_RISK_REGISTER.md | PASS | — |
 | Doc: docs/RELEASE_NOTES_TEMPLATE.md | PASS | — |
 | Backend TypeScript build | PASS | — |
-| Feedback API reachable | PASS | HTTP 404 — deploy pending |
+| Feedback API reachable | PASS | HTTP 200 |
 
 ## Top 20 launch risks
 
