@@ -22,6 +22,7 @@ import {
     type CreateProgramInput,
 } from '../lib/programEngine.js';
 import { requireAdmin } from '../lib/supabase.js';
+import { requireProSubscription } from '../middleware/requireProSubscription.js';
 
 export const trainingRouter = Router();
 
@@ -82,7 +83,7 @@ trainingRouter.get('/recovery/today', async (req, res) => {
   }
 });
 
-trainingRouter.get('/recommendations/daily', async (req, res) => {
+trainingRouter.get('/recommendations/daily', requireProSubscription, async (req, res) => {
   try {
     const userId = req.query.userId as string | undefined;
     if (!userId) {
@@ -95,7 +96,7 @@ trainingRouter.get('/recommendations/daily', async (req, res) => {
   }
 });
 
-trainingRouter.get('/recovery/intelligence', async (req, res) => {
+trainingRouter.get('/recovery/intelligence', requireProSubscription, async (req, res) => {
   try {
     const userId = req.query.userId as string | undefined;
     if (!userId) {
@@ -108,7 +109,7 @@ trainingRouter.get('/recovery/intelligence', async (req, res) => {
   }
 });
 
-trainingRouter.post('/progression/smart', async (req, res) => {
+trainingRouter.post('/progression/smart', requireProSubscription, async (req, res) => {
   try {
     const { userId, exerciseId, sessionId, currentSessionSets } = req.body as {
       userId?: string;

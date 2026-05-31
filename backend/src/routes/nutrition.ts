@@ -4,6 +4,7 @@ import { generateWeeklyMealPlan } from '../lib/aiCoach.js';
 import { loadCoachContext } from '../lib/coachContext.js';
 import { loadNutritionIntelligence } from '../lib/loadNutritionIntelligence.js';
 import { requireAdmin } from '../lib/supabase.js';
+import { requireProSubscription } from '../middleware/requireProSubscription.js';
 import { resolveRankedGoals, toNutritionGoal } from '../lib/trainingGoals.js';
 import {
     calculateMacroTargets,
@@ -13,7 +14,7 @@ import {
 
 export const nutritionRouter = Router();
 
-nutritionRouter.get('/intelligence', async (req, res) => {
+nutritionRouter.get('/intelligence', requireProSubscription, async (req, res) => {
   try {
     const userId = req.query.userId as string | undefined;
     if (!userId) {

@@ -12,7 +12,8 @@ import { Card } from '@/components/layout/Card';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { SectionHeader } from '@/components/layout/SectionHeader';
-import { PremiumGate } from '@/components/subscription/PremiumGate';
+import { FeatureGate } from '@/components/subscription/PremiumGate';
+import { UpgradePrompt } from '@/components/subscription/UpgradePrompt';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
@@ -50,21 +51,38 @@ export default function CoachingScreen() {
 
   const load = useCallback(async () => {
     if (!user) return;
-    const [recs, today, trendRes, macros, intel, workoutRecommendation, nutritionReport] = await Promise.all([
-      aiService.getRecommendations(user.id),
+
+    const [today, trendRes, macros] = await Promise.all([
       recoveryService.getToday(user.id),
       recoveryService.getTrend(user.id),
       nutritionService.getAdaptiveTargets(user.id),
-      recoveryService.getIntelligence(user.id),
-      workoutRecommendationService.getDaily(user.id),
-      nutritionIntelligenceService.getIntelligence(user.id),
     ]);
-    if (recs.success) setRecommendations(recs.data);
+
     if (today.success && today.data) setCheckIn(today.data);
     if (trendRes.success) setTrend(trendRes.data);
-    if (intel.success) setIntelligence(intel.data);
-    if (workoutRecommendation.success) setWorkoutRec(workoutRecommendation.data);
-    if (nutritionReport.success) setNutritionIntel(nutritionReport.data);
+
+    if (isPremium) {
+      const [recs, intel, workoutRecommendation, nutritionReport] = await Promise.all([
+        aiService.getRecommendations(user.id),
+        recoveryService.getIntelligence(user.id),
+        workoutRecommendationService.getDaily(user.id),
+        nutritionIntelligenceService.getIntelligence(user.id),
+      ]);
+      if (recs.success) setRecommendations(recs.data);
+      else setRecommendations([]);
+      if (intel.success) setIntelligence(intel.data);
+      else setIntelligence(null);
+      if (workoutRecommendation.success) setWorkoutRec(workoutRecommendation.data);
+      else setWorkoutRec(null);
+      if (nutritionReport.success) setNutritionIntel(nutritionReport.data);
+      else setNutritionIntel(null);
+    } else {
+      setRecommendations([]);
+      setIntelligence(null);
+      setWorkoutRec(null);
+      setNutritionIntel(null);
+    }
+
     if (macros.success) {
       setMacroRationale(macros.data.rationale);
       setMacroError(null);
@@ -74,7 +92,7 @@ export default function CoachingScreen() {
     }
     setLoading(false);
     setRefreshing(false);
-  }, [user]);
+  }, [user, isPremium]);
 
   useEffect(() => {
     load();
@@ -154,11 +172,29 @@ export default function CoachingScreen() {
 
       <RecoveryScoreCard checkIn={checkIn} trend={trend} />
 
-      {intelligence ? <RecoveryIntelligenceDashboard report={intelligence} compact /> : null}
+      {intelligence ? (
+        <FeatureGate featureId="recovery-intelligence" hidePaywall>
+          <RecoveryIntelligenceDashboard report={intelligence} compact />
+        </FeatureGate>
+      ) : (
+        <UpgradePrompt featureId="recovery-intelligence" />
+      )}
 
-      {workoutRec ? <WorkoutRecommendationPanel report={workoutRec} compact /> : null}
+      {workoutRec ? (
+        <FeatureGate featureId="workout-recommendations" hidePaywall>
+          <WorkoutRecommendationPanel report={workoutRec} compact />
+        </FeatureGate>
+      ) : (
+        <UpgradePrompt featureId="workout-recommendations" compact />
+      )}
 
-      {nutritionIntel ? <NutritionIntelligenceDashboard report={nutritionIntel} compact /> : null}
+      {nutritionIntel ? (
+        <FeatureGate featureId="nutrition-intelligence" hidePaywall>
+          <NutritionIntelligenceDashboard report={nutritionIntel} compact />
+        </FeatureGate>
+      ) : (
+        <UpgradePrompt featureId="nutrition-intelligence" compact />
+      )}
 
       <View style={styles.linkRow}>
         <PrimaryButton label="Today's Workout" onPress={() => router.push('/(features)/suggested-workouts')} variant="secondary" />
@@ -202,6 +238,7 @@ export default function CoachingScreen() {
       ) : null}
 
       <SectionHeader title="Smart Coach Questions" />
+      <FeatureGate featureId="ai-coach">
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.questionRow}>
         {COACH_STARTER_QUESTIONS.map((q) => (
           <Pressable key={q.topic} style={styles.questionChip} onPress={() => handleSmartQuestion(q.label)} disabled={asking}>
@@ -214,12 +251,13 @@ export default function CoachingScreen() {
           <AppText variant="body">{coachAnswer}</AppText>
         </Card>
       ) : null}
+      </FeatureGate>
 
-      <PremiumGate featureName="Voice coaching">
+      <FeatureGate featureId="voice-coaching">
         <ConversationalCoachPanel compact context="general" />
-      </PremiumGate>
+      </FeatureGate>
 
-      <PremiumGate featureName="AI workout generation">
+      <FeatureGate featureId="ai-coach" featureName="AI workout generation">
         <Card style={styles.actionCard}>
           <AppText variant="bodyBold">Generate today&apos;s workout</AppText>
           <AppText variant="caption" color="textSecondary">
@@ -237,12 +275,12 @@ export default function CoachingScreen() {
             </AppText>
           ) : null}
         </Card>
-      </PremiumGate>
+      </FeatureGate>
 
       {isPremium ? (
         <PrimaryButton label="Refresh Recommendations" onPress={handleRefresh} variant="secondary" />
       ) : (
-        <PremiumGate featureName="AI recommendations refresh" />
+        <FeatureGate featureId="ai-coach" featureName="AI recommendations refresh" />
       )}
 
       <SectionHeader title="Recommendations" subtitle="Based on recovery, load, and goals" />

@@ -79,6 +79,7 @@
     "validate:sprint71": "node scripts/validate-sprint71-progression.mjs",
     "validate:sprint79": "node scripts/validate-sprint79-rc-hardening.mjs",
     "validate:sprint79-gate": "node scripts/validate-sprint79-final-gate.mjs",
+    "validate:sprint81": "node scripts/validate-sprint81-revenuecat.mjs",
     "deploy:render": "node scripts/deploy-render.mjs",
     "build:ios:dev": "eas build --platform ios --profile development --non-interactive",
     "build:ios": "eas build --platform ios --profile production --non-interactive",

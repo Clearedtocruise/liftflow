@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Switch, View } from 'react-native';
 import { Card } from '@/components/layout/Card';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { SectionHeader } from '@/components/layout/SectionHeader';
+import { FeatureGate } from '@/components/subscription/PremiumGate';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
@@ -44,6 +45,7 @@ export default function PeakMusicSettingsScreen() {
         Optional — sync song peaks with rest timers and manage playlist continuity during workouts.
       </AppText>
 
+      <FeatureGate featureId="peak-music-sync">
       <Card style={styles.card}>
         <ToggleRow label="Enable peak sync" value={settings.enabled} onChange={(v) => updateSettings({ enabled: v })} />
       </Card>
@@ -121,6 +123,7 @@ export default function PeakMusicSettingsScreen() {
           See docs/PLAYLIST_CONTINUITY.md for provider feasibility.
         </AppText>
       </Card>
+      </FeatureGate>
     </ScreenContainer>
   );
 }

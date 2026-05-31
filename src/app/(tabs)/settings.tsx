@@ -326,14 +326,22 @@ export default function SettingsScreen() {
       ) : null}
 
       <View style={styles.sectionGap}>
-        <SectionHeader title="Premium" />
+        <SectionHeader title="LiftFlow Pro" />
       </View>
       <Card style={styles.group}>
         <SettingsRow
           label="Subscription"
-          value={isPremium ? 'Premium' : 'Free'}
+          value={isPremium ? 'Pro' : 'Free'}
           icon={
             <AppSymbol name="creditcard.fill" fallback={SYMBOL_FALLBACKS['creditcard.fill']} size={20} tintColor={LiftFlowColors.textSecondary} />
+          }
+          onPress={() => router.push(isPremium ? '/(features)/manage-subscription' : '/(features)/upgrade')}
+        />
+        <SettingsRow
+          label="Compare plans"
+          value="Free vs Pro"
+          icon={
+            <AppSymbol name="sparkles" fallback={SYMBOL_FALLBACKS.sparkles} size={20} tintColor={LiftFlowColors.textSecondary} />
           }
           onPress={() => router.push('/(features)/subscription')}
         />

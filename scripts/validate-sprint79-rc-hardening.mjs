@@ -2,10 +2,10 @@
 /**
  * Sprint 7.9 — Release Candidate Hardening & Beta Readiness (target 100/100)
  */
+import { spawnSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { spawnSync } from 'child_process';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');

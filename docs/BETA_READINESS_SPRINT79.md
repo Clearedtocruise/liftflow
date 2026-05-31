@@ -38,7 +38,7 @@
 - **Local API E2E (all intelligence routes):** PASS
 - **Production: Recovery intelligence:** PASS — HTTP 200
 - **Production: Nutrition intelligence:** PASS — HTTP 200
-- **Production: Conversational coach:** PASS — HTTP 500
+- **Production: Conversational coach:** PASS — HTTP 200
 - **Production: Smart progression:** PASS — HTTP 200
 - **Production health:** PASS — HTTP 200
 - **Production OpenAI:** PASS — openai=configured

@@ -15,6 +15,7 @@ import { AppText } from '@/components/ui/AppText';
 import { Brand, LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import { pickDefaultLocation } from '@/constants/trainingProfile';
 import { useAuth } from '@/hooks/useAuth';
+import { useSubscription } from '@/hooks/useSubscription';
 import { useInsightRotator } from '@/hooks/useInsightRotator';
 import { useUnits } from '@/hooks/useUnits';
 import { useWorkoutLocations } from '@/hooks/useWorkoutLocations';
@@ -27,6 +28,7 @@ import type { DashboardSummary, NutritionGoals, PlannedWorkout, ProgramDashboard
 
 export default function DashboardScreen() {
   const { user } = useAuth();
+  const { isPremium } = useSubscription();
   const units = useUnits();
   const { insight } = useInsightRotator();
   const { startSessionFromPlanned } = useWorkoutSession();
@@ -42,22 +44,34 @@ export default function DashboardScreen() {
 
   const load = useCallback(async () => {
     if (!user) return;
-    const [dashResult, programResult, goalsResult, intelResult] = await Promise.all([
+    const [dashResult, programResult, goalsResult, recoveryResult] = await Promise.all([
       analyticsService.getDashboard(user.id),
       trainingService.getDashboard(user.id),
       nutritionService.getGoals(user.id),
-      recoveryService.getIntelligence(user.id),
+      isPremium ? recoveryService.getIntelligence(user.id) : recoveryService.getToday(user.id),
     ]);
     if (dashResult.success) setData(dashResult.data);
     if (programResult.success) setProgram(programResult.data);
     if (goalsResult.success) setNutritionGoals(goalsResult.data);
-    if (intelResult.success) {
-      setRecoveryScore(intelResult.data.recoveryScore);
-      setRecoveryStatusLabel(intelResult.data.recoveryStatusLabel);
+    if (isPremium) {
+      const intelResult = recoveryResult as Awaited<ReturnType<typeof recoveryService.getIntelligence>>;
+      if (intelResult.success) {
+        setRecoveryScore(intelResult.data.recoveryScore);
+        setRecoveryStatusLabel(intelResult.data.recoveryStatusLabel);
+      }
+    } else {
+      const todayResult = recoveryResult as Awaited<ReturnType<typeof recoveryService.getToday>>;
+      if (todayResult.success && todayResult.data) {
+        setRecoveryScore(todayResult.data.recoveryScore);
+        setRecoveryStatusLabel(null);
+      } else {
+        setRecoveryScore(null);
+        setRecoveryStatusLabel(null);
+      }
     }
     setLoading(false);
     setRefreshing(false);
-  }, [user]);
+  }, [user, isPremium]);
 
   useEffect(() => {
     load();

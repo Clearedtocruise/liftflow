@@ -16,7 +16,7 @@ Gate passed — proceed with Sprint 8.0 implementation.
 | Production /health | PASS | HTTP 200 |
 | Production Recovery intelligence | PASS | HTTP 200 |
 | Production Nutrition intelligence | PASS | HTTP 200 |
-| Production Conversational coach | PASS | HTTP 500 |
+| Production Conversational coach | PASS | HTTP 200 |
 | Production Smart progression | PASS | HTTP 200 |
 | Production Workout recommendations | PASS | HTTP 200 |
 | OPENAI_API_KEY on Render | PASS | configured |

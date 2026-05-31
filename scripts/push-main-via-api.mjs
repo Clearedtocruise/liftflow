@@ -15,11 +15,13 @@ const dryRun = process.argv.includes('--dry-run');
 const OWNER = 'Clearedtocruise';
 const REPO = 'liftflow';
 const BRANCH = 'main';
-const COMMIT_MSG = `Sprint 7.9: fix converse GPT json_object + gate HTTP 200 check
+const COMMIT_MSG = `Sprint 8.1: RevenueCat Pro gating, subscription UI, API middleware
 
-- System prompt includes JSON instruction for response_format compliance
-- GPT failures fall back to heuristic answers
-- Gate validators require HTTP 200 for /api/ai/converse`;
+- Pro entitlement (pro + legacy premium), trial support, FeatureGate
+- Subscription, upgrade, manage screens + RestorePurchases
+- requireProSubscription on AI and intelligence routes
+- RevenueCat webhook trial events + subscription_events logging
+- validate:sprint81 + setup docs`;
 
 const IGNORE = new Set([
   'node_modules',

@@ -1,26 +1,33 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, RefreshControl, View } from 'react-native';
+import { StyleSheet } from 'react-native';
+import { router } from 'expo-router';
 
 import { RecoveryIntelligenceDashboard } from '@/components/recovery/RecoveryIntelligenceDashboard';
+import { FeatureGate } from '@/components/subscription/PremiumGate';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
+import { useEntitlement } from '@/hooks/useEntitlement';
 import { recoveryService } from '@/services/recoveryService';
 import type { RecoveryIntelligenceReport } from '@/types/recoveryIntelligence';
-import { router } from 'expo-router';
-import { StyleSheet } from 'react-native';
 
 export default function RecoveryAnalysisScreen() {
   const { user } = useAuth();
+  const { allowed } = useEntitlement('recovery-intelligence');
   const [report, setReport] = useState<RecoveryIntelligenceReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    if (!user) return;
+    if (!user || !allowed) {
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
     const result = await recoveryService.getIntelligence(user.id);
     if (result.success) {
       setReport(result.data);
@@ -30,19 +37,11 @@ export default function RecoveryAnalysisScreen() {
     }
     setLoading(false);
     setRefreshing(false);
-  }, [user]);
+  }, [user, allowed]);
 
   useEffect(() => {
     load();
   }, [load]);
-
-  if (loading) {
-    return (
-      <View style={styles.loading}>
-        <ActivityIndicator size="large" color={LiftFlowColors.accent} />
-      </View>
-    );
-  }
 
   return (
     <ScreenContainer
@@ -54,29 +53,29 @@ export default function RecoveryAnalysisScreen() {
         Readiness from training load, muscle fatigue, and your check-in signals
       </AppText>
 
-      {error ? (
-        <AppText variant="body" color="restTimer">
-          {error}
-        </AppText>
-      ) : report ? (
-        <RecoveryIntelligenceDashboard report={report} />
-      ) : null}
+      <FeatureGate featureId="recovery-intelligence">
+        {loading ? (
+          <View style={styles.loading}>
+            <ActivityIndicator size="large" color={LiftFlowColors.accent} />
+          </View>
+        ) : error ? (
+          <AppText variant="body" color="restTimer">
+            {error}
+          </AppText>
+        ) : report ? (
+          <RecoveryIntelligenceDashboard report={report} />
+        ) : null}
+      </FeatureGate>
 
-      <PrimaryButton
-        label="Daily Check-in"
-        onPress={() => router.push('/(features)/recovery-check-in')}
-        variant="secondary"
-      />
+      <PrimaryButton label="Back" onPress={() => router.back()} variant="secondary" />
     </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
   loading: {
-    flex: 1,
+    paddingVertical: Spacing.xxl,
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: LiftFlowColors.background,
   },
-  subtitle: { marginBottom: Spacing.xl },
+  subtitle: { marginBottom: Spacing.lg },
 });

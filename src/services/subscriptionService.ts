@@ -1,15 +1,29 @@
 import { Platform } from 'react-native';
 
 import { SUBSCRIPTION } from '@/constants/subscription';
+import { entitlementActive, isProSubscription } from '@/lib/entitlements';
 import { fail, fromError, ok } from '@/lib/serviceResult';
 import { supabase } from '@/supabase/client';
 import type { ServiceResult, SubscriptionTier } from '@/types/common';
 import type { Subscription } from '@/types/platform';
 
-type CustomerInfo = { entitlements: { active: Record<string, unknown> }; originalAppUserId?: string };
+type EntitlementInfo = {
+  identifier?: string;
+  isActive?: boolean;
+  periodType?: string;
+  expirationDate?: string | null;
+  productIdentifier?: string;
+  willRenew?: boolean;
+};
+
+type CustomerInfo = {
+  entitlements: { active: Record<string, EntitlementInfo> };
+  originalAppUserId?: string;
+};
+
 type PurchasesPackage = {
   identifier: string;
-  product: { identifier: string; priceString: string };
+  product: { identifier: string; priceString: string; introPrice?: { priceString: string; period?: string } | null };
 };
 
 type PurchasesModule = {
@@ -22,6 +36,22 @@ type PurchasesModule = {
   addCustomerInfoUpdateListener: (listener: (info: CustomerInfo) => void) => void;
   removeCustomerInfoUpdateListener: (listener: (info: CustomerInfo) => void) => void;
   LOG_LEVEL: { DEBUG: number };
+};
+
+export type OfferingDetails = {
+  price: string;
+  productId: string;
+  packageId?: string;
+  hasTrial: boolean;
+  trialLabel?: string;
+};
+
+export type EntitlementStatus = {
+  isPro: boolean;
+  isTrialing: boolean;
+  expirationDate?: string;
+  productId?: string;
+  willRenew?: boolean;
 };
 
 function loadPurchases(): PurchasesModule | null {
@@ -47,6 +77,7 @@ type SubscriptionRow = {
   current_period_start: string | null;
   current_period_end: string | null;
   cancelled_at: string | null;
+  metadata: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
 };
@@ -65,18 +96,38 @@ function mapSubscription(row: SubscriptionRow): Subscription {
   };
 }
 
-function isPremiumActive(sub: Subscription | null): boolean {
-  if (!sub) return false;
-  if (sub.tier === 'free') return false;
-  if (sub.status === 'active' || sub.status === 'trialing') return true;
-  if (sub.status === 'cancelled' && sub.currentPeriodEnd) {
-    return new Date(sub.currentPeriodEnd) > new Date();
-  }
-  return false;
+function parseEntitlementStatus(info: CustomerInfo): EntitlementStatus {
+  const active = info.entitlements.active;
+  const entitlement =
+    active[SUBSCRIPTION.entitlementId] ?? active[SUBSCRIPTION.legacyEntitlementId];
+  const isPro = entitlementActive(active);
+  const isTrialing = isPro && entitlement?.periodType?.toUpperCase() === 'TRIAL';
+
+  return {
+    isPro,
+    isTrialing,
+    expirationDate: entitlement?.expirationDate ?? undefined,
+    productId: entitlement?.productIdentifier,
+    willRenew: entitlement?.willRenew,
+  };
 }
 
-function isPremiumFromCustomerInfo(info: CustomerInfo): boolean {
-  return Boolean(info.entitlements.active[SUBSCRIPTION.entitlementId]);
+function resolveSubscriptionStatus(entitlement: EntitlementStatus): Subscription['status'] {
+  if (!entitlement.isPro) return 'expired';
+  return entitlement.isTrialing ? 'trialing' : 'active';
+}
+
+async function logSubscriptionEvent(
+  subscriptionId: string,
+  eventType: string,
+  payload: Record<string, unknown> = {},
+): Promise<void> {
+  if (!subscriptionId) return;
+  await supabase.from('subscription_events').insert({
+    subscription_id: subscriptionId,
+    event_type: eventType,
+    payload,
+  });
 }
 
 async function syncSubscriptionToSupabase(
@@ -85,8 +136,13 @@ async function syncSubscriptionToSupabase(
   status: Subscription['status'],
   metadata: Record<string, unknown> = {},
 ): Promise<Subscription> {
-  const periodEnd = new Date();
-  periodEnd.setMonth(periodEnd.getMonth() + 1);
+  const periodEnd = metadata.expirationDate
+    ? new Date(String(metadata.expirationDate))
+    : (() => {
+        const d = new Date();
+        d.setMonth(d.getMonth() + 1);
+        return d;
+      })();
 
   const { data, error } = await supabase
     .from('subscriptions')
@@ -132,11 +188,23 @@ export const subscriptionService = {
     return loadPurchases() !== null;
   },
 
+  isRevenueCatConfigured(): boolean {
+    return Boolean(getRevenueCatApiKey());
+  },
+
   async getSubscription(userId: string): Promise<ServiceResult<Subscription>> {
     try {
       const { data, error } = await supabase.from('subscriptions').select('*').eq('user_id', userId).maybeSingle();
       if (error) return fail(error.message);
-      if (!data) return ok({ id: '', userId, tier: 'free', status: 'active', createdAt: new Date().toISOString() });
+      if (!data) {
+        return ok({
+          id: '',
+          userId,
+          tier: 'free',
+          status: 'active',
+          createdAt: new Date().toISOString(),
+        });
+      }
       return ok(mapSubscription(data as SubscriptionRow));
     } catch (e) {
       return fromError(e);
@@ -144,7 +212,30 @@ export const subscriptionService = {
   },
 
   isPremium(sub: Subscription | null): boolean {
-    return isPremiumActive(sub);
+    return isProSubscription(sub);
+  },
+
+  async getEntitlementStatus(userId: string): Promise<ServiceResult<EntitlementStatus>> {
+    const Purchases = loadPurchases();
+    if (!Purchases) {
+      const sub = await this.getSubscription(userId);
+      if (!sub.success) return sub;
+      return ok({
+        isPro: this.isPremium(sub.data),
+        isTrialing: sub.data.status === 'trialing',
+        expirationDate: sub.data.currentPeriodEnd,
+      });
+    }
+
+    try {
+      const configResult = await this.configurePurchases(userId);
+      if (!configResult.success) return configResult;
+
+      const info = await Purchases.getCustomerInfo();
+      return ok(parseEntitlementStatus(info));
+    } catch (e) {
+      return fromError(e);
+    }
   },
 
   async configurePurchases(userId: string): Promise<ServiceResult<void>> {
@@ -177,38 +268,51 @@ export const subscriptionService = {
       if (!configResult.success) return configResult;
 
       const info = await Purchases.getCustomerInfo();
-      if (isPremiumFromCustomerInfo(info)) {
-        const sub = await syncSubscriptionToSupabase(userId, 'premium', 'active', { source: 'revenuecat_sync' });
-        return ok(sub);
-      }
-      const sub = await syncSubscriptionToSupabase(userId, 'free', 'expired', { source: 'revenuecat_sync' });
+      const entitlement = parseEntitlementStatus(info);
+      const tier: SubscriptionTier = entitlement.isPro ? SUBSCRIPTION.tier : 'free';
+      const status = resolveSubscriptionStatus(entitlement);
+
+      const sub = await syncSubscriptionToSupabase(userId, tier, status, {
+        source: 'revenuecat_sync',
+        productId: entitlement.productId,
+        expirationDate: entitlement.expirationDate,
+        isTrialing: entitlement.isTrialing,
+      });
+
       return ok(sub);
     } catch (e) {
       return fromError(e);
     }
   },
 
-  async getOfferings(): Promise<ServiceResult<{ price: string; productId: string; packageId?: string }>> {
+  async getOfferings(): Promise<ServiceResult<OfferingDetails>> {
     const Purchases = loadPurchases();
-    if (!Purchases) {
-      return ok({ price: SUBSCRIPTION.displayPrice, productId: SUBSCRIPTION.appleProductId });
-    }
+    const fallback: OfferingDetails = {
+      price: SUBSCRIPTION.displayPrice,
+      productId: SUBSCRIPTION.appleProductId,
+      hasTrial: SUBSCRIPTION.trialDays > 0,
+      trialLabel: SUBSCRIPTION.trialLabel,
+    };
+
+    if (!Purchases) return ok(fallback);
 
     try {
       const offerings = await Purchases.getOfferings();
       const packages = offerings.current?.availablePackages ?? [];
       const pkg = findPremiumPackage(packages);
 
-      if (!pkg) {
-        return ok({ price: SUBSCRIPTION.displayPrice, productId: SUBSCRIPTION.appleProductId });
-      }
+      if (!pkg) return ok(fallback);
+
+      const hasTrial = Boolean(pkg.product.introPrice);
       return ok({
         price: pkg.product.priceString,
         productId: pkg.product.identifier,
         packageId: pkg.identifier,
+        hasTrial,
+        trialLabel: hasTrial ? SUBSCRIPTION.trialLabel : undefined,
       });
     } catch {
-      return ok({ price: SUBSCRIPTION.displayPrice, productId: SUBSCRIPTION.appleProductId });
+      return ok(fallback);
     }
   },
 
@@ -231,23 +335,24 @@ export const subscriptionService = {
       }
 
       const { customerInfo } = await Purchases.purchasePackage(pkg);
-      if (!isPremiumFromCustomerInfo(customerInfo)) {
-        return fail('Purchase completed but premium entitlement is not active.');
+      const entitlement = parseEntitlementStatus(customerInfo);
+      if (!entitlement.isPro) {
+        return fail('Purchase completed but Pro entitlement is not active.');
       }
 
-      const sub = await syncSubscriptionToSupabase(userId, 'premium', 'active', {
+      const status = resolveSubscriptionStatus(entitlement);
+      const sub = await syncSubscriptionToSupabase(userId, SUBSCRIPTION.tier, status, {
         source: 'revenuecat',
         productId: pkg.product.identifier,
+        expirationDate: entitlement.expirationDate,
+        isTrialing: entitlement.isTrialing,
         transactionId: customerInfo.originalAppUserId,
       });
 
-      if (sub.id) {
-        await supabase.from('subscription_events').insert({
-          subscription_id: sub.id,
-          event_type: 'purchase',
-          payload: { productId: pkg.product.identifier },
-        });
-      }
+      await logSubscriptionEvent(sub.id, entitlement.isTrialing ? 'trial_started' : 'purchase', {
+        productId: pkg.product.identifier,
+        packageId: pkg.identifier,
+      });
 
       return ok(sub);
     } catch (e) {
@@ -268,13 +373,43 @@ export const subscriptionService = {
       if (!configResult.success) return configResult;
 
       const customerInfo = await Purchases.restorePurchases();
-      if (!isPremiumFromCustomerInfo(customerInfo)) {
+      const entitlement = parseEntitlementStatus(customerInfo);
+
+      if (!entitlement.isPro) {
         await syncSubscriptionToSupabase(userId, 'free', 'expired', { source: 'restore' });
-        return fail('No active subscription found for this Apple ID.');
+        return fail('No active Pro subscription found for this Apple ID.');
       }
 
-      const sub = await syncSubscriptionToSupabase(userId, 'premium', 'active', { source: 'restore' });
+      const status = resolveSubscriptionStatus(entitlement);
+      const sub = await syncSubscriptionToSupabase(userId, SUBSCRIPTION.tier, status, {
+        source: 'restore',
+        productId: entitlement.productId,
+        expirationDate: entitlement.expirationDate,
+        isTrialing: entitlement.isTrialing,
+      });
+
+      await logSubscriptionEvent(sub.id, 'restore', { productId: entitlement.productId });
       return ok(sub);
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
+  /** Sandbox / QA — grants Pro via backend when RevenueCat is unavailable */
+  async grantSandboxPro(userId: string, token: string): Promise<ServiceResult<Subscription>> {
+    try {
+      const { API_BASE_URL } = await import('@/constants/api');
+      const res = await fetch(`${API_BASE_URL}/api/subscriptions/upgrade`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ tier: SUBSCRIPTION.tier, sandbox: true }),
+      });
+      const body = await res.json();
+      if (!res.ok) return fail(body.message ?? 'Sandbox upgrade failed');
+      return ok(body as Subscription);
     } catch (e) {
       return fromError(e);
     }
@@ -294,7 +429,9 @@ export const subscriptionService = {
         .single();
 
       if (error) return fail(error.message);
-      return ok(mapSubscription(data as SubscriptionRow));
+      const sub = mapSubscription(data as SubscriptionRow);
+      await logSubscriptionEvent(sub.id, 'cancelled', {});
+      return ok(sub);
     } catch (e) {
       return fromError(e);
     }
@@ -305,11 +442,16 @@ export const subscriptionService = {
     if (!Purchases) return () => undefined;
 
     const listener = async (info: CustomerInfo) => {
-      const premium = isPremiumFromCustomerInfo(info);
-      await syncSubscriptionToSupabase(userId, premium ? 'premium' : 'free', premium ? 'active' : 'expired', {
+      const entitlement = parseEntitlementStatus(info);
+      const tier: SubscriptionTier = entitlement.isPro ? SUBSCRIPTION.tier : 'free';
+      const status = resolveSubscriptionStatus(entitlement);
+      await syncSubscriptionToSupabase(userId, tier, status, {
         source: 'listener',
+        productId: entitlement.productId,
+        expirationDate: entitlement.expirationDate,
+        isTrialing: entitlement.isTrialing,
       });
-      onUpdate(premium);
+      onUpdate(entitlement.isPro);
     };
     Purchases.addCustomerInfoUpdateListener(listener);
     return () => Purchases.removeCustomerInfoUpdateListener(listener);

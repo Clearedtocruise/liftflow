@@ -9,7 +9,8 @@ import { SectionHeader } from '@/components/layout/SectionHeader';
 import { AppText } from '@/components/ui/AppText';
 import { MicrophoneButton } from '@/components/workout/MicrophoneButton';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
-import { useAuth } from '@/hooks/useAuth';
+import { UpgradePrompt } from '@/components/subscription/UpgradePrompt';
+import { useEntitlement } from '@/hooks/useEntitlement';
 import { useUnits } from '@/hooks/useUnits';
 import { useVoiceLogging } from '@/hooks/useVoiceLogging';
 import { parseNutritionVoice } from '@/lib/nutritionVoice';
@@ -22,6 +23,7 @@ const MEAL_TYPES: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack', 'pre_wo
 
 export default function NutritionScreen() {
   const { user } = useAuth();
+  const { allowed: nutritionIntelAllowed } = useEntitlement('nutrition-intelligence');
   const units = useUnits();
   const [goals, setGoals] = useState<NutritionGoals | null>(null);
   const [summary, setSummary] = useState<DailyNutritionSummary | null>(null);
@@ -87,6 +89,11 @@ export default function NutritionScreen() {
     const command = parseVoiceCommandLocal(text, {});
     if (command?.intent === 'nutrition_query' || command?.intent === 'grocery_list_query') {
       if (!user) return;
+      if (!nutritionIntelAllowed) {
+        Alert.alert('Pro feature', 'Nutrition Intelligence requires LiftFlow Pro.');
+        router.push('/(features)/upgrade');
+        return;
+      }
       const result = await nutritionIntelligenceService.getIntelligence(user.id);
       if (!result.success) {
         Alert.alert('Nutrition unavailable', result.error);
@@ -201,9 +208,14 @@ export default function NutritionScreen() {
         </AppText>
         <PrimaryButton
           label="Nutrition Intelligence"
-          onPress={() => router.push('/(features)/nutrition-intelligence')}
+          onPress={() =>
+            nutritionIntelAllowed
+              ? router.push('/(features)/nutrition-intelligence')
+              : router.push('/(features)/upgrade')
+          }
           variant="secondary"
         />
+        {!nutritionIntelAllowed ? <UpgradePrompt featureId="nutrition-intelligence" compact /> : null}
       </View>
 
       <View style={styles.macroRow}>

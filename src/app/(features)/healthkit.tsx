@@ -6,6 +6,7 @@ import { Card } from '@/components/layout/Card';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { SectionHeader } from '@/components/layout/SectionHeader';
+import { FeatureGate } from '@/components/subscription/PremiumGate';
 import { AppText } from '@/components/ui/AppText';
 import { HEALTH_DATA_LABELS } from '@/integrations/healthConstants';
 import { Spacing } from '@/constants/theme';
@@ -96,6 +97,7 @@ export default function HealthKitScreen() {
       </AppText>
 
       <SectionHeader title={Platform.OS === 'ios' ? 'Apple Health' : 'Health Connect'} />
+      <FeatureGate featureId="healthkit-sync">
       <Card style={styles.card}>
         <AppText variant="body">
           {healthAvailability.available
@@ -126,6 +128,7 @@ export default function HealthKitScreen() {
           </AppText>
         ) : null}
       </Card>
+      </FeatureGate>
 
       {Platform.OS === 'ios' ? (
         <>

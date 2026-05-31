@@ -5,7 +5,7 @@ import { Card } from '@/components/layout/Card';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { SectionHeader } from '@/components/layout/SectionHeader';
-import { PremiumGate } from '@/components/subscription/PremiumGate';
+import { FeatureGate } from '@/components/subscription/PremiumGate';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
@@ -49,7 +49,7 @@ export default function AppleWatchScreen() {
         </AppText>
       </View>
 
-      <PremiumGate featureName="Apple Watch workout assistant">
+      <FeatureGate featureId="apple-watch-advanced" featureName="Apple Watch workout assistant">
         <Card style={styles.card}>
           <AppText variant="bodyBold">Watch connectivity</AppText>
           <AppText variant="footnote" color="textSecondary">
@@ -140,7 +140,7 @@ export default function AppleWatchScreen() {
         <AppText variant="footnote" color="textSecondary">
           {supportedExercises.join(' · ')}
         </AppText>
-      </PremiumGate>
+      </FeatureGate>
     </ScreenContainer>
   );
 }

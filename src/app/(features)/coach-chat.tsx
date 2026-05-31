@@ -1,9 +1,9 @@
-import { useCallback, useState } from 'react';
-import { ActivityIndicator, RefreshControl, View } from 'react-native';
-import { StyleSheet } from 'react-native';
 import { router } from 'expo-router';
+import { useCallback, useState } from 'react';
+import { RefreshControl, StyleSheet } from 'react-native';
 
 import { ConversationalCoachPanel } from '@/components/coaching/ConversationalCoachPanel';
+import { FeatureGate } from '@/components/subscription/PremiumGate';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { AppText } from '@/components/ui/AppText';
@@ -33,7 +33,9 @@ export default function CoachChatScreen() {
         Ask about training, nutrition, fatigue, plateaus, and progression
       </AppText>
 
-      <ConversationalCoachPanel key={refreshKey} context="general" />
+      <FeatureGate featureId="ai-coach">
+        <ConversationalCoachPanel key={refreshKey} context="general" />
+      </FeatureGate>
 
       <PrimaryButton label="Back" onPress={() => router.back()} variant="secondary" />
     </ScreenContainer>

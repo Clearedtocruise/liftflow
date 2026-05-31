@@ -14,6 +14,7 @@ import {
     loadConversationalCoachHistory,
 } from '../lib/conversationalCoachEngine.js';
 import { requireAdmin } from '../lib/supabase.js';
+import { requireProSubscription } from '../middleware/requireProSubscription.js';
 
 export const aiRouter = Router();
 
@@ -21,7 +22,7 @@ function getUserId(req: { body?: { userId?: string }; query?: { userId?: string 
   return req.body?.userId ?? (req.query?.userId as string | undefined);
 }
 
-aiRouter.post('/coach', async (req, res) => {
+aiRouter.post('/coach', requireProSubscription, async (req, res) => {
   try {
     const { context = 'general', message = '', userId } = req.body as {
       context?: string;
@@ -41,7 +42,7 @@ aiRouter.post('/coach', async (req, res) => {
   }
 });
 
-aiRouter.post('/converse', async (req, res) => {
+aiRouter.post('/converse', requireProSubscription, async (req, res) => {
   try {
     const { userId, message, context, includeHistory, detailLevel } = req.body as {
       userId?: string;
@@ -67,7 +68,7 @@ aiRouter.post('/converse', async (req, res) => {
   }
 });
 
-aiRouter.get('/converse/history', async (req, res) => {
+aiRouter.get('/converse/history', requireProSubscription, async (req, res) => {
   try {
     const userId = getUserId(req);
     if (!userId) {
@@ -83,7 +84,7 @@ aiRouter.get('/converse/history', async (req, res) => {
   }
 });
 
-aiRouter.get('/recommendations', async (req, res) => {
+aiRouter.get('/recommendations', requireProSubscription, async (req, res) => {
   try {
     const userId = getUserId(req);
     if (!userId) {
@@ -98,7 +99,7 @@ aiRouter.get('/recommendations', async (req, res) => {
   }
 });
 
-aiRouter.post('/refresh', async (req, res) => {
+aiRouter.post('/refresh', requireProSubscription, async (req, res) => {
   try {
     const { userId } = req.body as { userId?: string };
     if (!userId) {
@@ -161,7 +162,7 @@ aiRouter.get('/progression/:exerciseId', async (req, res) => {
   }
 });
 
-aiRouter.post('/workout/generate', async (req, res) => {
+aiRouter.post('/workout/generate', requireProSubscription, async (req, res) => {
   try {
     const { userId } = req.body as { userId?: string };
     if (!userId) {
@@ -194,7 +195,7 @@ aiRouter.post('/workout/generate', async (req, res) => {
   }
 });
 
-aiRouter.post('/tts', async (req, res) => {
+aiRouter.post('/tts', requireProSubscription, async (req, res) => {
   try {
     const { text } = req.body as { text?: string };
     if (!text?.trim()) {

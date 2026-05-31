@@ -1,11 +1,11 @@
 import { answerSmartCoachQuestion } from './coachContext.js';
 import { classifyCoachTopic, saveCoachTurn, type CoachTopic } from './coachMemory.js';
-import { getOpenAI, hasOpenAI } from './openai.js';
 import {
-  buildContextSnapshot,
-  loadConversationalCoachContext,
-  type ConversationalCoachContext,
+    buildContextSnapshot,
+    loadConversationalCoachContext,
+    type ConversationalCoachContext,
 } from './loadConversationalCoachContext.js';
+import { getOpenAI, hasOpenAI } from './openai.js';
 
 export type CoachReferenceSource =
   | 'workout_history'

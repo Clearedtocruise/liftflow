@@ -3,24 +3,31 @@ import { ActivityIndicator, RefreshControl, View } from 'react-native';
 import { StyleSheet } from 'react-native';
 
 import { WorkoutRecommendationPanel } from '@/components/workout/WorkoutRecommendationPanel';
+import { FeatureGate } from '@/components/subscription/PremiumGate';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
+import { useEntitlement } from '@/hooks/useEntitlement';
 import { workoutRecommendationService } from '@/services/workoutRecommendationService';
 import type { WorkoutRecommendationReport } from '@/types/workoutRecommendation';
 import { router } from 'expo-router';
 
 export default function SuggestedWorkoutsScreen() {
   const { user } = useAuth();
+  const { allowed } = useEntitlement('workout-recommendations');
   const [report, setReport] = useState<WorkoutRecommendationReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    if (!user) return;
+    if (!user || !allowed) {
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
     const result = await workoutRecommendationService.getDaily(user.id);
     if (result.success) {
       setReport(result.data);
@@ -30,19 +37,11 @@ export default function SuggestedWorkoutsScreen() {
     }
     setLoading(false);
     setRefreshing(false);
-  }, [user]);
+  }, [user, allowed]);
 
   useEffect(() => {
     load();
   }, [load]);
-
-  if (loading) {
-    return (
-      <View style={styles.loading}>
-        <ActivityIndicator size="large" color={LiftFlowColors.accent} />
-      </View>
-    );
-  }
 
   return (
     <ScreenContainer
@@ -54,13 +53,19 @@ export default function SuggestedWorkoutsScreen() {
         Personalized from recovery, history, goals, and adherence
       </AppText>
 
-      {error ? (
-        <AppText variant="body" color="restTimer">
-          {error}
-        </AppText>
-      ) : report ? (
-        <WorkoutRecommendationPanel report={report} />
-      ) : null}
+      <FeatureGate featureId="workout-recommendations">
+        {loading ? (
+          <View style={styles.loading}>
+            <ActivityIndicator size="large" color={LiftFlowColors.accent} />
+          </View>
+        ) : error ? (
+          <AppText variant="body" color="restTimer">
+            {error}
+          </AppText>
+        ) : report ? (
+          <WorkoutRecommendationPanel report={report} />
+        ) : null}
+      </FeatureGate>
 
       <PrimaryButton label="Start Workout" onPress={() => router.push('/(tabs)/workout')} />
       <PrimaryButton label="Recovery Dashboard" onPress={() => router.push('/(features)/recovery-analysis')} variant="secondary" />
@@ -74,6 +79,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: LiftFlowColors.background,
+    paddingVertical: Spacing.xxl,
   },
   subtitle: { marginBottom: Spacing.xl },
 });

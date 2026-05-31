@@ -11,6 +11,7 @@ import { MicrophoneButton } from '@/components/workout/MicrophoneButton';
 import { QuickCorrectionButtons } from '@/components/workout/QuickCorrectionButtons';
 import { RestTimerSection } from '@/components/workout/RestTimerSection';
 import { SmartProgressionCard } from '@/components/workout/SmartProgressionCard';
+import { FeatureGate } from '@/components/subscription/PremiumGate';
 import { SetEditModal } from '@/components/workout/SetEditModal';
 import { StartWorkoutPrompt } from '@/components/workout/StartWorkoutPrompt';
 import { VoiceConfirmModal } from '@/components/workout/VoiceConfirmModal';
@@ -526,14 +527,16 @@ export default function WorkoutScreen() {
         />
 
         {user && focusExercise?.exercise?.id ? (
-          <SmartProgressionCard
-            userId={user.id}
-            exerciseId={focusExercise.exercise.id}
-            exerciseName={focusExercise.exercise.name}
-            sessionId={session.id}
-            currentSessionSets={focusExerciseSets}
-            recoveryScore={recoveryScore}
-          />
+          <FeatureGate featureId="smart-progression">
+            <SmartProgressionCard
+              userId={user.id}
+              exerciseId={focusExercise.exercise.id}
+              exerciseName={focusExercise.exercise.name}
+              sessionId={session.id}
+              currentSessionSets={focusExerciseSets}
+              recoveryScore={recoveryScore}
+            />
+          </FeatureGate>
         ) : null}
 
         <SectionHeader title="Manual Log" subtitle="Enter weight, reps, and exercise" />

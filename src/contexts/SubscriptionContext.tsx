@@ -1,5 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
+import { PRO_FEATURE_LABELS, type ProFeatureId } from '@/constants/subscription';
+import { hasProFeature, isTrialingSubscription } from '@/lib/entitlements';
 import { useAuth } from '@/hooks/useAuth';
 import { notificationService } from '@/services/notificationService';
 import { subscriptionService } from '@/services/subscriptionService';
@@ -8,7 +10,13 @@ import type { Subscription } from '@/types/platform';
 type SubscriptionContextValue = {
   subscription: Subscription | null;
   isPremium: boolean;
+  isTrialing: boolean;
+  isPro: boolean;
   loading: boolean;
+  isNativePurchasesAvailable: boolean;
+  isRevenueCatConfigured: boolean;
+  hasFeature: (featureId: ProFeatureId) => boolean;
+  featureLabel: (featureId: ProFeatureId) => string;
   refresh: () => Promise<void>;
 };
 
@@ -65,14 +73,30 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     return () => removeListener?.();
   }, [user, refresh]);
 
+  const isPremium = subscriptionService.isPremium(subscription);
+  const isTrialing = isTrialingSubscription(subscription);
+
+  const hasFeature = useCallback(
+    (featureId: ProFeatureId) => hasProFeature(subscription, featureId),
+    [subscription],
+  );
+
+  const featureLabel = useCallback((featureId: ProFeatureId) => PRO_FEATURE_LABELS[featureId], []);
+
   const value = useMemo(
     () => ({
       subscription,
-      isPremium: subscriptionService.isPremium(subscription),
+      isPremium,
+      isPro: isPremium,
+      isTrialing,
       loading,
+      isNativePurchasesAvailable: subscriptionService.isNativePurchasesAvailable(),
+      isRevenueCatConfigured: subscriptionService.isRevenueCatConfigured(),
+      hasFeature,
+      featureLabel,
       refresh,
     }),
-    [subscription, loading, refresh],
+    [subscription, isPremium, isTrialing, loading, hasFeature, featureLabel, refresh],
   );
 
   return <SubscriptionContext.Provider value={value}>{children}</SubscriptionContext.Provider>;

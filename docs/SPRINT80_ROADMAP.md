@@ -1,8 +1,10 @@
-# Sprint 8.0 — Roadmap (Implementation Blocked Until Sprint 7.9 Gate PASS)
+# Sprint 8.0 — Roadmap (Sprint 7.9 Gate PASS — Implementation Authorized)
 
-**Prerequisite:** `node scripts/validate-sprint79-final-gate.mjs` → **PASS** + Beta Readiness **100/100**
+**Prerequisite:** `node scripts/validate-sprint79-final-gate.mjs` → **PASS** + Beta Readiness **100/100** ✅
 
-Current gate status: see [SPRINT79_FINAL_GATE_REPORT.md](./SPRINT79_FINAL_GATE_REPORT.md)
+**Authorization:** 2026-05-31 — see [SPRINT79_CLOSURE_REPORT.md](./SPRINT79_CLOSURE_REPORT.md) and [SPRINT80_IMPLEMENTATION_PLAN.md](./SPRINT80_IMPLEMENTATION_PLAN.md)
+
+Current gate status: [SPRINT79_FINAL_GATE_REPORT.md](./SPRINT79_FINAL_GATE_REPORT.md) — **12/12 PASS**
 
 ---
 
