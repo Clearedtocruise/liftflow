@@ -5,14 +5,14 @@ import { ActivityIndicator, Alert, StyleSheet, View } from 'react-native';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { SectionHeader } from '@/components/layout/SectionHeader';
+import { FeatureGate } from '@/components/subscription/PremiumGate';
 import { AppText } from '@/components/ui/AppText';
 import { ManualSetEntry } from '@/components/workout/ManualSetEntry';
 import { MicrophoneButton } from '@/components/workout/MicrophoneButton';
 import { QuickCorrectionButtons } from '@/components/workout/QuickCorrectionButtons';
 import { RestTimerSection } from '@/components/workout/RestTimerSection';
-import { SmartProgressionCard } from '@/components/workout/SmartProgressionCard';
-import { FeatureGate } from '@/components/subscription/PremiumGate';
 import { SetEditModal } from '@/components/workout/SetEditModal';
+import { SmartProgressionCard } from '@/components/workout/SmartProgressionCard';
 import { StartWorkoutPrompt } from '@/components/workout/StartWorkoutPrompt';
 import { VoiceConfirmModal } from '@/components/workout/VoiceConfirmModal';
 import { WorkoutCard } from '@/components/workout/WorkoutCard';
@@ -20,6 +20,7 @@ import { LiftFlowColors, Spacing } from '@/constants/theme';
 import { buildWorkoutSessionName, pickDefaultLocation } from '@/constants/trainingProfile';
 import { DEFAULT_REST_SECONDS } from '@/constants/workout';
 import { useAuth } from '@/hooks/useAuth';
+import { useEntitlement } from '@/hooks/useEntitlement';
 import { useNearbyWorkoutLocation } from '@/hooks/useNearbyWorkoutLocation';
 import { useUnits } from '@/hooks/useUnits';
 import { useVoiceRecognition } from '@/hooks/useVoiceRecognition';
@@ -27,19 +28,23 @@ import { useVoiceSettings } from '@/hooks/useVoiceSettings';
 import { useWorkoutLocations } from '@/hooks/useWorkoutLocations';
 import { formatWorkoutWeightForInput, normalizeVoiceWeightToKg, weightStepKg } from '@/lib/unitConversion';
 import { speakVoiceConfirmation } from '@/lib/voice';
-import { coachActivationService } from '@/services/coachActivationService';
+import { bodyService } from '@/services/bodyService';
 import { conversationalCoachService } from '@/services/conversationalCoachService';
+import { peakMusicService } from '@/services/peakMusicService';
+import { productAnalyticsService } from '@/services/productAnalyticsService';
 import { recoveryService } from '@/services/recoveryService';
-import { voiceCoachingService } from '@/services/voiceCoachingService';
-import { workoutRecommendationService } from '@/services/workoutRecommendationService';
 import { socialShareService } from '@/services/socialShareService';
+import { voiceCoachingService } from '@/services/voiceCoachingService';
 import { processVoiceTranscript, voiceService } from '@/services/voiceService';
+import { workoutRecommendationService } from '@/services/workoutRecommendationService';
 import { useWorkoutSession } from '@/state/workout/WorkoutSessionContext';
 import type { ParsedVoiceCommand, WorkoutSet } from '@/types';
 
 export default function WorkoutScreen() {
   const { user } = useAuth();
   const units = useUnits();
+  const { allowed: transformationAllowed } = useEntitlement('transformation-engine');
+  const { allowed: peakMusicAllowed } = useEntitlement('peak-music-sync');
   const {
     activeSession: session,
     isLoading: loading,
@@ -236,8 +241,94 @@ export default function WorkoutScreen() {
         Alert.alert('Coach unavailable', coach.error);
         return;
       }
+      void productAnalyticsService.trackAiCoach(user.id, 'workout');
       await voiceCoachingService.speakLine(coach.data.voiceLine);
       Alert.alert('LiftFlow Coach', coach.data.detailedAnswer);
+      clearTranscript();
+      setConfirmVisible(false);
+      setParsed(null);
+      return;
+    }
+
+    if (command.intent === 'transformation_query' || command.intent === 'transformation_progress' || command.intent === 'transformation_target_bf') {
+      if (!transformationAllowed) {
+        Alert.alert('Pro feature', 'Transformation projections require LiftFlow Pro.');
+        router.push('/(features)/upgrade');
+        clearTranscript();
+        setConfirmVisible(false);
+        setParsed(null);
+        return;
+      }
+
+      if (command.intent === 'transformation_query' || command.intent === 'transformation_progress') {
+        speakVoiceConfirmation(
+          {
+            ...command,
+            transformationVoiceLine:
+              command.intent === 'transformation_progress'
+                ? 'Opening your progress timeline'
+                : 'Opening your transformation projection',
+          },
+          voiceSettings.voiceFeedback,
+          units.weightLabel,
+        );
+        router.push('/(tabs)/progress');
+        clearTranscript();
+        setConfirmVisible(false);
+        setParsed(null);
+        return;
+      }
+
+      const targetBf = command.targetBodyFatPct ?? 12;
+      const projection = await bodyService.runTransformation(user.id, targetBf);
+      if (!projection.success) {
+        Alert.alert('Transformation unavailable', projection.error);
+        return;
+      }
+      const line = `At ${targetBf}% body fat, projected weight ${units.formatWeight(projection.data.projected.weightKg)}`;
+      speakVoiceConfirmation(
+        { ...command, transformationVoiceLine: line },
+        voiceSettings.voiceFeedback,
+        units.weightLabel,
+      );
+      Alert.alert(
+        'Transformation Projection',
+        `${projection.data.rationale}\n\nProjected: ${units.formatWeight(projection.data.projected.weightKg)} at ${projection.data.projected.bodyFatPct}% BF`,
+      );
+      clearTranscript();
+      setConfirmVisible(false);
+      setParsed(null);
+      return;
+    }
+
+    const peakIntents = [
+      'play_peak',
+      'start_at_chorus',
+      'sync_music_next_set',
+      'sync_next_set',
+      'use_pr_song',
+      'resume_playlist',
+      'next_hype_song',
+    ] as const;
+    if (command.intent && peakIntents.includes(command.intent as (typeof peakIntents)[number])) {
+      if (!peakMusicAllowed) {
+        Alert.alert('Pro feature', 'Peak Music Sync requires LiftFlow Pro.');
+        router.push('/(features)/upgrade');
+        clearTranscript();
+        setConfirmVisible(false);
+        setParsed(null);
+        return;
+      }
+      const peakResult = await peakMusicService.handleVoicePeakCommand(user.id, command.intent, {
+        restDurationMs: restSecondsRemaining != null ? restSecondsRemaining * 1000 : undefined,
+      });
+      if (peakResult.success) {
+        void productAnalyticsService.trackPeakMusic(user.id, command.intent);
+        await voiceCoachingService.speakLine(peakResult.data);
+        Alert.alert('Peak Music', peakResult.data);
+      } else {
+        Alert.alert('Peak Music', peakResult.error);
+      }
       clearTranscript();
       setConfirmVisible(false);
       setParsed(null);
@@ -327,6 +418,7 @@ export default function WorkoutScreen() {
     });
 
     if (logged) {
+      void productAnalyticsService.trackVoiceLog(user.id, command.intent);
       setActiveExerciseName(exerciseName);
       if (logged.isPr) {
         Alert.alert(
@@ -412,6 +504,8 @@ export default function WorkoutScreen() {
   async function handleFinishWorkout() {
     const completed = await endSession();
     if (!completed || !user) return;
+
+    void productAnalyticsService.trackWorkoutCompleted(user.id, completed.id);
 
     const coachResult = await coachActivationService.getPostWorkoutSummary(user.id, completed.id);
     const summary = coachResult.success ? coachResult.data : null;

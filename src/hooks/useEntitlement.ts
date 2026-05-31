@@ -1,5 +1,5 @@
-import { useSubscriptionContext } from '@/contexts/SubscriptionContext';
 import type { ProFeatureId } from '@/constants/subscription';
+import { useSubscriptionContext } from '@/contexts/SubscriptionContext';
 
 /**
  * Check Pro entitlement for a specific feature surface.

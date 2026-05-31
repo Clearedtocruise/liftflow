@@ -37,6 +37,8 @@ export function speakVoiceConfirmation(
     message = command.trainTodayVoiceLine ?? 'Checking training recommendation';
   } else if (command.intent === 'build_workout') {
     message = command.buildWorkoutVoiceLine ?? command.trainTodayVoiceLine ?? 'Building your workout';
+  } else if (command.intent === 'transformation_query' || command.intent === 'transformation_progress' || command.intent === 'transformation_target_bf') {
+    message = command.transformationVoiceLine ?? 'Running transformation projection';
   }
 
   Speech.stop();

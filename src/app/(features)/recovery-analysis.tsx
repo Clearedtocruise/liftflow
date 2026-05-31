@@ -1,16 +1,16 @@
-import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, RefreshControl, View } from 'react-native';
-import { StyleSheet } from 'react-native';
 import { router } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, RefreshControl, StyleSheet, View } from 'react-native';
 
-import { RecoveryIntelligenceDashboard } from '@/components/recovery/RecoveryIntelligenceDashboard';
-import { FeatureGate } from '@/components/subscription/PremiumGate';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
+import { RecoveryIntelligenceDashboard } from '@/components/recovery/RecoveryIntelligenceDashboard';
+import { FeatureGate } from '@/components/subscription/PremiumGate';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 import { useEntitlement } from '@/hooks/useEntitlement';
+import { productAnalyticsService } from '@/services/productAnalyticsService';
 import { recoveryService } from '@/services/recoveryService';
 import type { RecoveryIntelligenceReport } from '@/types/recoveryIntelligence';
 
@@ -32,6 +32,7 @@ export default function RecoveryAnalysisScreen() {
     if (result.success) {
       setReport(result.data);
       setError(null);
+      void productAnalyticsService.trackRecovery(user.id);
     } else {
       setError(result.error);
     }

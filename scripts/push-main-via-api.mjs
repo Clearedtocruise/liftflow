@@ -15,13 +15,12 @@ const dryRun = process.argv.includes('--dry-run');
 const OWNER = 'Clearedtocruise';
 const REPO = 'liftflow';
 const BRANCH = 'main';
-const COMMIT_MSG = `Sprint 8.1: RevenueCat Pro gating, subscription UI, API middleware
+const COMMIT_MSG = `Sprint 8.5–8.6: Beta readiness pack + TestFlight RC prep
 
-- Pro entitlement (pro + legacy premium), trial support, FeatureGate
-- Subscription, upgrade, manage screens + RestorePurchases
-- requireProSubscription on AI and intelligence routes
-- RevenueCat webhook trial events + subscription_events logging
-- validate:sprint81 + setup docs`;
+- Sentry crash reporting (mobile + backend)
+- Feedback, analytics, beta ops (migration 015)
+- Founder metrics + monitoring dashboards
+- Sprint 8.6 TestFlight RC validation + checklists`;
 
 const IGNORE = new Set([
   'node_modules',

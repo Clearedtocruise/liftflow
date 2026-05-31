@@ -75,6 +75,11 @@ export default function AppleWatchScreen() {
             <AppText variant="caption" color="textSecondary">
               Set {active.setNumber} of {active.targetSets} · Target {active.targetReps} reps
             </AppText>
+            {active.phase === 'rest' && active.restSecondsRemaining != null ? (
+              <AppText variant="headline" color="accent">
+                Rest {active.restSecondsRemaining}s
+              </AppText>
+            ) : null}
             <View style={styles.metrics}>
               <Metric label="Reps" value={String(active.currentRepCount)} />
               <Metric
@@ -83,6 +88,21 @@ export default function AppleWatchScreen() {
               />
               <Metric label="Phase" value={active.phase} />
             </View>
+            {state?.recoveryScore != null ? (
+              <AppText variant="footnote" color="textSecondary">
+                Recovery {state.recoveryScore} · {state.recoveryLabel}
+              </AppText>
+            ) : null}
+            {state?.workoutRecommendation ? (
+              <AppText variant="footnote" color="textTertiary">
+                Today: {state.workoutRecommendation}
+              </AppText>
+            ) : null}
+            {state?.progressionLine ? (
+              <AppText variant="footnote" color="textTertiary">
+                Progression: {state.progressionLine}
+              </AppText>
+            ) : null}
             {active.needsConfirmation ? (
               <AppText variant="footnote" color="accent" style={styles.warn}>
                 Low motion confidence — confirm count or correct manually.
@@ -114,10 +134,10 @@ export default function AppleWatchScreen() {
           </Card>
         )}
 
-        <SectionHeader title="Voice commands" subtitle="Also available on Watch mic" />
+        <SectionHeader title="Voice commands" subtitle="Log set · Next set · Recovery · What should I do next?" />
         <TextInput
           style={styles.input}
-          placeholder='Try "What rep am I on?" or "Correct to rep 8"'
+          placeholder='Try "Log set", "Next set", "How recovered am I?"'
           placeholderTextColor={LiftFlowColors.textTertiary}
           value={voiceInput}
           onChangeText={setVoiceInput}

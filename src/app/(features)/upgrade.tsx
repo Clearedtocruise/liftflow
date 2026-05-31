@@ -2,11 +2,11 @@ import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, Platform, ScrollView, StyleSheet, View } from 'react-native';
 
-import { ProPlanComparison } from '@/components/subscription/ProPlanComparison';
-import { RestorePurchasesButton } from '@/components/subscription/RestorePurchasesButton';
 import { Card } from '@/components/layout/Card';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
+import { ProPlanComparison } from '@/components/subscription/ProPlanComparison';
+import { RestorePurchasesButton } from '@/components/subscription/RestorePurchasesButton';
 import { AppText } from '@/components/ui/AppText';
 import { SUBSCRIPTION } from '@/constants/subscription';
 import { Spacing } from '@/constants/theme';

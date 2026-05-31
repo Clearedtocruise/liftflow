@@ -1,8 +1,8 @@
 # Sprint 8.0 — Implementation Plan (Authorized)
 
 **Authorization date:** 2026-05-31  
-**Prerequisite:** Sprint 7.9 gate **12/12 PASS**, Beta Readiness **100/100** ✅  
-**Status:** **AUTHORIZED — planning only; no coding started**
+**Sprint 8.1 status:** **PASS (52/52)** — see [SPRINT81_VALIDATION_REPORT.md](./SPRINT81_VALIDATION_REPORT.md)  
+**Prerequisite:** Sprint 7.9 gate **12/12 PASS** ✅
 
 See closure report: [SPRINT79_CLOSURE_REPORT.md](./SPRINT79_CLOSURE_REPORT.md)
 

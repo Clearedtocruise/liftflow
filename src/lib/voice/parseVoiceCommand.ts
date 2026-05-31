@@ -57,6 +57,24 @@ const CONTROL_PATTERNS: PatternDef[] = [
     build: (_, raw) => ({ intent: 'next_hype_song', rawText: raw, confidence: 0.89 }),
   },
   {
+    pattern: /^(?:show\s+(?:my\s+)?projection|show\s+(?:my\s+)?transformation|my\s+transformation)\??$/i,
+    build: (_, raw) => ({ intent: 'transformation_query', rawText: raw, confidence: 0.93 }),
+  },
+  {
+    pattern: /^(?:show\s+(?:my\s+)?progress|my\s+progress\s+photos?)\??$/i,
+    build: (_, raw) => ({ intent: 'transformation_progress', rawText: raw, confidence: 0.92 }),
+  },
+  {
+    pattern:
+      /^(?:what\s+will\s+i\s+look\s+like\s+at\s+(?<bf>\d{1,2})(?:\s*(?:%|percent))?\s*(?:body\s*fat|bf)?|project(?:ion)?\s+(?:to|at)\s+(?<bf2>\d{1,2})\s*(?:%|percent)?)\??$/i,
+    build: (m, raw) => ({
+      intent: 'transformation_target_bf',
+      rawText: raw,
+      confidence: 0.92,
+      targetBodyFatPct: Number(m.groups!.bf ?? m.groups!.bf2),
+    }),
+  },
+  {
     pattern:
       /^(?:why\s+am\s+i\s+(?:stalled|fatigued|tired)|how\s+much\s+(?:should\s+i\s+)?lift|how\s+much\s+protein|coach\s+help|ask\s+(?:the\s+)?coach)\??$/i,
     build: (_, raw) => ({ intent: 'coach_query', rawText: raw, confidence: 0.91 }),
@@ -329,6 +347,12 @@ export function intentLabel(intent?: VoiceIntent): string {
       return 'Resume playlist';
     case 'next_hype_song':
       return 'Next hype';
+    case 'transformation_query':
+      return 'Show transformation';
+    case 'transformation_progress':
+      return 'Show progress';
+    case 'transformation_target_bf':
+      return 'Target body fat projection';
     default:
       return 'Log set';
   }

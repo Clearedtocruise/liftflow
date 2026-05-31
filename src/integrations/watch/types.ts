@@ -52,8 +52,26 @@ export type WatchActiveSetState = {
 export type WatchWorkoutAssistantState = {
   userId: string;
   activeSet: WatchActiveSetState | null;
+  /** Recovery intelligence score 0–100 */
+  recoveryScore?: number;
+  recoveryLabel?: string;
+  /** Today's training recommendation line */
+  workoutRecommendation?: string;
+  /** Smart progression hint for active exercise */
+  progressionLine?: string;
+  healthSnapshot?: WatchHealthSnapshot;
   lastSpokenResponse?: string;
   updatedAt: string;
+};
+
+export type WatchHealthSnapshot = {
+  heartRateBpm?: number;
+  restingHeartRateBpm?: number;
+  hrvMs?: number;
+  activeCalories?: number;
+  sleepHours?: number;
+  steps?: number;
+  syncedAt?: string;
 };
 
 export type WatchVoiceCommandResult = {
@@ -70,4 +88,6 @@ export type WatchWorkoutMessage =
   | { type: 'voice_command'; transcript: string; workoutSessionId?: string }
   | { type: 'rep_correction'; repCount: number; workoutSessionId: string; workoutExerciseId: string }
   | { type: 'confirm_reps'; workoutSessionId: string; workoutExerciseId: string }
+  | { type: 'skip_rest'; workoutSessionId?: string }
+  | { type: 'next_set'; workoutSessionId?: string }
   | { type: 'workout_sync'; [key: string]: unknown };

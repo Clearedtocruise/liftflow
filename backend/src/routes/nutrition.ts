@@ -4,13 +4,13 @@ import { generateWeeklyMealPlan } from '../lib/aiCoach.js';
 import { loadCoachContext } from '../lib/coachContext.js';
 import { loadNutritionIntelligence } from '../lib/loadNutritionIntelligence.js';
 import { requireAdmin } from '../lib/supabase.js';
-import { requireProSubscription } from '../middleware/requireProSubscription.js';
 import { resolveRankedGoals, toNutritionGoal } from '../lib/trainingGoals.js';
 import {
     calculateMacroTargets,
     generateDailyMeals,
     inferWorkoutType,
 } from '../lib/workoutAwareNutrition.js';
+import { requireProSubscription } from '../middleware/requireProSubscription.js';
 
 export const nutritionRouter = Router();
 

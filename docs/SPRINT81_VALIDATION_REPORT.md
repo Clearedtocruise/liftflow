@@ -1,8 +1,8 @@
 # Sprint 8.1 — RevenueCat Validation Report
 
 **Date:** 2026-05-31  
-**Result:** FAIL  
-**Score:** 51/52  
+**Result:** PASS  
+**Score:** 52/52  
 
 ## Summary
 
@@ -60,7 +60,7 @@ Sprint 8.1 delivers RevenueCat integration, Pro entitlement gating (client + API
 | Webhook trial events | PASS | — |
 | Webhook subscription_events insert | PASS | — |
 | Backend TypeScript build | PASS | — |
-| Free user blocked on recovery/intelligence | FAIL | HTTP 200 |
+| Free user blocked on recovery/intelligence | PASS | HTTP 403 |
 | RevenueCat setup guide | PASS | — |
 | ASC checklist | PASS | — |
 | TestFlight checklist | PASS | — |

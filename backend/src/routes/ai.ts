@@ -9,6 +9,7 @@ import {
     suggestMuscleGroups,
     synthesizeSpeech,
 } from '../lib/aiCoach.js';
+import { captureAiError } from '../lib/aiErrorReporting.js';
 import {
     converseWithCoach,
     loadConversationalCoachHistory,
@@ -38,6 +39,7 @@ aiRouter.post('/coach', requireProSubscription, async (req, res) => {
     const result = await coachResponse(context, message, userId);
     res.json(result);
   } catch (error) {
+    captureAiError(error, '/api/ai/coach', getUserId(req));
     res.status(500).json({ message: error instanceof Error ? error.message : 'Coach failed' });
   }
 });
@@ -64,6 +66,7 @@ aiRouter.post('/converse', requireProSubscription, async (req, res) => {
     });
     res.json(result);
   } catch (error) {
+    captureAiError(error, '/api/ai/converse', getUserId(req));
     res.status(500).json({ message: error instanceof Error ? error.message : 'Conversational coach failed' });
   }
 });

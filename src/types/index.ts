@@ -12,6 +12,7 @@ export * from './progression';
 export * from './recoveryIntelligence';
 export * from './workoutRecommendation';
 export * from './training';
+export * from './transformation';
 export * from './user';
 export * from './voice';
 export * from './workout';

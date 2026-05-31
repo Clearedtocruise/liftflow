@@ -1,11 +1,11 @@
 import { router } from 'expo-router';
 import { Linking, Platform, ScrollView, StyleSheet, View } from 'react-native';
 
-import { RestorePurchasesButton } from '@/components/subscription/RestorePurchasesButton';
 import { Card } from '@/components/layout/Card';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { SectionHeader } from '@/components/layout/SectionHeader';
+import { RestorePurchasesButton } from '@/components/subscription/RestorePurchasesButton';
 import { AppText } from '@/components/ui/AppText';
 import { SUBSCRIPTION } from '@/constants/subscription';
 import { Spacing } from '@/constants/theme';

@@ -2,9 +2,6 @@ import { Router } from 'express';
 
 import { adaptActiveProgram } from '../lib/adaptiveProgram.js';
 import { assessRecovery, suggestMuscleGroups } from '../lib/aiCoach.js';
-import { loadSmartProgression } from '../lib/loadSmartProgression.js';
-import { loadRecoveryIntelligence } from '../lib/loadRecoveryIntelligence.js';
-import { loadWorkoutRecommendations } from '../lib/loadWorkoutRecommendations.js';
 import { activateCoachSystem } from '../lib/coachActivation.js';
 import {
     answerSmartCoachQuestion,
@@ -13,6 +10,9 @@ import {
     mergeTrainingLoadScore,
 } from '../lib/coachContext.js';
 import { parseLimitationFromVoice } from '../lib/exerciseSubstitution.js';
+import { loadRecoveryIntelligence } from '../lib/loadRecoveryIntelligence.js';
+import { loadSmartProgression } from '../lib/loadSmartProgression.js';
+import { loadWorkoutRecommendations } from '../lib/loadWorkoutRecommendations.js';
 import { generatePostWorkoutCoachSummary } from '../lib/postWorkoutCoach.js';
 import {
     generateTrainingProgram,

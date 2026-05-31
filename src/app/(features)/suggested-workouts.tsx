@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, RefreshControl, View } from 'react-native';
-import { StyleSheet } from 'react-native';
+import { ActivityIndicator, RefreshControl, StyleSheet, View } from 'react-native';
 
-import { WorkoutRecommendationPanel } from '@/components/workout/WorkoutRecommendationPanel';
-import { FeatureGate } from '@/components/subscription/PremiumGate';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
+import { FeatureGate } from '@/components/subscription/PremiumGate';
 import { AppText } from '@/components/ui/AppText';
+import { WorkoutRecommendationPanel } from '@/components/workout/WorkoutRecommendationPanel';
 import { LiftFlowColors, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 import { useEntitlement } from '@/hooks/useEntitlement';

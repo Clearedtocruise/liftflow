@@ -1,11 +1,13 @@
 import { Platform } from 'react-native';
 
+import { watchOfflineQueue } from '@/integrations/watchOfflineQueue';
+
 import type { WatchMotionSample, WatchWorkoutAssistantState, WatchWorkoutMessage } from '@/integrations/watch';
 import {
-  parseWatchHeartRate,
-  parseWatchMovement,
-  parseWatchWorkoutDetection,
-  WATCH_MESSAGE_TYPES,
+    parseWatchHeartRate,
+    parseWatchMovement,
+    parseWatchWorkoutDetection,
+    WATCH_MESSAGE_TYPES,
 } from '@/integrations/watch/watchHealthArchitecture';
 import type { IntegrationAvailability, WatchSyncPayload } from './types';
 
@@ -99,6 +101,10 @@ export function parseWatchWorkoutMessage(raw: Record<string, unknown>): WatchWor
         workoutSessionId: String(raw.workoutSessionId ?? ''),
         workoutExerciseId: String(raw.workoutExerciseId ?? ''),
       };
+    case 'skip_rest':
+      return { type: 'skip_rest', workoutSessionId: raw.workoutSessionId as string | undefined };
+    case 'next_set':
+      return { type: 'next_set', workoutSessionId: raw.workoutSessionId as string | undefined };
     case 'workout_sync':
     case 'health_sync':
       return { type: 'workout_sync', ...raw };
@@ -110,17 +116,53 @@ export function parseWatchWorkoutMessage(raw: Record<string, unknown>): WatchWor
 export async function sendToWatch(message: WatchWorkoutMessage | Record<string, unknown>): Promise<{ sent: boolean; error?: string }> {
   const wc = loadWatchConnectivity();
   if (!wc) {
+    await watchOfflineQueue.enqueue(message as Record<string, unknown>);
     return { sent: false, error: getWatchAvailability().reason };
   }
 
   try {
     const paired = await wc.isPaired();
-    if (!paired) return { sent: false, error: 'No Apple Watch paired' };
+    if (!paired) {
+      await watchOfflineQueue.enqueue(message as Record<string, unknown>);
+      return { sent: false, error: 'No Apple Watch paired' };
+    }
     await wc.sendMessage(message as Record<string, unknown>);
     return { sent: true };
   } catch (error) {
+    await watchOfflineQueue.enqueue(message as Record<string, unknown>);
     return { sent: false, error: error instanceof Error ? error.message : 'Failed to send to Watch' };
   }
+}
+
+export async function flushWatchOutboundQueue(): Promise<number> {
+  const wc = loadWatchConnectivity();
+  if (!wc) return 0;
+
+  const queued = await watchOfflineQueue.list();
+  let sent = 0;
+  for (const item of queued) {
+    try {
+      await wc.sendMessage(item.message);
+      await watchOfflineQueue.remove(item.id);
+      sent += 1;
+    } catch {
+      await watchOfflineQueue.markAttempt(item.id);
+      break;
+    }
+  }
+  return sent;
+}
+
+export function subscribeToWatchMessages(
+  handler: (message: Record<string, unknown>) => void,
+): () => void {
+  const wc = loadWatchConnectivity();
+  if (!wc?.watchEvents) return () => undefined;
+
+  const sub = wc.watchEvents.addListener((event) => {
+    handler(event.message);
+  });
+  return () => sub.remove();
 }
 
 export async function pushWorkoutStateToWatch(state: WatchWorkoutAssistantState): Promise<{ sent: boolean; error?: string }> {
@@ -155,6 +197,8 @@ export function isWorkoutAssistantMessage(message: Record<string, unknown>): boo
     t === 'voice_command' ||
     t === 'rep_correction' ||
     t === 'confirm_reps' ||
+    t === 'skip_rest' ||
+    t === 'next_set' ||
     t === 'workout_state'
   );
 }

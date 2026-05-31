@@ -1,15 +1,15 @@
+import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, TextInput, View } from 'react-native';
-import { router } from 'expo-router';
 
 import { Card } from '@/components/layout/Card';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { SectionHeader } from '@/components/layout/SectionHeader';
+import { UpgradePrompt } from '@/components/subscription/UpgradePrompt';
 import { AppText } from '@/components/ui/AppText';
 import { MicrophoneButton } from '@/components/workout/MicrophoneButton';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
-import { UpgradePrompt } from '@/components/subscription/UpgradePrompt';
 import { useEntitlement } from '@/hooks/useEntitlement';
 import { useUnits } from '@/hooks/useUnits';
 import { useVoiceLogging } from '@/hooks/useVoiceLogging';

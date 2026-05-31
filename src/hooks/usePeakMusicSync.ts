@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { peakMusicService } from '@/services/peakMusicService';
 import type { PeakMusicSettings } from '@/types/peakMusic';
@@ -8,6 +8,15 @@ export function usePeakMusicSync(userId: string | undefined) {
   const [settings, setSettings] = useState<PeakMusicSettings>(() =>
     userId ? peakMusicService.getSettings(userId) : { ...DEFAULT_PEAK_MUSIC_SETTINGS },
   );
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    if (!userId) return;
+    peakMusicService.hydrateSettings(userId).then((loaded) => {
+      setSettings(loaded);
+      setReady(true);
+    });
+  }, [userId]);
 
   const updateSettings = useCallback(
     (patch: Partial<PeakMusicSettings>) => {
@@ -17,5 +26,5 @@ export function usePeakMusicSync(userId: string | undefined) {
     [userId],
   );
 
-  return { settings, updateSettings, peakMusicService };
+  return { settings, updateSettings, peakMusicService, ready };
 }

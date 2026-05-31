@@ -1,11 +1,17 @@
 import { Router } from 'express';
 
+import {
+  getLatestTransformationProjection,
+  listTransformationProjections,
+  runTransformationProjection,
+} from '../lib/transformationEngine.js';
 import { getOpenAI, hasOpenAI } from '../lib/openai.js';
 import { requireAdmin } from '../lib/supabase.js';
+import { requireProSubscription } from '../middleware/requireProSubscription.js';
 
 export const bodyRouter = Router();
 
-bodyRouter.post('/estimate-body-fat', async (req, res) => {
+bodyRouter.post('/estimate-body-fat', requireProSubscription, async (req, res) => {
   try {
     const { photoUrl, userId, photoId } = req.body as {
       photoUrl?: string;
@@ -62,7 +68,7 @@ bodyRouter.post('/estimate-body-fat', async (req, res) => {
   }
 });
 
-bodyRouter.post('/projection', async (req, res) => {
+bodyRouter.post('/projection', requireProSubscription, async (req, res) => {
   try {
     const { userId, photoId, targetBodyFatPct } = req.body as {
       userId?: string;
@@ -140,5 +146,58 @@ bodyRouter.post('/projection', async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ message: error instanceof Error ? error.message : 'Projection failed' });
+  }
+});
+
+bodyRouter.post('/transformation/run', requireProSubscription, async (req, res) => {
+  try {
+    const { userId, targetBodyFatPct, beforePhotoId, currentPhotoId } = req.body as {
+      userId?: string;
+      targetBodyFatPct?: number;
+      beforePhotoId?: string;
+      currentPhotoId?: string;
+    };
+
+    if (!userId || targetBodyFatPct === undefined) {
+      res.status(400).json({ message: 'userId and targetBodyFatPct are required' });
+      return;
+    }
+
+    const result = await runTransformationProjection(userId, targetBodyFatPct, {
+      beforePhotoId,
+      currentPhotoId,
+    });
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ message: error instanceof Error ? error.message : 'Transformation failed' });
+  }
+});
+
+bodyRouter.get('/transformation/latest', requireProSubscription, async (req, res) => {
+  try {
+    const userId = req.query.userId as string | undefined;
+    if (!userId) {
+      res.status(400).json({ message: 'userId query param required' });
+      return;
+    }
+    const latest = await getLatestTransformationProjection(userId);
+    res.json(latest);
+  } catch (error) {
+    res.status(500).json({ message: error instanceof Error ? error.message : 'Fetch failed' });
+  }
+});
+
+bodyRouter.get('/transformation/history', requireProSubscription, async (req, res) => {
+  try {
+    const userId = req.query.userId as string | undefined;
+    if (!userId) {
+      res.status(400).json({ message: 'userId query param required' });
+      return;
+    }
+    const limit = Number(req.query.limit ?? 10);
+    const history = await listTransformationProjections(userId, limit);
+    res.json({ projections: history });
+  } catch (error) {
+    res.status(500).json({ message: error instanceof Error ? error.message : 'History failed' });
   }
 });

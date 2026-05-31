@@ -26,7 +26,10 @@ export type VoiceIntent =
   | 'use_pr_song'
   | 'resume_playlist'
   | 'next_hype_song'
-  | 'sync_music_next_set';
+  | 'sync_music_next_set'
+  | 'transformation_query'
+  | 'transformation_progress'
+  | 'transformation_target_bf';
 
 export type ParsedVoiceCommandExtended = ParsedVoiceCommand & {
   intent?: VoiceIntent;
@@ -41,6 +44,8 @@ export type ParsedVoiceCommandExtended = ParsedVoiceCommand & {
   buildWorkoutVoiceLine?: string;
   nutritionVoiceLine?: string;
   groceryVoiceLine?: string;
+  targetBodyFatPct?: number;
+  transformationVoiceLine?: string;
 };
 
 export type VoiceParseContext = {

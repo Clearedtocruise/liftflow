@@ -1,29 +1,36 @@
 import { getMusicProvider } from '@/integrations/music/musicProviderRegistry';
-import {
-  buildContinuityPlan,
-  buildDefaultWorkoutQueue,
-  nextHypeTrack,
-  selectTrackForSet,
-} from '@/integrations/music/playlistContinuityEngine';
-import { computePeakPlaybackPlan, shouldAutoSyncPeak } from '@/integrations/music/peakPlaybackEngine';
 import { peakMomentStore } from '@/integrations/music/peakMomentStore';
+import { computePeakPlaybackPlan, shouldAutoSyncPeak } from '@/integrations/music/peakPlaybackEngine';
+import { loadPeakSettings, peakSettingsStore } from '@/integrations/music/peakSettingsStore';
+import {
+    buildContinuityPlan,
+    buildDefaultWorkoutQueue,
+    nextHypeTrack,
+    selectTrackForSet,
+} from '@/integrations/music/playlistContinuityEngine';
 import { playlistStateStore } from '@/integrations/music/playlistStateStore';
 import { fail, ok, type ServiceResult } from '@/lib/serviceResult';
 import type {
-  MusicProviderId,
-  PeakMoment,
-  PeakMusicSettings,
-  PeakMusicVoiceIntent,
-  PeakPlaybackRequest,
-  PlaybackSeekPlan,
-  PlaylistContinuityPlan,
-  WorkoutMusicQueue,
+    MusicProviderId,
+    PeakMoment,
+    PeakMusicSettings,
+    PeakMusicVoiceIntent,
+    PeakPlaybackRequest,
+    PlaybackSeekPlan,
+    PlaylistContinuityPlan,
+    WorkoutMusicQueue,
 } from '@/types/peakMusic';
 import { DEFAULT_PEAK_MUSIC_SETTINGS } from '@/types/peakMusic';
 
 const settingsCache = new Map<string, PeakMusicSettings>();
 
 export const peakMusicService = {
+  async hydrateSettings(userId: string): Promise<PeakMusicSettings> {
+    const settings = await loadPeakSettings(userId);
+    settingsCache.set(userId, settings);
+    return settings;
+  },
+
   getSettings(userId: string): PeakMusicSettings {
     return settingsCache.get(userId) ?? { ...DEFAULT_PEAK_MUSIC_SETTINGS };
   },
@@ -31,7 +38,37 @@ export const peakMusicService = {
   updateSettings(userId: string, patch: Partial<PeakMusicSettings>): PeakMusicSettings {
     const next = { ...this.getSettings(userId), ...patch };
     settingsCache.set(userId, next);
+    void peakSettingsStore.save(userId, next);
     return next;
+  },
+
+  async triggerRestPeakSync(
+    userId: string,
+    restDurationMs: number,
+    setContext?: PeakPlaybackRequest['setContext'],
+  ): Promise<ServiceResult<{ started: boolean; message: string }>> {
+    const settings = this.getSettings(userId);
+    if (!settings.enabled) return ok({ started: false, message: 'Peak sync disabled' });
+
+    const providerId = settings.activeProvider ?? 'apple_music';
+    const moments = await peakMomentStore.list(userId);
+    const moment =
+      moments.find((m) => m.provider === providerId && m.trackId === settings.defaultTrackId) ??
+      moments.find((m) => m.provider === providerId) ??
+      moments[0];
+
+    if (!moment) return ok({ started: false, message: 'No saved peak moment' });
+
+    const result = await this.onRestStarted(userId, {
+      moment,
+      restDurationMs,
+      setContext,
+    });
+    if (!result.success) return fail(result.error);
+    return ok({
+      started: result.data.started,
+      message: result.data.started ? 'Peak synced to rest timer' : 'Connect music provider in Settings',
+    });
   },
 
   async savePeakMoment(
@@ -253,8 +290,15 @@ export const peakMusicService = {
         if (!trackId) return fail('No track selected');
         const moment = await peakMomentStore.get(userId, providerId, trackId);
         if (!moment) return fail('No saved peak for this track');
+        const sync = await this.onRestStarted(userId, {
+          moment,
+          restDurationMs: context.restDurationMs,
+        });
+        if (!sync.success) return fail(sync.error);
         const plan = computePeakPlaybackPlan(moment.peakOffsetMs, context.restDurationMs);
-        return ok(`Music synced — peak at rest end (${plan.seekToMs}ms seek)`);
+        return sync.data.started
+          ? ok(`Music synced — peak at rest end (${Math.round(plan.seekToMs / 1000)}s)`)
+          : ok(`Sync planned — connect ${providerId.replace('_', ' ')} in Settings`);
       }
       case 'start_at_chorus':
       case 'play_peak':

@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, StyleSheet, View } from 'react-native';
+import { Alert, StyleSheet, TextInput, View } from 'react-native';
 
 import { Card } from '@/components/layout/Card';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
@@ -24,6 +24,7 @@ import { resolveUnitPreferences } from '@/lib/unitConversion';
 import { coachingPrefsPatch } from '@/lib/voice/voicePreferences';
 import { deviceLocationService } from '@/services/deviceLocationService';
 import { exportService } from '@/services/exportService';
+import { feedbackService } from '@/services/feedbackService';
 import { userService } from '@/services/userService';
 import type { ConfirmationMode } from '@/types/common';
 import type { VoiceInputMode } from '@/types/voice';
@@ -393,6 +394,25 @@ export default function SettingsScreen() {
           }
           onPress={() => router.push('/legal/support')}
         />
+        <SettingsRow
+          label="Report a bug"
+          onPress={() => router.push('/(features)/send-feedback?type=bug')}
+        />
+        <SettingsRow
+          label="Request a feature"
+          onPress={() => router.push('/(features)/send-feedback?type=feature')}
+        />
+        <SettingsRow
+          label="Release notes"
+          onPress={() => router.push('/(features)/release-notes')}
+        />
+      </Card>
+
+      <View style={styles.sectionGap}>
+        <SectionHeader title="Beta" subtitle="Closed beta program" />
+      </View>
+      <Card style={styles.group}>
+        <BetaInviteRow userId={user?.id} />
       </Card>
 
       <View style={styles.sectionGap}>
@@ -405,6 +425,47 @@ export default function SettingsScreen() {
         LiftFlow provides informational coaching only. Not medical advice. Exercise at your own risk.
       </AppText>
     </ScreenContainer>
+  );
+}
+
+function BetaInviteRow({ userId }: { userId?: string }) {
+  const [code, setCode] = useState('');
+  const [status, setStatus] = useState<string | null>(null);
+
+  async function redeem() {
+    if (!userId || !code.trim()) {
+      Alert.alert('Enter code', 'Paste your beta invite code.');
+      return;
+    }
+    const result = await feedbackService.redeemInvite(userId, code.trim());
+    if (result.success) {
+      setStatus(`Redeemed: ${result.data.label ?? result.data.code}`);
+      Alert.alert('Welcome to the beta', 'Your tester access is active.');
+    } else {
+      Alert.alert('Invalid code', result.error);
+    }
+  }
+
+  return (
+    <View style={{ gap: Spacing.sm }}>
+      <TextInput
+        style={styles.inviteInput}
+        placeholder="Beta invite code"
+        placeholderTextColor={LiftFlowColors.textTertiary}
+        value={code}
+        onChangeText={setCode}
+        autoCapitalize="characters"
+      />
+      <PrimaryButton label="Redeem invite" onPress={redeem} variant="secondary" />
+      {status ? (
+        <AppText variant="footnote" color="accent">
+          {status}
+        </AppText>
+      ) : null}
+      <AppText variant="caption" color="textTertiary">
+        Internal testers receive a separate invite flag for early features.
+      </AppText>
+    </View>
   );
 }
 
@@ -430,5 +491,12 @@ const styles = StyleSheet.create({
     marginTop: Spacing.xxxl,
     textAlign: 'center',
     lineHeight: 18,
+  },
+  inviteInput: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: LiftFlowColors.border,
+    borderRadius: 12,
+    padding: Spacing.md,
+    color: LiftFlowColors.textPrimary,
   },
 });

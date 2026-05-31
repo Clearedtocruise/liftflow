@@ -64,6 +64,15 @@ function buildEnvVars() {
   if (databaseUrl) vars.push({ key: 'DATABASE_URL', value: databaseUrl });
   const founderKey = env.FOUNDER_ADMIN_KEY ?? process.env.FOUNDER_ADMIN_KEY ?? '';
   if (founderKey) vars.push({ key: 'FOUNDER_ADMIN_KEY', value: founderKey });
+  const sentryDsn = env.SENTRY_DSN ?? process.env.SENTRY_DSN ?? '';
+  if (sentryDsn) {
+    vars.push({ key: 'SENTRY_DSN', value: sentryDsn });
+    vars.push({ key: 'SENTRY_ENVIRONMENT', value: env.SENTRY_ENVIRONMENT ?? 'production' });
+    vars.push({ key: 'SENTRY_RELEASE', value: env.SENTRY_RELEASE ?? 'liftflow-api@1.0.0' });
+    vars.push({ key: 'SENTRY_TRACES_SAMPLE_RATE', value: env.SENTRY_TRACES_SAMPLE_RATE ?? '0.1' });
+  }
+  const revenuecatWebhook = env.REVENUECAT_WEBHOOK_SECRET ?? '';
+  if (revenuecatWebhook) vars.push({ key: 'REVENUECAT_WEBHOOK_SECRET', value: revenuecatWebhook });
   const stravaId = env.STRAVA_CLIENT_ID ?? '';
   const stravaSecret = env.STRAVA_CLIENT_SECRET ?? '';
   const stravaRedirect = env.STRAVA_REDIRECT_URI ?? 'https://liftflow-api.onrender.com/api/integrations/strava/callback';

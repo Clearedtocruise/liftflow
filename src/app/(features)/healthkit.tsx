@@ -8,10 +8,10 @@ import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { SectionHeader } from '@/components/layout/SectionHeader';
 import { FeatureGate } from '@/components/subscription/PremiumGate';
 import { AppText } from '@/components/ui/AppText';
-import { HEALTH_DATA_LABELS } from '@/integrations/healthConstants';
 import { Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 import { useHealthSync } from '@/hooks/useHealthSync';
+import { HEALTH_DATA_LABELS } from '@/integrations/healthConstants';
 import { integrationService } from '@/services/integrationService';
 import type { IntegrationConnection } from '@/types/integrations';
 

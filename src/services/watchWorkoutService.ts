@@ -97,6 +97,38 @@ export const watchWorkoutService = {
     return getAssistant(userId).getState();
   },
 
+  loadState(userId: string, state: WatchWorkoutAssistantState): void {
+    getAssistant(userId).loadState(state);
+  },
+
+  updateRestTimer(userId: string, restSecondsRemaining: number): WatchWorkoutAssistantState {
+    const assistant = getAssistant(userId);
+    const set = assistant.getState().activeSet;
+    if (!set) return assistant.getState();
+    assistant.loadState({
+      ...assistant.getState(),
+      activeSet: {
+        ...set,
+        phase: restSecondsRemaining > 0 ? 'rest' : 'active_set',
+        restSecondsRemaining: restSecondsRemaining > 0 ? restSecondsRemaining : undefined,
+      },
+      updatedAt: new Date().toISOString(),
+    });
+    return assistant.getState();
+  },
+
+  async suggestProgressionLine(
+    userId: string,
+    exerciseId: string,
+    targetReps: number,
+  ): Promise<string | undefined> {
+    const suggested = await suggestWeight(userId, exerciseId, targetReps);
+    if (suggested.weightLbs) {
+      return `Try ${suggested.weightLbs} lb for ${suggested.repRange} reps.`;
+    }
+    return undefined;
+  },
+
   async syncActiveSession(userId: string): Promise<ServiceResult<WatchWorkoutAssistantState>> {
     try {
       const sessionResult = await workoutService.getActiveSession(userId);
@@ -227,7 +259,18 @@ export const watchWorkoutService = {
         };
       }
 
-      const result = assistant.handleVoice(transcript, voiceCtx);
+      const enriched = assistant.getState();
+      const result = assistant.handleVoice(transcript, {
+        ...voiceCtx,
+        recoveryScore: enriched.recoveryScore,
+        recoveryLabel: enriched.recoveryLabel,
+        workoutRecommendation: enriched.workoutRecommendation,
+        progressionLine: enriched.progressionLine,
+      });
+
+      if (result.intent === 'next_set' || result.intent === 'skip_rest') {
+        assistant.advanceToNextSet();
+      }
 
       if (result.shouldLogSet && assistant.getState().activeSet) {
         const logResult = await this.completeSet(userId);
@@ -329,6 +372,24 @@ export const watchWorkoutService = {
         case 'confirm_reps': {
           const r = await this.confirmReps(userId);
           return r.success ? ok(r.data) : fail(r.error);
+        }
+        case 'skip_rest': {
+          const assistant = getAssistant(userId);
+          const set = assistant.getState().activeSet;
+          if (set) {
+            assistant.loadState({
+              ...assistant.getState(),
+              activeSet: { ...set, phase: 'active_set', restSecondsRemaining: 0 },
+              lastSpokenResponse: 'Rest skipped.',
+              updatedAt: new Date().toISOString(),
+            });
+          }
+          return ok(assistant.getState());
+        }
+        case 'next_set': {
+          const assistant = getAssistant(userId);
+          assistant.advanceToNextSet();
+          return ok(assistant.getState());
         }
         case 'workout_state':
           getAssistant(userId).loadState(message.state);

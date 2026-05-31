@@ -11,6 +11,7 @@ import {
 import { Vibration } from 'react-native';
 
 import { DEFAULT_REST_SECONDS } from '@/constants/workout';
+import { peakMusicService } from '@/services/peakMusicService';
 import { workoutService } from '@/services/workoutService';
 import type { CreateSetPayload, RestPeriod, StartSessionPayload, UpdateSetPayload, WorkoutSession, WorkoutSet } from '@/types';
 
@@ -206,12 +207,18 @@ export function WorkoutSessionProvider({
           const seconds = restResult.data.recommendedSeconds ?? DEFAULT_REST_SECONDS;
           restEndAtRef.current = Date.now() + seconds * 1000;
           setRestSecondsRemaining(seconds);
+          if (userId) {
+            void peakMusicService.triggerRestPeakSync(userId, seconds * 1000, {
+              isHeavySet: result.data.weight != null && result.data.weight >= 100,
+              isPrAttempt: result.data.isPr === true || result.data.type === 'failure',
+            });
+          }
         }
       }
 
       return result.data;
     },
-    [activeSession, refreshSession],
+    [activeSession, refreshSession, userId],
   );
 
   const updateSet = useCallback(
@@ -262,9 +269,15 @@ export function WorkoutSessionProvider({
         setActiveRestPeriod(result.data);
         restEndAtRef.current = Date.now() + seconds * 1000;
         setRestSecondsRemaining(seconds);
+        if (userId) {
+          void peakMusicService.triggerRestPeakSync(userId, seconds * 1000, {
+            isHeavySet: lastLoggedSet?.weight != null && lastLoggedSet.weight >= 100,
+            isPrAttempt: lastLoggedSet?.isPr === true || lastLoggedSet?.type === 'failure',
+          });
+        }
       }
     },
-    [activeSession],
+    [activeSession, userId, lastLoggedSet],
   );
 
   const adjustRestTimer = useCallback((deltaSeconds: number) => {
@@ -278,19 +291,21 @@ export function WorkoutSessionProvider({
     if (!activeRestPeriod) return;
     const elapsed = Math.floor((Date.now() - new Date(activeRestPeriod.startedAt).getTime()) / 1000);
     await workoutService.endRestTimer(activeRestPeriod.id, elapsed, true);
+    if (userId) void peakMusicService.onSetCompleted(userId);
     setActiveRestPeriod(null);
     setRestSecondsRemaining(null);
     restEndAtRef.current = null;
-  }, [activeRestPeriod]);
+  }, [activeRestPeriod, userId]);
 
   const endRestTimer = useCallback(async () => {
     if (!activeRestPeriod) return;
     const elapsed = Math.floor((Date.now() - new Date(activeRestPeriod.startedAt).getTime()) / 1000);
     await workoutService.endRestTimer(activeRestPeriod.id, elapsed, false);
+    if (userId) void peakMusicService.onSetCompleted(userId);
     setActiveRestPeriod(null);
     setRestSecondsRemaining(null);
     restEndAtRef.current = null;
-  }, [activeRestPeriod]);
+  }, [activeRestPeriod, userId]);
 
   const value = useMemo<WorkoutSessionContextValue>(
     () => ({

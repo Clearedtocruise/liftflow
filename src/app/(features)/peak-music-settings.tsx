@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Switch, View } from 'react-native';
 
 import { Card } from '@/components/layout/Card';
@@ -9,7 +10,8 @@ import { LiftFlowColors, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 import { usePeakMusicSync } from '@/hooks/usePeakMusicSync';
 import { listProviderCapabilities } from '@/integrations/music/musicProviderRegistry';
-import type { MusicProviderId, PeakPlaybackMode } from '@/types/peakMusic';
+import { peakMomentStore } from '@/integrations/music/peakMomentStore';
+import type { MusicProviderId, PeakMoment, PeakPlaybackMode } from '@/types/peakMusic';
 
 const PROVIDER_ORDER: MusicProviderId[] = ['apple_music', 'spotify', 'amazon_music', 'pandora', 'local'];
 
@@ -64,6 +66,32 @@ export default function PeakMusicSettingsScreen() {
           </Pressable>
         ))}
       </Card>
+
+      <SectionHeader title="Music provider" />
+      <Card style={styles.card}>
+        {PROVIDER_ORDER.map((id) => {
+          const cap = caps.find((c) => c.id === id);
+          if (!cap) return null;
+          const selected = settings.activeProvider === id;
+          return (
+            <Pressable
+              key={id}
+              style={[styles.modeRow, selected && styles.modeActive]}
+              onPress={() => updateSettings({ activeProvider: id })}>
+              <AppText variant="bodyBold">{cap.displayName}</AppText>
+              <AppText variant="footnote" color="textSecondary">
+                {cap.oauthAvailable ? 'OAuth supported' : 'Limited'} · {selected ? 'Active' : 'Tap to select'}
+              </AppText>
+            </Pressable>
+          );
+        })}
+        <AppText variant="caption" color="textTertiary">
+          Real playback requires an EAS dev client (not Expo Go). Apple Music is the primary Sprint 8.3 target.
+        </AppText>
+      </Card>
+
+      <SectionHeader title="Peak Song Library" />
+      <PeakLibrarySection userId={user?.id} activeProvider={settings.activeProvider} />
 
       <SectionHeader title="Continuity settings" />
       <Card style={styles.card}>
@@ -128,6 +156,47 @@ export default function PeakMusicSettingsScreen() {
   );
 }
 
+function PeakLibrarySection({
+  userId,
+  activeProvider,
+}: {
+  userId?: string;
+  activeProvider?: MusicProviderId;
+}) {
+  const [moments, setMoments] = useState<PeakMoment[]>([]);
+
+  useEffect(() => {
+    if (!userId) return;
+    peakMomentStore.list(userId).then(setMoments);
+  }, [userId]);
+
+  const filtered = activeProvider ? moments.filter((m) => m.provider === activeProvider) : moments;
+
+  return (
+    <Card style={styles.card}>
+      {filtered.length === 0 ? (
+        <AppText variant="body" color="textSecondary">
+          Save peak moments during rest. Voice: “Play the good part”. PR and heavy-set tags apply during workouts.
+        </AppText>
+      ) : (
+        filtered.map((m) => (
+          <View key={m.id} style={styles.peakRow}>
+            <AppText variant="bodyBold">{m.trackName}</AppText>
+            <AppText variant="footnote" color="textSecondary">
+              {m.artistName ?? m.provider} · peak at {Math.round(m.peakOffsetMs / 1000)}s
+            </AppText>
+            {m.label ? (
+              <AppText variant="caption" color="accent">
+                {m.label}
+              </AppText>
+            ) : null}
+          </View>
+        ))
+      )}
+    </Card>
+  );
+}
+
 function ToggleRow({
   label,
   value,
@@ -155,4 +224,5 @@ const styles = StyleSheet.create({
   rowLabel: { flex: 1 },
   modeRow: { gap: Spacing.xs, paddingVertical: Spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: LiftFlowColors.border },
   modeActive: { backgroundColor: LiftFlowColors.surfaceElevated, borderRadius: 8, paddingHorizontal: Spacing.sm },
+  peakRow: { gap: Spacing.xs, paddingVertical: Spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: LiftFlowColors.border },
 });

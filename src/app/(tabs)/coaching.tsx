@@ -2,19 +2,19 @@ import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 
-import { NutritionIntelligenceDashboard } from '@/components/nutrition/NutritionIntelligenceDashboard';
 import { ConversationalCoachPanel } from '@/components/coaching/ConversationalCoachPanel';
 import { RecoveryCheckInForm } from '@/components/coaching/RecoveryCheckInForm';
-import { RecoveryIntelligenceDashboard } from '@/components/recovery/RecoveryIntelligenceDashboard';
-import { WorkoutRecommendationPanel } from '@/components/workout/WorkoutRecommendationPanel';
 import { RecoveryScoreCard } from '@/components/coaching/RecoveryScoreCard';
 import { Card } from '@/components/layout/Card';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { SectionHeader } from '@/components/layout/SectionHeader';
+import { NutritionIntelligenceDashboard } from '@/components/nutrition/NutritionIntelligenceDashboard';
+import { RecoveryIntelligenceDashboard } from '@/components/recovery/RecoveryIntelligenceDashboard';
 import { FeatureGate } from '@/components/subscription/PremiumGate';
 import { UpgradePrompt } from '@/components/subscription/UpgradePrompt';
 import { AppText } from '@/components/ui/AppText';
+import { WorkoutRecommendationPanel } from '@/components/workout/WorkoutRecommendationPanel';
 import { LiftFlowColors, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 import { useSubscription } from '@/hooks/useSubscription';
@@ -26,9 +26,9 @@ import { recoveryService } from '@/services/recoveryService';
 import { workoutRecommendationService } from '@/services/workoutRecommendationService';
 import type { AIRecommendation } from '@/types';
 import type { DailyRecoveryCheckIn, RecoveryTrendPoint } from '@/types/coaching';
+import { COACH_STARTER_QUESTIONS } from '@/types/conversationalCoach';
 import type { NutritionIntelligenceReport } from '@/types/nutritionIntelligence';
 import type { RecoveryIntelligenceReport } from '@/types/recoveryIntelligence';
-import { COACH_STARTER_QUESTIONS } from '@/types/conversationalCoach';
 import type { WorkoutRecommendationReport } from '@/types/workoutRecommendation';
 
 export default function CoachingScreen() {

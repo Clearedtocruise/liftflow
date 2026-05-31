@@ -22,7 +22,11 @@ export type ParsedCommand = {
     | 'build_workout'
     | 'nutrition_query'
     | 'grocery_list_query'
-    | 'coach_query';
+    | 'coach_query'
+    | 'transformation_query'
+    | 'transformation_progress'
+    | 'transformation_target_bf';
+  targetBodyFatPct?: number;
   feedback?: 'easy' | 'hard' | 'failed';
   weightAdjustment?: 'increase' | 'decrease';
   targetWeight?: number;
@@ -71,6 +75,24 @@ const COACHING_PATTERNS: Array<{ pattern: RegExp; build: (match: RegExpMatchArra
     pattern:
       /^(?:why\s+am\s+i\s+(?:stalled|fatigued|tired)|how\s+much\s+(?:should\s+i\s+)?lift|how\s+much\s+protein|coach\s+help|ask\s+(?:the\s+)?coach)\??$/i,
     build: (_, text) => ({ intent: 'coach_query', rawText: text, confidence: 0.91 }),
+  },
+  {
+    pattern: /^(?:show\s+(?:my\s+)?projection|show\s+(?:my\s+)?transformation|my\s+transformation)\??$/i,
+    build: (_, text) => ({ intent: 'transformation_query', rawText: text, confidence: 0.93 }),
+  },
+  {
+    pattern: /^(?:show\s+(?:my\s+)?progress|my\s+progress\s+photos?)\??$/i,
+    build: (_, text) => ({ intent: 'transformation_progress', rawText: text, confidence: 0.92 }),
+  },
+  {
+    pattern:
+      /^(?:what\s+will\s+i\s+look\s+like\s+at\s+(?<bf>\d{1,2})(?:\s*(?:%|percent))?\s*(?:body\s*fat|bf)?|project(?:ion)?\s+(?:to|at)\s+(?<bf2>\d{1,2})\s*(?:%|percent)?)\??$/i,
+    build: (m, text) => ({
+      intent: 'transformation_target_bf',
+      rawText: text,
+      confidence: 0.92,
+      targetBodyFatPct: Number(m.groups!.bf ?? m.groups!.bf2),
+    }),
   },
   {
     pattern: /^(?:undo|delete)\s+(?:the\s+)?last\s+set\.?$/i,

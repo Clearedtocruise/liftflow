@@ -3,9 +3,9 @@ import { useCallback, useState } from 'react';
 import { RefreshControl, StyleSheet } from 'react-native';
 
 import { ConversationalCoachPanel } from '@/components/coaching/ConversationalCoachPanel';
-import { FeatureGate } from '@/components/subscription/PremiumGate';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
+import { FeatureGate } from '@/components/subscription/PremiumGate';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';

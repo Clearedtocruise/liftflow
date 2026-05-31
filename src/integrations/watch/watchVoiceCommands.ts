@@ -6,6 +6,10 @@ export type WatchVoiceContext = {
   lastReps?: number;
   suggestedWeightLbs?: number;
   suggestedReps?: string;
+  recoveryScore?: number;
+  recoveryLabel?: string;
+  workoutRecommendation?: string;
+  progressionLine?: string;
 };
 
 function matchInt(text: string, patterns: RegExp[]): number | null {
@@ -102,6 +106,54 @@ export function parseWatchVoiceCommand(transcript: string, ctx: WatchVoiceContex
     return {
       intent: 'query_suggested_weight',
       spokenResponse: 'Start with a weight you can control for your target reps.',
+    };
+  }
+
+  if (/how recovered am i|how(?:'s|\s+is)\s+my\s+recovery|recovery score/.test(text)) {
+    if (ctx.recoveryScore != null) {
+      return {
+        intent: 'query_recovery',
+        spokenResponse: `Recovery score ${ctx.recoveryScore}. ${ctx.recoveryLabel ?? 'Keep training smart.'}`,
+      };
+    }
+    return {
+      intent: 'query_recovery',
+      spokenResponse: 'Sync HealthKit on your phone to see recovery score.',
+    };
+  }
+
+  if (/what should i do next|what(?:'s|\s+is)\s+next|next exercise/.test(text)) {
+    if (ctx.workoutRecommendation) {
+      return {
+        intent: 'query_next_action',
+        spokenResponse: ctx.workoutRecommendation,
+      };
+    }
+    if (ctx.progressionLine) {
+      return {
+        intent: 'query_next_action',
+        spokenResponse: ctx.progressionLine,
+      };
+    }
+    return {
+      intent: 'query_next_action',
+      spokenResponse: 'Finish your current set, then check training recommendations on your phone.',
+    };
+  }
+
+  if (/^log set\.?$|^log the set\.?$/.test(text)) {
+    return {
+      intent: 'log_set',
+      spokenResponse: 'Logging set now.',
+      shouldLogSet: true,
+    };
+  }
+
+  if (/^next set\.?$|^next\.?$/.test(text)) {
+    return {
+      intent: 'next_set',
+      spokenResponse: 'Next set. Rest skipped.',
+      state: { phase: 'active_set', restSecondsRemaining: 0 },
     };
   }
 

@@ -48,7 +48,16 @@
       "env": {
         "EXPO_PUBLIC_API_URL": "https://liftflow-api.onrender.com",
         "EXPO_PUBLIC_SUPABASE_URL": "https://jaajsalblkjtmrapijbe.supabase.co",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_l_d781eIJciTmAKZh0sjsQ_0NwmvDRA"
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_l_d781eIJciTmAKZh0sjsQ_0NwmvDRA",
+        "EXPO_PUBLIC_SENTRY_ENVIRONMENT": "production"
+      }
+    },
+    "testflight": {
+      "extends": "production",
+      "distribution": "store",
+      "channel": "testflight",
+      "ios": {
+        "resourceClass": "m-medium"
       }
     },
     "production-apk": {

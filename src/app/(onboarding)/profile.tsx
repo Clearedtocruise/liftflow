@@ -45,6 +45,7 @@ import { buildGoalsProfilePayload } from '@/lib/trainingGoalsProfile';
 import { preferredUnitsFromGranular } from '@/lib/unitConversion';
 import { coachActivationService } from '@/services/coachActivationService';
 import { limitationService } from '@/services/limitationService';
+import { productAnalyticsService } from '@/services/productAnalyticsService';
 import { userService } from '@/services/userService';
 import { workoutLocationService } from '@/services/workoutLocationService';
 
@@ -322,6 +323,7 @@ export default function ProfileOnboardingScreen() {
 
     setActivationStatus('Finalizing nutrition & grocery list…');
     await refreshProfile();
+    void productAnalyticsService.trackOnboardingCompleted(user.id);
     setSaving(false);
     setStep(16);
   }, [user, saveProfile, refreshProfile]);

@@ -1,17 +1,17 @@
-import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, RefreshControl, View } from 'react-native';
-import { StyleSheet } from 'react-native';
 import { router } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, RefreshControl, StyleSheet, View } from 'react-native';
 
-import { NutritionIntelligenceDashboard } from '@/components/nutrition/NutritionIntelligenceDashboard';
-import { FeatureGate } from '@/components/subscription/PremiumGate';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
+import { NutritionIntelligenceDashboard } from '@/components/nutrition/NutritionIntelligenceDashboard';
+import { FeatureGate } from '@/components/subscription/PremiumGate';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 import { useEntitlement } from '@/hooks/useEntitlement';
 import { nutritionIntelligenceService } from '@/services/nutritionIntelligenceService';
+import { productAnalyticsService } from '@/services/productAnalyticsService';
 import type { NutritionIntelligenceReport } from '@/types/nutritionIntelligence';
 
 export default function NutritionIntelligenceScreen() {
@@ -32,6 +32,7 @@ export default function NutritionIntelligenceScreen() {
     if (result.success) {
       setReport(result.data);
       setError(null);
+      void productAnalyticsService.trackNutrition(user.id);
     } else {
       setError(result.error);
     }

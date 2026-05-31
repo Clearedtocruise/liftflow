@@ -1,9 +1,10 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { PRO_FEATURE_LABELS, type ProFeatureId } from '@/constants/subscription';
-import { hasProFeature, isTrialingSubscription } from '@/lib/entitlements';
 import { useAuth } from '@/hooks/useAuth';
+import { hasProFeature, isTrialingSubscription } from '@/lib/entitlements';
 import { notificationService } from '@/services/notificationService';
+import { productAnalyticsService } from '@/services/productAnalyticsService';
 import { subscriptionService } from '@/services/subscriptionService';
 import type { Subscription } from '@/types/platform';
 
@@ -26,6 +27,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [loading, setLoading] = useState(true);
+  const prevSubscriptionRef = useRef<Subscription | null>(null);
 
   const refresh = useCallback(async () => {
     if (!user) {
@@ -53,6 +55,26 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    if (!user || !subscription) return;
+    const prev = prevSubscriptionRef.current;
+    if (prev?.id === subscription.id && prev.status === subscription.status && prev.tier === subscription.tier) {
+      return;
+    }
+    if (isTrialingSubscription(subscription) && !prev) {
+      void productAnalyticsService.trackSubscription(user.id, 'started');
+    }
+    if (
+      subscriptionService.isPremium(subscription) &&
+      prev &&
+      !subscriptionService.isPremium(prev) &&
+      !isTrialingSubscription(subscription)
+    ) {
+      void productAnalyticsService.trackSubscription(user.id, 'converted');
+    }
+    prevSubscriptionRef.current = subscription;
+  }, [user, subscription]);
 
   useEffect(() => {
     if (!user) return;

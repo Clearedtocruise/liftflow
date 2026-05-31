@@ -226,6 +226,12 @@ export interface IBodyService {
   uploadFromPicker(userId: string, uri: string, angle: import('@/types').PhotoAngle, weightKg?: number): Promise<ServiceResult<ProgressPhoto>>;
   estimateBodyFat(userId: string, photoId: string): Promise<ServiceResult<{ bodyFatPct: number; analysis: string }>>;
   getProjections(userId: string): Promise<ServiceResult<PhysiqueProjection[]>>;
+  runTransformation(
+    userId: string,
+    targetBodyFatPct: number,
+    options?: { beforePhotoId?: string; currentPhotoId?: string },
+  ): Promise<ServiceResult<import('@/types/transformation').TransformationProjection>>;
+  getLatestTransformation(userId: string): Promise<ServiceResult<import('@/types/transformation').TransformationProjection | null>>;
 }
 
 // =============================================================================

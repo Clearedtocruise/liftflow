@@ -3,13 +3,18 @@ import express from 'express';
 import './loadEnv.js';
 
 import { hasOpenAI } from './lib/openai.js';
+import { getSentryErrorHandler, getSentryRequestHandler, initSentry } from './lib/sentry.js';
 import { supabaseAdmin } from './lib/supabase.js';
+import { apiErrorHandler } from './middleware/errorHandler.js';
 import { aiRouter } from './routes/ai.js';
 import { analyticsRouter } from './routes/analytics.js';
 import { authRouter } from './routes/auth.js';
+import { betaRouter } from './routes/beta.js';
 import { bodyRouter } from './routes/body.js';
 import { cardioRouter } from './routes/cardio.js';
+import { eventsRouter } from './routes/events.js';
 import { exportRouter } from './routes/export.js';
+import { feedbackRouter } from './routes/feedback.js';
 import { founderRouter, serveFounderDashboard } from './routes/founder.js';
 import { goalsRouter } from './routes/goals.js';
 import { healthRouter } from './routes/health.js';
@@ -28,6 +33,9 @@ import { workoutsRouter } from './routes/workouts.js';
 const app = express();
 const PORT = process.env.PORT ?? 3000;
 
+initSentry();
+
+app.use(getSentryRequestHandler() as express.RequestHandler);
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
@@ -58,8 +66,14 @@ app.use('/api/export', exportRouter);
 app.use('/api/user', userRouter);
 app.use('/api/outcome', outcomeRouter);
 app.use('/api/founder', founderRouter);
+app.use('/api/feedback', feedbackRouter);
+app.use('/api/events', eventsRouter);
+app.use('/api/beta', betaRouter);
 
 app.get('/admin/founder', serveFounderDashboard);
+
+app.use(getSentryErrorHandler() as express.ErrorRequestHandler);
+app.use(apiErrorHandler);
 
 app.listen(PORT, () => {
   console.log(`LiftFlow API listening on port ${PORT}`);
@@ -69,4 +83,6 @@ app.listen(PORT, () => {
   console.log('        /api/nutrition, /api/body, /api/analytics, /api/goals,');
   console.log('        /api/integrations, /api/cardio, /api/subscriptions, /api/export');
   console.log('        /api/outcome, /api/founder, /admin/founder');
+  console.log('        /api/feedback, /api/events, /api/beta');
+  console.log(`Sentry: ${process.env.SENTRY_DSN ? 'configured' : 'NOT SET'}`);
 });
