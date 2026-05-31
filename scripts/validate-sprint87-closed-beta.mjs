@@ -37,7 +37,7 @@ function runValidator(script) {
 async function founderGet(pathname, env) {
   const key = env.FOUNDER_ADMIN_KEY ?? '';
   if (!key) return { status: 0, data: null };
-  const res = await fetch(`${API}${pathname}`, { headers: { 'X-Founder-Key': key } });
+  const res = await fetch(`${API}${pathname}`, { headers: { 'x-founder-admin-key': key } });
   const data = res.ok ? await res.json() : null;
   return { status: res.status, data };
 }

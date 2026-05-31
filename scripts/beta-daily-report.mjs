@@ -19,7 +19,7 @@ async function founderGet(pathname) {
   if (!key) throw new Error('FOUNDER_ADMIN_KEY missing in .env');
 
   const res = await fetch(`${API}${pathname}`, {
-    headers: { 'X-Founder-Key': key, Accept: 'application/json' },
+    headers: { 'x-founder-admin-key': key, Accept: 'application/json' },
   });
   const text = await res.text();
   if (!res.ok) throw new Error(`${pathname} HTTP ${res.status}: ${text.slice(0, 200)}`);

@@ -2,7 +2,7 @@
 
 **Date:** 2026-05-31  
 **Result:** PASS  
-**Checks:** 15/15  
+**Checks:** 16/16  
 
 ## Summary
 
@@ -35,4 +35,5 @@ npm run deploy:render            # Deploy soak-status routes
 | build:ios:testflight script | PASS | — |
 | beta:daily-report script | PASS | — |
 | Backend TypeScript build | PASS | — |
-| Production soak-status API | PASS | HTTP 404 — deploy pending |
+| Production soak-status API | PASS | internal=0 |
+| LIFTFLOW-INTERNAL invite live | PASS | — |
