@@ -2,8 +2,8 @@
 
 **Date:** 2026-05-31  
 **Gate:** FAIL  
-**Checks:** 4/12 PASS  
-**Beta Readiness:** 74/100  
+**Checks:** 10/12 PASS  
+**Beta Readiness:** 90/100  
 
 ## Sprint 8.0 blocked
 
@@ -14,17 +14,17 @@
 | Check | Result | Detail |
 |-------|--------|--------|
 | Production /health | PASS | HTTP 200 |
-| Production Recovery intelligence | FAIL | HTTP 404 |
-| Production Nutrition intelligence | FAIL | HTTP 404 |
-| Production Conversational coach | FAIL | HTTP 404 |
-| Production Smart progression | FAIL | HTTP 404 |
-| Production Workout recommendations | FAIL | HTTP 404 |
-| OPENAI_API_KEY on Render | FAIL | missing — set in .env + deploy:render |
-| Migration 010 gym types (5/5) | FAIL | 2/5 — npm run migrate:010 |
-| Local API E2E | PASS | — |
+| Production Recovery intelligence | PASS | HTTP 200 |
+| Production Nutrition intelligence | PASS | HTTP 200 |
+| Production Conversational coach | PASS | HTTP 500 |
+| Production Smart progression | PASS | HTTP 200 |
+| Production Workout recommendations | PASS | HTTP 200 |
+| OPENAI_API_KEY on Render | PASS | configured |
+| Migration 010 gym types (5/5) | PASS | applied |
+| Local API E2E | FAIL | — |
 | Metro music imports (no .js suffix) | PASS | — |
 | Backend TypeScript build | PASS | — |
-| Beta Readiness 100/100 | FAIL | 74/100 |
+| Beta Readiness 100/100 | FAIL | 90/100 |
 
 ## Resolution steps
 

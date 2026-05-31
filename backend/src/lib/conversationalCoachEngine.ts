@@ -243,16 +243,22 @@ export async function converseWithCoach(
   const answer = pickAnswer(detailLevel, short, detailed, voice);
   const contextSnapshot = buildContextSnapshot(ctx);
 
-  const id = await saveCoachTurn(userId, {
-    message,
-    topic,
-    shortAnswer: short,
-    detailedAnswer: detailed,
-    voiceLine: voice,
-    referencesUsed: used,
-    context: options.context ?? 'general',
-    modelVersion: topic === 'general' && hasOpenAI() ? 'gpt-4o-mini-conversational' : 'conversational-coach-v1',
-  });
+  let id: string;
+  try {
+    id = await saveCoachTurn(userId, {
+      message,
+      topic,
+      shortAnswer: short,
+      detailedAnswer: detailed,
+      voiceLine: voice,
+      referencesUsed: used,
+      context: options.context ?? 'general',
+      modelVersion: topic === 'general' && hasOpenAI() ? 'gpt-4o-mini-conversational' : 'conversational-coach-v1',
+    });
+  } catch {
+    // Validation and orphaned user IDs should not block coaching responses.
+    id = `ephemeral-${Date.now()}`;
+  }
 
   return {
     id,

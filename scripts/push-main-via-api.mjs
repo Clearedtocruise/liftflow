@@ -15,12 +15,10 @@ const dryRun = process.argv.includes('--dry-run');
 const OWNER = 'Clearedtocruise';
 const REPO = 'liftflow';
 const BRANCH = 'main';
-const COMMIT_MSG = `Sprint 7.9 RC: intelligence API routes, smart progression, peak music fixes, gate validation
+const COMMIT_MSG = `Sprint 7.9: fix converse FK save failure — graceful ephemeral session id
 
-- Backend: recovery/nutrition/converse/progression routes
-- Client: progressionService, SmartProgressionCard, music import fix
-- Scripts: sprint 7.9 gate, migration 010 apply, local API E2E
-- Docs: release checklist, sprint 80 roadmap, gate reports`;
+- converseWithCoach: do not fail when ai_coaching_sessions FK missing
+- verify-openai: check answer field on converse response`;
 
 const IGNORE = new Set([
   'node_modules',

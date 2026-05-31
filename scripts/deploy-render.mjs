@@ -55,9 +55,13 @@ function buildEnvVars() {
     { key: 'SUPABASE_URL', value: env.SUPABASE_URL ?? env.EXPO_PUBLIC_SUPABASE_URL ?? '' },
     { key: 'SUPABASE_SERVICE_ROLE_KEY', value: env.SUPABASE_SERVICE_ROLE_KEY ?? '' },
   ];
-  if (openai && !openai.includes('your-openai-api-key')) {
+  if (openai && openai.startsWith('sk-') && !openai.includes('your-openai') && openai.length > 20) {
     vars.push({ key: 'OPENAI_API_KEY', value: openai });
   }
+  const accessToken = env.SUPABASE_ACCESS_TOKEN ?? '';
+  if (accessToken) vars.push({ key: 'SUPABASE_ACCESS_TOKEN', value: accessToken });
+  const databaseUrl = env.DATABASE_URL ?? '';
+  if (databaseUrl) vars.push({ key: 'DATABASE_URL', value: databaseUrl });
   const founderKey = env.FOUNDER_ADMIN_KEY ?? process.env.FOUNDER_ADMIN_KEY ?? '';
   if (founderKey) vars.push({ key: 'FOUNDER_ADMIN_KEY', value: founderKey });
   const stravaId = env.STRAVA_CLIENT_ID ?? '';
