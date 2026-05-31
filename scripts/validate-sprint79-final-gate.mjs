@@ -27,7 +27,8 @@ async function fetchStatus(url, init) {
   }
 }
 
-function routeOk(res) {
+function routeOk(res, require200 = false) {
+  if (require200) return res.status === 200;
   return res.status !== 404 && res.status !== 403 && !res.text.includes('Cannot GET') && !res.text.includes('Cannot POST');
 }
 
@@ -63,7 +64,7 @@ for (const [label, url, method, body] of prodRoutes) {
     headers: body ? { 'Content-Type': 'application/json' } : undefined,
     body: body ? JSON.stringify(body) : undefined,
   });
-  const ok = routeOk(res);
+  const ok = label === 'Conversational coach' ? routeOk(res, true) : routeOk(res);
   if (!ok) prodAllOk = false;
   gate(`Production ${label}`, ok, `HTTP ${res.status}`);
 }

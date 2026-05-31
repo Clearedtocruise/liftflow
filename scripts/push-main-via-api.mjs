@@ -15,10 +15,11 @@ const dryRun = process.argv.includes('--dry-run');
 const OWNER = 'Clearedtocruise';
 const REPO = 'liftflow';
 const BRANCH = 'main';
-const COMMIT_MSG = `Sprint 7.9: fix converse FK save failure — graceful ephemeral session id
+const COMMIT_MSG = `Sprint 7.9: fix converse GPT json_object + gate HTTP 200 check
 
-- converseWithCoach: do not fail when ai_coaching_sessions FK missing
-- verify-openai: check answer field on converse response`;
+- System prompt includes JSON instruction for response_format compliance
+- GPT failures fall back to heuristic answers
+- Gate validators require HTTP 200 for /api/ai/converse`;
 
 const IGNORE = new Set([
   'node_modules',

@@ -203,30 +203,30 @@ export async function converseWithCoach(
   let { short, detailed, voice, used } = buildAnswer(topic, ctx, message);
 
   if (topic === 'general' && hasOpenAI()) {
-    const snapshot = buildContextSnapshot(ctx);
-    const openai = getOpenAI()!;
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        {
-          role: 'system',
-          content:
-            'You are LiftFlow Coach. Give evidence-based fitness coaching using the user context. Provide a concise shortAnswer (1-2 sentences) and detailedAnswer (3-5 sentences). Never diagnose medical conditions.',
-        },
-        {
-          role: 'user',
-          content: JSON.stringify({
-            question: message,
-            context: snapshot,
-            memory: options.includeHistory !== false ? ctx.memory.summary : undefined,
-            heuristicHint: short,
-          }),
-        },
-      ],
-      response_format: { type: 'json_object' },
-    });
-
     try {
+      const snapshot = buildContextSnapshot(ctx);
+      const openai = getOpenAI()!;
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content:
+              'You are LiftFlow Coach. Give evidence-based fitness coaching using the user context. Respond in JSON with shortAnswer (1-2 sentences) and detailedAnswer (3-5 sentences). Never diagnose medical conditions.',
+          },
+          {
+            role: 'user',
+            content: JSON.stringify({
+              question: message,
+              context: snapshot,
+              memory: options.includeHistory !== false ? ctx.memory.summary : undefined,
+              heuristicHint: short,
+            }),
+          },
+        ],
+        response_format: { type: 'json_object' },
+      });
+
       const parsed = JSON.parse(completion.choices[0]?.message?.content ?? '{}') as {
         shortAnswer?: string;
         detailedAnswer?: string;
@@ -235,7 +235,7 @@ export async function converseWithCoach(
       if (parsed.detailedAnswer) detailed = parsed.detailedAnswer;
       voice = short;
     } catch {
-      // keep heuristic
+      // Fall back to heuristic answers when GPT is unavailable or misconfigured.
     }
   }
 

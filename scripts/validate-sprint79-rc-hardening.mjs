@@ -108,7 +108,7 @@ for (const [label, url, method, body] of prodRoutes) {
     headers: body ? { 'Content-Type': 'application/json' } : undefined,
     body: body ? JSON.stringify(body) : undefined,
   });
-  const ok = routeDeployed(res);
+  const ok = label === 'Conversational coach' ? res.status === 200 : routeDeployed(res);
   if (!ok) prodDeployed = false;
   area(`Production: ${label}`, ok ? 'PASS' : 'FAIL', ok ? `HTTP ${res.status}` : 'Push main + npm run deploy:render');
 }
