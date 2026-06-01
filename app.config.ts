@@ -29,7 +29,7 @@ const config: ExpoConfig = {
   ios: {
     icon: './assets/branding/one-more-icon-1024.png',
     bundleIdentifier: 'com.liftflow.app',
-    buildNumber: '11',
+    buildNumber: '12',
     infoPlist: {
       NSMicrophoneUsageDescription: 'ONE MORE uses the microphone for voice workout logging and AI coaching.',
       NSSpeechRecognitionUsageDescription: 'ONE MORE converts speech to workout sets and coaching questions.',
@@ -43,7 +43,7 @@ const config: ExpoConfig = {
   },
   android: {
     package: 'com.liftflow.app',
-    versionCode: 11,
+    versionCode: 12,
     permissions: [
       'android.permission.ACCESS_COARSE_LOCATION',
       'android.permission.ACCESS_FINE_LOCATION',

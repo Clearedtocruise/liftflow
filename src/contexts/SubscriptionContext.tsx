@@ -79,20 +79,29 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!user) return;
 
-    subscriptionService.configurePurchases(user.id).catch(() => undefined);
-    notificationService.registerDevice(user.id).catch(() => undefined);
-    notificationService.scheduleWorkoutReminder(18, 0).catch(() => undefined);
-
+    let cancelled = false;
     let removeListener: (() => void) | undefined;
-    try {
-      removeListener = subscriptionService.addCustomerInfoUpdateListener(user.id, () => {
-        void refresh();
-      });
-    } catch {
-      // RevenueCat unavailable in Expo Go
-    }
 
-    return () => removeListener?.();
+    void (async () => {
+      notificationService.registerDevice(user.id).catch(() => undefined);
+      notificationService.scheduleWorkoutReminder(18, 0).catch(() => undefined);
+
+      const config = await subscriptionService.configurePurchases(user.id);
+      if (cancelled || !config.success) return;
+
+      try {
+        removeListener = subscriptionService.addCustomerInfoUpdateListener(user.id, () => {
+          void refresh();
+        });
+      } catch {
+        // RevenueCat unavailable
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      removeListener?.();
+    };
   }, [user, refresh]);
 
   const isPremium = subscriptionService.isPremium(subscription);

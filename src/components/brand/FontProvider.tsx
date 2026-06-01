@@ -36,7 +36,7 @@ export function FontProvider({ children }: FontProviderProps) {
   if (!ready) {
     return (
       <View style={styles.loading}>
-        <LogoMark size={72} glow animate />
+        <LogoMark size={72} glow={false} animate={false} />
         <ActivityIndicator color={LiftFlowColors.primary} style={styles.spinner} />
       </View>
     );

@@ -439,7 +439,8 @@ export const subscriptionService = {
 
   addCustomerInfoUpdateListener(userId: string, onUpdate: (isPremium: boolean) => void) {
     const Purchases = loadPurchases();
-    if (!Purchases) return () => undefined;
+    if (!Purchases || !getRevenueCatApiKey()) return () => undefined;
+    if (configuredForUser !== userId) return () => undefined;
 
     const listener = async (info: CustomerInfo) => {
       const entitlement = parseEntitlementStatus(info);
