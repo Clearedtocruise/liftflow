@@ -53,6 +53,7 @@
         "EXPO_PUBLIC_API_URL": "https://liftflow-api.onrender.com",
         "EXPO_PUBLIC_SUPABASE_URL": "https://jaajsalblkjtmrapijbe.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_l_d781eIJciTmAKZh0sjsQ_0NwmvDRA",
+        "EXPO_PUBLIC_SENTRY_DSN": "https://55002ad407685e9e5485e2ed58efac92@o4511486214864896.ingest.us.sentry.io/4511486225285120",
         "EXPO_PUBLIC_SENTRY_ENVIRONMENT": "production",
         "EXPO_PUBLIC_SENTRY_RELEASE": "liftflow@1.0.0",
         "SENTRY_ORG": "4511486214864896",
@@ -67,6 +68,7 @@
         "resourceClass": "m-medium"
       },
       "env": {
+        "EXPO_PUBLIC_SENTRY_DSN": "https://55002ad407685e9e5485e2ed58efac92@o4511486214864896.ingest.us.sentry.io/4511486225285120",
         "EXPO_PUBLIC_SENTRY_ENVIRONMENT": "production",
         "EXPO_PUBLIC_SENTRY_RELEASE": "liftflow@1.0.0",
         "SENTRY_ORG": "4511486214864896",

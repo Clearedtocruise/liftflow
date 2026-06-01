@@ -11,7 +11,7 @@ export default function Index() {
   if (isLoading) {
     return (
       <View style={styles.loading}>
-        <LogoMark size={80} glow animate />
+        <LogoMark size={80} glow={false} animate={false} />
         <ActivityIndicator color={LiftFlowColors.primary} style={styles.spinner} />
       </View>
     );

@@ -21,7 +21,11 @@ const config: ExpoConfig = {
   },
   updates: {
     url: 'https://u.expo.dev/62d95ef4-66d9-4638-8e66-93d27e1fb48d',
+    // Disabled until first stable TestFlight launch — expo-updates ErrorRecovery
+    // intercepts RN fatal handlers and re-raises NSException (SIGABRT) on failed recovery.
+    enabled: false,
   },
+  newArchEnabled: false,
   orientation: 'portrait',
   icon: './assets/branding/one-more-icon-1024.png',
   scheme: 'liftflow',
@@ -29,7 +33,7 @@ const config: ExpoConfig = {
   ios: {
     icon: './assets/branding/one-more-icon-1024.png',
     bundleIdentifier: 'com.liftflow.app',
-    buildNumber: '12',
+    buildNumber: '13',
     infoPlist: {
       NSMicrophoneUsageDescription: 'ONE MORE uses the microphone for voice workout logging and AI coaching.',
       NSSpeechRecognitionUsageDescription: 'ONE MORE converts speech to workout sets and coaching questions.',
@@ -43,7 +47,7 @@ const config: ExpoConfig = {
   },
   android: {
     package: 'com.liftflow.app',
-    versionCode: 12,
+    versionCode: 13,
     permissions: [
       'android.permission.ACCESS_COARSE_LOCATION',
       'android.permission.ACCESS_FINE_LOCATION',
