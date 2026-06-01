@@ -7,3 +7,7 @@
 **/* 2.svg
 **/* 2.mjs
 .ipa-inspect/
+
+# Generated native projects — EAS prebuilds on CI (managed workflow)
+ios/
+android/
