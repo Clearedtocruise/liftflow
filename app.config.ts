@@ -25,7 +25,6 @@ const config: ExpoConfig = {
     // intercepts RN fatal handlers and re-raises NSException (SIGABRT) on failed recovery.
     enabled: false,
   },
-  newArchEnabled: false,
   orientation: 'portrait',
   icon: './assets/branding/one-more-icon-1024.png',
   scheme: 'liftflow',

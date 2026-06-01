@@ -1,0 +1,9 @@
+# Duplicate macOS "copy" files — must not ship to EAS
+**/* 2.*
+**/* 2.js
+**/* 2.tsx
+**/* 2.md
+**/* 2.png
+**/* 2.svg
+**/* 2.mjs
+.ipa-inspect/
