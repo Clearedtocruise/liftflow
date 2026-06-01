@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" fill="none">
+  <defs>
+    <linearGradient id="ogGrad" x1="200" y1="80" x2="200" y2="280" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0E90FF"/>
+      <stop offset="100%" stop-color="#0456B8"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="#000000"/>
+  <circle cx="980" cy="315" r="240" fill="rgba(14,144,255,0.06)"/>
+  <g transform="translate(120 180)">
+    <path fill="url(#ogGrad)" d="M 72 200 L 72 40 L 52 40 L 92 0 L 114 40 L 114 72 L 128 40 L 146 80 L 164 40 L 184 72 L 184 200 L 160 200 L 160 156 L 144 184 L 130 156 L 114 200 Z"/>
+  </g>
+  <text x="380" y="250" fill="#FFFFFF" font-family="system-ui, -apple-system, sans-serif" font-size="38" font-weight="800" letter-spacing="3">YOUR TRANSFORMATION</text>
+  <text x="380" y="310" fill="#FFFFFF" font-family="system-ui, -apple-system, sans-serif" font-size="38" font-weight="800" letter-spacing="3">STARTS WITH <tspan fill="#0E90FF">ONE MORE</tspan>.</text>
+  <text x="380" y="370" fill="#0E90FF" font-family="system-ui, -apple-system, sans-serif" font-size="18" font-weight="600" letter-spacing="8">ONLY ONE.</text>
+</svg>

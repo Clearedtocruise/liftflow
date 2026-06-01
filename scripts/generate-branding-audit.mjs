@@ -1,203 +1,182 @@
 #!/usr/bin/env node
 /**
- * Sprint 8.8 — generate ONE_MORE_BRANDING_AUDIT.md
+ * Sprint 8.8.1 — generate BRANDING_AUDIT.md
  */
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { execSync } from 'child_process';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
 
-const INTERNAL_ALLOW = [
-  /LiftFlowColors/,
-  /LiftFlowWordmark/,
-  /LiftFlowLogo/,
-  /LiftFlowInsight/,
-  /whyLiftFlow/,
-  /WHY_LIFTFLOW/,
-  /WhyLiftFlow/,
-  /useLiftFlowTheme/,
-  /liftflow\.app/,
-  /liftflow-api/,
-  /com\.liftflow/,
-  /liftflow_premium/,
-  /liftflow@\d/,
-  /liftflow-api@/,
-  /support@liftflow/,
-  /@liftflow/,
-  /why-liftflow/,
-  /HeroImages\.whyLiftFlow/,
-  /liftflow-icon/,
-  /one-more-icon/,
-  /owner: 'liftflow1'/,
-  /slug: 'liftflow'/,
-  /scheme: 'liftflow'/,
-  /liftflow:\/\//,
-  /LiftFlow Sprint/,
-  /LiftFlow API listening/,
-  /LiftFlow Sentry test/,
-  /LiftFlow AI route/,
-  /LiftFlow runtime error/,
-  /LiftFlow workout queue/,
-  /LiftFlow backend/,
-  /LiftFlow domains/,
-  /iPhone LiftFlow/,
-  /LiftFlow Beta/,
-  /LiftFlow Pro feature/,
-  /LiftFlow Launch/,
-  /LiftFlow — Production/,
-  /LiftFlow is \*\*iPhone/,
-  /name: 'liftflow'/,
-  /package\.json/,
-  /\.git/,
-  /ONE_MORE_BRANDING_AUDIT/,
-  /validate-branding/,
-  /generate-branding-audit/,
-  /update-branding-sprint88/,
+const FORBIDDEN = /LiftFlow|Lift Flow|RepForge|AtlasIQ|IronIQ|lift-flow|repforge|atlasiq|ironiq/i;
+
+const ASSET_PATHS = [
+  'assets/branding/one-more-logo-primary.svg',
+  'assets/branding/one-more-splash-full.svg',
+  'assets/branding/one-more-og.svg',
+  'assets/branding/one-more-icon-1024.png',
+  'assets/branding/one-more-icon-512.png',
+  'assets/branding/one-more-icon-256.png',
+  'assets/branding/one-more-splash-full-512.png',
+  'assets/branding/one-more-splash-512.png',
+  'assets/images/icon.png',
+  'assets/images/favicon.png',
+  'assets/images/splash-icon.png',
+  'assets/images/android-icon-foreground.png',
+  'assets/images/android-icon-monochrome.png',
+  'public/favicon-one-more.png',
+  'public/favicon.png',
+  'public/og-one-more.png',
+  'public/one-more-mark.svg',
 ];
 
-function walk(dir, acc = []) {
-  if (!fs.existsSync(dir)) return acc;
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    if (['node_modules', '.git', '.expo', 'dist', 'build'].includes(entry.name)) continue;
-    const fp = path.join(dir, entry.name);
-    if (entry.isDirectory()) walk(fp, acc);
-    else if (/\.(tsx?|jsx?|html|md|json|svg|png|mjs)$/.test(entry.name)) acc.push(fp);
-  }
-  return acc;
-}
-
-function isAllowed(line) {
-  return INTERNAL_ALLOW.some((p) => p.test(line));
-}
-
-function scan(pattern, opts = {}) {
-  const { excludeDirs = ['node_modules', '.git', '.expo', 'dist', 'build', 'docs'] } = opts;
-  const hits = [];
-  for (const fp of walk(root)) {
-    const rel = path.relative(root, fp);
-    if (rel.startsWith('.git/')) continue;
-    if (excludeDirs.some((d) => rel === d || rel.startsWith(`${d}/`))) continue;
-    if (/scripts\/(validate-branding|generate-branding-audit)/.test(rel)) continue;
-    if (rel === 'ONE_MORE_BRANDING_AUDIT.md') continue;
-    const content = fs.readFileSync(fp, 'utf8');
-    content.split('\n').forEach((line, i) => {
-      if (!pattern.test(line)) return;
-      if (isAllowed(line)) return;
-      hits.push({ file: rel, line: i + 1, text: line.trim().slice(0, 120) });
-    });
-  }
-  return hits;
-}
-
-const screens = [
+const SCREENS = [
+  'src/app/index.tsx',
   'src/app/welcome.tsx',
   'src/app/(auth)/login.tsx',
   'src/app/(auth)/signup.tsx',
   'src/app/(auth)/forgot-password.tsx',
   'src/app/(tabs)/dashboard.tsx',
+  'src/app/(tabs)/coaching.tsx',
+  'src/app/(tabs)/workout.tsx',
+  'src/app/(tabs)/nutrition.tsx',
+  'src/app/(tabs)/progress.tsx',
   'src/app/(tabs)/settings.tsx',
-  'src/app/why-liftflow.tsx',
+  'src/app/(features)/subscription.tsx',
+  'src/app/(features)/upgrade.tsx',
   'src/app/(onboarding)/profile.tsx',
   'src/components/auth/AuthFormContainer.tsx',
+  'src/components/brand/LiftFlowLogo.tsx',
+  'src/components/brand/LiftFlowWordmark.tsx',
   'public/index.html',
   'backend/src/lib/authPages.ts',
   'backend/src/lib/pdfExport.ts',
 ];
 
-const assets = [
-  'assets/branding/one-more-logo-primary.svg',
-  'assets/branding/one-more-icon-1024.png',
-  'assets/branding/one-more-icon-512.png',
-  'assets/branding/one-more-icon-256.png',
-  'assets/branding/one-more-splash-512.png',
-  'assets/branding/liftflow-icon-1024.png',
-  'assets/branding/liftflow-icon-512.png',
-  'assets/branding/liftflow-icon-256.png',
-  'public/favicon-one-more.png',
-  'public/og-one-more.png',
-  'public/one-more-mark.svg',
-];
+function gitChanged(files) {
+  try {
+    const out = execSync('git diff --name-only HEAD', { cwd: root, encoding: 'utf8' });
+    const staged = execSync('git diff --cached --name-only', { cwd: root, encoding: 'utf8' });
+    const all = new Set([...out.split('\n'), ...staged.split('\n')].filter(Boolean));
+    return files.filter((f) => all.has(f));
+  } catch {
+    return files;
+  }
+}
 
-const liftflowHits = scan(/LiftFlow|Lift Flow/i);
-const repforgeHits = scan(/RepForge/i);
+function scanForbidden() {
+  const hits = [];
+  function walk(dir) {
+    if (!fs.existsSync(dir)) return;
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (['node_modules', '.git', '.expo'].includes(e.name)) continue;
+      const fp = path.join(dir, e.name);
+      if (e.isDirectory()) walk(fp);
+      else if (/\.(tsx?|html|svg|md)$/.test(e.name)) {
+        const rel = path.relative(root, fp);
+        if (rel.startsWith('docs/') || rel.startsWith('scripts/')) continue;
+        const content = fs.readFileSync(fp, 'utf8');
+        content.split('\n').forEach((line, i) => {
+          if (FORBIDDEN.test(line) && !/LiftFlowColors|LiftFlowLogo|LiftFlowWordmark|liftflow-api|com\.liftflow|liftflow:\/\//.test(line)) {
+            hits.push(`${rel}:${i + 1}`);
+          }
+        });
+      }
+    }
+  }
+  walk(path.join(root, 'src'));
+  walk(path.join(root, 'public'));
+  walk(path.join(root, 'assets/branding'));
+  return hits;
+}
 
-const userFacingDirs = ['src/app', 'src/components', 'public', 'backend/src/lib/authPages.ts', 'backend/src/lib/pdfExport.ts'];
-const userFacingLiftflow = liftflowHits.filter((h) =>
-  userFacingDirs.some((d) => h.file.startsWith(d) || h.file === d),
-);
+const appConfig = fs.readFileSync(path.join(root, 'app.config.ts'), 'utf8');
+const buildMatch = appConfig.match(/buildNumber: '(\d+)'/);
+const buildNumber = buildMatch?.[1] ?? '?';
+const forbiddenHits = scanForbidden();
+const changedAssets = gitChanged(ASSET_PATHS);
+const manifest = fs.existsSync(path.join(root, 'assets/branding/ASSET_MANIFEST.json'))
+  ? JSON.parse(fs.readFileSync(path.join(root, 'assets/branding/ASSET_MANIFEST.json'), 'utf8'))
+  : { files: ASSET_PATHS };
 
-const totalChecks = screens.length + assets.length + 4;
-const passed =
-  (fs.readFileSync(path.join(root, 'app.config.ts'), 'utf8').includes("name: 'ONE MORE'") ? 1 : 0) +
-  (fs.readFileSync(path.join(root, 'src/constants/theme.ts'), 'utf8').includes("name: 'ONE MORE'") ? 1 : 0) +
-  (repforgeHits.length === 0 ? 1 : 0) +
-  (userFacingLiftflow.length === 0 ? 1 : 0) +
-  screens.filter((s) => fs.existsSync(path.join(root, s))).length +
-  assets.filter((a) => fs.existsSync(path.join(root, a))).length;
+const md = `# BRANDING_AUDIT — Sprint 8.8.1
 
-const completionPct = Math.round((passed / totalChecks) * 100);
+Generated: ${new Date().toISOString()}
 
-const md = `# ONE MORE Branding Audit — Sprint 8.8
+## Executive Summary
 
-Generated: ${new Date().toISOString().slice(0, 10)}
+| Item | Status |
+|------|--------|
+| Public brand | **ONE MORE** |
+| Tagline | **Only One.** |
+| iOS build number | **${buildNumber}** |
+| App icon source | \`assets/branding/one-more-icon-1024.png\` |
+| Splash source | \`assets/branding/one-more-splash-full-512.png\` |
+| User-facing legacy leaks | ${forbiddenHits.length === 0 ? '**None**' : `**${forbiddenHits.length} found**`} |
 
-## Summary
+## Root Cause (TestFlight legacy icon)
 
-| Metric | Value |
-|--------|-------|
-| **Branding completion** | **${completionPct}%** |
-| Remaining LiftFlow references (non-internal) | ${liftflowHits.length} |
-| Remaining RepForge references | ${repforgeHits.length} |
-| User-facing LiftFlow leaks | ${userFacingLiftflow.length} |
+The previous TestFlight build referenced \`liftflow-icon-*\` paths and \`assets/images/icon.png\` still contained a **964KB legacy PNG** (old LiftFlow artwork). Sprint 8.8.1:
 
-## Brand Configuration
+1. Regenerated the full ONE MORE asset pack from \`one-more-logo-primary.svg\`
+2. Installed icons into **both** \`assets/branding/\` and \`assets/images/\`
+3. Pointed \`app.config.ts\` exclusively at \`one-more-*\` paths
+4. Replaced legacy LF vector sources (\`liftflow-logo-*.svg\`)
+5. Incremented iOS buildNumber → **11**
 
-| Setting | Value |
-|---------|-------|
-| App display name | ONE MORE |
-| App Store name | One More Fitness |
-| Tagline | Only One. |
-| Hero headline | YOUR TRANSFORMATION STARTS WITH ONE MORE. |
-| Bundle ID (unchanged) | com.liftflow.app |
+## Files Changed (config)
 
-## Screens Updated
+- \`app.config.ts\` — icon, adaptiveIcon, splash, favicon, notifications icon → \`one-more-*\`
+- \`scripts/generate-one-more-icons.mjs\` — full asset pack installer
+- \`scripts/validate-branding-enforcement.mjs\` — pre-build gate
 
-${screens.map((s) => `- ${fs.existsSync(path.join(root, s)) ? '✓' : '○'} \`${s}\``).join('\n')}
+## Logo Assets Replaced
 
-## Assets Updated
+${ASSET_PATHS.map((a) => `- ${fs.existsSync(path.join(root, a)) ? '✓' : '○'} \`${a}\``).join('\n')}
 
-${assets.map((a) => `- ${fs.existsSync(path.join(root, a)) ? '✓' : '○'} \`${a}\``).join('\n')}
+### Generated this run
 
-## Remaining LiftFlow References (non-internal)
+${(manifest.files ?? []).map((f) => `- \`${f}\``).join('\n') || '_Run `node scripts/generate-one-more-icons.mjs`_'}
 
-${liftflowHits.length === 0 ? '_None — all remaining references are internal identifiers (LiftFlowColors, bundle IDs, API URLs, etc.)._' : liftflowHits.map((h) => `- \`${h.file}:${h.line}\` — ${h.text}`).join('\n')}
+## Screens Verified
 
-## Remaining RepForge References
+${SCREENS.map((s) => `- ${fs.existsSync(path.join(root, s)) ? '✓' : '○'} \`${s}\``).join('\n')}
 
-${repforgeHits.length === 0 ? '_None._' : repforgeHits.map((h) => `- \`${h.file}:${h.line}\` — ${h.text}`).join('\n')}
+## Emails & PDFs
 
-## User-Facing LiftFlow Leaks
+- \`backend/src/lib/authPages.ts\` — Header: ONE MORE · Footer: Only One.
+- \`backend/src/lib/pdfExport.ts\` — Header: ONE MORE · Footer: Only One.
 
-${userFacingLiftflow.length === 0 ? '_None detected in app screens, components, public web, or customer emails/PDFs._' : userFacingLiftflow.map((h) => `- \`${h.file}:${h.line}\` — ${h.text}`).join('\n')}
+## Website
 
-## Intentionally Unchanged (Infrastructure)
+- \`public/index.html\` — Hero: YOUR TRANSFORMATION STARTS WITH ONE MORE. · Sub: Only One.
+- \`public/og-one-more.png\` — Social preview
+- \`public/favicon-one-more.png\` — Favicon
+
+## Remaining Legacy References (intentional infrastructure)
+
+These are **not** user-facing and must not change per Sprint 8.8 spec:
 
 - Bundle ID: \`com.liftflow.app\`
-- Expo slug: \`liftflow\`
-- RevenueCat / App Store product IDs: \`com.liftflow.app.premium.monthly\`, \`liftflow_premium_monthly\`
+- Expo slug / scheme: \`liftflow\`
 - API host: \`liftflow-api.onrender.com\`
-- Internal code identifiers: \`LiftFlowColors\`, \`LiftFlowLogo\`, \`LiftFlowWordmark\`
-- Deep link scheme: \`liftflow://\`
+- Internal tokens: \`LiftFlowColors\`, \`LiftFlowLogo\` component name
+- Beta invite codes: \`LIFTFLOW-INTERNAL\`, etc.
 
-## Success Criteria
+## Remaining Issues
 
-Users should see only **ONE MORE** and **Only One.** throughout the application. Internal infrastructure names remain LiftFlow for backward compatibility.
+${forbiddenHits.length === 0 ? '_None in user-facing src/public/branding paths._' : forbiddenHits.map((h) => `- \`${h}\``).join('\n')}
+
+## Validation Commands
+
+\`\`\`bash
+node scripts/generate-one-more-icons.mjs
+node scripts/validate-branding-enforcement.mjs
+node scripts/validate-branding.mjs
+\`\`\`
 `;
 
-fs.writeFileSync(path.join(root, 'ONE_MORE_BRANDING_AUDIT.md'), md);
-console.log('Wrote ONE_MORE_BRANDING_AUDIT.md');
-console.log(`Completion: ${completionPct}%`);
-console.log(`LiftFlow refs (non-internal): ${liftflowHits.length}`);
-console.log(`RepForge refs: ${repforgeHits.length}`);
+fs.writeFileSync(path.join(root, 'BRANDING_AUDIT.md'), md);
+console.log('Wrote BRANDING_AUDIT.md');

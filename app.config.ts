@@ -23,13 +23,13 @@ const config: ExpoConfig = {
     url: 'https://u.expo.dev/62d95ef4-66d9-4638-8e66-93d27e1fb48d',
   },
   orientation: 'portrait',
-  icon: './assets/branding/liftflow-icon-1024.png',
+  icon: './assets/branding/one-more-icon-1024.png',
   scheme: 'liftflow',
   userInterfaceStyle: 'dark',
   ios: {
-    icon: './assets/branding/liftflow-icon-1024.png',
+    icon: './assets/branding/one-more-icon-1024.png',
     bundleIdentifier: 'com.liftflow.app',
-    buildNumber: '1',
+    buildNumber: '11',
     infoPlist: {
       NSMicrophoneUsageDescription: 'ONE MORE uses the microphone for voice workout logging and AI coaching.',
       NSSpeechRecognitionUsageDescription: 'ONE MORE converts speech to workout sets and coaching questions.',
@@ -43,7 +43,7 @@ const config: ExpoConfig = {
   },
   android: {
     package: 'com.liftflow.app',
-    versionCode: 1,
+    versionCode: 11,
     permissions: [
       'android.permission.ACCESS_COARSE_LOCATION',
       'android.permission.ACCESS_FINE_LOCATION',
@@ -55,15 +55,15 @@ const config: ExpoConfig = {
       'android.permission.health.READ_EXERCISE',
     ],
     adaptiveIcon: {
-      backgroundColor: '#080B10',
-      foregroundImage: './assets/branding/liftflow-icon-1024.png',
-      monochromeImage: './assets/branding/liftflow-icon-1024.png',
+      backgroundColor: '#000000',
+      foregroundImage: './assets/branding/one-more-icon-1024.png',
+      monochromeImage: './assets/branding/one-more-icon-1024.png',
     },
     predictiveBackGestureEnabled: false,
   },
   web: {
     output: 'static',
-    favicon: './assets/branding/liftflow-icon-256.png',
+    favicon: './assets/branding/one-more-icon-256.png',
   },
   plugins: [
     'expo-router',
@@ -94,20 +94,20 @@ const config: ExpoConfig = {
     [
       'expo-notifications',
       {
-        icon: './assets/branding/liftflow-icon-256.png',
-        color: '#1F6BFF',
+        icon: './assets/branding/one-more-icon-256.png',
+        color: '#0E90FF',
         sounds: [],
       },
     ],
     [
       'expo-splash-screen',
       {
-        backgroundColor: '#080B10',
-        image: './assets/branding/one-more-splash-512.png',
-        imageWidth: 162,
+        backgroundColor: '#000000',
+        image: './assets/branding/one-more-splash-full-512.png',
+        imageWidth: 200,
         android: {
-          image: './assets/branding/one-more-splash-512.png',
-          imageWidth: 162,
+          image: './assets/branding/one-more-splash-full-512.png',
+          imageWidth: 200,
         },
       },
     ],

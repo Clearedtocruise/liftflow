@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LiftFlowWordmark } from '@/components/brand/LiftFlowWordmark';
 import { LogoMark } from '@/components/brand/LogoMark';
 import { AppText } from '@/components/ui/AppText';
-import { Brand, LiftFlowColors, Spacing } from '@/constants/theme';
+import { LiftFlowColors, Spacing } from '@/constants/theme';
 
 type AuthFormContainerProps = {
   title: string;

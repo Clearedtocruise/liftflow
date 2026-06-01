@@ -1,18 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
   <defs>
-    <linearGradient id="lfRingGrad" x1="72" y1="400" x2="440" y2="112" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#1F6BFF"/>
-      <stop offset="100%" stop-color="#00E5FF"/>
-    </linearGradient>
-    <linearGradient id="lfMarkGrad" x1="140" y1="160" x2="320" y2="360" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#1F6BFF"/>
-      <stop offset="100%" stop-color="#00E5FF"/>
+    <linearGradient id="omGrad" x1="256" y1="96" x2="256" y2="416" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0E90FF"/>
+      <stop offset="45%" stop-color="#0E90FF"/>
+      <stop offset="100%" stop-color="#0456B8"/>
     </linearGradient>
   </defs>
-  <path d="M 108 388 A 198 198 0 1 1 418 188" stroke="url(#lfRingGrad)" stroke-width="26" stroke-linecap="round" fill="none"/>
-  <g transform="translate(256 256) skewX(-11) translate(-256 -256)">
-    <path fill="url(#lfMarkGrad)" d="M 138 168 L 138 352 L 218 352 L 218 316 L 176 316 L 176 168 Z"/>
-    <path fill="url(#lfMarkGrad)" d="M 218 168 L 348 168 L 348 200 L 252 200 L 252 244 L 274 244 L 274 276 L 252 276 L 252 352 L 218 352 Z"/>
-    <path fill="#00E5FF" d="M 348 154 L 348 186 L 408 172 Z"/>
-  </g>
+  <rect width="512" height="512" fill="#000000"/>
+  <path fill="url(#omGrad)" d="M 186 400 L 186 176 L 154 176 L 218 96 L 252 176 L 252 232 L 274 176 L 306 256 L 338 176 L 370 232 L 370 400 L 322 400 L 322 288 L 290 348 L 264 288 L 252 400 Z"/>
 </svg>

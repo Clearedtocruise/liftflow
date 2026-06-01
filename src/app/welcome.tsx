@@ -8,7 +8,7 @@ import { LiftFlowWordmark } from '@/components/brand/LiftFlowWordmark';
 import { LogoMark } from '@/components/brand/LogoMark';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { AppText } from '@/components/ui/AppText';
-import { Brand, LiftFlowColors, Spacing } from '@/constants/theme';
+import { LiftFlowColors, Spacing } from '@/constants/theme';
 
 const LOGO_SIZE = 130;
 

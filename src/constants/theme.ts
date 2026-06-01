@@ -16,13 +16,13 @@ export const LiftFlowColors = {
   textTertiary: '#6B7589',
   textMuted: '#4A5366',
 
-  primary: '#1F6BFF',
-  primaryMuted: '#1854CC',
-  primaryGlow: 'rgba(31, 107, 255, 0.22)',
+  primary: '#0E90FF',
+  primaryMuted: '#0B73CC',
+  primaryGlow: 'rgba(14, 144, 255, 0.22)',
 
-  accent: '#00E5FF',
-  accentMuted: '#00B8CC',
-  accentGlow: 'rgba(0, 229, 255, 0.15)',
+  accent: '#0E90FF',
+  accentMuted: '#0B73CC',
+  accentGlow: 'rgba(14, 144, 255, 0.15)',
 
   /** @deprecated use primary — kept for gradual migration */
   legacyAccent: '#1F6BFF',

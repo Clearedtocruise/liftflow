@@ -1,0 +1,30 @@
+{
+  "brand": "ONE MORE",
+  "tagline": "Only One.",
+  "generated": "2026-06-01T05:42:30.859Z",
+  "files": [
+    "assets/branding/one-more-icon-1024.png",
+    "assets/branding/one-more-icon-512.png",
+    "assets/branding/one-more-icon-256.png",
+    "assets/branding/one-more-icon-192.png",
+    "assets/branding/one-more-icon-128.png",
+    "assets/branding/one-more-splash-512.png",
+    "assets/images/icon.png",
+    "assets/images/favicon.png",
+    "assets/images/splash-icon.png",
+    "assets/images/android-icon-foreground.png",
+    "assets/images/android-icon-monochrome.png",
+    "public/favicon-one-more.png",
+    "public/favicon.png",
+    "assets/branding/one-more-splash-full-512.png",
+    "public/og-one-more.png",
+    "assets/branding/liftflow-icon-1024.png",
+    "assets/branding/liftflow-icon-512.png",
+    "assets/branding/liftflow-icon-256.png",
+    "assets/branding/one-more-splash-512.png",
+    "assets/branding/liftflow-logo-primary.svg",
+    "assets/branding/liftflow-logo-white.svg",
+    "assets/branding/liftflow-logo-black.svg",
+    "assets/branding/liftflow-logo-gradient.svg"
+  ]
+}

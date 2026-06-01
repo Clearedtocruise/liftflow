@@ -17,20 +17,16 @@ const SIZES = {
 
 export function LiftFlowWordmark({ size = 'md', align = 'center', showTagline = false }: LiftFlowWordmarkProps) {
   const scale = SIZES[size];
-  const [first, second] = Brand.name.split(' ');
 
   return (
     <View style={[styles.block, align === 'center' && styles.centered]}>
       <View style={[styles.row, align === 'center' && styles.centered]}>
         <AppText variant="caption" align={align} style={[styles.word, scale]}>
-          {first}
-        </AppText>
-        <AppText variant="caption" color="accent" align={align} style={[styles.word, scale]}>
-          {second}
+          {Brand.name}
         </AppText>
       </View>
       {showTagline ? (
-        <AppText variant="label" color="textSecondary" align={align} style={styles.tagline}>
+        <AppText variant="label" color="accent" align={align} style={styles.tagline}>
           {Brand.taglinePrimary}
         </AppText>
       ) : null}

@@ -44,6 +44,8 @@ async function main() {
   record('Production API health', health.status === 'ok');
   record('Backend Sentry', health.sentry === 'configured');
 
+  record('Branding enforcement', spawnSync('node', ['scripts/validate-branding-enforcement.mjs'], { cwd: root, encoding: 'utf8' }).status === 0);
+
   const sprint86 = spawnSync('node', ['scripts/validate-sprint86-testflight-rc.mjs'], {
     cwd: root,
     encoding: 'utf8',
