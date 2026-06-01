@@ -511,7 +511,7 @@ async function generateFounderInsights(ctx: {
 
   if (ctx.population?.lives_improved_count != null && ctx.population.lives_improved_count > 0) {
     evidenceInsights.push({
-      text: `${ctx.population.lives_improved_count} lives improved by measurable outcome standards — ONE MORE is producing evidence of impact.`,
+      text: `${ctx.population.lives_improved_count} lives improved by measurable outcome standards — LiftFlow is producing evidence of impact.`,
       source: 'evidence',
       confidence: 'high',
     });
@@ -544,7 +544,7 @@ async function generateFounderInsights(ctx: {
         {
           role: 'system',
           content:
-            'You are the strategic analytics brain for ONE MORE fitness. Generate 3-5 concise, evidence-based strategic insights for the founder. Each insight must reference the data provided — no generic advice. Format: one insight per line, no numbering.',
+            'You are the strategic analytics brain for LiftFlow fitness. Generate 3-5 concise, evidence-based strategic insights for the founder. Each insight must reference the data provided — no generic advice. Format: one insight per line, no numbering.',
         },
         {
           role: 'user',

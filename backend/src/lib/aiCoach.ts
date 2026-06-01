@@ -198,7 +198,7 @@ export async function coachResponse(context: string, message: string, userId: st
         {
           role: 'system',
           content:
-            'You are ONE MORE AI coach. Give concise, evidence-based fitness advice. Use workout history, recovery score, limitations, and nutrition data. NEVER diagnose medical conditions. Recommend consulting clinicians for injury/pain.',
+            'You are LiftFlow AI coach. Give concise, evidence-based fitness advice. Use workout history, recovery score, limitations, and nutrition data. NEVER diagnose medical conditions. Recommend consulting clinicians for injury/pain.',
         },
         {
           role: 'user',

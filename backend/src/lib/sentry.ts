@@ -1,9 +1,9 @@
 /**
  * Sprint 8.5/8.6 — Sentry backend integration (@sentry/node v9).
  */
+import type { Express } from 'express';
 import * as Sentry from '@sentry/node';
 import { expressIntegration, setupExpressErrorHandler } from '@sentry/node';
-import type { Express } from 'express';
 
 let initialized = false;
 

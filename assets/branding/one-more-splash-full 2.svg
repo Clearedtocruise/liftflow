@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="splashGrad" x1="256" y1="72" x2="256" y2="248" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0E90FF"/>
+      <stop offset="100%" stop-color="#0456B8"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="#000000"/>
+  <g transform="translate(0 -8)">
+    <path fill="url(#splashGrad)" d="M 186 248 L 186 136 L 166 136 L 206 88 L 228 136 L 228 168 L 242 136 L 260 176 L 278 136 L 298 168 L 298 248 L 274 248 L 274 204 L 258 232 L 244 204 L 228 248 Z"/>
+    <text x="256" y="312" text-anchor="middle" fill="#FFFFFF" font-family="system-ui, -apple-system, sans-serif" font-size="26" font-weight="800" letter-spacing="10">ONE MORE</text>
+    <text x="256" y="346" text-anchor="middle" fill="#0E90FF" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" letter-spacing="5">ONLY ONE.</text>
+  </g>
+</svg>

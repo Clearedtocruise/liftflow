@@ -212,7 +212,7 @@ export async function converseWithCoach(
           {
             role: 'system',
             content:
-              'You are ONE MORE Coach. Give evidence-based fitness coaching using the user context. Respond in JSON with shortAnswer (1-2 sentences) and detailedAnswer (3-5 sentences). Never diagnose medical conditions.',
+              'You are LiftFlow Coach. Give evidence-based fitness coaching using the user context. Respond in JSON with shortAnswer (1-2 sentences) and detailedAnswer (3-5 sentences). Never diagnose medical conditions.',
           },
           {
             role: 'user',
