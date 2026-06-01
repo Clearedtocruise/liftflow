@@ -1,72 +1,140 @@
 import { api } from '@/api/client';
 import { fail, fromError, ok } from '@/lib/serviceResult';
+import {
+    enrichParsedCommand,
+    parseVoiceCommandLocal,
+    resolveFromVoiceSettings,
+} from '@/lib/voice';
+import { voiceSettingsFromUser } from '@/lib/voice/voicePreferences';
 import type { IVoiceService } from '@/services/interfaces';
+import { userService } from '@/services/userService';
 import { supabase } from '@/supabase/client';
-import type { ParseVoiceRequest, ParsedVoiceCommand } from '@/types';
+import type { ParseVoiceRequest } from '@/types';
+import type { ParsedVoiceCommandExtended, ProcessVoiceResult, VoiceParseContext, VoiceSettings } from '@/types/voice';
 
-function parseLocally(transcript: string): ParsedVoiceCommand | null {
-  const text = transcript.trim().toLowerCase();
-
-  const patterns = [
-    /^(?<exercise>.+?)\s+(?<weight>\d+(?:\.\d+)?)\s*(?:lbs?|pounds?|kg|kilos?)?\s*(?:for|x|\*|×)\s*(?<reps>\d+)/i,
-    /^(?<exercise>.+?)\s+(?<reps>\d+)\s*(?:reps?|rep)\s*(?:at|@)\s*(?<weight>\d+(?:\.\d+)?)/i,
-    /^(?<exercise>.+?)\s+(?<weight>\d+(?:\.\d+)?)\s+(?<reps>\d+)/i,
-  ];
-
-  for (const pattern of patterns) {
-    const match = text.match(pattern);
-    if (match?.groups) {
-      return {
-        exercise: match.groups.exercise.trim(),
-        weight: parseFloat(match.groups.weight),
-        reps: parseInt(match.groups.reps, 10),
-        rawText: transcript,
-        confidence: 0.85,
-      };
-    }
-  }
-
-  const simpleReps = text.match(/^(?<exercise>.+?)\s+(?<reps>\d+)\s*reps?$/i);
-  if (simpleReps?.groups) {
-    return {
-      exercise: simpleReps.groups.exercise.trim(),
-      reps: parseInt(simpleReps.groups.reps, 10),
-      rawText: transcript,
-      confidence: 0.7,
-    };
-  }
-
-  return null;
+function buildContext(request: ParseVoiceRequest): VoiceParseContext {
+  const ctx = request.context ?? {};
+  return {
+    activeExerciseName: ctx.activeExerciseName as string | undefined,
+    lastWeight: ctx.lastWeight as number | undefined,
+    lastReps: ctx.lastReps as number | undefined,
+    preferredWeightUnit: ctx.preferredWeightUnit as 'lb' | 'kg' | undefined,
+    setNumber: ctx.setNumber as number | undefined,
+  };
 }
 
-export const voiceService: IVoiceService = {
-  async parseCommand(request: ParseVoiceRequest) {
+export async function loadVoiceSettings(userId: string): Promise<VoiceSettings> {
+  const [profile, prefs] = await Promise.all([
+    userService.getProfile(userId),
+    userService.getPreferences(userId),
+  ]);
+  return voiceSettingsFromUser(
+    profile.success ? profile.data : null,
+    prefs.success ? prefs.data : null,
+  );
+}
+
+export async function processVoiceTranscript(
+  userId: string,
+  request: ParseVoiceRequest,
+  settingsOverride?: Partial<VoiceSettings>,
+): Promise<import('@/types/common').ServiceResult<ProcessVoiceResult>> {
+  try {
+    const settings = { ...(await loadVoiceSettings(userId)), ...settingsOverride };
+    const context = buildContext(request);
+    const local = parseVoiceCommandLocal(request.transcript, context);
+    const enrichedLocal = local ? enrichParsedCommand(local, context) : null;
+
+    if (enrichedLocal && (enrichedLocal.confidence ?? 0) >= 0.88) {
+      const { requiresConfirmation, confirmationReason } = resolveFromVoiceSettings(
+        enrichedLocal.confidence ?? 0.85,
+        settings,
+      );
+      return ok({
+        parsed: enrichedLocal,
+        confidence: enrichedLocal.confidence ?? 0.85,
+        requiresConfirmation,
+        confirmationReason,
+      });
+    }
+
     try {
-      const local = parseLocally(request.transcript);
-      if (local && (local.confidence ?? 0) >= 0.8) {
+      const remote = await api.parseVoice({ ...request, context: context as Record<string, unknown> });
+      const parsed = enrichParsedCommand(
+        { ...remote.parsed, intent: remote.parsed.intent ?? 'log_set' } as ParsedVoiceCommandExtended,
+        context,
+      );
+      const { requiresConfirmation, confirmationReason } = resolveFromVoiceSettings(
+        remote.confidence,
+        settings,
+      );
+      return ok({
+        parsed,
+        confidence: remote.confidence,
+        requiresConfirmation: settings.confirmationMode === 'none' ? false : remote.requiresConfirmation || requiresConfirmation,
+        confirmationReason: remote.confirmationReason ?? confirmationReason,
+      });
+    } catch {
+      if (enrichedLocal) {
+        const { requiresConfirmation, confirmationReason } = resolveFromVoiceSettings(
+          enrichedLocal.confidence ?? 0.6,
+          settings,
+        );
         return ok({
-          parsed: local,
-          confidence: local.confidence ?? 0.85,
-          requiresConfirmation: false,
+          parsed: enrichedLocal,
+          confidence: enrichedLocal.confidence ?? 0.6,
+          requiresConfirmation,
+          confirmationReason,
         });
       }
+      return fail('Could not parse voice command. Try: "Bench press 225 for 8"');
+    }
+  } catch (e) {
+    return fromError(e);
+  }
+}
 
-      try {
-        const remote = await api.parseVoice(request);
-        return ok(remote);
-      } catch {
-        if (local) {
-          return ok({
-            parsed: local,
-            confidence: local.confidence ?? 0.6,
-            requiresConfirmation: true,
-            confirmationReason: 'Low confidence parse — please confirm',
-          });
-        }
-        return fail('Could not parse voice command. Try: "Bench press 225 for 8"');
+/** @deprecated Use processVoiceTranscript — kept for IVoiceService compatibility */
+export const voiceRecognitionService = {
+  processVoiceTranscript,
+  loadVoiceSettings,
+};
+
+export const voiceService: IVoiceService = {
+  async parseCommand(request) {
+    const context = buildContext(request);
+    const local = parseVoiceCommandLocal(request.transcript, context);
+    const enriched = local ? enrichParsedCommand(local, context) : null;
+
+    if (enriched && (enriched.confidence ?? 0) >= 0.88) {
+      return ok({
+        parsed: enriched,
+        confidence: enriched.confidence ?? 0.85,
+        requiresConfirmation: (enriched.confidence ?? 0) < 0.8,
+      });
+    }
+
+    try {
+      const remote = await api.parseVoice({ ...request, context: context as Record<string, unknown> });
+      return ok({
+        parsed: enrichParsedCommand(
+          { ...remote.parsed, intent: remote.parsed.intent ?? 'log_set' } as ParsedVoiceCommandExtended,
+          context,
+        ),
+        confidence: remote.confidence,
+        requiresConfirmation: remote.requiresConfirmation,
+        confirmationReason: remote.confirmationReason,
+      });
+    } catch {
+      if (enriched) {
+        return ok({
+          parsed: enriched,
+          confidence: enriched.confidence ?? 0.6,
+          requiresConfirmation: true,
+          confirmationReason: 'Low confidence parse — please confirm',
+        });
       }
-    } catch (e) {
-      return fromError(e);
+      return fail('Could not parse voice command. Try: "Bench press 225 for 8"');
     }
   },
 

@@ -65,13 +65,44 @@ create table public.profiles (
   training_experience public.training_experience default 'beginner',
   fitness_goals text[] default '{}',
   preferred_units text not null default 'imperial' check (preferred_units in ('imperial', 'metric')),
+  preferred_height_unit text not null default 'ft_in' check (preferred_height_unit in ('ft_in', 'in', 'cm')),
+  preferred_weight_unit text not null default 'lb' check (preferred_weight_unit in ('lb', 'kg')),
+  preferred_distance_unit text not null default 'mi' check (preferred_distance_unit in ('mi', 'km')),
+  preferred_measurement_unit text not null default 'in' check (preferred_measurement_unit in ('in', 'cm')),
+  preferred_water_unit text not null default 'oz' check (preferred_water_unit in ('oz', 'L')),
   confirmation_mode public.confirmation_mode not null default 'smart',
   timezone text default 'UTC',
+  training_location text check (training_location in (
+    'home_gym',
+    'garage_gym',
+    'commercial_gym',
+    'planet_fitness',
+    'full_gym'
+  )),
+  primary_gym_name text,
+  available_equipment text[] not null default '{}',
+  primary_training_goal text check (primary_training_goal in ('fat_loss', 'muscle_gain', 'strength', 'general_fitness')),
   onboarding_completed boolean not null default false,
   metadata jsonb not null default '{}',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   deleted_at timestamptz
+);
+
+create table public.workout_locations (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  name text not null,
+  location_type text not null check (location_type in ('home_gym', 'commercial_gym')),
+  available_equipment text[] not null default '{}',
+  is_default boolean not null default false,
+  sort_order integer not null default 0,
+  notes text,
+  latitude double precision,
+  longitude double precision,
+  radius_meters integer not null default 150,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
 
 create table public.user_preferences (
@@ -544,6 +575,31 @@ create table public.physique_projections (
   created_at timestamptz not null default now()
 );
 
+create table public.transformation_projections (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  before_photo_id uuid references public.progress_photos(id) on delete set null,
+  current_photo_id uuid references public.progress_photos(id) on delete set null,
+  target_body_fat_pct numeric(4,2) not null,
+  current_weight_kg numeric(5,2),
+  current_body_fat_pct numeric(4,2),
+  current_lean_mass_kg numeric(5,2),
+  current_fat_mass_kg numeric(5,2),
+  projected_weight_kg numeric(5,2),
+  projected_body_fat_pct numeric(4,2),
+  projected_lean_mass_kg numeric(5,2),
+  projected_fat_mass_kg numeric(5,2),
+  projected_weeks_to_target numeric(5,1),
+  success_score numeric(5,2),
+  workout_adherence_pct numeric(5,2),
+  nutrition_adherence_pct numeric(5,2),
+  weight_trend text,
+  rationale text,
+  confidence text default 'medium',
+  engine_version text not null default 'transformation-v1',
+  created_at timestamptz not null default now()
+);
+
 -- =============================================================================
 -- GOALS & ANALYTICS
 -- =============================================================================
@@ -774,6 +830,7 @@ create index idx_voice_logs_user_session on public.voice_log_entries(user_id, se
 create index idx_notifications_user_unread on public.notifications(user_id, is_read) where is_read = false;
 create index idx_planned_workouts_user_date on public.planned_workouts(user_id, scheduled_date);
 create index idx_progress_photos_user_taken on public.progress_photos(user_id, taken_at desc);
+create index idx_transformation_projections_user_created on public.transformation_projections(user_id, created_at desc);
 
 -- =============================================================================
 -- UPDATED_AT TRIGGER
@@ -807,7 +864,7 @@ do $$
 declare
   tbl text;
   tables text[] := array[
-    'profiles', 'user_preferences', 'user_metrics', 'user_devices', 'legal_acceptances',
+    'profiles', 'workout_locations', 'user_preferences', 'user_metrics', 'user_devices', 'legal_acceptances',
     'user_custom_exercises', 'workout_sessions', 'workout_blocks', 'workout_exercises',
     'workout_sets', 'rest_periods', 'workout_density_metrics', 'training_programs',
     'training_phases', 'workout_templates', 'planned_workouts', 'recovery_assessments',
@@ -815,6 +872,7 @@ declare
     'ai_recommendations', 'ai_insights', 'nutrition_goals', 'meal_plans', 'meals',
     'grocery_lists', 'grocery_list_items', 'hydration_logs', 'nutrition_recommendations',
     'body_composition_records', 'progress_photos', 'photo_comparisons', 'physique_projections',
+    'transformation_projections',
     'goals', 'goal_milestones', 'analytics_snapshots', 'performance_trends',
     'integration_connections', 'healthkit_sync_records', 'watch_sessions', 'motion_samples',
     'rep_count_events', 'exercise_recognition_events', 'subscriptions', 'subscription_events',
@@ -828,6 +886,7 @@ end $$;
 
 -- Profiles: user owns their row
 create policy "Users manage own profile" on public.profiles for all using (auth.uid() = id);
+create policy "Users manage own workout locations" on public.workout_locations for all using (auth.uid() = user_id);
 
 -- Generic user_id policies (covers most tables)
 create policy "Users manage own preferences" on public.user_preferences for all using (auth.uid() = user_id);
@@ -853,6 +912,7 @@ create policy "Users manage own grocery lists" on public.grocery_lists for all u
 create policy "Users manage own hydration" on public.hydration_logs for all using (auth.uid() = user_id);
 create policy "Users manage own body comp" on public.body_composition_records for all using (auth.uid() = user_id);
 create policy "Users manage own photos" on public.progress_photos for all using (auth.uid() = user_id);
+create policy "Users manage own transformation projections" on public.transformation_projections for all using (auth.uid() = user_id);
 create policy "Users manage own cardio" on public.cardio_sessions for all using (auth.uid() = user_id);
 create policy "Users manage own heart rate" on public.heart_rate_samples for all using (auth.uid() = user_id);
 create policy "Users manage own analytics" on public.analytics_snapshots for all using (auth.uid() = user_id);
@@ -916,3 +976,100 @@ $$ language plpgsql security definer;
 create or replace trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
+
+-- =============================================================================
+-- Sprint 8.5 — Beta User Readiness Pack
+-- =============================================================================
+
+create type public.feedback_type as enum ('bug', 'feature', 'support');
+create type public.feedback_status as enum ('open', 'triaged', 'resolved', 'closed');
+
+create table if not exists public.beta_feedback (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references public.profiles(id) on delete set null,
+  feedback_type public.feedback_type not null,
+  subject text not null,
+  body text not null,
+  screenshot_url text,
+  device_metadata jsonb not null default '{}',
+  app_version text,
+  app_environment text,
+  status public.feedback_status not null default 'open',
+  founder_notified boolean default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.app_events (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references public.profiles(id) on delete set null,
+  session_id text,
+  event_name text not null,
+  properties jsonb not null default '{}',
+  app_version text,
+  app_environment text,
+  platform text,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.beta_invites (
+  id uuid primary key default gen_random_uuid(),
+  code text not null unique,
+  label text,
+  max_uses int not null default 1,
+  uses_count int not null default 0,
+  is_internal boolean not null default false,
+  expires_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.beta_invite_redemptions (
+  id uuid primary key default gen_random_uuid(),
+  invite_id uuid not null references public.beta_invites(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  redeemed_at timestamptz not null default now(),
+  unique (invite_id, user_id)
+);
+
+create table if not exists public.release_notes (
+  id uuid primary key default gen_random_uuid(),
+  version text not null,
+  title text not null,
+  body text not null,
+  is_published boolean not null default true,
+  published_at timestamptz not null default now(),
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.changelog_entries (
+  id uuid primary key default gen_random_uuid(),
+  version text not null,
+  category text not null default 'improvement',
+  summary text not null,
+  created_at timestamptz not null default now()
+);
+
+alter table public.profiles
+  add column if not exists is_internal_tester boolean not null default false,
+  add column if not exists beta_tester_tag text,
+  add column if not exists beta_invite_code text;
+
+create index if not exists idx_beta_feedback_created on public.beta_feedback(created_at desc);
+create index if not exists idx_beta_feedback_status on public.beta_feedback(status, created_at desc);
+create index if not exists idx_app_events_name_created on public.app_events(event_name, created_at desc);
+create index if not exists idx_app_events_user_created on public.app_events(user_id, created_at desc);
+create index if not exists idx_beta_invites_code on public.beta_invites(code);
+
+alter table public.beta_feedback enable row level security;
+alter table public.app_events enable row level security;
+alter table public.beta_invites enable row level security;
+alter table public.beta_invite_redemptions enable row level security;
+alter table public.release_notes enable row level security;
+alter table public.changelog_entries enable row level security;
+
+create policy "Users insert own feedback" on public.beta_feedback for insert with check (auth.uid() = user_id);
+create policy "Users read own feedback" on public.beta_feedback for select using (auth.uid() = user_id);
+create policy "Users insert own events" on public.app_events for insert with check (auth.uid() = user_id);
+create policy "Users read own events" on public.app_events for select using (auth.uid() = user_id);
+create policy "Anyone read published release notes" on public.release_notes for select using (is_published = true);
+create policy "Anyone read changelog" on public.changelog_entries for select using (true);

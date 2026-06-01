@@ -1,4 +1,4 @@
-# LiftFlow
+# One More
 
 Voice-first AI workout tracking and coaching platform. **Expo SDK 54** — compatible with Expo Go on iPhone (App Store).
 

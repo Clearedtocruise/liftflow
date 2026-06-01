@@ -9,7 +9,13 @@ import {
     suggestMuscleGroups,
     synthesizeSpeech,
 } from '../lib/aiCoach.js';
+import { captureAiError } from '../lib/aiErrorReporting.js';
+import {
+    converseWithCoach,
+    loadConversationalCoachHistory,
+} from '../lib/conversationalCoachEngine.js';
 import { requireAdmin } from '../lib/supabase.js';
+import { requireProSubscription } from '../middleware/requireProSubscription.js';
 
 export const aiRouter = Router();
 
@@ -17,7 +23,7 @@ function getUserId(req: { body?: { userId?: string }; query?: { userId?: string 
   return req.body?.userId ?? (req.query?.userId as string | undefined);
 }
 
-aiRouter.post('/coach', async (req, res) => {
+aiRouter.post('/coach', requireProSubscription, async (req, res) => {
   try {
     const { context = 'general', message = '', userId } = req.body as {
       context?: string;
@@ -33,11 +39,55 @@ aiRouter.post('/coach', async (req, res) => {
     const result = await coachResponse(context, message, userId);
     res.json(result);
   } catch (error) {
+    captureAiError(error, '/api/ai/coach', getUserId(req));
     res.status(500).json({ message: error instanceof Error ? error.message : 'Coach failed' });
   }
 });
 
-aiRouter.get('/recommendations', async (req, res) => {
+aiRouter.post('/converse', requireProSubscription, async (req, res) => {
+  try {
+    const { userId, message, context, includeHistory, detailLevel } = req.body as {
+      userId?: string;
+      message?: string;
+      context?: string;
+      includeHistory?: boolean;
+      detailLevel?: 'short' | 'detailed' | 'voice';
+    };
+
+    if (!userId || !message?.trim()) {
+      res.status(400).json({ message: 'userId and message are required' });
+      return;
+    }
+
+    const result = await converseWithCoach(userId, message.trim(), {
+      context,
+      includeHistory,
+      detailLevel,
+    });
+    res.json(result);
+  } catch (error) {
+    captureAiError(error, '/api/ai/converse', getUserId(req));
+    res.status(500).json({ message: error instanceof Error ? error.message : 'Conversational coach failed' });
+  }
+});
+
+aiRouter.get('/converse/history', requireProSubscription, async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    if (!userId) {
+      res.status(400).json({ message: 'userId query param required' });
+      return;
+    }
+
+    const limit = Number(req.query.limit ?? 20);
+    const history = await loadConversationalCoachHistory(userId, limit);
+    res.json(history);
+  } catch (error) {
+    res.status(500).json({ message: error instanceof Error ? error.message : 'Coach history failed' });
+  }
+});
+
+aiRouter.get('/recommendations', requireProSubscription, async (req, res) => {
   try {
     const userId = getUserId(req);
     if (!userId) {
@@ -52,7 +102,7 @@ aiRouter.get('/recommendations', async (req, res) => {
   }
 });
 
-aiRouter.post('/refresh', async (req, res) => {
+aiRouter.post('/refresh', requireProSubscription, async (req, res) => {
   try {
     const { userId } = req.body as { userId?: string };
     if (!userId) {
@@ -115,7 +165,7 @@ aiRouter.get('/progression/:exerciseId', async (req, res) => {
   }
 });
 
-aiRouter.post('/workout/generate', async (req, res) => {
+aiRouter.post('/workout/generate', requireProSubscription, async (req, res) => {
   try {
     const { userId } = req.body as { userId?: string };
     if (!userId) {
@@ -148,7 +198,7 @@ aiRouter.post('/workout/generate', async (req, res) => {
   }
 });
 
-aiRouter.post('/tts', async (req, res) => {
+aiRouter.post('/tts', requireProSubscription, async (req, res) => {
   try {
     const { text } = req.body as { text?: string };
     if (!text?.trim()) {

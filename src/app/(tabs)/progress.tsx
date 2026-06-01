@@ -1,41 +1,60 @@
 import * as ImagePicker from 'expo-image-picker';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, StyleSheet, TextInput, View } from 'react-native';
 
+import { BodyCompositionSummary } from '@/components/body/BodyCompositionSummary';
+import { PhotoAnglePicker } from '@/components/body/PhotoAnglePicker';
+import { PhotoTimeline } from '@/components/body/PhotoTimeline';
+import { TransformationDashboard } from '@/components/body/TransformationDashboard';
 import { Card } from '@/components/layout/Card';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { SectionHeader } from '@/components/layout/SectionHeader';
+import { FeatureGate } from '@/components/subscription/PremiumGate';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
+import { useEntitlement } from '@/hooks/useEntitlement';
+import { useUnits } from '@/hooks/useUnits';
 import { bodyService } from '@/services/bodyService';
-import type { BodyCompositionRecord, PhysiqueProjection, ProgressPhoto } from '@/types';
+import { productAnalyticsService } from '@/services/productAnalyticsService';
+import type { BodyCompositionRecord, PhotoAngle, PhysiqueProjection, ProgressPhoto } from '@/types';
+import type { TransformationProjection } from '@/types/transformation';
 
 export default function ProgressScreen() {
   const { user } = useAuth();
+  const units = useUnits();
+  const { allowed: transformationAllowed } = useEntitlement('transformation-engine');
   const [photos, setPhotos] = useState<ProgressPhoto[]>([]);
   const [measurements, setMeasurements] = useState<BodyCompositionRecord[]>([]);
   const [projections, setProjections] = useState<PhysiqueProjection[]>([]);
+  const [transformation, setTransformation] = useState<TransformationProjection | null>(null);
+  const [transformHistory, setTransformHistory] = useState<TransformationProjection[]>([]);
   const [loading, setLoading] = useState(true);
+  const [runningTransform, setRunningTransform] = useState(false);
   const [weight, setWeight] = useState('');
   const [waist, setWaist] = useState('');
   const [bodyFat, setBodyFat] = useState('');
   const [targetBf, setTargetBf] = useState('12');
   const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
+  const [uploadAngle, setUploadAngle] = useState<PhotoAngle>('front');
 
   const load = useCallback(async () => {
     if (!user) return;
-    const [photosRes, bodyRes, projRes] = await Promise.all([
+    const [photosRes, bodyRes, projRes, transformRes, historyRes] = await Promise.all([
       bodyService.getProgressPhotos(user.id),
       bodyService.getCompositionHistory(user.id),
-      bodyService.getProjections(user.id),
+      transformationAllowed ? bodyService.getProjections(user.id) : Promise.resolve({ success: true as const, data: [] }),
+      transformationAllowed ? bodyService.getLatestTransformation(user.id) : Promise.resolve({ success: true as const, data: null }),
+      transformationAllowed ? bodyService.getTransformationHistory(user.id) : Promise.resolve({ success: true as const, data: [] }),
     ]);
     if (photosRes.success) setPhotos(photosRes.data);
     if (bodyRes.success) setMeasurements(bodyRes.data);
     if (projRes.success) setProjections(projRes.data);
+    if (transformRes.success) setTransformation(transformRes.data);
+    if (historyRes.success) setTransformHistory(historyRes.data);
     setLoading(false);
-  }, [user]);
+  }, [user, transformationAllowed]);
 
   useEffect(() => {
     load();
@@ -56,7 +75,7 @@ export default function ProgressScreen() {
 
     if (result.canceled || !result.assets[0]) return;
 
-    const upload = await bodyService.uploadFromPicker(user.id, result.assets[0].uri, 'front');
+    const upload = await bodyService.uploadFromPicker(user.id, result.assets[0].uri, uploadAngle);
     if (upload.success) {
       setSelectedPhotoId(upload.data.id);
       load();
@@ -67,13 +86,18 @@ export default function ProgressScreen() {
 
   async function handleSaveMeasurement() {
     if (!user) return;
-    const weightKg = weight ? parseFloat(weight) / 2.20462 : undefined;
+    const weightKg = units.parseWeight(weight);
+    const waistCm = units.parseMeasurement(waist);
+    const bf = bodyFat ? parseFloat(bodyFat) : undefined;
+    const leanMassKg =
+      weightKg && bf != null ? Math.round(weightKg * (1 - bf / 100) * 100) / 100 : undefined;
     const result = await bodyService.recordComposition(user.id, {
       userId: user.id,
       recordedAt: new Date().toISOString(),
       weightKg,
-      waistCm: waist ? parseFloat(waist) : undefined,
-      bodyFatPct: bodyFat ? parseFloat(bodyFat) : undefined,
+      waistCm,
+      bodyFatPct: bf,
+      leanMassKg,
       estimationMethod: 'manual',
     });
     if (result.success) {
@@ -105,12 +129,39 @@ export default function ProgressScreen() {
       Alert.alert('Select a photo', 'Upload a current photo first.');
       return;
     }
-      const result = await bodyService.generatePhysiqueProjection(user.id, selectedPhotoId, targetBf);
+    const result = await bodyService.generatePhysiqueProjection(user.id, selectedPhotoId, targetBf);
     if (result.success) {
       load();
-      Alert.alert('Projection saved', 'View comparison below.');
+      Alert.alert('Projection saved', 'View comparison in the dashboard.');
     } else {
       Alert.alert('Error', result.error);
+    }
+  }
+
+  async function handleRunTransformation() {
+    if (!user) return;
+    if (photos.length === 0) {
+      Alert.alert('Add a photo', 'Upload at least one progress photo to run a transformation projection.');
+      return;
+    }
+    const sorted = [...photos].sort(
+      (a, b) => new Date(a.takenAt).getTime() - new Date(b.takenAt).getTime(),
+    );
+    const beforePhoto = sorted[0];
+    const currentPhoto = sorted[sorted.length - 1];
+    setRunningTransform(true);
+    const result = await bodyService.runTransformation(user.id, parseFloat(targetBf) || 12, {
+      beforePhotoId: beforePhoto?.id,
+      currentPhotoId: currentPhoto?.id ?? selectedPhotoId ?? undefined,
+    });
+    setRunningTransform(false);
+    if (result.success) {
+      setTransformation(result.data);
+      void productAnalyticsService.trackTransformation(user.id, parseFloat(targetBf) || 12);
+      const history = await bodyService.getTransformationHistory(user.id);
+      if (history.success) setTransformHistory(history.data);
+    } else {
+      Alert.alert('Transformation failed', result.error);
     }
   }
 
@@ -122,101 +173,78 @@ export default function ProgressScreen() {
     );
   }
 
-  const beforePhoto = photos[photos.length - 1];
-  const afterPhoto = photos[0];
-
   return (
     <ScreenContainer>
       <View style={styles.header}>
-        <AppText variant="title">Progress</AppText>
+        <AppText variant="headline">Progress</AppText>
         <AppText variant="body" color="textSecondary">
-          Photos, measurements, and projections
+          Photo timeline, body composition, and transformation projections
         </AppText>
       </View>
 
-      <SectionHeader title="Progress Photos" />
+      <SectionHeader title="Photo Timeline" />
+      <PhotoAnglePicker value={uploadAngle} onChange={setUploadAngle} />
       <PrimaryButton label="Upload Photo" onPress={handleUploadPhoto} variant="secondary" />
-
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photoScroll}>
-        {photos.map((photo) => (
-          <PressablePhoto
-            key={photo.id}
-            photo={photo}
-            selected={selectedPhotoId === photo.id}
-            onSelect={() => setSelectedPhotoId(photo.id)}
-          />
-        ))}
-      </ScrollView>
-
-      {beforePhoto && afterPhoto && beforePhoto.id !== afterPhoto.id ? (
-        <>
-          <SectionHeader title="Before / After" />
-          <View style={styles.comparisonRow}>
-            <Image source={{ uri: beforePhoto.photoUrl }} style={styles.comparisonImage} />
-            <Image source={{ uri: afterPhoto.photoUrl }} style={styles.comparisonImage} />
-          </View>
-        </>
-      ) : null}
+      <PhotoTimeline photos={photos} selectedId={selectedPhotoId} onSelect={(p) => setSelectedPhotoId(p.id)} />
 
       <SectionHeader title="Body Measurements" />
+      <BodyCompositionSummary
+        latestMeasurement={measurements[0]}
+        projection={transformationAllowed ? transformation : null}
+        formatWeight={units.formatWeight}
+      />
       <Card style={styles.form}>
-        <TextInput style={styles.input} placeholder="Weight (lbs)" placeholderTextColor={LiftFlowColors.textTertiary} keyboardType="numeric" value={weight} onChangeText={setWeight} />
-        <TextInput style={styles.input} placeholder="Waist (cm)" placeholderTextColor={LiftFlowColors.textTertiary} keyboardType="numeric" value={waist} onChangeText={setWaist} />
-        <TextInput style={styles.input} placeholder="Body fat %" placeholderTextColor={LiftFlowColors.textTertiary} keyboardType="numeric" value={bodyFat} onChangeText={setBodyFat} />
+        <TextInput
+          style={styles.input}
+          placeholder={`Weight (${units.weightLabel})`}
+          placeholderTextColor={LiftFlowColors.textTertiary}
+          keyboardType="numeric"
+          value={weight}
+          onChangeText={setWeight}
+        />
+        <TextInput
+          style={styles.input}
+          placeholder={`Waist (${units.measurementLabel})`}
+          placeholderTextColor={LiftFlowColors.textTertiary}
+          keyboardType="numeric"
+          value={waist}
+          onChangeText={setWaist}
+        />
+        <TextInput
+          style={styles.input}
+          placeholder="Body fat %"
+          placeholderTextColor={LiftFlowColors.textTertiary}
+          keyboardType="numeric"
+          value={bodyFat}
+          onChangeText={setBodyFat}
+        />
         <PrimaryButton label="Save Measurement" onPress={handleSaveMeasurement} />
       </Card>
 
-      {measurements.length > 0 ? (
-        <Card>
-          {measurements.slice(0, 5).map((m) => (
-            <View key={m.id} style={styles.measureRow}>
-              <AppText variant="footnote" color="textSecondary">
-                {new Date(m.recordedAt).toLocaleDateString()}
-              </AppText>
-              <AppText variant="bodyBold">
-                {m.weightKg ? `${Math.round(m.weightKg * 2.20462)} lbs` : '—'}
-                {m.waistCm ? ` · ${m.waistCm}cm waist` : ''}
-              </AppText>
-            </View>
-          ))}
+      <SectionHeader title="Transformation Engine" />
+      <FeatureGate featureId="transformation-engine">
+        <TransformationDashboard
+          photos={photos}
+          measurements={measurements}
+          projection={transformation}
+          history={transformHistory}
+          targetBf={targetBf}
+          onTargetBfChange={setTargetBf}
+          onRun={handleRunTransformation}
+          running={runningTransform}
+          formatWeight={units.formatWeight}
+          projectedImageUrl={projections[0]?.projectedImageUrl}
+        />
+        <Card style={styles.form}>
+          <PrimaryButton label="Estimate Body Fat (AI)" onPress={handleEstimateBodyFat} variant="secondary" />
+          <PrimaryButton label="Generate AI Physique Image" onPress={handleGenerateProjection} variant="secondary" />
         </Card>
-      ) : null}
+      </FeatureGate>
 
-      <SectionHeader title="Physique Projection" />
-      <Card style={styles.form}>
-        <TextInput style={styles.input} placeholder="Target body fat %" placeholderTextColor={LiftFlowColors.textTertiary} keyboardType="numeric" value={targetBf} onChangeText={setTargetBf} />
-        <PrimaryButton label="Estimate Body Fat" onPress={handleEstimateBodyFat} variant="secondary" />
-        <PrimaryButton label="Generate Projection" onPress={handleGenerateProjection} />
-      </Card>
-
-      {projections.length > 0 ? (
-        <View style={styles.projectionRow}>
-          {projections[0].projectedImageUrl ? (
-            <Image source={{ uri: projections[0].projectedImageUrl }} style={styles.projectionImage} />
-          ) : null}
-          <AppText variant="footnote" color="textSecondary">
-            Target: {projections[0].targetBodyFatPct}% body fat
-          </AppText>
-        </View>
-      ) : null}
+      <AppText variant="caption" color="textTertiary" style={styles.disclaimer}>
+        Projections are estimates based on your logged data — not medical advice.
+      </AppText>
     </ScreenContainer>
-  );
-}
-
-function PressablePhoto({
-  photo,
-  selected,
-  onSelect,
-}: {
-  photo: ProgressPhoto;
-  selected: boolean;
-  onSelect: () => void;
-}) {
-  return (
-    <View style={[styles.photoWrap, selected && styles.photoSelected]}>
-      <Image source={{ uri: photo.photoUrl }} style={styles.photo} />
-      <PrimaryButton label={selected ? 'Selected' : 'Select'} onPress={onSelect} variant="secondary" />
-    </View>
   );
 }
 
@@ -231,34 +259,6 @@ const styles = StyleSheet.create({
     gap: Spacing.xs,
     marginBottom: Spacing.xxl,
   },
-  photoScroll: {
-    marginVertical: Spacing.lg,
-  },
-  photoWrap: {
-    marginRight: Spacing.md,
-    gap: Spacing.sm,
-    width: 140,
-  },
-  photoSelected: {
-    opacity: 1,
-  },
-  photo: {
-    width: 140,
-    height: 180,
-    borderRadius: 8,
-    backgroundColor: LiftFlowColors.surface,
-  },
-  comparisonRow: {
-    flexDirection: 'row',
-    gap: Spacing.md,
-    marginBottom: Spacing.xxl,
-  },
-  comparisonImage: {
-    flex: 1,
-    height: 200,
-    borderRadius: 8,
-    backgroundColor: LiftFlowColors.surface,
-  },
   form: {
     gap: Spacing.md,
     marginBottom: Spacing.xxl,
@@ -271,19 +271,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: LiftFlowColors.border,
   },
-  measureRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: Spacing.sm,
-  },
-  projectionRow: {
-    gap: Spacing.md,
-    marginBottom: Spacing.xxl,
-  },
-  projectionImage: {
-    width: '100%',
-    height: 240,
-    borderRadius: 8,
-    backgroundColor: LiftFlowColors.surface,
+  disclaimer: {
+    marginBottom: Spacing.xxxl,
   },
 });

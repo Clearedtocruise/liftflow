@@ -1,3 +1,4 @@
+import { LinearGradient } from 'expo-linear-gradient';
 import { ScrollView, StyleSheet, View, type ScrollViewProps } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -7,6 +8,7 @@ type ScreenContainerProps = ScrollViewProps & {
   scroll?: boolean;
   padded?: boolean;
   bottomInset?: boolean;
+  ambient?: boolean;
   children: React.ReactNode;
 };
 
@@ -14,6 +16,7 @@ export function ScreenContainer({
   scroll = true,
   padded = true,
   bottomInset = true,
+  ambient = true,
   style,
   contentContainerStyle,
   children,
@@ -38,18 +41,38 @@ export function ScreenContainer({
   );
 
   if (!scroll) {
-    return <View style={[styles.root, style]}>{content}</View>;
+    return (
+      <View style={[styles.root, style]}>
+        {ambient ? (
+          <LinearGradient
+            colors={['rgba(31, 107, 255, 0.07)', 'transparent']}
+            style={styles.ambient}
+            pointerEvents="none"
+          />
+        ) : null}
+        {content}
+      </View>
+    );
   }
 
   return (
-    <ScrollView
-      style={[styles.root, style]}
-      contentContainerStyle={[contentContainerStyle]}
-      showsVerticalScrollIndicator={false}
-      keyboardShouldPersistTaps="handled"
-      {...rest}>
-      {content}
-    </ScrollView>
+    <View style={styles.root}>
+      {ambient ? (
+        <LinearGradient
+          colors={['rgba(31, 107, 255, 0.07)', 'transparent']}
+          style={styles.ambient}
+          pointerEvents="none"
+        />
+      ) : null}
+      <ScrollView
+        style={[styles.flex, style]}
+        contentContainerStyle={[contentContainerStyle]}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        {...rest}>
+        {content}
+      </ScrollView>
+    </View>
   );
 }
 
@@ -57,6 +80,17 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: LiftFlowColors.background,
+  },
+  flex: {
+    flex: 1,
+  },
+  ambient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 220,
+    zIndex: 0,
   },
   inner: {
     flexGrow: 1,

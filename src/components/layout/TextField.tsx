@@ -41,7 +41,7 @@ const styles = StyleSheet.create({
     minHeight: TouchTarget.comfortable,
     backgroundColor: LiftFlowColors.surface,
     borderRadius: Radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 1,
     borderColor: LiftFlowColors.border,
     paddingHorizontal: Spacing.lg,
     color: LiftFlowColors.textPrimary,

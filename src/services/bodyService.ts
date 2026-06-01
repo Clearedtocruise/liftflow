@@ -1,8 +1,8 @@
+import { API_BASE_URL } from '@/constants/api';
 import { mapBodyRecord, mapProgressPhoto } from '@/lib/db-mappers';
 import { fail, fromError, ok } from '@/lib/serviceResult';
 import type { IBodyService } from '@/services/interfaces';
 import { getAccessToken, supabase } from '@/supabase/client';
-import { API_BASE_URL } from '@/constants/api';
 import type { PhotoAngle, PhysiqueProjection } from '@/types';
 
 const BUCKET = 'progress-photos';
@@ -284,4 +284,105 @@ export const bodyService: IBodyService = {
       return fromError(e);
     }
   },
+
+  async runTransformation(
+    userId: string,
+    targetBodyFatPct: number,
+    options: { beforePhotoId?: string; currentPhotoId?: string } = {},
+  ) {
+    try {
+      const token = await getAccessToken();
+      const response = await fetch(`${API_BASE_URL}/api/body/transformation/run`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ userId, targetBodyFatPct, ...options }),
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ message: response.statusText }));
+        return fail(err.message ?? 'Transformation projection failed');
+      }
+
+      const result = await response.json();
+      return ok(mapTransformationResponse(userId, result));
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
+  async getLatestTransformation(userId: string) {
+    try {
+      const token = await getAccessToken();
+      const response = await fetch(
+        `${API_BASE_URL}/api/body/transformation/latest?userId=${encodeURIComponent(userId)}`,
+        {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        },
+      );
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ message: response.statusText }));
+        return fail(err.message ?? 'Failed to load transformation');
+      }
+
+      const result = await response.json();
+      if (!result) return ok(null);
+      return ok(mapTransformationResponse(userId, result));
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
+  async getTransformationHistory(userId: string, limit = 10) {
+    try {
+      const token = await getAccessToken();
+      const response = await fetch(
+        `${API_BASE_URL}/api/body/transformation/history?userId=${encodeURIComponent(userId)}&limit=${limit}`,
+        {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        },
+      );
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ message: response.statusText }));
+        return fail(err.message ?? 'Failed to load transformation history');
+      }
+
+      const result = (await response.json()) as { projections?: Record<string, unknown>[] };
+      const rows = result.projections ?? [];
+      return ok(rows.map((row) => mapTransformationResponse(userId, row)));
+    } catch (e) {
+      return fromError(e);
+    }
+  },
 };
+
+function mapTransformationResponse(
+  userId: string,
+  row: Record<string, unknown>,
+): import('@/types/transformation').TransformationProjection {
+  return {
+    id: String(row.id ?? ''),
+    userId,
+    beforePhotoId: (row.beforePhotoId as string) ?? undefined,
+    currentPhotoId: (row.currentPhotoId as string) ?? undefined,
+    beforePhotoUrl: (row.beforePhotoUrl as string) ?? undefined,
+    currentPhotoUrl: (row.currentPhotoUrl as string) ?? undefined,
+    targetBodyFatPct: Number(row.targetBodyFatPct),
+    current: row.current as import('@/types/transformation').BodyCompositionSnapshot,
+    projected: row.projected as import('@/types/transformation').BodyCompositionSnapshot,
+    projectedWeeksToTarget:
+      row.projectedWeeksToTarget != null ? Number(row.projectedWeeksToTarget) : undefined,
+    successScore: row.successScore != null ? Number(row.successScore) : undefined,
+    workoutAdherencePct: row.workoutAdherencePct != null ? Number(row.workoutAdherencePct) : undefined,
+    nutritionAdherencePct: row.nutritionAdherencePct != null ? Number(row.nutritionAdherencePct) : undefined,
+    weightTrend: (row.weightTrend as string) ?? undefined,
+    rationale: String(row.rationale ?? ''),
+    confidence: (row.confidence as import('@/types/transformation').TransformationConfidence) ?? 'medium',
+    engineVersion: String(row.engineVersion ?? 'transformation-v1'),
+    createdAt: String(row.createdAt ?? new Date().toISOString()),
+  };
+}

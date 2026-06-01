@@ -11,5 +11,5 @@ export function getOpenAI(): OpenAI | null {
 
 export function hasOpenAI(): boolean {
   const key = process.env.OPENAI_API_KEY;
-  return Boolean(key && !key.includes('your-openai-api-key'));
+  return Boolean(key && key.startsWith('sk-') && !key.includes('your-openai') && key.length > 20);
 }

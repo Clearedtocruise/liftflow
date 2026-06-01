@@ -1,4 +1,33 @@
-import type { BaseEntity, ConfirmationMode, PreferredUnits, TrainingExperience } from './common';
+import type { EquipmentId } from '@/constants/equipmentCatalog';
+import type { CoachProfileMetadata } from '@/constants/onboardingCoach';
+import type { NutritionGoal, TrainingGoalId } from '@/constants/trainingGoals';
+import type { TrainingLocationId } from '@/constants/trainingProfile';
+import type {
+    BaseEntity,
+    ConfirmationMode,
+    DistanceUnit,
+    HeightUnit,
+    MeasurementUnit,
+    PreferredUnits,
+    TrainingExperience,
+    WaterUnit,
+    WeightUnit,
+} from './common';
+
+export type TrainingLocation = TrainingLocationId;
+/** Highest-priority nutrition goal (derived from fitnessGoals[0]) */
+export type TrainingGoal = NutritionGoal;
+
+export type UserProfileMetadata = {
+  coachProfile?: CoachProfileMetadata;
+  coachActivation?: {
+    activatedAt?: string;
+    coachMessage?: string;
+    supplementRecommendations?: Array<{ name: string; rationale: string; priority: string }>;
+    programType?: string;
+    frequency?: number | string;
+  };
+};
 
 export type UserProfile = BaseEntity & {
   email: string;
@@ -10,11 +39,24 @@ export type UserProfile = BaseEntity & {
   weightKg?: number;
   bodyFatPct?: number;
   trainingExperience?: TrainingExperience;
-  fitnessGoals?: string[];
+  /** Ordered by priority — index 0 drives nutrition; all influence programming */
+  fitnessGoals?: TrainingGoalId[];
   preferredUnits: PreferredUnits;
+  preferredHeightUnit?: HeightUnit;
+  preferredWeightUnit?: WeightUnit;
+  preferredDistanceUnit?: DistanceUnit;
+  preferredMeasurementUnit?: MeasurementUnit;
+  preferredWaterUnit?: WaterUnit;
   confirmationMode: ConfirmationMode;
   timezone?: string;
+  trainingLocation?: TrainingLocation;
+  /** User's gym name, e.g. "Gold's Gym Downtown" */
+  primaryGymName?: string;
+  availableEquipment?: EquipmentId[];
+  /** Nutrition driver — synced from fitnessGoals[0] */
+  primaryTrainingGoal?: TrainingGoal;
   onboardingCompleted: boolean;
+  metadata?: UserProfileMetadata;
   updatedAt?: string;
 };
 

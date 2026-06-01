@@ -22,7 +22,7 @@ const CATEGORY_LABELS: Record<FeatureCategory, string> = {
 };
 
 /**
- * Feature hub — navigation entry point for all planned LiftFlow capabilities.
+ * Feature hub — navigation entry point for all planned ONE MORE capabilities.
  * MVP features link to active tabs; future features link to placeholder screens.
  */
 export default function ExploreScreen() {
@@ -33,7 +33,7 @@ export default function ExploreScreen() {
       <View style={styles.header}>
         <AppText variant="title">Explore</AppText>
         <AppText variant="body" color="textSecondary">
-          LiftFlow platform capabilities
+          ONE MORE platform capabilities
         </AppText>
       </View>
 

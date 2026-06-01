@@ -13,11 +13,13 @@ export default function TabsLayout() {
         tabBarInactiveTintColor: LiftFlowColors.tabInactive,
         tabBarStyle: {
           backgroundColor: LiftFlowColors.tabBar,
-          borderTopColor: LiftFlowColors.tabBarBorder,
-          borderTopWidth: Platform.OS === 'ios' ? 0.5 : 1,
+          borderTopColor: LiftFlowColors.border,
+          borderTopWidth: 1,
           height: TabBarHeight,
           paddingTop: 8,
           paddingBottom: Platform.OS === 'ios' ? 24 : 12,
+          elevation: 0,
+          shadowOpacity: 0,
         },
         tabBarLabelStyle: {
           ...Typography.caption,

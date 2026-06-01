@@ -1,6 +1,7 @@
 import { Router } from 'express';
 
 import { hasOpenAI } from '../lib/openai.js';
+import { isSentryConfigured } from '../lib/sentry.js';
 import { supabaseAdmin } from '../lib/supabase.js';
 
 export const healthRouter = Router();
@@ -11,6 +12,7 @@ healthRouter.get('/', (_req, res) => {
     service: 'liftflow-api',
     openai: hasOpenAI() ? 'configured' : 'missing',
     supabase: supabaseAdmin ? 'configured' : 'missing',
+    sentry: isSentryConfigured() ? 'configured' : 'missing',
     timestamp: new Date().toISOString(),
   });
 });

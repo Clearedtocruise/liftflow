@@ -3,6 +3,7 @@ import { Modal, Pressable, StyleSheet, View } from 'react-native';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
+import { intentLabel } from '@/lib/voice';
 import type { ParsedVoiceCommand } from '@/types';
 
 type VoiceConfirmModalProps = {
@@ -31,10 +32,19 @@ export function VoiceConfirmModal({
 
           {parsed ? (
             <View style={styles.parsed}>
-              <AppText variant="bodyBold">{parsed.exercise ?? 'Exercise'}</AppText>
-              <AppText variant="metric" color="accent">
-                {parsed.weight ?? '—'} × {parsed.reps ?? '—'}
+              <AppText variant="caption" color="textSecondary">
+                {intentLabel(parsed.intent)}
               </AppText>
+              <AppText variant="bodyBold">{parsed.exercise ?? '—'}</AppText>
+              {parsed.intent === 'log_set' || !parsed.intent ? (
+                <AppText variant="metric" color="accent">
+                  {parsed.weight ?? '—'} × {parsed.reps ?? '—'}
+                </AppText>
+              ) : parsed.targetWeight != null ? (
+                <AppText variant="metric" color="accent">
+                  Target {parsed.targetWeight} {parsed.weightUnit ?? 'lb'}
+                </AppText>
+              ) : null}
             </View>
           ) : null}
 

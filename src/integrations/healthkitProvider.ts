@@ -1,24 +1,19 @@
 import { Platform } from 'react-native';
 
+import { HEALTHKIT_READ_PERMISSIONS } from './healthConstants';
 import type { HealthMetricSample, HealthSyncResult, IntegrationAvailability } from './types';
-
-const READ_TYPES = [
-  'HKQuantityTypeIdentifierStepCount',
-  'HKQuantityTypeIdentifierBodyMass',
-  'HKQuantityTypeIdentifierActiveEnergyBurned',
-  'HKQuantityTypeIdentifierHeartRate',
-  'HKQuantityTypeIdentifierDistanceWalkingRunning',
-  'HKQuantityTypeIdentifierAppleExerciseTime',
-  'HKWorkoutTypeIdentifier',
-] as const;
 
 type HealthKitModule = {
   isHealthDataAvailableAsync: () => Promise<boolean>;
-  requestAuthorization: (opts: { toRead: readonly string[] }) => Promise<boolean>;
+  requestAuthorization: (opts: { toRead: readonly string[]; toShare?: readonly string[] }) => Promise<boolean>;
   queryQuantitySamples: (
     id: string,
     filter: { from: Date; to: Date; limit: number },
-  ) => Promise<{ uuid: string; quantity: number; endDate: Date }[]>;
+  ) => Promise<{ uuid: string; quantity: number; endDate: Date; startDate?: Date }[]>;
+  queryCategorySamples?: (
+    id: string,
+    filter: { from: Date; to: Date; limit: number },
+  ) => Promise<{ uuid: string; value: number; startDate: Date; endDate: Date }[]>;
   queryWorkoutSamples: (filter: { from: Date; to: Date; limit: number }) => Promise<
     {
       uuid: string;
@@ -40,15 +35,7 @@ function loadHealthKit(): HealthKitModule | null {
   }
 }
 
-export const HEALTHKIT_DATA_TYPES = [
-  'steps',
-  'weight',
-  'active_calories',
-  'heart_rate',
-  'workout_session',
-  'distance',
-  'exercise_minutes',
-] as const;
+export { HEALTH_DATA_TYPES } from './healthConstants';
 
 export function getHealthKitAvailability(): IntegrationAvailability {
   if (Platform.OS !== 'ios') {
@@ -66,7 +53,20 @@ export function getHealthKitAvailability(): IntegrationAvailability {
 export async function requestHealthKitAuthorization(): Promise<boolean> {
   const hk = loadHealthKit();
   if (!hk) return false;
-  return hk.requestAuthorization({ toRead: [...READ_TYPES] });
+  const toRead = [
+    ...HEALTHKIT_READ_PERMISSIONS.quantity,
+    ...HEALTHKIT_READ_PERMISSIONS.category,
+    ...HEALTHKIT_READ_PERMISSIONS.workout,
+  ];
+  return hk.requestAuthorization({ toRead });
+}
+
+/** HK sleep category: 0=inBed, 1=asleep, 2=awake (common mapping) */
+function sleepHoursFromCategory(value: number, start: Date, end: Date): number {
+  if (value === 1 || value === 0) {
+    return Math.max(0, (end.getTime() - start.getTime()) / (1000 * 60 * 60));
+  }
+  return 0;
 }
 
 export async function fetchHealthKitSamples(since: Date): Promise<HealthMetricSample[]> {
@@ -119,6 +119,43 @@ export async function fetchHealthKitSamples(since: Date): Promise<HealthMetricSa
       recordedAt: s.endDate.toISOString(),
       unit: 'bpm',
     });
+  }
+
+  const restingHr = await hk.queryQuantitySamples('HKQuantityTypeIdentifierRestingHeartRate', filter);
+  for (const s of restingHr) {
+    samples.push({
+      dataType: 'resting_heart_rate',
+      externalId: s.uuid,
+      value: { bpm: s.quantity },
+      recordedAt: s.endDate.toISOString(),
+      unit: 'bpm',
+    });
+  }
+
+  const hrv = await hk.queryQuantitySamples('HKQuantityTypeIdentifierHeartRateVariabilitySDNN', filter);
+  for (const s of hrv) {
+    samples.push({
+      dataType: 'hrv',
+      externalId: s.uuid,
+      value: { ms: s.quantity, sdnn: s.quantity },
+      recordedAt: s.endDate.toISOString(),
+      unit: 'ms',
+    });
+  }
+
+  if (hk.queryCategorySamples) {
+    const sleepSamples = await hk.queryCategorySamples('HKCategoryTypeIdentifierSleepAnalysis', filter);
+    for (const s of sleepSamples) {
+      const hours = sleepHoursFromCategory(s.value, s.startDate, s.endDate);
+      if (hours <= 0) continue;
+      samples.push({
+        dataType: 'sleep',
+        externalId: s.uuid,
+        value: { hours, durationHours: hours, sleepValue: s.value },
+        recordedAt: s.endDate.toISOString(),
+        unit: 'h',
+      });
+    }
   }
 
   const distances = await hk.queryQuantitySamples('HKQuantityTypeIdentifierDistanceWalkingRunning', filter);

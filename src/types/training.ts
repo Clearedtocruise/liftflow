@@ -6,6 +6,7 @@ export type TrainingProgram = BaseEntity & {
   description?: string;
   durationWeeks?: number;
   isActive: boolean;
+  metadata?: Record<string, unknown>;
 };
 
 export type TrainingPhase = BaseEntity & {
@@ -17,6 +18,7 @@ export type TrainingPhase = BaseEntity & {
   endDate?: string;
   targetMuscleGroups: string[];
   notes?: string;
+  metadata?: Record<string, unknown>;
 };
 
 export type WorkoutTemplate = BaseEntity & {
@@ -31,12 +33,31 @@ export type WorkoutTemplate = BaseEntity & {
 };
 
 export type TemplateExercise = {
-  exerciseId: string;
-  exerciseName: string;
+  exerciseId?: string;
+  exerciseName?: string;
+  name?: string;
   sets: number;
   repRange?: string;
+  reps?: string;
+  weightLbs?: number;
   restSeconds?: number;
   notes?: string;
+};
+
+export type PlannedWorkoutMetadata = {
+  programId?: string;
+  weekNumber?: number;
+  dayIndex?: number;
+  dayLabel?: string;
+  slotLabel?: string;
+  sprintPhase?: string;
+  exercises?: TemplateExercise[];
+  plannedVolume?: number;
+  locationId?: string;
+  locationName?: string;
+  rescheduledFrom?: string;
+  recoveryAdjusted?: boolean;
+  limitationAdjusted?: boolean;
 };
 
 export type PlannedWorkout = BaseEntity & {
@@ -49,6 +70,39 @@ export type PlannedWorkout = BaseEntity & {
   status: import('./common').SessionStatus;
   suggestedMuscleGroups: string[];
   aiRationale?: string;
+  metadata?: PlannedWorkoutMetadata;
+};
+
+export type ProgramType =
+  | 'push_pull_legs'
+  | 'upper_lower'
+  | 'full_body'
+  | 'body_part_split'
+  | 'strength';
+
+export type ProgramFrequency = 3 | 4 | 5 | 6 | 'custom';
+
+export type CreateProgramPayload = {
+  programType: ProgramType;
+  frequency: ProgramFrequency;
+  goal?: string;
+  experience?: string;
+  durationWeeks?: number;
+  equipment?: string[];
+  locationId?: string;
+  locationName?: string;
+  customSchedule?: string[];
+};
+
+export type ProgramDashboard = {
+  program: TrainingProgram;
+  phase: TrainingPhase | null;
+  currentWeek: number;
+  completionPct: number;
+  nextWorkout: PlannedWorkout | null;
+  upcomingWorkouts: PlannedWorkout[];
+  totalPlanned: number;
+  totalCompleted: number;
 };
 
 export type RecoveryAssessment = BaseEntity & {

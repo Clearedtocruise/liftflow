@@ -2,24 +2,42 @@ import type { ExpoConfig } from 'expo/config';
 
 const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'https://liftflow-api.onrender.com';
 
+function parseSentryDsn(dsn: string | undefined): { orgId: string; projectId: string } | null {
+  if (!dsn) return null;
+  const match = dsn.match(/@o(\d+)\.ingest(?:\.[a-z]+)?\.sentry\.io\/(\d+)/);
+  return match ? { orgId: match[1], projectId: match[2] } : null;
+}
+
+const sentryFromDsn = parseSentryDsn(process.env.EXPO_PUBLIC_SENTRY_DSN);
+const sentryOrganization = process.env.SENTRY_ORG ?? sentryFromDsn?.orgId ?? '';
+const sentryProject = process.env.SENTRY_PROJECT ?? sentryFromDsn?.projectId ?? '';
+
 const config: ExpoConfig = {
-  name: 'LiftFlow',
+  name: 'ONE MORE',
   slug: 'liftflow',
   version: '1.0.0',
+  runtimeVersion: {
+    policy: 'appVersion',
+  },
+  updates: {
+    url: 'https://u.expo.dev/62d95ef4-66d9-4638-8e66-93d27e1fb48d',
+  },
   orientation: 'portrait',
-  icon: './assets/images/icon.png',
+  icon: './assets/branding/liftflow-icon-1024.png',
   scheme: 'liftflow',
   userInterfaceStyle: 'dark',
   ios: {
-    icon: './assets/expo.icon',
+    icon: './assets/branding/liftflow-icon-1024.png',
     bundleIdentifier: 'com.liftflow.app',
     buildNumber: '1',
     infoPlist: {
-      NSMicrophoneUsageDescription: 'LiftFlow uses the microphone for voice workout logging and AI coaching.',
-      NSSpeechRecognitionUsageDescription: 'LiftFlow converts speech to workout sets and coaching questions.',
-      NSPhotoLibraryUsageDescription: 'LiftFlow saves progress photos to track your transformation.',
-      NSHealthShareUsageDescription: 'LiftFlow reads steps, weight, heart rate, and workouts from Apple Health to personalize coaching.',
-      NSHealthUpdateUsageDescription: 'LiftFlow may write workout data to Apple Health when you log sessions.',
+      NSMicrophoneUsageDescription: 'ONE MORE uses the microphone for voice workout logging and AI coaching.',
+      NSSpeechRecognitionUsageDescription: 'ONE MORE converts speech to workout sets and coaching questions.',
+      NSPhotoLibraryUsageDescription: 'ONE MORE saves progress photos to track your transformation.',
+      NSHealthShareUsageDescription: 'ONE MORE reads steps, weight, heart rate, and workouts from Apple Health to personalize coaching.',
+      NSHealthUpdateUsageDescription: 'ONE MORE may write workout data to Apple Health when you log sessions.',
+      NSLocationWhenInUseUsageDescription:
+        'ONE MORE uses your location to detect when you arrive at a saved gym and suggest starting a workout.',
       ITSAppUsesNonExemptEncryption: false,
     },
   },
@@ -27,6 +45,8 @@ const config: ExpoConfig = {
     package: 'com.liftflow.app',
     versionCode: 1,
     permissions: [
+      'android.permission.ACCESS_COARSE_LOCATION',
+      'android.permission.ACCESS_FINE_LOCATION',
       'android.permission.health.READ_STEPS',
       'android.permission.health.READ_WEIGHT',
       'android.permission.health.READ_HEART_RATE',
@@ -35,43 +55,59 @@ const config: ExpoConfig = {
       'android.permission.health.READ_EXERCISE',
     ],
     adaptiveIcon: {
-      backgroundColor: '#E6F4FE',
-      foregroundImage: './assets/images/android-icon-foreground.png',
-      backgroundImage: './assets/images/android-icon-background.png',
-      monochromeImage: './assets/images/android-icon-monochrome.png',
+      backgroundColor: '#080B10',
+      foregroundImage: './assets/branding/liftflow-icon-1024.png',
+      monochromeImage: './assets/branding/liftflow-icon-1024.png',
     },
     predictiveBackGestureEnabled: false,
   },
   web: {
     output: 'static',
-    favicon: './assets/images/favicon.png',
+    favicon: './assets/branding/liftflow-icon-256.png',
   },
   plugins: [
     'expo-router',
     'expo-dev-client',
+    [
+      '@sentry/react-native/expo',
+      {
+        url: 'https://sentry.io/',
+        organization: sentryOrganization,
+        project: sentryProject,
+      },
+    ],
     'expo-speech-recognition',
     [
       '@kingstinct/react-native-healthkit',
       {
-        NSHealthShareUsageDescription: 'LiftFlow reads steps, weight, heart rate, and workouts from Apple Health.',
-        NSHealthUpdateUsageDescription: 'LiftFlow writes workout data to Apple Health when you log sessions.',
+        NSHealthShareUsageDescription: 'ONE MORE reads steps, weight, heart rate, and workouts from Apple Health.',
+        NSHealthUpdateUsageDescription: 'ONE MORE writes workout data to Apple Health when you log sessions.',
+      },
+    ],
+    [
+      'expo-location',
+      {
+        locationWhenInUsePermission:
+          'ONE MORE uses your location to detect when you arrive at a saved gym and suggest starting a workout.',
       },
     ],
     [
       'expo-notifications',
       {
-        icon: './assets/images/icon.png',
-        color: '#6366F1',
+        icon: './assets/branding/liftflow-icon-256.png',
+        color: '#1F6BFF',
         sounds: [],
       },
     ],
     [
       'expo-splash-screen',
       {
-        backgroundColor: '#0A0A0B',
+        backgroundColor: '#080B10',
+        image: './assets/branding/one-more-splash-512.png',
+        imageWidth: 162,
         android: {
-          image: './assets/images/splash-icon.png',
-          imageWidth: 76,
+          image: './assets/branding/one-more-splash-512.png',
+          imageWidth: 162,
         },
       },
     ],

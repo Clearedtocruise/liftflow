@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="omRingGrad" x1="72" y1="400" x2="440" y2="112" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#1F6BFF"/>
+      <stop offset="55%" stop-color="#1F6BFF"/>
+      <stop offset="100%" stop-color="#00E5FF"/>
+    </linearGradient>
+    <linearGradient id="omRingGlow" x1="72" y1="400" x2="440" y2="112" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#1F6BFF" stop-opacity="0.45"/>
+      <stop offset="100%" stop-color="#00E5FF" stop-opacity="0.35"/>
+    </linearGradient>
+  </defs>
+  <path d="M 108 388 A 198 198 0 1 1 418 188" stroke="url(#omRingGlow)" stroke-width="44" stroke-linecap="round" fill="none" opacity="0.55"/>
+  <path d="M 108 388 A 198 198 0 1 1 418 188" stroke="url(#omRingGrad)" stroke-width="26" stroke-linecap="round" fill="none"/>
+  <path d="M 118 378 A 188 188 0 1 1 408 198" stroke="#00E5FF" stroke-width="3" stroke-linecap="round" fill="none" opacity="0.25"/>
+  <g transform="translate(256 256) skewX(-8) translate(-256 -256)">
+    <path fill="#FFFFFF" d="M 228 148 L 268 148 L 268 188 L 248 188 L 248 318 L 288 318 L 288 354 L 208 354 L 208 318 L 228 318 Z"/>
+    <path fill="#00E5FF" d="M 288 134 L 288 172 L 354 154 Z"/>
+  </g>
+  <circle cx="418" cy="188" r="6" fill="#00E5FF" opacity="0.85"/>
+</svg>

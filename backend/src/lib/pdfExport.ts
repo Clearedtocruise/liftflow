@@ -1,6 +1,9 @@
 import PDFDocument from 'pdfkit';
 import { requireAdmin } from './supabase.js';
 
+const BRAND_HEADER = 'ONE MORE';
+const BRAND_FOOTER = 'Only One.';
+
 type ExportPayload = {
   userId: string;
   contentType: string;
@@ -15,13 +18,20 @@ function buildPdfBuffer(title: string, lines: string[]): Promise<Buffer> {
     doc.on('end', () => resolve(Buffer.concat(chunks)));
     doc.on('error', reject);
 
-    doc.fontSize(20).text(title, { align: 'center' });
+    doc.fontSize(22).text(BRAND_HEADER, { align: 'center' });
+    doc.moveDown(0.3);
+    doc.fontSize(10).fillColor('#6B7589').text(BRAND_FOOTER, { align: 'center' });
+    doc.moveDown();
+    doc.fillColor('#000000');
+    doc.fontSize(16).text(title, { align: 'center' });
     doc.moveDown();
     doc.fontSize(11);
     for (const line of lines) {
       doc.text(line);
       doc.moveDown(0.3);
     }
+    doc.moveDown();
+    doc.fontSize(9).fillColor('#6B7589').text(`${BRAND_HEADER} · ${BRAND_FOOTER}`, { align: 'center' });
     doc.end();
   });
 }
@@ -56,7 +66,7 @@ export async function generateWorkoutPdf(userId: string, sessionId?: string) {
     lines.push('---');
   }
 
-  const buffer = await buildPdfBuffer('LiftFlow Workout Export', lines);
+  const buffer = await buildPdfBuffer('Workout Export', lines);
   return uploadPdf(userId, 'workout-export.pdf', buffer, 'Workout History');
 }
 
@@ -83,7 +93,7 @@ export async function generateNutritionPdf(userId: string) {
     lines.push(`  ${meal.meal_type}: ${meal.name} — ${meal.calories ?? 0} cal, ${meal.protein_g ?? 0}g protein`);
   }
 
-  const buffer = await buildPdfBuffer('LiftFlow Nutrition Export', lines);
+  const buffer = await buildPdfBuffer('Nutrition Export', lines);
   return uploadPdf(userId, 'nutrition-export.pdf', buffer, 'Nutrition Log');
 }
 
@@ -115,7 +125,7 @@ export async function generateProgressPdf(userId: string) {
     );
   }
 
-  const buffer = await buildPdfBuffer('LiftFlow Progress Export', lines);
+  const buffer = await buildPdfBuffer('Progress Export', lines);
   return uploadPdf(userId, 'progress-export.pdf', buffer, 'Progress Report');
 }
 

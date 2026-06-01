@@ -2,7 +2,7 @@ import { Platform } from 'react-native';
 
 import type { HealthMetricSample, HealthSyncResult, IntegrationAvailability } from './types';
 
-/** Health Connect record types LiftFlow imports (Android) */
+/** Health Connect record types ONE MORE imports (Android) */
 export const HEALTH_CONNECT_DATA_TYPES = [
   'steps',
   'weight',

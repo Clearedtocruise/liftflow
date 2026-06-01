@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, RefreshControl, StyleSheet, View } from 'react-native';
 
@@ -62,7 +63,7 @@ export default function HistoryScreen() {
     <ScreenContainer
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={LiftFlowColors.accent} />}>
       <View style={styles.header}>
-        <AppText variant="title">History</AppText>
+        <AppText variant="headline">History</AppText>
         <AppText variant="body" color="textSecondary">
           Track progression over time
         </AppText>
@@ -85,7 +86,7 @@ export default function HistoryScreen() {
         </Card>
       </View>
 
-      <SectionHeader title="Recent Workouts" subtitle="Long press to delete" />
+      <SectionHeader title="Recent Workouts" subtitle="Tap to view · Long press to delete" />
 
       {history.length === 0 ? (
         <AppText variant="body" color="textSecondary">
@@ -93,7 +94,12 @@ export default function HistoryScreen() {
         </AppText>
       ) : (
         history.map((item) => (
-          <HistoryCard key={item.id} item={item} onPress={() => handleDelete(item.id)} />
+          <HistoryCard
+            key={item.id}
+            item={item}
+            onPress={() => router.push(`/session/${item.id}`)}
+            onLongPress={() => handleDelete(item.id)}
+          />
         ))
       )}
     </ScreenContainer>

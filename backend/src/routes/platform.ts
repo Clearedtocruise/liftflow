@@ -50,6 +50,7 @@ subscriptionsRouter.post('/webhook/revenuecat', async (req, res) => {
         app_user_id?: string;
         product_id?: string;
         expiration_at_ms?: number;
+        period_type?: string;
       };
     };
 
@@ -60,9 +61,11 @@ subscriptionsRouter.post('/webhook/revenuecat', async (req, res) => {
     }
 
     const db = requireAdmin();
-    const isActive = ['INITIAL_PURCHASE', 'RENEWAL', 'UNCANCELLATION', 'PRODUCT_CHANGE'].includes(event.event?.type ?? '');
+    const eventType = event.event?.type ?? '';
+    const isActive = ['INITIAL_PURCHASE', 'RENEWAL', 'UNCANCELLATION', 'PRODUCT_CHANGE', 'TRIAL_STARTED', 'TRIAL_CONVERTED'].includes(eventType);
+    const isTrial = eventType === 'TRIAL_STARTED' || event.event?.period_type === 'TRIAL';
     const tier = isActive ? 'premium' : 'free';
-    const status = isActive ? 'active' : 'expired';
+    const status = isActive ? (isTrial ? 'trialing' : 'active') : 'expired';
     const periodEnd = event.event?.expiration_at_ms ? new Date(event.event.expiration_at_ms).toISOString() : null;
 
     await db.from('subscriptions').upsert(
@@ -71,11 +74,20 @@ subscriptionsRouter.post('/webhook/revenuecat', async (req, res) => {
         tier,
         status,
         current_period_end: periodEnd,
-        metadata: { source: 'revenuecat_webhook', eventType: event.event?.type, productId: event.event?.product_id },
+        metadata: { source: 'revenuecat_webhook', eventType, productId: event.event?.product_id, isTrial },
         updated_at: new Date().toISOString(),
       },
       { onConflict: 'user_id' },
     );
+
+    const { data: subRow } = await db.from('subscriptions').select('id').eq('user_id', userId).maybeSingle();
+    if (subRow?.id) {
+      await db.from('subscription_events').insert({
+        subscription_id: subRow.id,
+        event_type: eventType || 'webhook',
+        payload: { productId: event.event?.product_id, isTrial, status },
+      });
+    }
 
     res.json({ received: true });
   } catch (error) {
@@ -201,7 +213,7 @@ notificationsRouter.post('/send', requireUser, async (req: AuthedRequest, res) =
     const messages = tokens.map((token) => ({
       to: token,
       sound: 'default',
-      title: title ?? 'LiftFlow',
+      title: title ?? 'ONE MORE',
       body: body ?? '',
       data: { type },
     }));
@@ -215,7 +227,7 @@ notificationsRouter.post('/send', requireUser, async (req: AuthedRequest, res) =
     await db.from('notifications').insert({
       user_id: userId,
       type,
-      title: title ?? 'LiftFlow',
+      title: title ?? 'ONE MORE',
       body: body ?? '',
       payload: {},
       is_read: false,

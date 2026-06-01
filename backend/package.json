@@ -12,11 +12,13 @@
     "build": "node ./node_modules/typescript/bin/tsc"
   },
   "dependencies": {
+    "@sentry/node": "^9.47.1",
     "@supabase/supabase-js": "^2.106.2",
     "cors": "^2.8.5",
     "express": "^5.1.0",
     "openai": "^6.39.1",
-    "pdfkit": "^0.18.0"
+    "pdfkit": "^0.18.0",
+    "pg": "^8.21.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",

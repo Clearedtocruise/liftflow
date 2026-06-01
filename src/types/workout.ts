@@ -113,6 +113,13 @@ export type ParsedVoiceCommand = {
   type?: SetType;
   confidence?: number;
   rawText: string;
+  intent?: 'log_set' | 'completed_set' | 'adjust_weight' | 'feedback' | 'undo_last_set' | 'delete_last_set' | 'next_set' | 'declare_exercise';
+  feedback?: 'easy' | 'hard' | 'failed';
+  weightAdjustment?: 'increase' | 'decrease';
+  targetWeight?: number;
+  weightUnit?: 'lb' | 'kg';
+  usesContextWeight?: boolean;
+  usesContextExercise?: boolean;
 };
 
 export type VoiceLogEntry = BaseEntity & {
@@ -133,8 +140,19 @@ export type CreateSetPayload = {
   durationSeconds?: number;
 };
 
+export type UpdateSetPayload = {
+  weight?: number;
+  reps?: number;
+  type?: SetType;
+  rpe?: number;
+  notes?: string;
+};
+
 export type StartSessionPayload = {
   name: string;
   templateId?: string;
   plannedWorkoutId?: string;
+  gymName?: string;
+  trainingLocation?: string;
+  workoutLocationId?: string;
 };

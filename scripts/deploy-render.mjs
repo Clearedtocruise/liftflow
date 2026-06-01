@@ -55,9 +55,24 @@ function buildEnvVars() {
     { key: 'SUPABASE_URL', value: env.SUPABASE_URL ?? env.EXPO_PUBLIC_SUPABASE_URL ?? '' },
     { key: 'SUPABASE_SERVICE_ROLE_KEY', value: env.SUPABASE_SERVICE_ROLE_KEY ?? '' },
   ];
-  if (openai && !openai.includes('your-openai-api-key')) {
+  if (openai && openai.startsWith('sk-') && !openai.includes('your-openai') && openai.length > 20) {
     vars.push({ key: 'OPENAI_API_KEY', value: openai });
   }
+  const accessToken = env.SUPABASE_ACCESS_TOKEN ?? '';
+  if (accessToken) vars.push({ key: 'SUPABASE_ACCESS_TOKEN', value: accessToken });
+  const databaseUrl = env.DATABASE_URL ?? '';
+  if (databaseUrl) vars.push({ key: 'DATABASE_URL', value: databaseUrl });
+  const founderKey = env.FOUNDER_ADMIN_KEY ?? process.env.FOUNDER_ADMIN_KEY ?? '';
+  if (founderKey) vars.push({ key: 'FOUNDER_ADMIN_KEY', value: founderKey });
+  const sentryDsn = env.SENTRY_DSN ?? process.env.SENTRY_DSN ?? '';
+  if (sentryDsn) {
+    vars.push({ key: 'SENTRY_DSN', value: sentryDsn });
+    vars.push({ key: 'SENTRY_ENVIRONMENT', value: env.SENTRY_ENVIRONMENT ?? 'production' });
+    vars.push({ key: 'SENTRY_RELEASE', value: env.SENTRY_RELEASE ?? 'liftflow-api@1.0.0' });
+    vars.push({ key: 'SENTRY_TRACES_SAMPLE_RATE', value: env.SENTRY_TRACES_SAMPLE_RATE ?? '0.1' });
+  }
+  const revenuecatWebhook = env.REVENUECAT_WEBHOOK_SECRET ?? '';
+  if (revenuecatWebhook) vars.push({ key: 'REVENUECAT_WEBHOOK_SECRET', value: revenuecatWebhook });
   const stravaId = env.STRAVA_CLIENT_ID ?? '';
   const stravaSecret = env.STRAVA_CLIENT_SECRET ?? '';
   const stravaRedirect = env.STRAVA_REDIRECT_URI ?? 'https://liftflow-api.onrender.com/api/integrations/strava/callback';
@@ -189,6 +204,33 @@ async function waitForHealth(maxAttempts = 40, intervalMs = 15000) {
   throw new Error(`Health check failed after ${maxAttempts} attempts: ${HEALTH_URL}`);
 }
 
+async function verifyIntelligenceRoutes(baseUrl) {
+  const testUser = '00000000-0000-0000-0000-000000000001';
+  const checks = [
+    [`${baseUrl}/api/training/recovery/intelligence?userId=${testUser}`, 'GET'],
+    [`${baseUrl}/api/nutrition/intelligence?userId=${testUser}`, 'GET'],
+  ];
+  const results = [];
+  for (const [url, method] of checks) {
+    const res = await fetch(url, { method });
+    const text = await res.text();
+    const ok = res.status !== 404 && !text.includes('Cannot GET');
+    results.push({ url, status: res.status, ok });
+  }
+  const converse = await fetch(`${baseUrl}/api/ai/converse`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userId: testUser, message: 'deploy verify' }),
+  });
+  const converseText = await converse.text();
+  results.push({
+    url: '/api/ai/converse',
+    status: converse.status,
+    ok: converse.status !== 404 && !converseText.includes('Cannot POST'),
+  });
+  return results;
+}
+
 async function main() {
   console.log('=== LiftFlow Render Deploy ===\n');
 
@@ -215,6 +257,22 @@ async function main() {
   console.log('\n=== DEPLOY SUCCESS ===');
   console.log(`Service URL: https://${service.slug ?? SERVICE_NAME}.onrender.com`);
   console.log(`Health: HTTP ${health.status}`, JSON.stringify(health.data));
+
+  const baseUrl = `https://${service.slug ?? SERVICE_NAME}.onrender.com`;
+  console.log('\nVerifying intelligence routes (may take 1–2 min after deploy)...');
+  await new Promise((r) => setTimeout(r, 30000));
+  const routes = await verifyIntelligenceRoutes(baseUrl);
+  for (const r of routes) {
+    console.log(`  ${r.ok ? '✓' : '✗'} ${r.url} — HTTP ${r.status}`);
+  }
+  const allOk = routes.every((r) => r.ok);
+  if (!allOk) {
+    console.warn('\nWARNING: Intelligence routes return 404 on production.');
+    console.warn('Render deploys from GitHub main — commit + push backend changes, then re-run deploy:render');
+  }
+  if (health.data?.openai === 'missing') {
+    console.warn('\nWARNING: OPENAI_API_KEY not set on Render — add to .env and re-run deploy:render');
+  }
 }
 
 main().catch((e) => {

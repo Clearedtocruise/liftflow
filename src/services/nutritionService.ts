@@ -63,7 +63,7 @@ export const nutritionService: INutritionService = {
     }
   },
 
-  async logFood(userId, food: { name: string; mealType: MealType; calories?: number; proteinG?: number; carbsG?: number; fatG?: number; date?: string }) {
+  async logFood(userId, food: { name: string; mealType: MealType; calories?: number; proteinG?: number; carbsG?: number; fatG?: number; date?: string; instructions?: string }) {
     try {
       const { data, error } = await supabase
         .from('meals')
@@ -76,6 +76,7 @@ export const nutritionService: INutritionService = {
           protein_g: food.proteinG,
           carbs_g: food.carbsG,
           fat_g: food.fatG,
+          instructions: food.instructions,
         })
         .select('*')
         .single();
@@ -291,6 +292,26 @@ export const nutritionService: INutritionService = {
         source: data.source,
         createdAt: data.logged_at,
       });
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
+  async getAdaptiveTargets(userId: string) {
+    try {
+      const token = await getAccessToken();
+      const targets = await api.getAdaptiveMacroTargets(userId, token);
+      return ok(targets);
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
+  async generateDailyPlan(userId: string, dietaryStyle?: string) {
+    try {
+      const token = await getAccessToken();
+      const plan = await api.generateDailyMealPlan({ userId, dietaryStyle }, token);
+      return ok(plan);
     } catch (e) {
       return fromError(e);
     }

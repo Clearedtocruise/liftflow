@@ -49,4 +49,8 @@ export const SYMBOL_FALLBACKS: Partial<Record<SFSymbol, string>> = {
   'leaf.fill': '🥗',
   'camera.fill': '📷',
   'chart.line.uptrend.xyaxis': '📈',
+  'creditcard.fill': '💳',
+  'heart.text.square.fill': '❤',
+  'hand.raised.fill': '✋',
+  'envelope.fill': '✉',
 };

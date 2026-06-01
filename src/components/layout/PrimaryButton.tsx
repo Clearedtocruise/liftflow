@@ -1,7 +1,11 @@
+import { LinearGradient } from 'expo-linear-gradient';
 import { ActivityIndicator, Pressable, StyleSheet } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 
 import { AppText } from '@/components/ui/AppText';
-import { LiftFlowColors, Radius, Spacing, TouchTarget, Typography } from '@/constants/theme';
+import { LiftFlowColors, Radius, Shadows, Spacing, TouchTarget, Typography } from '@/constants/theme';
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 type PrimaryButtonProps = {
   label: string;
@@ -20,34 +24,72 @@ export function PrimaryButton({
   variant = 'primary',
   size = 'default',
 }: PrimaryButtonProps) {
+  const scale = useSharedValue(1);
+  const animStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
   const isDisabled = disabled || loading;
 
+  if (variant === 'primary') {
+    return (
+      <AnimatedPressable
+        onPress={onPress}
+        disabled={isDisabled}
+        onPressIn={() => {
+          scale.value = withSpring(0.97, { damping: 15 });
+        }}
+        onPressOut={() => {
+          scale.value = withSpring(1, { damping: 15 });
+        }}
+        style={[animStyle, isDisabled && styles.disabledWrap]}
+        accessibilityRole="button"
+        accessibilityState={{ disabled: isDisabled }}>
+        <LinearGradient
+          colors={isDisabled ? [LiftFlowColors.surfaceHighlight, LiftFlowColors.surfaceElevated] : ['#1F6BFF', '#1860EB']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[styles.base, size === 'large' && styles.large, styles.primaryGradient, !isDisabled && Shadows.glow]}>
+          {loading ? (
+            <ActivityIndicator color={LiftFlowColors.textPrimary} />
+          ) : (
+            <AppText variant="bodyBold" color="textPrimary" style={styles.label}>
+              {label}
+            </AppText>
+          )}
+        </LinearGradient>
+      </AnimatedPressable>
+    );
+  }
+
   return (
-    <Pressable
+    <AnimatedPressable
       onPress={onPress}
       disabled={isDisabled}
-      style={({ pressed }) => [
+      onPressIn={() => {
+        scale.value = withSpring(0.97, { damping: 15 });
+      }}
+      onPressOut={() => {
+        scale.value = withSpring(1, { damping: 15 });
+      }}
+      style={[
+        animStyle,
         styles.base,
         size === 'large' && styles.large,
-        variant === 'primary' && styles.primary,
         variant === 'secondary' && styles.secondary,
         variant === 'ghost' && styles.ghost,
-        pressed && !isDisabled && styles.pressed,
-        isDisabled && styles.disabled,
+        isDisabled && styles.disabledWrap,
       ]}
       accessibilityRole="button"
       accessibilityState={{ disabled: isDisabled }}>
       {loading ? (
-        <ActivityIndicator color={variant === 'primary' ? LiftFlowColors.background : LiftFlowColors.accent} />
+        <ActivityIndicator color={LiftFlowColors.primary} />
       ) : (
         <AppText
           variant="bodyBold"
-          color={variant === 'primary' ? 'background' : variant === 'ghost' ? 'accent' : 'textPrimary'}
+          color={variant === 'ghost' ? 'primary' : 'textPrimary'}
           style={styles.label}>
           {label}
         </AppText>
       )}
-    </Pressable>
+    </AnimatedPressable>
   );
 }
 
@@ -63,12 +105,12 @@ const styles = StyleSheet.create({
     minHeight: TouchTarget.large,
     borderRadius: Radius.lg,
   },
-  primary: {
-    backgroundColor: LiftFlowColors.accent,
+  primaryGradient: {
+    overflow: 'hidden',
   },
   secondary: {
-    backgroundColor: LiftFlowColors.surfaceElevated,
-    borderWidth: StyleSheet.hairlineWidth,
+    backgroundColor: LiftFlowColors.surface,
+    borderWidth: 1,
     borderColor: LiftFlowColors.border,
   },
   ghost: {
@@ -76,12 +118,9 @@ const styles = StyleSheet.create({
   },
   label: {
     ...Typography.bodyBold,
+    letterSpacing: 0.3,
   },
-  pressed: {
-    opacity: 0.88,
-    transform: [{ scale: 0.98 }],
-  },
-  disabled: {
-    opacity: 0.45,
+  disabledWrap: {
+    opacity: 0.5,
   },
 });

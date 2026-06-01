@@ -22,7 +22,7 @@ exportRouter.post('/', async (req, res) => {
     const doc = await exportByType({
       userId,
       contentType,
-      title: title ?? 'LiftFlow Export',
+      title: title ?? 'ONE MORE Export',
       sourceEntityId,
     });
 
@@ -49,7 +49,7 @@ exportRouter.post('/pdf', async (req, res) => {
     const doc = await exportByType({
       userId,
       contentType,
-      title: title ?? 'LiftFlow Export',
+      title: title ?? 'ONE MORE Export',
       sourceEntityId,
     });
 

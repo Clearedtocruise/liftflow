@@ -9,7 +9,7 @@ function loadLegalHtml(name: string): string {
   try {
     return readFileSync(join(__dirname, '../../public/legal', `${name}.html`), 'utf8');
   } catch {
-    return `<html><body><h1>LiftFlow ${name}</h1><p>See in-app Settings → Legal.</p><p>support@liftflow.app</p></body></html>`;
+    return `<html><body><h1>ONE MORE ${name}</h1><p>See in-app Settings → Legal.</p><p>support@liftflow.app</p></body></html>`;
   }
 }
 

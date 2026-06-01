@@ -13,7 +13,9 @@
       "env": {
         "EXPO_PUBLIC_API_URL": "https://liftflow-api.onrender.com",
         "EXPO_PUBLIC_SUPABASE_URL": "https://jaajsalblkjtmrapijbe.supabase.co",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_l_d781eIJciTmAKZh0sjsQ_0NwmvDRA"
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_l_d781eIJciTmAKZh0sjsQ_0NwmvDRA",
+        "SENTRY_ORG": "4511486214864896",
+        "SENTRY_PROJECT": "4511486225285120"
       }
     },
     "development-simulator": {
@@ -33,7 +35,9 @@
       "env": {
         "EXPO_PUBLIC_API_URL": "https://liftflow-api.onrender.com",
         "EXPO_PUBLIC_SUPABASE_URL": "https://jaajsalblkjtmrapijbe.supabase.co",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_l_d781eIJciTmAKZh0sjsQ_0NwmvDRA"
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_l_d781eIJciTmAKZh0sjsQ_0NwmvDRA",
+        "SENTRY_ORG": "4511486214864896",
+        "SENTRY_PROJECT": "4511486225285120"
       }
     },
     "production": {
@@ -48,7 +52,25 @@
       "env": {
         "EXPO_PUBLIC_API_URL": "https://liftflow-api.onrender.com",
         "EXPO_PUBLIC_SUPABASE_URL": "https://jaajsalblkjtmrapijbe.supabase.co",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_l_d781eIJciTmAKZh0sjsQ_0NwmvDRA"
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_l_d781eIJciTmAKZh0sjsQ_0NwmvDRA",
+        "EXPO_PUBLIC_SENTRY_ENVIRONMENT": "production",
+        "EXPO_PUBLIC_SENTRY_RELEASE": "liftflow@1.0.0",
+        "SENTRY_ORG": "4511486214864896",
+        "SENTRY_PROJECT": "4511486225285120"
+      }
+    },
+    "testflight": {
+      "extends": "production",
+      "distribution": "store",
+      "channel": "testflight",
+      "ios": {
+        "resourceClass": "m-medium"
+      },
+      "env": {
+        "EXPO_PUBLIC_SENTRY_ENVIRONMENT": "production",
+        "EXPO_PUBLIC_SENTRY_RELEASE": "liftflow@1.0.0",
+        "SENTRY_ORG": "4511486214864896",
+        "SENTRY_PROJECT": "4511486225285120"
       }
     },
     "production-apk": {
