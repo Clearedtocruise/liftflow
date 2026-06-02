@@ -1,6 +1,6 @@
 {
   "name": "liftflow",
-  "main": "expo-router/entry",
+  "main": "index.js",
   "version": "1.0.0",
   "dependencies": {
     "@expo-google-fonts/inter": "^0.4.2",
@@ -109,5 +109,48 @@
     "build:android:apk": "eas build --platform android --profile production-apk --non-interactive",
     "build:android:aab": "eas build --platform android --profile production --non-interactive"
   },
-  "private": true
+  "private": true,
+  "expo": {
+    "autolinking": {
+      "exclude": [
+        "@kingstinct/react-native-healthkit",
+        "react-native-nitro-modules",
+        "react-native-purchases",
+        "react-native-watch-connectivity",
+        "expo-speech-recognition",
+        "expo-dev-client",
+        "expo-dev-launcher",
+        "expo-dev-menu",
+        "expo-dev-menu-interface",
+        "react-native-reanimated",
+        "react-native-worklets",
+        "@sentry/react-native",
+        "react-native-svg",
+        "expo-updates",
+        "expo-updates-interface",
+        "@react-native-async-storage/async-storage",
+        "expo-av",
+        "expo-notifications",
+        "expo-location",
+        "expo-image",
+        "expo-image-picker",
+        "expo-linear-gradient",
+        "expo-speech",
+        "expo-secure-store",
+        "expo-sharing",
+        "expo-web-browser",
+        "expo-system-ui",
+        "expo-symbols",
+        "expo-file-system",
+        "expo-font",
+        "expo-device",
+        "expo-eas-client",
+        "expo-application",
+        "expo-structured-headers",
+        "expo-manifests",
+        "expo-json-utils",
+        "expo-image-loader"
+      ]
+    }
+  }
 }

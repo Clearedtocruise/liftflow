@@ -1,40 +1,21 @@
-import { Redirect } from 'expo-router';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
-
-import { LogoMark } from '@/components/brand/LogoMark';
-import { LiftFlowColors, Spacing } from '@/constants/theme';
-import { useAuth } from '@/hooks/useAuth';
+import { DIAGNOSTIC_B23, DIAGNOSTIC_B25, DIAGNOSTIC_B28 } from '@/config/startupFlags';
 
 export default function Index() {
-  const { user, isAuthenticated, isLoading } = useAuth();
-
-  if (isLoading) {
-    return (
-      <View style={styles.loading}>
-        <LogoMark size={80} glow={false} animate={false} />
-        <ActivityIndicator color={LiftFlowColors.primary} style={styles.spinner} />
-      </View>
-    );
+  if (DIAGNOSTIC_B28) {
+    const { DiagnosticB28Home } = require('./DiagnosticB28Home') as typeof import('./DiagnosticB28Home');
+    return <DiagnosticB28Home />;
   }
 
-  if (isAuthenticated) {
-    if (user && !user.onboardingCompleted) {
-      return <Redirect href="/(onboarding)/legal" />;
-    }
-    return <Redirect href="/(tabs)/dashboard" />;
+  if (DIAGNOSTIC_B25) {
+    const { DiagnosticB25Screen } = require('./DiagnosticB25Screen') as typeof import('./DiagnosticB25Screen');
+    return <DiagnosticB25Screen />;
   }
 
-  return <Redirect href="/welcome" />;
+  if (DIAGNOSTIC_B23) {
+    const { DiagnosticB23Screen } = require('./DiagnosticB23Screen') as typeof import('./DiagnosticB23Screen');
+    return <DiagnosticB23Screen />;
+  }
+
+  const { default: AppIndex } = require('./index.app') as typeof import('./index.app');
+  return <AppIndex />;
 }
-
-const styles = StyleSheet.create({
-  loading: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: LiftFlowColors.background,
-  },
-  spinner: {
-    marginTop: Spacing.xl,
-  },
-});
