@@ -4,17 +4,9 @@ const { getDefaultConfig } = require('expo/metro-config');
 const projectRoot = __dirname;
 const stripNative = process.env.EXPO_PUBLIC_STRIP_NATIVE === '1';
 const smokeTest = process.env.EXPO_PUBLIC_SMOKE_TEST === '1';
-const diagnosticB23 = process.env.EXPO_PUBLIC_DIAGNOSTIC_B23 === '1';
-const diagnosticB25 = process.env.EXPO_PUBLIC_DIAGNOSTIC_B25 === '1';
-const diagnosticB26 = process.env.EXPO_PUBLIC_DIAGNOSTIC_B26 === '1';
-const diagnosticB28 = process.env.EXPO_PUBLIC_DIAGNOSTIC_B28 === '1';
-const diagnosticB29 = process.env.EXPO_PUBLIC_DIAGNOSTIC_B29 === '1';
-const diagnosticB30 = process.env.EXPO_PUBLIC_DIAGNOSTIC_B30 === '1';
-const diagnosticB31 = process.env.EXPO_PUBLIC_DIAGNOSTIC_B31 === '1';
-const leanDiagnosticBuild = diagnosticB25 || diagnosticB26 || diagnosticB28 || diagnosticB29 || diagnosticB30 || diagnosticB31;
 
 const config =
-  stripNative || smokeTest || leanDiagnosticBuild
+  stripNative || smokeTest
     ? getDefaultConfig(projectRoot)
     : require('@sentry/react-native/metro').getSentryExpoConfig(projectRoot);
 
@@ -37,11 +29,6 @@ const stripNativeStubs = {
   'expo-speech-recognition': path.resolve(projectRoot, 'src/integrations/speech-recognition.metro-stub.js'),
 };
 
-const stripNativeStubsWithGestureHandler = {
-  ...stripNativeStubs,
-  'react-native-gesture-handler': path.resolve(projectRoot, 'src/integrations/gesture-handler.metro-stub.js'),
-};
-
 if (disableErrorOverlay) {
   expoGoStubs['@expo/metro-runtime/error-overlay'] = path.resolve(
     projectRoot,
@@ -53,9 +40,7 @@ const defaultResolveRequest = config.resolver.resolveRequest;
 
 config.resolver.resolveRequest = (context, moduleName, platform) => {
   let stubPath;
-  if (stripNative || diagnosticB25 || diagnosticB26 || diagnosticB29 || diagnosticB30) {
-    stubPath = stripNativeStubsWithGestureHandler[moduleName];
-  } else if (diagnosticB28 || diagnosticB31) {
+  if (stripNative) {
     stubPath = stripNativeStubs[moduleName];
   } else if (useExpoGoStubs) {
     stubPath = expoGoStubs[moduleName];
