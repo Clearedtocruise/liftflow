@@ -91,14 +91,7 @@ const optionalPlugins: ExpoConfig['plugins'] = [
         'ONE MORE uses your location to detect when you arrive at a saved gym and suggest starting a workout.',
     },
   ],
-  [
-    'expo-notifications',
-    {
-      icon: './assets/branding/one-more-icon-256.png',
-      color: '#0E90FF',
-      sounds: [],
-    },
-  ],
+  // expo-notifications plugin omitted until ASC Push capability is synced to the provisioning profile.
 ];
 
 const config: ExpoConfig = {
