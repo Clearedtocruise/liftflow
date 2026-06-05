@@ -52,17 +52,20 @@ export const LiftFlowColors = {
 
 export type LiftFlowColor = keyof typeof LiftFlowColors;
 
+/** System fonts — no expo-font / ExpoFontLoader required. */
+const systemFont = Platform.select({ ios: 'System', android: 'sans-serif', default: 'System' }) ?? 'System';
+
 export const FontFamily = {
-  hero: 'Sora_800ExtraBold',
-  heroBold: 'Sora_700Bold',
-  header: 'Inter_700Bold',
-  headerSemi: 'Inter_600SemiBold',
-  body: 'Inter_400Regular',
-  bodyMedium: 'Inter_500Medium',
-  bodySemi: 'Inter_600SemiBold',
-  label: 'Manrope_500Medium',
-  labelSemi: 'Manrope_600SemiBold',
-  metric: 'Inter_700Bold',
+  hero: systemFont,
+  heroBold: systemFont,
+  header: systemFont,
+  headerSemi: systemFont,
+  body: systemFont,
+  bodyMedium: systemFont,
+  bodySemi: systemFont,
+  label: systemFont,
+  labelSemi: systemFont,
+  metric: systemFont,
 } as const;
 
 export const Typography = {
@@ -70,59 +73,70 @@ export const Typography = {
     fontSize: 34,
     lineHeight: 40,
     fontFamily: FontFamily.hero,
+    fontWeight: '800',
     letterSpacing: 0.3,
   },
   display: {
     fontSize: 40,
     lineHeight: 46,
     fontFamily: FontFamily.hero,
+    fontWeight: '800',
     letterSpacing: 0.2,
   },
   title: {
     fontSize: 28,
     lineHeight: 34,
     fontFamily: FontFamily.header,
+    fontWeight: '700',
   },
   headline: {
     fontSize: 22,
     lineHeight: 28,
     fontFamily: FontFamily.headerSemi,
+    fontWeight: '600',
   },
   body: {
     fontSize: 17,
     lineHeight: 24,
     fontFamily: FontFamily.body,
+    fontWeight: '400',
   },
   bodyBold: {
     fontSize: 17,
     lineHeight: 24,
     fontFamily: FontFamily.bodySemi,
+    fontWeight: '600',
   },
   callout: {
     fontSize: 16,
     lineHeight: 22,
     fontFamily: FontFamily.bodyMedium,
+    fontWeight: '500',
   },
   subhead: {
     fontSize: 15,
     lineHeight: 20,
     fontFamily: FontFamily.bodyMedium,
+    fontWeight: '500',
   },
   footnote: {
     fontSize: 13,
     lineHeight: 18,
     fontFamily: FontFamily.body,
+    fontWeight: '400',
   },
   caption: {
     fontSize: 12,
     lineHeight: 16,
     fontFamily: FontFamily.labelSemi,
+    fontWeight: '600',
     letterSpacing: 0.4,
   },
   label: {
     fontSize: 11,
     lineHeight: 14,
     fontFamily: FontFamily.labelSemi,
+    fontWeight: '600',
     letterSpacing: 1.2,
     textTransform: 'uppercase' as const,
   },
@@ -130,12 +144,14 @@ export const Typography = {
     fontSize: 40,
     lineHeight: 44,
     fontFamily: FontFamily.metric,
+    fontWeight: '700',
     letterSpacing: -0.5,
   },
   timer: {
     fontSize: 48,
     lineHeight: 52,
     fontFamily: FontFamily.body,
+    fontWeight: '400',
     letterSpacing: -1,
   },
 } as const;
