@@ -1,6 +1,13 @@
 import { Router } from 'express';
 
 import {
+    generateExplainWorkoutAdvisory,
+    generateNutritionAdvisory,
+    generateWorkoutAdvisory,
+    type AdvisoryNutritionKind,
+    type AdvisoryWorkoutKind,
+} from '../lib/advisoryCoach.js';
+import {
     assessRecovery,
     coachResponse,
     generateRecommendations,
@@ -195,6 +202,63 @@ aiRouter.post('/workout/generate', requireProSubscription, async (req, res) => {
     res.json({ ...plan, id: data.id, scheduledDate: data.scheduled_date });
   } catch (error) {
     res.status(500).json({ message: error instanceof Error ? error.message : 'Workout generation failed' });
+  }
+});
+
+aiRouter.post('/advisory/nutrition', async (req, res) => {
+  try {
+    const { kind, context } = req.body as {
+      kind?: AdvisoryNutritionKind;
+      context?: Record<string, unknown>;
+    };
+
+    if (!kind || !context) {
+      res.status(400).json({ message: 'kind and context are required' });
+      return;
+    }
+
+    const data = await generateNutritionAdvisory(kind, context);
+    res.json({ data });
+  } catch (error) {
+    captureAiError(error, '/api/ai/advisory/nutrition');
+    res.status(500).json({ message: error instanceof Error ? error.message : 'Nutrition advisory failed' });
+  }
+});
+
+aiRouter.post('/advisory/workout', async (req, res) => {
+  try {
+    const { kind, context } = req.body as {
+      kind?: AdvisoryWorkoutKind;
+      context?: Record<string, unknown>;
+    };
+
+    if (!kind || !context) {
+      res.status(400).json({ message: 'kind and context are required' });
+      return;
+    }
+
+    const data = await generateWorkoutAdvisory(kind, context);
+    res.json({ data });
+  } catch (error) {
+    captureAiError(error, '/api/ai/advisory/workout');
+    res.status(500).json({ message: error instanceof Error ? error.message : 'Workout advisory failed' });
+  }
+});
+
+aiRouter.post('/advisory/workout/explain', async (req, res) => {
+  try {
+    const { context } = req.body as { context?: Record<string, unknown> };
+
+    if (!context) {
+      res.status(400).json({ message: 'context is required' });
+      return;
+    }
+
+    const data = await generateExplainWorkoutAdvisory(context);
+    res.json({ data });
+  } catch (error) {
+    captureAiError(error, '/api/ai/advisory/workout/explain');
+    res.status(500).json({ message: error instanceof Error ? error.message : 'Workout explain failed' });
   }
 });
 
