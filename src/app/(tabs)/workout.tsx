@@ -8,7 +8,7 @@ import { SectionHeader } from '@/components/layout/SectionHeader';
 import { FeatureGate } from '@/components/subscription/PremiumGate';
 import { AppText } from '@/components/ui/AppText';
 import { ManualSetEntry } from '@/components/workout/ManualSetEntry';
-import { MicrophoneButton } from '@/components/workout/MicrophoneButton';
+import { VoiceUnavailableMessage } from '@/components/voice/VoiceUnavailableMessage';
 import { QuickCorrectionButtons } from '@/components/workout/QuickCorrectionButtons';
 import { RestTimerSection } from '@/components/workout/RestTimerSection';
 import { SetEditModal } from '@/components/workout/SetEditModal';
@@ -666,15 +666,7 @@ export default function WorkoutScreen() {
       </ScreenContainer>
 
       <View style={styles.micDock}>
-        <MicrophoneButton
-          onPress={onMicPress}
-          onPressIn={handlePressIn}
-          onPressOut={handlePressOut}
-          isListening={isListening}
-          disabled={isPaused}
-          inputMode={voiceSettings.inputMode}
-          interimTranscript={interimTranscript}
-        />
+        <VoiceUnavailableMessage />
       </View>
 
       <VoiceConfirmModal

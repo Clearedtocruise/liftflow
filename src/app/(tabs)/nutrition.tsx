@@ -8,11 +8,10 @@ import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { SectionHeader } from '@/components/layout/SectionHeader';
 import { UpgradePrompt } from '@/components/subscription/UpgradePrompt';
 import { AppText } from '@/components/ui/AppText';
-import { MicrophoneButton } from '@/components/workout/MicrophoneButton';
+import { VoiceUnavailableMessage } from '@/components/voice/VoiceUnavailableMessage';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import { useEntitlement } from '@/hooks/useEntitlement';
 import { useUnits } from '@/hooks/useUnits';
-import { useVoiceLogging } from '@/hooks/useVoiceLogging';
 import { parseNutritionVoice } from '@/lib/nutritionVoice';
 import { parseVoiceCommandLocal } from '@/lib/voice/parseVoiceCommand';
 import { nutritionIntelligenceService } from '@/services/nutritionIntelligenceService';
@@ -39,8 +38,6 @@ export default function NutritionScreen() {
   const [carbs, setCarbs] = useState('');
   const [fat, setFat] = useState('');
 
-  const { transcript, isListening, startListening, stopListening, clearTranscript } = useVoiceLogging();
-
   const load = useCallback(async () => {
     if (!user) return;
     const today = new Date().toISOString().slice(0, 10);
@@ -58,12 +55,6 @@ export default function NutritionScreen() {
   useEffect(() => {
     load();
   }, [load]);
-
-  useEffect(() => {
-    if (!isListening && transcript.trim()) {
-      handleVoiceLog(transcript);
-    }
-  }, [isListening, transcript]);
 
   function resetForm() {
     setFoodName('');
@@ -181,11 +172,6 @@ export default function NutritionScreen() {
     const result = await nutritionService.generateGroceryList(user.id);
     if (result.success) setGroceryList(result.data);
     else Alert.alert('Error', result.error);
-  }
-
-  async function handleMicPress() {
-    if (isListening) stopListening();
-    else await startListening();
   }
 
   const supplements = meals.filter((m) => m.instructions === 'supplement');
@@ -337,10 +323,7 @@ export default function NutritionScreen() {
       </Card>
 
       <View style={styles.micRow}>
-        <MicrophoneButton onPress={handleMicPress} isListening={isListening} />
-        <AppText variant="footnote" color="textSecondary" style={styles.micHint}>
-          Say "protein shake 250 calories 30g protein" or "creatine supplement"
-        </AppText>
+        <VoiceUnavailableMessage />
       </View>
 
       <SectionHeader title="Today's Meals" />
