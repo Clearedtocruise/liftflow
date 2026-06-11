@@ -94,15 +94,6 @@ const config: ExpoConfig = {
       },
     ],
     [
-      'expo-notifications',
-      {
-        icon: './assets/branding/one-more-icon-256.png',
-        color: '#0E90FF',
-        sounds: [],
-      },
-    ],
-    './plugins/withLocalNotificationsOnly.js',
-    [
       'expo-splash-screen',
       {
         backgroundColor: '#000000',
