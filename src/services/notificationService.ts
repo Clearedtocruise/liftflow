@@ -61,6 +61,12 @@ export const notificationService = {
   },
 
   async registerDevice(userId: string): Promise<ServiceResult<void>> {
+    // Provisioning profile is local-notifications-only (no aps-environment).
+    // Skip remote push registration on iOS until Push capability is enabled in ASC.
+    if (Platform.OS === 'ios') {
+      return ok(undefined);
+    }
+
     try {
       const tokenResult = await this.getExpoPushToken();
       if (!tokenResult.success) return fail(tokenResult.error);

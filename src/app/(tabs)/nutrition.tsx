@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
+import { withScreenBoundary } from '@/components/observability/withScreenBoundary';
 import { Card } from '@/components/layout/Card';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
@@ -20,7 +21,7 @@ import type { DailyNutritionSummary, GroceryList, Meal, MealType, NutritionGoals
 
 const MEAL_TYPES: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack', 'pre_workout', 'post_workout'];
 
-export default function NutritionScreen() {
+function NutritionScreen() {
   const { user } = useAuth();
   const { allowed: nutritionIntelAllowed } = useEntitlement('nutrition-intelligence');
   const units = useUnits();
@@ -524,3 +525,5 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.xxl,
   },
 });
+
+export default withScreenBoundary(NutritionScreen, 'Nutrition');
