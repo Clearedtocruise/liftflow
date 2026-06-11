@@ -51,7 +51,6 @@ src/services/exerciseStatsService.ts
 src/services/initNotifications.ts
 src/services/workoutSessionNotificationService.ts
 src/types/exerciseCard.ts
-scripts/
 backend/src/lib/betaManagement.ts
 backend/src/middleware/requireFounderUser.ts
 .preview/

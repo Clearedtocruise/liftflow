@@ -101,6 +101,7 @@ const config: ExpoConfig = {
         sounds: [],
       },
     ],
+    './plugins/withLocalNotificationsOnly.js',
     [
       'expo-splash-screen',
       {
