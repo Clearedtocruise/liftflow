@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, RefreshControl, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
+import { withScreenBoundary } from '@/components/observability/withScreenBoundary';
+
 import { LogoMark } from '@/components/brand/LogoMark';
 import { RingGauge } from '@/components/dashboard/RingGauge';
 import { WorkoutHeroCard } from '@/components/dashboard/WorkoutHeroCard';
@@ -26,7 +28,7 @@ import { trainingService } from '@/services/trainingService';
 import { useWorkoutSession } from '@/state/workout/WorkoutSessionContext';
 import type { DashboardSummary, NutritionGoals, PlannedWorkout, ProgramDashboard } from '@/types';
 
-export default function DashboardScreen() {
+function DashboardScreen() {
   const { user } = useAuth();
   const { isPremium } = useSubscription();
   const units = useUnits();
@@ -324,3 +326,5 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.md,
   },
 });
+
+export default withScreenBoundary(DashboardScreen, 'Home');

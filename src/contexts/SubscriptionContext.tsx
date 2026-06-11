@@ -3,6 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { PRO_FEATURE_LABELS, type ProFeatureId } from '@/constants/subscription';
 import { useAuth } from '@/hooks/useAuth';
 import { hasProFeature, isTrialingSubscription } from '@/lib/entitlements';
+import { forensicLog, forensicLogError } from '@/lib/forensicLog';
 import { notificationService } from '@/services/notificationService';
 import { productAnalyticsService } from '@/services/productAnalyticsService';
 import { subscriptionService } from '@/services/subscriptionService';
@@ -37,19 +38,27 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     }
 
     setLoading(true);
+    forensicLog('REVENUECAT_INIT_START', { userId: user.id });
     try {
       const rcResult = await subscriptionService.syncFromRevenueCat(user.id);
       if (rcResult.success) {
         setSubscription(rcResult.data);
         setLoading(false);
+        forensicLog('REVENUECAT_INIT_SUCCESS', { source: 'revenuecat' });
         return;
       }
-    } catch {
-      // RevenueCat not configured — fall back to Supabase
+    } catch (error) {
+      forensicLogError('REVENUECAT_INIT_FAIL', error, { phase: 'revenuecat_sync' });
     }
-    const result = await subscriptionService.getSubscription(user.id);
-    if (result.success) setSubscription(result.data);
-    setLoading(false);
+    try {
+      const result = await subscriptionService.getSubscription(user.id);
+      if (result.success) setSubscription(result.data);
+      setLoading(false);
+      forensicLog('REVENUECAT_INIT_SUCCESS', { source: 'supabase_fallback' });
+    } catch (error) {
+      setLoading(false);
+      forensicLogError('REVENUECAT_INIT_FAIL', error, { phase: 'supabase_fallback' });
+    }
   }, [user]);
 
   useEffect(() => {

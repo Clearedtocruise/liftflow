@@ -2,6 +2,8 @@ import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, StyleSheet, View } from 'react-native';
 
+import { withScreenBoundary } from '@/components/observability/withScreenBoundary';
+
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { SectionHeader } from '@/components/layout/SectionHeader';
@@ -26,6 +28,7 @@ import { useUnits } from '@/hooks/useUnits';
 import { useVoiceRecognition } from '@/hooks/useVoiceRecognition';
 import { useVoiceSettings } from '@/hooks/useVoiceSettings';
 import { useWorkoutLocations } from '@/hooks/useWorkoutLocations';
+import { forensicLog, forensicLogError } from '@/lib/forensicLog';
 import { formatWorkoutWeightForInput, normalizeVoiceWeightToKg, weightStepKg } from '@/lib/unitConversion';
 import { speakVoiceConfirmation } from '@/lib/voice';
 import { bodyService } from '@/services/bodyService';
@@ -40,7 +43,13 @@ import { workoutRecommendationService } from '@/services/workoutRecommendationSe
 import { useWorkoutSession } from '@/state/workout/WorkoutSessionContext';
 import type { ParsedVoiceCommand, WorkoutSet } from '@/types';
 
-export default function WorkoutScreen() {
+function WorkoutScreen() {
+  useEffect(() => {
+    forensicLog('WORKOUT_LOAD_START');
+    return () => {
+      forensicLog('WORKOUT_LOAD_SUCCESS', { phase: 'unmount' });
+    };
+  }, []);
   const { user } = useAuth();
   const units = useUnits();
   const { allowed: transformationAllowed } = useEntitlement('transformation-engine');
@@ -734,3 +743,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.xl,
   },
 });
+
+export default withScreenBoundary(WorkoutScreen, 'Workout');

@@ -1,6 +1,7 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { VOICE_STABILIZATION_MESSAGE } from '@/constants/stabilization';
+import { forensicLog } from '@/lib/forensicLog';
 import type { VoiceInputMode } from '@/types/voice';
 
 export type VoiceRecognitionOptions = {
@@ -13,6 +14,11 @@ export type VoiceRecognitionOptions = {
 /** Stabilization stub — never loads expo-speech-recognition. */
 export function useVoiceRecognition(options: VoiceRecognitionOptions = {}) {
   const { inputMode = 'push_to_talk' } = options;
+
+  useEffect(() => {
+    forensicLog('VOICE_INIT_START', { mode: 'stub' });
+    forensicLog('VOICE_INIT_SUCCESS', { available: false, reason: 'stabilization_stub' });
+  }, []);
 
   const [interimTranscript] = useState('');
   const [isListening] = useState(false);

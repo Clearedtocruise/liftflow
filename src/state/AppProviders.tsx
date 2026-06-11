@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 
 import { SentryBootstrap } from '@/components/observability/SentryBootstrap';
+import { diagnosticAtLeast } from '@/constants/diagnosticMode';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { SubscriptionProvider } from '@/contexts/SubscriptionContext';
 import { WatchCompanionBridge } from '@/state/WatchCompanionBridge';
@@ -15,6 +16,10 @@ function WorkoutSessionBridge({ children }: { children: ReactNode }) {
   );
 }
 
+function PassThrough({ children }: { children: ReactNode }) {
+  return <>{children}</>;
+}
+
 export function AppProviders({ children }: { children: ReactNode }) {
   return (
     <AuthProvider>
@@ -24,12 +29,15 @@ export function AppProviders({ children }: { children: ReactNode }) {
 }
 
 function AuthenticatedShell({ children }: { children: ReactNode }) {
+  const Shell = diagnosticAtLeast('revenuecat') ? SubscriptionProvider : PassThrough;
+  const WorkoutBridge = diagnosticAtLeast('workout') ? WorkoutSessionBridge : PassThrough;
+
   return (
     <>
-      <SentryBootstrap />
-      <SubscriptionProvider>
-        <WorkoutSessionBridge>{children}</WorkoutSessionBridge>
-      </SubscriptionProvider>
+      {diagnosticAtLeast('full') ? <SentryBootstrap /> : null}
+      <Shell>
+        <WorkoutBridge>{children}</WorkoutBridge>
+      </Shell>
     </>
   );
 }

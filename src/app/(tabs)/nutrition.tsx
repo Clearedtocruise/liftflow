@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
+import { withScreenBoundary } from '@/components/observability/withScreenBoundary';
 import { Card } from '@/components/layout/Card';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
@@ -14,13 +15,20 @@ import { useEntitlement } from '@/hooks/useEntitlement';
 import { useUnits } from '@/hooks/useUnits';
 import { parseNutritionVoice } from '@/lib/nutritionVoice';
 import { parseVoiceCommandLocal } from '@/lib/voice/parseVoiceCommand';
+import { forensicLog, forensicLogError } from '@/lib/forensicLog';
 import { nutritionIntelligenceService } from '@/services/nutritionIntelligenceService';
 import { nutritionService } from '@/services/nutritionService';
 import type { DailyNutritionSummary, GroceryList, Meal, MealType, NutritionGoals } from '@/types';
 
 const MEAL_TYPES: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack', 'pre_workout', 'post_workout'];
 
-export default function NutritionScreen() {
+function NutritionScreen() {
+  useEffect(() => {
+    forensicLog('NUTRITION_LOAD_START');
+    return () => {
+      forensicLog('NUTRITION_LOAD_SUCCESS', { phase: 'unmount' });
+    };
+  }, []);
   const { user } = useAuth();
   const { allowed: nutritionIntelAllowed } = useEntitlement('nutrition-intelligence');
   const units = useUnits();
@@ -524,3 +532,5 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.xxl,
   },
 });
+
+export default withScreenBoundary(NutritionScreen, 'Nutrition');

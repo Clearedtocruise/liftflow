@@ -75,6 +75,14 @@
         "SENTRY_PROJECT": "4511486225285120"
       }
     },
+    "diagnostic-boot-test": {
+      "extends": "testflight",
+      "channel": "diagnostic-boot-test",
+      "env": {
+        "EXPO_PUBLIC_BOOT_TEST": "true",
+        "EXPO_PUBLIC_DIAGNOSTIC_STAGE": "boot"
+      }
+    },
     "production-apk": {
       "extends": "production",
       "distribution": "internal",
@@ -84,6 +92,14 @@
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {
+        "ascAppId": "6775314524",
+        "appleTeamId": "DZXP5Q6649"
+      }
+    },
+    "testflight": {
+      "extends": "production"
+    }
   }
 }

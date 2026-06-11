@@ -3,6 +3,8 @@ import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, StyleSheet, TextInput, View } from 'react-native';
 
+import { withScreenBoundary } from '@/components/observability/withScreenBoundary';
+
 import { Card } from '@/components/layout/Card';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
@@ -30,7 +32,7 @@ import { userService } from '@/services/userService';
 import type { ConfirmationMode } from '@/types/common';
 import type { VoiceInputMode } from '@/types/voice';
 
-export default function SettingsScreen() {
+function SettingsScreen() {
   const { user, signOut, refreshProfile, deleteAccount } = useAuth();
   const units = useUnits();
   const { isPremium } = useSubscription();
@@ -522,3 +524,5 @@ const styles = StyleSheet.create({
     color: LiftFlowColors.textPrimary,
   },
 });
+
+export default withScreenBoundary(SettingsScreen, 'Profile');

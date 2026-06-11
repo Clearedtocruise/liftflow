@@ -7,20 +7,47 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { FontProvider } from '@/components/brand/FontProvider';
+import { BootTestShell } from '@/components/observability/BootTestShell';
 import { StartupErrorBoundary } from '@/components/observability/StartupErrorBoundary';
 import { LiftFlowColors } from '@/constants/theme';
+import { DIAGNOSTIC_BOOT_TEST, diagnosticAtLeast } from '@/constants/diagnosticMode';
+import { forensicLog, installForensicCrashHandlers } from '@/lib/forensicLog';
 import { initMobileSentry, Sentry } from '@/lib/sentry';
-import { AppProviders } from '@/state/AppProviders';
+import { DiagnosticAppShell } from '@/state/DiagnosticAppShell';
 
-initMobileSentry();
+forensicLog('APP_START', {
+  bootTest: DIAGNOSTIC_BOOT_TEST,
+  stage: process.env.EXPO_PUBLIC_DIAGNOSTIC_STAGE ?? 'boot',
+});
+
+installForensicCrashHandlers();
+
+if (diagnosticAtLeast('full')) {
+  initMobileSentry();
+}
 
 function RootLayout() {
+  const useFullShell = diagnosticAtLeast('supabase');
+
+  if (!useFullShell) {
+    return (
+      <GestureHandlerRootView style={styles.root}>
+        <SafeAreaProvider>
+          <StartupErrorBoundary>
+            <BootTestShell />
+            <StatusBar style="light" />
+          </StartupErrorBoundary>
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
+    );
+  }
+
   return (
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider>
         <StartupErrorBoundary>
           <FontProvider>
-            <AppProviders>
+            <DiagnosticAppShell>
               <StatusBar style="light" />
               <Stack
                 screenOptions={{
@@ -41,7 +68,7 @@ function RootLayout() {
                 />
                 <Stack.Screen name="legal" options={{ animation: 'slide_from_right' }} />
               </Stack>
-            </AppProviders>
+            </DiagnosticAppShell>
           </FontProvider>
         </StartupErrorBoundary>
       </SafeAreaProvider>
@@ -49,7 +76,9 @@ function RootLayout() {
   );
 }
 
-export default Sentry.wrap(RootLayout);
+const WrappedRootLayout = diagnosticAtLeast('full') ? Sentry.wrap(RootLayout) : RootLayout;
+
+export default WrappedRootLayout;
 
 const styles = StyleSheet.create({
   root: {
