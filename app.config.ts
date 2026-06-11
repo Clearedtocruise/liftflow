@@ -93,6 +93,8 @@ const config: ExpoConfig = {
           'ONE MORE uses your location to detect when you arrive at a saved gym and suggest starting a workout.',
       },
     ],
+    // expo-notifications plugin omitted — package autolinks; strip push entitlement below.
+    './plugins/withLocalNotificationsOnly.js',
     [
       'expo-splash-screen',
       {
