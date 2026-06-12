@@ -37,7 +37,7 @@ export function buildSupersetGroups(planExercises: EditableWorkoutExercise[]): S
   });
 
   return [...byId.entries()]
-    .filter(([, indices) => indices.length >= 2)
+    .filter(([, indices]) => indices.length >= 2)
     .map(([id, memberIndices]) => ({
       id,
       memberIndices: [...memberIndices].sort((a, b) => a - b),
