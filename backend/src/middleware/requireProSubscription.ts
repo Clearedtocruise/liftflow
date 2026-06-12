@@ -1,5 +1,6 @@
 import type { NextFunction, Response } from 'express';
 
+import { hasPremiumProfileAccess } from '../lib/premiumAccessOverride.js';
 import { requireAdmin } from '../lib/supabase.js';
 import type { AuthedRequest } from './authUser.js';
 
@@ -36,6 +37,19 @@ export async function requireProSubscription(req: ProRequest, res: Response, nex
     }
 
     const db = requireAdmin();
+
+    const { data: profile, error: profileError } = await db
+      .from('profiles')
+      .select('email, is_beta_tester')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (profileError) throw profileError;
+    if (hasPremiumProfileAccess(profile)) {
+      next();
+      return;
+    }
+
     const { data, error } = await db.from('subscriptions').select('tier, status, current_period_end').eq('user_id', userId).maybeSingle();
 
     if (error) throw error;

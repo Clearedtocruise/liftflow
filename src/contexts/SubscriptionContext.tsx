@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 
 import { PRO_FEATURE_LABELS, type ProFeatureId } from '@/constants/subscription';
 import { useAuth } from '@/hooks/useAuth';
-import { hasPremiumAccessOverride } from '@/lib/accessOverride';
+import { hasPremiumAccessOverride, isBetaTesterUser, isFounderUser } from '@/lib/accessOverride';
 import { hasProFeature, isTrialingSubscription } from '@/lib/entitlements';
 import { productAnalyticsService } from '@/services/productAnalyticsService';
 import { subscriptionService } from '@/services/subscriptionService';
@@ -13,6 +13,8 @@ type SubscriptionContextValue = {
   isPremium: boolean;
   isTrialing: boolean;
   isPro: boolean;
+  isFounder: boolean;
+  isBetaTester: boolean;
   loading: boolean;
   isNativePurchasesAvailable: boolean;
   isRevenueCatConfigured: boolean;
@@ -108,6 +110,8 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
   }, [user, refresh]);
 
   const premiumOverride = hasPremiumAccessOverride(user);
+  const isFounder = isFounderUser(user?.email);
+  const isBetaTester = isBetaTesterUser(user);
   const isPremium = premiumOverride || subscriptionService.isPremium(subscription);
   const isTrialing = !premiumOverride && isTrialingSubscription(subscription);
 
@@ -123,6 +127,8 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
       subscription,
       isPremium,
       isPro: isPremium,
+      isFounder,
+      isBetaTester,
       isTrialing,
       loading,
       isNativePurchasesAvailable: subscriptionService.isNativePurchasesAvailable(),
@@ -131,7 +137,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
       featureLabel,
       refresh,
     }),
-    [subscription, isPremium, isTrialing, loading, hasFeature, featureLabel, refresh],
+    [subscription, isPremium, isFounder, isBetaTester, isTrialing, loading, hasFeature, featureLabel, refresh],
   );
 
   return <SubscriptionContext.Provider value={value}>{children}</SubscriptionContext.Provider>;

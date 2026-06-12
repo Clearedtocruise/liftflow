@@ -33,6 +33,7 @@ export async function redeemBetaInvite(userId: string, code: string) {
       beta_invite_code: normalized,
       beta_tester_tag: invite.is_internal ? 'internal' : 'beta',
       is_internal_tester: invite.is_internal,
+      is_beta_tester: true,
     })
     .eq('id', userId);
 

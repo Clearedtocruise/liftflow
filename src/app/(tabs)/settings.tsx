@@ -14,7 +14,7 @@ import {
     isWorkoutLocationDetectionEnabled,
     PRIVACY_WORKOUT_LOCATION_DETECTION,
 } from '@/constants/locationPreferences';
-import { Brand, LiftFlowColors, Spacing } from '@/constants/theme';
+import { Brand, LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import { summarizeGoals } from '@/constants/trainingGoals';
 import { getPrimaryGymLabel, summarizeEquipment } from '@/constants/trainingProfile';
 import { summarizeUnitPreferences } from '@/constants/units';
@@ -33,7 +33,7 @@ import type { VoiceInputMode } from '@/types/voice';
 export default function SettingsScreen() {
   const { user, signOut, refreshProfile, deleteAccount } = useAuth();
   const units = useUnits();
-  const { isPremium } = useSubscription();
+  const { isPremium, isFounder, isBetaTester } = useSubscription();
   const [confirmationMode, setConfirmationMode] = useState<ConfirmationMode>('smart');
   const [voiceAutoLog, setVoiceAutoLog] = useState(true);
   const [voiceFeedback, setVoiceFeedback] = useState(true);
@@ -146,6 +146,24 @@ export default function SettingsScreen() {
           <AppText variant="footnote" color="textSecondary">
             {user.displayName ?? user.email}
           </AppText>
+        ) : null}
+        {isFounder || isBetaTester ? (
+          <View style={styles.accessBadges}>
+            {isFounder ? (
+              <View style={styles.accessBadge}>
+                <AppText variant="caption" color="accent">
+                  Founder
+                </AppText>
+              </View>
+            ) : null}
+            {isBetaTester ? (
+              <View style={styles.accessBadge}>
+                <AppText variant="caption" color="accent">
+                  Beta Tester
+                </AppText>
+              </View>
+            ) : null}
+          </View>
         ) : null}
         <View style={styles.headerAccent} />
       </View>
@@ -333,7 +351,15 @@ export default function SettingsScreen() {
       <Card style={styles.group}>
         <SettingsRow
           label="Subscription"
-          value={isPremium ? 'Pro' : 'Free'}
+          value={
+            isPremium
+              ? isFounder
+                ? 'Pro · Founder'
+                : isBetaTester
+                  ? 'Pro · Beta'
+                  : 'Pro'
+              : 'Free'
+          }
           icon={
             <AppSymbol name="creditcard.fill" fallback={SYMBOL_FALLBACKS['creditcard.fill']} size={20} tintColor={LiftFlowColors.textSecondary} />
           }
@@ -413,7 +439,7 @@ export default function SettingsScreen() {
         <SectionHeader title="Beta" subtitle="Closed beta program" />
       </View>
       <Card style={styles.group}>
-        <BetaInviteRow userId={user?.id} />
+        <BetaInviteRow userId={user?.id} isBetaTester={isBetaTester} onRedeemed={refreshProfile} />
       </Card>
 
       <View style={styles.sectionGap}>
@@ -441,7 +467,15 @@ export default function SettingsScreen() {
   );
 }
 
-function BetaInviteRow({ userId }: { userId?: string }) {
+function BetaInviteRow({
+  userId,
+  isBetaTester,
+  onRedeemed,
+}: {
+  userId?: string;
+  isBetaTester: boolean;
+  onRedeemed: () => Promise<void>;
+}) {
   const [code, setCode] = useState('');
   const [status, setStatus] = useState<string | null>(null);
 
@@ -453,6 +487,7 @@ function BetaInviteRow({ userId }: { userId?: string }) {
     const result = await feedbackService.redeemInvite(userId, code.trim());
     if (result.success) {
       setStatus(`Redeemed: ${result.data.label ?? result.data.code}`);
+      await onRedeemed();
       Alert.alert('Welcome to the beta', 'Your tester access is active.');
     } else {
       Alert.alert('Invalid code', result.error);
@@ -461,6 +496,11 @@ function BetaInviteRow({ userId }: { userId?: string }) {
 
   return (
     <View style={{ gap: Spacing.sm }}>
+      {isBetaTester ? (
+        <AppText variant="footnote" color="accent">
+          Beta access active — full Pro features unlocked
+        </AppText>
+      ) : null}
       <TextInput
         style={styles.inviteInput}
         placeholder="Beta invite code"
@@ -493,6 +533,20 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     backgroundColor: LiftFlowColors.primary,
     marginTop: Spacing.sm,
+  },
+  accessBadges: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.sm,
+    marginTop: Spacing.xs,
+  },
+  accessBadge: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    borderRadius: Radius.full,
+    backgroundColor: LiftFlowColors.surfaceElevated,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: LiftFlowColors.accent,
   },
   sectionGap: {
     marginTop: Spacing.xxl,
