@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { ActiveWorkoutScreen } from '@/components/workout/execution/ActiveWorkoutScreen';
@@ -9,12 +9,13 @@ import { LiftFlowColors } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 import { enrichWithSupersetGroups } from '@/lib/supersetFlow';
 import { buildWeekPlan, getWeekRange, isConditioningWorkout, type WeekDayPlan } from '@/lib/weekPlan';
-import { coachActivationService } from '@/services/coachActivationService';
+import { serializeChallengeNotes } from '@/lib/workoutChallengeFlow';
 import { productAnalyticsService } from '@/services/productAnalyticsService';
-import { socialShareService } from '@/services/socialShareService';
 import { trainingService } from '@/services/trainingService';
+import { workoutService } from '@/services/workoutService';
 import { useWorkoutPlanDraft } from '@/state/workout/WorkoutPlanDraftContext';
 import { useWorkoutSession } from '@/state/workout/WorkoutSessionContext';
+import type { WorkoutChallengeRecord } from '@/types/workoutChallenge';
 
 export default function WorkoutScreen() {
   const { user } = useAuth();
@@ -23,6 +24,7 @@ export default function WorkoutScreen() {
 
   const [weekDays, setWeekDays] = useState<WeekDayPlan[]>([]);
   const [loadingPlan, setLoadingPlan] = useState(true);
+  const [challengeRecords, setChallengeRecords] = useState<WorkoutChallengeRecord[]>([]);
 
   const loadWeekPlan = useCallback(async () => {
     if (!user?.id) {
@@ -83,17 +85,30 @@ export default function WorkoutScreen() {
   const handleFinishWorkout = useCallback(async () => {
     const completed = await endSession();
     if (!completed || !user) return;
+
+    if (challengeRecords.length > 0) {
+      const notes = serializeChallengeNotes(challengeRecords);
+      if (notes) {
+        await workoutService.updateSession(completed.id, { notes });
+      }
+    }
+
     void productAnalyticsService.trackWorkoutCompleted(user.id, completed.id);
-    const coachResult = await coachActivationService.getPostWorkoutSummary(user.id, completed.id);
-    const summary = coachResult.success ? coachResult.data : null;
-    const body = summary
-      ? `${summary.workoutSummary}\n\n${summary.recoveryRecommendation}\n\n${summary.nutritionRecommendation}`
-      : `Duration: ${Math.round((completed.durationSeconds ?? 0) / 60)} min · ${completed.totalSets ?? 0} sets`;
-    Alert.alert(summary ? 'Workout Complete' : 'Workout complete', body, [
-      { text: 'Done', style: 'cancel' },
-      { text: 'Share', onPress: () => socialShareService.shareWorkoutRecap(completed) },
-    ]);
-  }, [endSession, user]);
+    const challengesPayload = challengeRecords;
+    setChallengeRecords([]);
+
+    router.push({
+      pathname: '/(tabs)/workout/summary',
+      params: {
+        sessionId: completed.id,
+        challenges: JSON.stringify(challengesPayload),
+      },
+    });
+  }, [challengeRecords, endSession, user]);
+
+  const handleChallengeRecord = useCallback((record: WorkoutChallengeRecord) => {
+    setChallengeRecords((current) => [...current, record]);
+  }, []);
 
   if (loading && !session) {
     return (
@@ -122,6 +137,8 @@ export default function WorkoutScreen() {
       <ActiveWorkoutScreen
         session={session}
         planExercises={planForSession}
+        challengeRecords={challengeRecords}
+        onChallengeRecord={handleChallengeRecord}
         onFinish={handleFinishWorkout}
         onCancel={cancelSession}
       />

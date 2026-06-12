@@ -9,6 +9,7 @@ import { AppText } from '@/components/ui/AppText';
 import { ExerciseCompleteCard } from '@/components/workout/execution/ExerciseCompleteCard';
 import { RestTimerOverlay } from '@/components/workout/execution/RestTimerOverlay';
 import { SetLoggingControls } from '@/components/workout/execution/SetLoggingControls';
+import { WorkoutChallengeModal } from '@/components/workout/execution/WorkoutChallengeModal';
 import { SmartProgressionCard } from '@/components/workout/SmartProgressionCard';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import { DEFAULT_REST_SECONDS } from '@/constants/workout';
@@ -28,20 +29,35 @@ import {
     resolvePostSetSupersetAction,
 } from '@/lib/supersetFlow';
 import { formatWorkoutWeightForInput } from '@/lib/unitConversion';
+import { pickWorkoutChallenge } from '@/lib/workoutChallengeFlow';
 import { parseTargetReps } from '@/lib/workoutPlan';
 import { workoutService } from '@/services/workoutService';
 import { useWorkoutSession } from '@/state/workout/WorkoutSessionContext';
 import type { WorkoutSession } from '@/types';
+import type {
+    WorkoutChallengeRecord,
+    WorkoutChallengeTemplate,
+    WorkoutChallengeTrigger,
+} from '@/types/workoutChallenge';
 import type { EditableWorkoutExercise } from '@/types/workoutExecution';
 
 type ActiveWorkoutScreenProps = {
   session: WorkoutSession;
   planExercises: EditableWorkoutExercise[];
+  challengeRecords: WorkoutChallengeRecord[];
+  onChallengeRecord: (record: WorkoutChallengeRecord) => void;
   onFinish: () => void;
   onCancel: () => void;
 };
 
-export function ActiveWorkoutScreen({ session, planExercises, onFinish, onCancel }: ActiveWorkoutScreenProps) {
+export function ActiveWorkoutScreen({
+  session,
+  planExercises,
+  challengeRecords,
+  onChallengeRecord,
+  onFinish,
+  onCancel,
+}: ActiveWorkoutScreenProps) {
   const { user } = useAuth();
   const units = useUnits();
   const {
@@ -75,7 +91,10 @@ export function ActiveWorkoutScreen({ session, planExercises, onFinish, onCancel
   const [exerciseHadPr, setExerciseHadPr] = useState(false);
   const [restPaused, setRestPaused] = useState(false);
   const [restTargetSeconds, setRestTargetSeconds] = useState(DEFAULT_REST_SECONDS);
+  const [activeChallenge, setActiveChallenge] = useState<WorkoutChallengeTemplate | null>(null);
+  const [challengeTrigger, setChallengeTrigger] = useState<WorkoutChallengeTrigger>('between_sets');
   const pendingAdvanceRef = useRef<number | null>(null);
+  const offeredExerciseCompleteRef = useRef<number | null>(null);
 
   const currentExercise = sortedExercises[currentIndex];
   const planMeta = planExercises[currentIndex] ?? planExercises.find(
@@ -191,6 +210,58 @@ export function ActiveWorkoutScreen({ session, planExercises, onFinish, onCancel
   }, [groupComplete, completedSets]);
 
   useEffect(() => {
+    if (!showComplete || activeChallenge) return;
+    if (offeredExerciseCompleteRef.current === currentIndex) return;
+
+    const template = pickWorkoutChallenge(challengeRecords, 'between_exercises');
+    if (!template) return;
+
+    offeredExerciseCompleteRef.current = currentIndex;
+    setChallengeTrigger('between_exercises');
+    setActiveChallenge(template);
+  }, [showComplete, activeChallenge, challengeRecords, currentIndex]);
+
+  const offerBetweenSetsChallenge = useCallback(() => {
+    if (activeChallenge || groupComplete) return;
+    const template = pickWorkoutChallenge(challengeRecords, 'between_sets');
+    if (!template) return;
+    setChallengeTrigger('between_sets');
+    setActiveChallenge(template);
+  }, [activeChallenge, challengeRecords, groupComplete]);
+
+  const handleChallengeSkip = useCallback(() => {
+    if (!activeChallenge) return;
+    onChallengeRecord({
+      challengeId: activeChallenge.id,
+      kind: activeChallenge.kind,
+      title: activeChallenge.title,
+      prompt: activeChallenge.prompt,
+      status: 'skipped',
+      trigger: challengeTrigger,
+      exerciseName: currentExercise?.exercise?.name,
+    });
+    setActiveChallenge(null);
+  }, [activeChallenge, challengeTrigger, currentExercise?.exercise?.name, onChallengeRecord]);
+
+  const handleChallengeComplete = useCallback(
+    (loggedValue?: string) => {
+      if (!activeChallenge) return;
+      onChallengeRecord({
+        challengeId: activeChallenge.id,
+        kind: activeChallenge.kind,
+        title: activeChallenge.title,
+        prompt: activeChallenge.prompt,
+        status: 'completed',
+        trigger: challengeTrigger,
+        exerciseName: currentExercise?.exercise?.name,
+        loggedValue,
+      });
+      setActiveChallenge(null);
+    },
+    [activeChallenge, challengeTrigger, currentExercise?.exercise?.name, onChallengeRecord],
+  );
+
+  useEffect(() => {
     if (restSecondsRemaining !== 0 || pendingAdvanceRef.current === null) return;
     setCurrentIndex(pendingAdvanceRef.current);
     pendingAdvanceRef.current = null;
@@ -239,6 +310,8 @@ export function ActiveWorkoutScreen({ session, planExercises, onFinish, onCancel
     } else if (postSetAction.afterRestAdvanceIndex != null) {
       pendingAdvanceRef.current = postSetAction.afterRestAdvanceIndex;
     }
+
+    offerBetweenSetsChallenge();
   }
 
   function handleNextExercise() {
@@ -467,7 +540,7 @@ export function ActiveWorkoutScreen({ session, planExercises, onFinish, onCancel
       </ScreenContainer>
 
       <RestTimerOverlay
-        visible={restActive && !showComplete}
+        visible={restActive && !showComplete && !activeChallenge}
         secondsRemaining={restSecondsRemaining}
         recommendedSeconds={activeRestPeriod?.recommendedSeconds ?? restTargetSeconds}
         isPaused={restPaused}
@@ -484,6 +557,15 @@ export function ActiveWorkoutScreen({ session, planExercises, onFinish, onCancel
               ? `${nextExercise.suggestedReps} reps`
               : null
         }
+      />
+
+      <WorkoutChallengeModal
+        visible={activeChallenge != null}
+        challenge={activeChallenge}
+        exerciseName={currentExercise?.exercise?.name}
+        trigger={challengeTrigger}
+        onSkip={handleChallengeSkip}
+        onComplete={handleChallengeComplete}
       />
     </View>
   );
