@@ -270,8 +270,17 @@ export const trainingService: ITrainingService = {
 
   async regenerateProgramIfNeeded(userId: string) {
     try {
+      const { from, to } = await import('@/lib/weekPlan').then((m) => m.getWeekRange());
+      const weekRes = await this.getPlannedWorkouts(userId, from, to);
+      const weekPlans = weekRes.success ? weekRes.data : [];
+      const lowExerciseCount = weekPlans.some((workout) => {
+        if (workout.metadata?.sessionKind === 'cardio') return false;
+        const count = workout.metadata?.exercises?.length ?? 0;
+        return count > 0 && count < 8;
+      });
+
       const dashboard = await this.getDashboard(userId);
-      if (dashboard.success && dashboard.data) {
+      if (dashboard.success && dashboard.data && !lowExerciseCount) {
         const version = dashboard.data.program.metadata?.planRulesVersion;
         if (version === WORKOUT_PLAN_RULES_VERSION) {
           return ok({ regenerated: false });
@@ -279,7 +288,7 @@ export const trainingService: ITrainingService = {
       }
 
       const token = await getAccessToken();
-      const result = await api.regenerateProgram(userId, token);
+      const result = await api.regenerateProgram(userId, token, lowExerciseCount || undefined);
       return ok({ regenerated: result.regenerated });
     } catch (e) {
       return fromError(e);

@@ -17,6 +17,7 @@ import { generatePostWorkoutCoachSummary } from '../lib/postWorkoutCoach.js';
 import {
     generateTrainingProgram,
     getPlannedWorkoutsInRange,
+    getPlannedWorkoutsInRangeWithRefresh,
     getProgramDashboard,
     regenerateActiveProgram,
     reschedulePlannedWorkout,
@@ -581,7 +582,7 @@ trainingRouter.post('/programs/regenerate', async (req, res) => {
       res.status(400).json({ message: 'userId is required' });
       return;
     }
-    const result = await regenerateActiveProgram(userId);
+    const result = await regenerateActiveProgram(userId, { force: Boolean((req.body as { force?: boolean }).force) });
     res.json(result);
   } catch (error) {
     res.status(500).json({ message: error instanceof Error ? error.message : 'Program regeneration failed' });
@@ -625,7 +626,7 @@ trainingRouter.get('/programs/planned', async (req, res) => {
       res.status(400).json({ message: 'userId, from, and to query params required' });
       return;
     }
-    res.json(await getPlannedWorkoutsInRange(userId, from, to));
+    res.json(await getPlannedWorkoutsInRangeWithRefresh(userId, from, to));
   } catch (error) {
     res.status(500).json({ message: error instanceof Error ? error.message : 'Planned workouts failed' });
   }

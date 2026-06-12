@@ -177,10 +177,10 @@ export const api = {
     ),
   getProgramDashboard: (userId: string, token?: string) =>
     apiClient.get<Record<string, unknown> | null>(`/api/training/programs/dashboard?userId=${userId}`, token),
-  regenerateProgram: (userId: string, token?: string) =>
+  regenerateProgram: (userId: string, token?: string, force?: boolean) =>
     apiClient.post<{ regenerated: boolean; plannedCount?: number; reason?: string }>(
       '/api/training/programs/regenerate',
-      { userId },
+      { userId, force: force === true },
       token,
     ),
   adaptProgram: (userId: string, token?: string) =>

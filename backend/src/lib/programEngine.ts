@@ -40,7 +40,9 @@ export type CreateProgramInput = {
 };
 
 /** Bump when workout planning rules change so existing programs can be regenerated. */
-export const PLAN_RULES_VERSION = 2;
+export const PLAN_RULES_VERSION = 3;
+
+const MIN_ACCEPTABLE_EXERCISES_PER_SESSION = 8;
 
 type StoredProgramMetadata = {
   programType?: ProgramType;
@@ -348,7 +350,7 @@ async function buildProgramInputFromProfile(userId: string): Promise<CreateProgr
   };
 }
 
-export async function regenerateActiveProgram(userId: string) {
+export async function regenerateActiveProgram(userId: string, options?: { force?: boolean }) {
   const db = requireAdmin();
   const { data: program } = await db
     .from('training_programs')
@@ -359,7 +361,7 @@ export async function regenerateActiveProgram(userId: string) {
 
   if (program) {
     const meta = (program.metadata ?? {}) as StoredProgramMetadata;
-    if (meta.planRulesVersion === PLAN_RULES_VERSION) {
+    if (!options?.force && meta.planRulesVersion === PLAN_RULES_VERSION) {
       return { regenerated: false as const, reason: 'already_current' as const, program, plannedCount: 0 };
     }
 
@@ -481,6 +483,31 @@ export async function getPlannedWorkoutsInRange(userId: string, from: string, to
 
   if (error) throw error;
   return data ?? [];
+}
+
+function plannedWorkoutExerciseCount(workout: Record<string, unknown>): number {
+  const meta = (workout.metadata ?? {}) as { sessionKind?: string; exercises?: unknown[] };
+  if (meta.sessionKind === 'cardio') return WORKOUT_TARGET_EXERCISES;
+  return meta.exercises?.length ?? 0;
+}
+
+export function weekPlansNeedExerciseRefresh(
+  workouts: Record<string, unknown>[],
+): boolean {
+  return workouts.some((workout) => {
+    if (workout.status !== 'planned') return false;
+    const count = plannedWorkoutExerciseCount(workout);
+    return count > 0 && count < MIN_ACCEPTABLE_EXERCISES_PER_SESSION;
+  });
+}
+
+export async function getPlannedWorkoutsInRangeWithRefresh(userId: string, from: string, to: string) {
+  let workouts = await getPlannedWorkoutsInRange(userId, from, to);
+  if (weekPlansNeedExerciseRefresh(workouts)) {
+    await regenerateActiveProgram(userId, { force: true });
+    workouts = await getPlannedWorkoutsInRange(userId, from, to);
+  }
+  return workouts;
 }
 
 export type { DaySlot, ProgramFrequency, ProgramType };

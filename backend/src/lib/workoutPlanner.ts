@@ -196,12 +196,30 @@ export async function loadAvailableExercises(
     .select('id, name, slug, category, equipment, muscle_groups, metadata')
     .eq('is_system', true);
 
-  return (data ?? [])
+  let filtered = (data ?? [])
     .map((row) => ({
       ...row,
       metadata: (row.metadata ?? {}) as ExerciseRecord['metadata'],
     }))
     .filter((exercise) => exerciseMeetsEquipment(exercise, available));
+
+  if (filtered.length < WORKOUT_TARGET_EXERCISES) {
+    const expanded = expandAvailableEquipment([...equipment, 'bodyweight', 'bands', 'dumbbells']);
+    const supplemental = (data ?? [])
+      .map((row) => ({
+        ...row,
+        metadata: (row.metadata ?? {}) as ExerciseRecord['metadata'],
+      }))
+      .filter((exercise) => exerciseMeetsEquipment(exercise, expanded));
+
+    const bySlug = new Map<string, ExerciseRecord>();
+    for (const exercise of [...filtered, ...supplemental]) {
+      bySlug.set(exercise.slug, exercise);
+    }
+    filtered = Array.from(bySlug.values());
+  }
+
+  return filtered;
 }
 
 export async function getRecentExerciseSlugs(userId: string, days = 21): Promise<Map<string, Date>> {
@@ -396,6 +414,46 @@ export function selectRotatedExercises(
       usedSlugs.add(pick.slug);
     }
     if (selected.length >= count) break;
+  }
+
+  // Second and third picks from the same movement families (e.g. incline + flat press).
+  let stagnantRounds = 0;
+  while (selected.length < count && stagnantRounds < 3) {
+    let addedThisRound = 0;
+    for (const family of familiesNeeded) {
+      if (selected.length >= count) break;
+      const candidates = pool
+        .filter((e) => e.metadata?.movement_family === family && !usedSlugs.has(e.slug))
+        .map((e) => ({ exercise: e, score: scoreExercise(e, family, recentSlugs, lastWeekSlugs) }))
+        .sort((a, b) => b.score - a.score);
+
+      const pick = candidates[0]?.exercise;
+      if (pick) {
+        selected.push(pick);
+        usedSlugs.add(pick.slug);
+        addedThisRound += 1;
+      }
+    }
+    if (addedThisRound === 0) stagnantRounds += 1;
+    else stagnantRounds = 0;
+  }
+
+  if (selected.length < count) {
+    const targetSet = new Set(targetMuscles.map((m) => m.toLowerCase()));
+    const muscleMatched = pool
+      .filter((e) => !usedSlugs.has(e.slug))
+      .filter((e) => (e.muscle_groups ?? []).some((mg) => targetSet.has(mg.toLowerCase())))
+      .map((e) => ({
+        exercise: e,
+        score: scoreExercise(e, e.metadata?.movement_family ?? '', recentSlugs, lastWeekSlugs),
+      }))
+      .sort((a, b) => b.score - a.score);
+
+    for (const { exercise } of muscleMatched) {
+      if (selected.length >= count) break;
+      selected.push(exercise);
+      usedSlugs.add(exercise.slug);
+    }
   }
 
   if (selected.length < count) {
