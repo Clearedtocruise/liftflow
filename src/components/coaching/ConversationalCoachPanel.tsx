@@ -1,23 +1,21 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  TextInput,
-  View,
+    ActivityIndicator,
+    Alert,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    TextInput,
+    View,
 } from 'react-native';
 
 import { Card } from '@/components/layout/Card';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { AppText } from '@/components/ui/AppText';
-import { MicrophoneButton } from '@/components/workout/MicrophoneButton';
+import { VoiceComingSoonBanner } from '@/components/workout/VoiceComingSoonBanner';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
-import { useVoiceLogging } from '@/hooks/useVoiceLogging';
 import { conversationalCoachService } from '@/services/conversationalCoachService';
-import { voiceCoachingService } from '@/services/voiceCoachingService';
 import { COACH_STARTER_QUESTIONS, type ConversationalCoachResponse } from '@/types/conversationalCoach';
 
 type ChatMessage = {
@@ -43,7 +41,6 @@ export function ConversationalCoachPanel({ compact = false, context = 'general' 
   const [detailLevel, setDetailLevel] = useState<DetailLevel>('detailed');
   const [loading, setLoading] = useState(false);
   const [memorySummary, setMemorySummary] = useState<string | null>(null);
-  const { isListening, transcript, transcriptRef, startListening, stopListening } = useVoiceLogging();
 
   const loadHistory = useCallback(async () => {
     if (!user) return;
@@ -93,11 +90,6 @@ export function ConversationalCoachPanel({ compact = false, context = 'general' 
 
     appendCoachResponse(result.data, level);
     setMemorySummary(result.data.memorySummary);
-
-    if (level === 'voice') {
-      voiceCoachingService.stopSpeaking();
-      await voiceCoachingService.speakLine(result.data.voiceLine);
-    }
   }
 
   function appendCoachResponse(data: ConversationalCoachResponse, level: DetailLevel) {
@@ -113,23 +105,6 @@ export function ConversationalCoachPanel({ compact = false, context = 'general' 
         referencesUsed: data.referencesUsed,
       },
     ]);
-  }
-
-  async function handleMicPress() {
-    if (!user) return;
-    if (isListening) {
-      stopListening();
-      await new Promise((resolve) => setTimeout(resolve, 350));
-      const question = transcriptRef.current.trim();
-      if (!question) {
-        Alert.alert('No speech detected', 'Try asking your coach a question.');
-        return;
-      }
-      await sendQuestion(question, 'voice');
-    } else {
-      voiceCoachingService.stopSpeaking();
-      await startListening();
-    }
   }
 
   return (
@@ -193,13 +168,13 @@ export function ConversationalCoachPanel({ compact = false, context = 'general' 
           style={styles.input}
           placeholder="Ask your coach…"
           placeholderTextColor={LiftFlowColors.textTertiary}
-          value={isListening ? transcript : input}
+          value={input}
           onChangeText={setInput}
-          editable={!isListening}
           onSubmitEditing={() => sendQuestion(input)}
         />
-        <MicrophoneButton isListening={isListening || loading} onPress={handleMicPress} />
       </View>
+
+      <VoiceComingSoonBanner />
 
       <PrimaryButton label="Ask Coach" onPress={() => sendQuestion(input)} disabled={loading || !input.trim()} />
     </Card>

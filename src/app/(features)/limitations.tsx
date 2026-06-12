@@ -6,10 +6,9 @@ import { Card } from '@/components/layout/Card';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { AppText } from '@/components/ui/AppText';
-import { MicrophoneButton } from '@/components/workout/MicrophoneButton';
+import { VoiceComingSoonBanner } from '@/components/workout/VoiceComingSoonBanner';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
-import { useVoiceLogging } from '@/hooks/useVoiceLogging';
 import { limitationService } from '@/services/limitationService';
 import type { LimitationType, TrainingLimitation } from '@/types/coaching';
 
@@ -26,8 +25,6 @@ export default function LimitationsScreen() {
   const [painScore, setPainScore] = useState('5');
   const [isDiagnosed, setIsDiagnosed] = useState(false);
 
-  const { isListening, transcript, startListening, stopListening, clearTranscript } = useVoiceLogging();
-
   const load = useCallback(async () => {
     if (!user) return;
     const result = await limitationService.list(user.id, true);
@@ -38,13 +35,6 @@ export default function LimitationsScreen() {
   useEffect(() => {
     load();
   }, [load]);
-
-  useEffect(() => {
-    if (!isListening && transcript.trim()) {
-      setDescription(transcript.trim());
-      clearTranscript();
-    }
-  }, [isListening, transcript]);
 
   async function handleAdd() {
     if (!user) return;
@@ -130,19 +120,14 @@ export default function LimitationsScreen() {
           onChangeText={setDescription}
           multiline
         />
-        <View style={styles.micRow}>
-          <MicrophoneButton
-            isListening={isListening}
-            onPress={() => (isListening ? stopListening() : startListening())}
-          />
-          <TextInput
-            style={[styles.input, styles.painInput]}
-            placeholder="Pain 1–10"
-            keyboardType="number-pad"
-            value={painScore}
-            onChangeText={setPainScore}
-          />
-        </View>
+        <VoiceComingSoonBanner />
+        <TextInput
+          style={[styles.input, styles.painInput]}
+          placeholder="Pain 1–10"
+          keyboardType="number-pad"
+          value={painScore}
+          onChangeText={setPainScore}
+        />
         <PrimaryButton label="Save Limitation" onPress={handleAdd} />
       </Card>
 
@@ -196,7 +181,6 @@ const styles = StyleSheet.create({
     borderColor: LiftFlowColors.border,
     minHeight: 80,
   },
-  micRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
   painInput: { flex: 1, minHeight: 48 },
   item: { gap: Spacing.sm, marginBottom: Spacing.md },
 });

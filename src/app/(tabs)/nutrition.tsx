@@ -8,14 +8,11 @@ import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { SectionHeader } from '@/components/layout/SectionHeader';
 import { UpgradePrompt } from '@/components/subscription/UpgradePrompt';
 import { AppText } from '@/components/ui/AppText';
-import { MicrophoneButton } from '@/components/workout/MicrophoneButton';
+import { VoiceComingSoonBanner } from '@/components/workout/VoiceComingSoonBanner';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
+import { useAuth } from '@/hooks/useAuth';
 import { useEntitlement } from '@/hooks/useEntitlement';
 import { useUnits } from '@/hooks/useUnits';
-import { useVoiceLogging } from '@/hooks/useVoiceLogging';
-import { parseNutritionVoice } from '@/lib/nutritionVoice';
-import { parseVoiceCommandLocal } from '@/lib/voice/parseVoiceCommand';
-import { nutritionIntelligenceService } from '@/services/nutritionIntelligenceService';
 import { nutritionService } from '@/services/nutritionService';
 import type { DailyNutritionSummary, GroceryList, Meal, MealType, NutritionGoals } from '@/types';
 
@@ -39,8 +36,6 @@ export default function NutritionScreen() {
   const [carbs, setCarbs] = useState('');
   const [fat, setFat] = useState('');
 
-  const { transcript, isListening, startListening, stopListening, clearTranscript } = useVoiceLogging();
-
   const load = useCallback(async () => {
     if (!user) return;
     const today = new Date().toISOString().slice(0, 10);
@@ -59,72 +54,12 @@ export default function NutritionScreen() {
     load();
   }, [load]);
 
-  useEffect(() => {
-    if (!isListening && transcript.trim()) {
-      handleVoiceLog(transcript);
-    }
-  }, [isListening, transcript]);
-
   function resetForm() {
     setFoodName('');
     setCalories('');
     setProtein('');
     setCarbs('');
     setFat('');
-  }
-
-  function applyParsedEntry(parsed: ReturnType<typeof parseNutritionVoice>) {
-    if (!parsed) return;
-    setEntryMode(parsed.isSupplement ? 'supplement' : 'food');
-    setMealType(parsed.mealType);
-    setFoodName(parsed.name);
-    if (parsed.calories != null) setCalories(String(parsed.calories));
-    if (parsed.proteinG != null) setProtein(String(parsed.proteinG));
-    if (parsed.carbsG != null) setCarbs(String(parsed.carbsG));
-    if (parsed.fatG != null) setFat(String(parsed.fatG));
-  }
-
-  async function handleVoiceLog(text: string) {
-    clearTranscript();
-    const command = parseVoiceCommandLocal(text, {});
-    if (command?.intent === 'nutrition_query' || command?.intent === 'grocery_list_query') {
-      if (!user) return;
-      if (!nutritionIntelAllowed) {
-        Alert.alert('Pro feature', 'Nutrition Intelligence requires ONE MORE Pro.');
-        router.push('/(features)/upgrade');
-        return;
-      }
-      const result = await nutritionIntelligenceService.getIntelligence(user.id);
-      if (!result.success) {
-        Alert.alert('Nutrition unavailable', result.error);
-        return;
-      }
-      const line =
-        command.intent === 'grocery_list_query'
-          ? result.data.voiceGroceryLine
-          : result.data.voiceEatTodayLine;
-      Alert.alert(command.intent === 'grocery_list_query' ? 'Shopping list' : 'Eat today', line);
-      return;
-    }
-
-    const parsed = parseNutritionVoice(text);
-    if (!parsed) {
-      Alert.alert(
-        'Could not parse',
-        'Try: "What should I eat today?", "Build my shopping list", or "Protein shake 250 calories 30g protein"',
-      );
-      return;
-    }
-    applyParsedEntry(parsed);
-
-    if (parsed.calories || parsed.proteinG || parsed.isSupplement) {
-      await saveEntry(parsed.name, parsed.mealType, parsed.isSupplement, {
-        calories: parsed.calories,
-        proteinG: parsed.proteinG,
-        carbsG: parsed.carbsG,
-        fatG: parsed.fatG,
-      });
-    }
   }
 
   async function saveEntry(
@@ -181,11 +116,6 @@ export default function NutritionScreen() {
     const result = await nutritionService.generateGroceryList(user.id);
     if (result.success) setGroceryList(result.data);
     else Alert.alert('Error', result.error);
-  }
-
-  async function handleMicPress() {
-    if (isListening) stopListening();
-    else await startListening();
   }
 
   const supplements = meals.filter((m) => m.instructions === 'supplement');
@@ -336,12 +266,7 @@ export default function NutritionScreen() {
         />
       </Card>
 
-      <View style={styles.micRow}>
-        <MicrophoneButton onPress={handleMicPress} isListening={isListening} />
-        <AppText variant="footnote" color="textSecondary" style={styles.micHint}>
-          Say "protein shake 250 calories 30g protein" or "creatine supplement"
-        </AppText>
-      </View>
+      <VoiceComingSoonBanner />
 
       <SectionHeader title="Today's Meals" />
       {foods.length === 0 ? (
@@ -519,14 +444,6 @@ const styles = StyleSheet.create({
   chipActive: {
     borderColor: LiftFlowColors.accentMuted,
     backgroundColor: LiftFlowColors.accentGlow,
-  },
-  micRow: {
-    alignItems: 'center',
-    gap: Spacing.sm,
-    marginBottom: Spacing.xxl,
-  },
-  micHint: {
-    textAlign: 'center',
   },
   mealCard: {
     marginBottom: Spacing.sm,

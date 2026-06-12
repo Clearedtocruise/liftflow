@@ -79,7 +79,6 @@ const config: ExpoConfig = {
         project: sentryProject,
       },
     ],
-    'expo-speech-recognition',
     [
       '@kingstinct/react-native-healthkit',
       {
