@@ -1,44 +1,86 @@
 import Constants from 'expo-constants';
 import * as Device from 'expo-device';
-import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
 import { fail, fromError, ok } from '@/lib/serviceResult';
 import { getAccessToken, supabase } from '@/supabase/client';
 import type { ServiceResult } from '@/types/common';
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+type NotificationsModule = typeof import('expo-notifications');
+
+let notificationsModule: NotificationsModule | null = null;
+let handlerConfigured = false;
+let initAttempted = false;
+
+async function loadNotificationsModule(): Promise<NotificationsModule | null> {
+  if (notificationsModule) return notificationsModule;
+  try {
+    notificationsModule = await import('expo-notifications');
+    return notificationsModule;
+  } catch {
+    return null;
+  }
+}
+
+/** Safe to call after app mount — never runs at module import time. */
+export async function initializeNotificationsSafely(): Promise<boolean> {
+  if (initAttempted && handlerConfigured) return true;
+  initAttempted = true;
+
+  const Notifications = await loadNotificationsModule();
+  if (!Notifications || handlerConfigured) return handlerConfigured;
+
+  try {
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: true,
+        shouldShowBanner: true,
+        shouldShowList: true,
+      }),
+    });
+    handlerConfigured = true;
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 async function getProjectId(): Promise<string | undefined> {
   return Constants.expoConfig?.extra?.eas?.projectId as string | undefined;
 }
 
-function permissionsGranted(perm: Notifications.NotificationPermissionsStatus): boolean {
+function permissionsGranted(
+  Notifications: NotificationsModule,
+  perm: NotificationsModule['NotificationPermissionsStatus'],
+): boolean {
   if (Platform.OS === 'android') return true;
   const status = perm.ios?.status;
-  return status === Notifications.IosAuthorizationStatus.AUTHORIZED || status === Notifications.IosAuthorizationStatus.PROVISIONAL;
+  return (
+    status === Notifications.IosAuthorizationStatus.AUTHORIZED ||
+    status === Notifications.IosAuthorizationStatus.PROVISIONAL
+  );
 }
 
 export const notificationService = {
+  initializeNotificationsSafely,
+
   async requestPermissions(): Promise<ServiceResult<boolean>> {
     if (!Device.isDevice) {
       return fail('Push notifications require a physical device.');
     }
 
     try {
+      const ready = await initializeNotificationsSafely();
+      const Notifications = await loadNotificationsModule();
+      if (!ready || !Notifications) return fail('Notifications unavailable');
+
       const existing = await Notifications.getPermissionsAsync();
-      if (permissionsGranted(existing)) return ok(true);
+      if (permissionsGranted(Notifications, existing)) return ok(true);
 
       const requested = await Notifications.requestPermissionsAsync();
-      if (!permissionsGranted(requested)) {
+      if (!permissionsGranted(Notifications, requested)) {
         return fail('Notification permission denied');
       }
       return ok(true);
@@ -52,6 +94,9 @@ export const notificationService = {
       const perm = await this.requestPermissions();
       if (!perm.success) return fail(perm.error);
 
+      const Notifications = await loadNotificationsModule();
+      if (!Notifications) return fail('Notifications unavailable');
+
       const projectId = await getProjectId();
       const tokenData = await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined);
       return ok(tokenData.data);
@@ -60,52 +105,17 @@ export const notificationService = {
     }
   },
 
-  async registerDevice(userId: string): Promise<ServiceResult<void>> {
-    try {
-      const tokenResult = await this.getExpoPushToken();
-      if (!tokenResult.success) return fail(tokenResult.error);
-
-      const platform = Platform.OS === 'ios' ? 'ios' : Platform.OS === 'android' ? 'android' : 'web';
-
-      const { error } = await supabase.from('user_devices').insert({
-        user_id: userId,
-        device_token: tokenResult.data,
-        platform,
-        device_name: Device.modelName ?? Device.deviceName ?? 'Unknown',
-        is_active: true,
-        last_seen_at: new Date().toISOString(),
-      });
-
-      if (error && !error.message.includes('duplicate')) {
-        return fail(error.message);
-      }
-
-      const accessToken = await getAccessToken();
-      await fetch(`${process.env.EXPO_PUBLIC_API_URL ?? 'https://liftflow-api.onrender.com'}/api/notifications/register`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-        },
-        body: JSON.stringify({ deviceToken: tokenResult.data, platform }),
-      });
-
-      if (Platform.OS === 'android') {
-        await Notifications.setNotificationChannelAsync('default', {
-          name: 'ONE MORE',
-          importance: Notifications.AndroidImportance.MAX,
-          vibrationPattern: [0, 250, 250, 250],
-        });
-      }
-
-      return ok(undefined);
-    } catch (e) {
-      return fromError(e);
-    }
+  /** Skipped when push entitlement is absent — local reminders only for now. */
+  async registerDevice(_userId: string): Promise<ServiceResult<void>> {
+    return ok(undefined);
   },
 
   async scheduleWorkoutReminder(hour: number, minute: number): Promise<ServiceResult<string>> {
     try {
+      const ready = await initializeNotificationsSafely();
+      const Notifications = await loadNotificationsModule();
+      if (!ready || !Notifications) return fail('Notifications unavailable');
+
       const id = await Notifications.scheduleNotificationAsync({
         content: {
           title: 'Time to train',
@@ -124,11 +134,15 @@ export const notificationService = {
     }
   },
 
-  addNotificationReceivedListener(listener: (notification: Notifications.Notification) => void) {
-    return Notifications.addNotificationReceivedListener(listener);
+  async addNotificationReceivedListener(listener: (notification: unknown) => void) {
+    const Notifications = await loadNotificationsModule();
+    if (!Notifications) return { remove: () => undefined };
+    return Notifications.addNotificationReceivedListener(listener as never);
   },
 
-  addNotificationResponseListener(listener: (response: Notifications.NotificationResponse) => void) {
-    return Notifications.addNotificationResponseReceivedListener(listener);
+  async addNotificationResponseListener(listener: (response: unknown) => void) {
+    const Notifications = await loadNotificationsModule();
+    if (!Notifications) return { remove: () => undefined };
+    return Notifications.addNotificationResponseReceivedListener(listener as never);
   },
 };

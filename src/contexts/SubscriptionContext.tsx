@@ -3,7 +3,6 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { PRO_FEATURE_LABELS, type ProFeatureId } from '@/constants/subscription';
 import { useAuth } from '@/hooks/useAuth';
 import { hasProFeature, isTrialingSubscription } from '@/lib/entitlements';
-import { notificationService } from '@/services/notificationService';
 import { productAnalyticsService } from '@/services/productAnalyticsService';
 import { subscriptionService } from '@/services/subscriptionService';
 import type { Subscription } from '@/types/platform';
@@ -83,7 +82,8 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     let removeListener: (() => void) | undefined;
 
     void (async () => {
-      notificationService.registerDevice(user.id).catch(() => undefined);
+      const { notificationService } = await import('@/services/notificationService');
+      await notificationService.initializeNotificationsSafely();
       notificationService.scheduleWorkoutReminder(18, 0).catch(() => undefined);
 
       const config = await subscriptionService.configurePurchases(user.id);
