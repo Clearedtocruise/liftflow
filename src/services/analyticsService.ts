@@ -1,4 +1,5 @@
-import { mapHistoryItem } from '@/lib/db-mappers';
+import { mapHistoryItem, mapMeal } from '@/lib/db-mappers';
+import { aggregateDailyMeals } from '@/lib/mealAggregation';
 import { fail, fromError, ok } from '@/lib/serviceResult';
 import type { IAnalyticsService } from '@/services/interfaces';
 import { supabase } from '@/supabase/client';
@@ -77,7 +78,11 @@ export const analyticsService: IAnalyticsService = {
           .order('recorded_at', { ascending: true })
           .limit(30),
         supabase.from('goals').select('*').eq('user_id', userId).eq('status', 'active'),
-        supabase.from('meals').select('calories, protein_g').eq('user_id', userId).eq('scheduled_date', today),
+        supabase
+          .from('meals')
+          .select('id, user_id, meal_type, meal_plan_id, name, calories, protein_g, carbs_g, fat_g, instructions, created_at')
+          .eq('user_id', userId)
+          .eq('scheduled_date', today),
         supabase
           .from('workout_sessions')
           .select('started_at')
@@ -91,6 +96,9 @@ export const analyticsService: IAnalyticsService = {
         (g) => g.goal_type === 'weight_loss' || g.goal_type === 'body_composition',
       );
 
+      const todayMeals = (nutrition.data ?? []).map(mapMeal);
+      const mealTotals = aggregateDailyMeals(todayMeals);
+
       const dashboard: DashboardSummary = {
         streak: computeStreak((allDates.data ?? []).map((d) => d.started_at)),
         weeklyWorkouts: weekWorkouts.data?.length ?? 0,
@@ -100,8 +108,8 @@ export const analyticsService: IAnalyticsService = {
         recentPrs: 0,
         currentWeightKg: profile.data?.weight_kg ?? undefined,
         goalWeightKg: weightGoal?.target_value ?? undefined,
-        caloriesToday: (nutrition.data ?? []).reduce((s, m) => s + (m.calories ?? 0), 0),
-        proteinToday: (nutrition.data ?? []).reduce((s, m) => s + Number(m.protein_g ?? 0), 0),
+        caloriesToday: mealTotals.caloriesConsumed,
+        proteinToday: mealTotals.proteinG,
         recentWorkouts: (recentSessions.data ?? []).map((row) =>
           mapHistoryItem({ ...row, workout_exercises: row.workout_exercises }),
         ),

@@ -65,6 +65,10 @@ export function scheduledTimesForDay(
   return slots;
 }
 
+export function formatWorkoutTime(schedule: ScheduleInput): string {
+  return formatHour(schedule.workoutHour ?? 9, 0);
+}
+
 export function mealTypeLabel(type: MealType): string {
   switch (type) {
     case 'pre_workout':

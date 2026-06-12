@@ -13,6 +13,7 @@ import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 import { aggregateWeeklyGroceries } from '@/lib/groceryAggregation';
+import { aggregateDailyMeals, dedupeMealsByType } from '@/lib/mealAggregation';
 import {
     enrichMealMeta,
     ingredientsForMealName,
@@ -44,6 +45,7 @@ export default function NutritionScreen() {
   const load = useCallback(async () => {
     if (!user) return;
     const { from, to } = getWeekRange();
+    await nutritionService.pruneDuplicateMeals(user.id, { from, to });
     const [goalsRes, summaryRes, weekRes, dashRes] = await Promise.all([
       nutritionService.getGoals(user.id),
       nutritionService.getDailySummary(user.id, today),
@@ -61,13 +63,17 @@ export default function NutritionScreen() {
     load();
   }, [load]);
 
-  const todayMeals = useMemo(() => weekMeals.filter((meal) => meal.scheduledDate === today), [weekMeals, today]);
+  const todayMeals = useMemo(
+    () => dedupeMealsByType(weekMeals.filter((meal) => meal.scheduledDate === today)),
+    [weekMeals, today],
+  );
   const todayTimes = useMemo(
     () => scheduledTimesForDay(todayMeals.map((meal) => meal.mealType), schedule, hasWorkoutToday),
     [todayMeals, schedule, hasWorkoutToday],
   );
 
-  const mealsCompleted = todayMeals.filter((meal) => enrichMealMeta(meal.name, meal.instructions).status === 'completed').length;
+  const mealAggregation = useMemo(() => aggregateDailyMeals(weekMeals.filter((m) => m.scheduledDate === today)), [weekMeals, today]);
+  const mealsCompleted = mealAggregation.mealsCompleted;
 
   const weekDays = useMemo(() => {
     const { dates } = getWeekRange();

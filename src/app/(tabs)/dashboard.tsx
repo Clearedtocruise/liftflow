@@ -1,11 +1,11 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RefreshControl, StyleSheet, View, type ViewStyle } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
+import { HomeNextUpCard } from '@/components/dashboard/HomeNextUpCard';
 import { RingGauge } from '@/components/dashboard/RingGauge';
-import { WorkoutHeroCard } from '@/components/dashboard/WorkoutHeroCard';
 import { InsightCard } from '@/components/insights/InsightCard';
 import { Card } from '@/components/layout/Card';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
@@ -18,13 +18,22 @@ import { useInsightRotator } from '@/hooks/useInsightRotator';
 import { useSubscription } from '@/hooks/useSubscription';
 import { useUnits } from '@/hooks/useUnits';
 import { useWorkoutLocations } from '@/hooks/useWorkoutLocations';
+import {
+    aggregateDailyMeals,
+    findNextMeal,
+    trainingLabelFromRecoveryScore,
+} from '@/lib/mealAggregation';
+import { formatWorkoutTime, scheduleFromProfile, scheduledTimesForDay } from '@/lib/mealSchedule';
 import { logStartup } from '@/lib/startupLogger';
+import { getWeekRange } from '@/lib/weekPlan';
+import { estimateWorkoutDurationMinutes, exercisesFromPlannedWorkout } from '@/lib/workoutPlan';
 import { analyticsService } from '@/services/analyticsService';
 import { nutritionService } from '@/services/nutritionService';
 import { recoveryService } from '@/services/recoveryService';
 import { trainingService } from '@/services/trainingService';
 import { useWorkoutSession } from '@/state/workout/WorkoutSessionContext';
-import type { DashboardSummary, NutritionGoals, PlannedWorkout, ProgramDashboard } from '@/types';
+import type { DashboardSummary, Meal, NutritionGoals, PlannedWorkout, ProgramDashboard } from '@/types';
+import type { RecoveryIntelligenceReport } from '@/types/recoveryIntelligence';
 
 export default function DashboardScreen() {
   const { user, isProfileReady } = useAuth();
@@ -35,15 +44,20 @@ export default function DashboardScreen() {
   const { locations, selectedId } = useWorkoutLocations(user?.id);
   const [data, setData] = useState<DashboardSummary | null>(null);
   const [recoveryScore, setRecoveryScore] = useState<number | null>(null);
-  const [recoveryStatusLabel, setRecoveryStatusLabel] = useState<string | null>(null);
+  const [recoveryIntel, setRecoveryIntel] = useState<RecoveryIntelligenceReport | null>(null);
   const [program, setProgram] = useState<ProgramDashboard | null>(null);
   const [nutritionGoals, setNutritionGoals] = useState<NutritionGoals | null>(null);
+  const [todayMeals, setTodayMeals] = useState<Meal[]>([]);
   const [programLoading, setProgramLoading] = useState(true);
   const [summaryLoading, setSummaryLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [startingWorkout, setStartingWorkout] = useState(false);
   const homeRenderedRef = useRef(false);
   const appReadyLoggedRef = useRef(false);
+
+  const today = new Date().toISOString().slice(0, 10);
+  const hasWorkoutToday = Boolean(program?.nextWorkout);
+  const schedule = scheduleFromProfile(user, hasWorkoutToday);
 
   useEffect(() => {
     if (homeRenderedRef.current) return;
@@ -63,6 +77,10 @@ export default function DashboardScreen() {
     setProgramLoading(true);
     setSummaryLoading(true);
 
+    const { from, to } = getWeekRange();
+
+    await nutritionService.pruneDuplicateMeals(user.id);
+
     void trainingService.getDashboard(user.id).then((programResult) => {
       if (programResult.success) setProgram(programResult.data);
       setProgramLoading(false);
@@ -72,25 +90,31 @@ export default function DashboardScreen() {
     void Promise.all([
       analyticsService.getDashboard(user.id),
       nutritionService.getGoals(user.id),
+      nutritionService.getMealsForWeek(user.id, from, to),
       isPremium ? recoveryService.getIntelligence(user.id) : recoveryService.getToday(user.id),
-    ]).then(([dashResult, goalsResult, recoveryResult]) => {
+    ]).then(([dashResult, goalsResult, mealsResult, recoveryResult]) => {
       if (dashResult.success) setData(dashResult.data);
       if (goalsResult.success) setNutritionGoals(goalsResult.data);
+      if (mealsResult.success) {
+        setTodayMeals(mealsResult.data.filter((meal) => meal.scheduledDate === today));
+      }
 
       if (isPremium) {
         const intelResult = recoveryResult as Awaited<ReturnType<typeof recoveryService.getIntelligence>>;
         if (intelResult.success) {
+          setRecoveryIntel(intelResult.data);
           setRecoveryScore(intelResult.data.recoveryScore);
-          setRecoveryStatusLabel(intelResult.data.recoveryStatusLabel);
+        } else {
+          setRecoveryIntel(null);
+          setRecoveryScore(null);
         }
       } else {
         const todayResult = recoveryResult as Awaited<ReturnType<typeof recoveryService.getToday>>;
+        setRecoveryIntel(null);
         if (todayResult.success && todayResult.data) {
           setRecoveryScore(todayResult.data.recoveryScore);
-          setRecoveryStatusLabel(null);
         } else {
           setRecoveryScore(null);
-          setRecoveryStatusLabel(null);
         }
       }
 
@@ -102,7 +126,7 @@ export default function DashboardScreen() {
         logStartup('APP_READY');
       }
     });
-  }, [user, isPremium]);
+  }, [user, isPremium, today]);
 
   useEffect(() => {
     load();
@@ -112,17 +136,45 @@ export default function DashboardScreen() {
   const displayRecoveryScore =
     recoveryScore ??
     (data?.recoveryStatus === 'optimal' ? 88 : data?.recoveryStatus === 'moderate' ? 72 : 65);
-  const readinessScore = Math.min(95, displayRecoveryScore - 4 + (data?.streak ?? 0));
+
+  const trainingLabel =
+    recoveryIntel?.trainingRecommendationLabel ?? trainingLabelFromRecoveryScore(displayRecoveryScore);
+
+  const mealAggregation = useMemo(() => aggregateDailyMeals(todayMeals), [todayMeals]);
+  const todayTimes = useMemo(
+    () => scheduledTimesForDay(mealAggregation.dedupedMeals.map((meal) => meal.mealType), schedule, hasWorkoutToday),
+    [mealAggregation.dedupedMeals, schedule, hasWorkoutToday],
+  );
+  const nextMealEntry = useMemo(
+    () => findNextMeal(todayMeals, todayTimes),
+    [todayMeals, todayTimes],
+  );
+
+  const calorieTarget = nutritionGoals?.dailyCalories ?? 0;
+  const proteinTarget = nutritionGoals?.proteinG ?? 0;
+  const caloriesRemaining = Math.max(0, calorieTarget - mealAggregation.caloriesConsumed);
+  const proteinRemaining = Math.max(0, proteinTarget - mealAggregation.proteinG);
+
+  const coachHeadline = recoveryIntel?.trainingRecommendationLabel
+    ? `${trainingLabel} recommended today`
+    : displayRecoveryScore >= 75
+      ? 'You are cleared to train.'
+      : displayRecoveryScore >= 55
+        ? 'Keep training lighter today.'
+        : 'Prioritize recovery before intensity.';
+
   const coachMessage =
+    recoveryIntel?.rationale ??
     user?.metadata?.coachActivation?.coachMessage ??
     (displayRecoveryScore >= 80
-      ? 'Recovery is high today. Increase training volume by 5% if warm-ups feel strong.'
-      : 'Prioritize quality over volume today. Keep intensity moderate.');
-  const coachHeadline =
-    recoveryStatusLabel ??
-    (displayRecoveryScore >= 80 ? 'Recovery is high today.' : 'Prioritize quality over volume today.');
-  const proteinTarget = nutritionGoals?.proteinG ?? 0;
-  const calorieTarget = nutritionGoals?.dailyCalories ?? 0;
+      ? 'Recovery is high. Increase training volume slightly if warm-ups feel strong.'
+      : 'Prioritize quality over volume. Match nutrition to your remaining macros.');
+
+  const workoutDurationMin = nextPlanned
+    ? estimateWorkoutDurationMinutes(exercisesFromPlannedWorkout(nextPlanned)) ||
+      user?.metadata?.coachProfile?.minutesPerWorkout ||
+      60
+    : undefined;
 
   async function handleStartNextWorkout(planned: PlannedWorkout) {
     if (!user) return;
@@ -152,37 +204,15 @@ export default function DashboardScreen() {
       }>
       <Animated.View entering={FadeInDown.duration(400)} style={styles.header}>
         <AppText variant="headline" style={styles.heroHeadline}>
-          {Brand.heroHeadline}
+          {user?.displayName ? `Hey, ${user.displayName.split(' ')[0]}` : Brand.heroHeadline}
         </AppText>
-        <AppText variant="footnote" color="accent" align="center">
-          {Brand.taglinePrimary}
+        <AppText variant="footnote" color="textSecondary" align="center">
+          {coachHeadline}
         </AppText>
       </Animated.View>
 
       <Animated.View entering={FadeInDown.delay(60).duration(400)}>
-        {summaryLoading && recoveryScore === null ? (
-          <Card style={styles.recoveryCard} glow>
-            <SkeletonBlock height={14} width="45%" />
-            <View style={styles.gaugeRow}>
-              <SkeletonBlock height={88} width={88} style={styles.skeletonCircle} />
-              <SkeletonBlock height={88} width={88} style={styles.skeletonCircle} />
-            </View>
-          </Card>
-        ) : (
-          <Card style={styles.recoveryCard} glow>
-            <AppText variant="label" color="accent">
-              Recovery & Readiness
-            </AppText>
-            <View style={styles.gaugeRow}>
-              <RingGauge label="Recovery" value={displayRecoveryScore} color={LiftFlowColors.success} />
-              <RingGauge label="Readiness" value={readinessScore} color={LiftFlowColors.accent} />
-            </View>
-          </Card>
-        )}
-      </Animated.View>
-
-      <Animated.View entering={FadeInDown.delay(120).duration(400)}>
-        {summaryLoading && !user?.metadata?.coachActivation?.coachMessage ? (
+        {summaryLoading && !coachMessage ? (
           <View style={styles.aiOuter}>
             <LinearGradient colors={['rgba(31, 107, 255, 0.35)', 'rgba(0, 229, 255, 0.12)']} style={styles.aiBorder}>
               <View style={styles.aiCard}>
@@ -199,7 +229,6 @@ export default function DashboardScreen() {
                 <AppText variant="label" color="primary">
                   AI Coach
                 </AppText>
-                <AppText variant="bodyBold">{coachHeadline}</AppText>
                 <AppText variant="footnote" color="textSecondary">
                   {coachMessage}
                 </AppText>
@@ -209,26 +238,46 @@ export default function DashboardScreen() {
         )}
       </Animated.View>
 
-      <Animated.View entering={FadeInDown.delay(180).duration(400)}>
-        {programLoading ? (
+      <Animated.View entering={FadeInDown.delay(120).duration(400)}>
+        {programLoading || summaryLoading ? (
           <Card style={styles.emptyWorkout} glow>
             <SkeletonBlock height={160} />
-            <SkeletonBlock height={22} width="55%" />
-            <SkeletonBlock height={14} width="35%" />
-            <SkeletonBlock height={48} />
           </Card>
-        ) : nextPlanned ? (
-          <WorkoutHeroCard
-            title={nextPlanned.name}
-            durationMin={
-              (nextPlanned.metadata?.exercises?.length ?? 0) > 0
-                ? Math.max(30, Math.round((nextPlanned.metadata?.exercises?.length ?? 6) * 8))
-                : user?.metadata?.coachProfile?.minutesPerWorkout ?? 60
+        ) : (
+          <HomeNextUpCard
+            nextMeal={
+              nextMealEntry
+                ? {
+                    name: nextMealEntry.meal.name,
+                    mealType: nextMealEntry.meal.mealType,
+                    scheduledTime: nextMealEntry.scheduledTime,
+                  }
+                : null
             }
-            onStart={() => handleStartNextWorkout(nextPlanned)}
-            loading={startingWorkout}
+            caloriesRemaining={caloriesRemaining}
+            proteinRemainingG={proteinRemaining}
+            mealsCompleted={mealAggregation.mealsCompleted}
+            mealsTotal={mealAggregation.mealsTotal}
+            workout={
+              nextPlanned
+                ? {
+                    title: nextPlanned.name,
+                    durationMin: workoutDurationMin,
+                    startTime: formatWorkoutTime(schedule),
+                    trainingLabel,
+                    recoveryScore: displayRecoveryScore,
+                  }
+                : null
+            }
+            onLogMeal={() => router.push('/(tabs)/nutrition')}
+            onStartWorkout={() => nextPlanned && handleStartNextWorkout(nextPlanned)}
+            startingWorkout={startingWorkout}
           />
-        ) : user?.onboardingCompleted ? (
+        )}
+      </Animated.View>
+
+      {!nextPlanned && !programLoading && user?.onboardingCompleted ? (
+        <Animated.View entering={FadeInDown.delay(150).duration(400)}>
           <Card style={styles.emptyWorkout} glow>
             <AppText variant="bodyBold">Your coach is syncing</AppText>
             <AppText variant="footnote" color="textSecondary">
@@ -236,42 +285,43 @@ export default function DashboardScreen() {
             </AppText>
             <PrimaryButton label="Refresh Plan" onPress={() => { setRefreshing(true); load(); }} />
           </Card>
+        </Animated.View>
+      ) : null}
+
+      <Animated.View entering={FadeInDown.delay(180).duration(400)}>
+        {summaryLoading && recoveryScore === null ? (
+          <Card style={styles.recoveryCard} glow>
+            <SkeletonBlock height={14} width="45%" />
+            <View style={styles.gaugeRow}>
+              <SkeletonBlock height={88} width={88} style={styles.skeletonCircle} />
+            </View>
+          </Card>
         ) : (
-          <Card style={styles.emptyWorkout} glow>
-            <AppText variant="bodyBold">No workout scheduled</AppText>
-            <AppText variant="footnote" color="textSecondary">
-              Start a session or set up your training program.
+          <Card style={styles.recoveryCard} glow>
+            <AppText variant="label" color="accent">
+              Recovery
             </AppText>
-            <PrimaryButton label="Go to Workout" onPress={() => router.push('/(tabs)/workout')} />
+            <View style={styles.gaugeRow}>
+              <RingGauge label="Score" value={displayRecoveryScore} color={LiftFlowColors.success} />
+              <View style={styles.trainingBadge}>
+                <AppText variant="caption" color="textTertiary">
+                  Today
+                </AppText>
+                <AppText variant="headline" color="accent">
+                  {trainingLabel}
+                </AppText>
+                {recoveryIntel?.recoveryStatusLabel ? (
+                  <AppText variant="footnote" color="textSecondary" align="center">
+                    {recoveryIntel.recoveryStatusLabel}
+                  </AppText>
+                ) : null}
+              </View>
+            </View>
           </Card>
         )}
       </Animated.View>
 
       <Animated.View entering={FadeInDown.delay(240).duration(400)}>
-        {summaryLoading && !data ? (
-          <Card style={styles.statsCard}>
-            <SkeletonBlock height={14} width="25%" />
-            <View style={styles.statRow}>
-              <SkeletonBlock height={56} style={styles.statSkeleton} />
-              <SkeletonBlock height={56} style={styles.statSkeleton} />
-              <SkeletonBlock height={56} style={styles.statSkeleton} />
-            </View>
-          </Card>
-        ) : (
-          <Card style={styles.statsCard}>
-            <AppText variant="label" color="accent">
-              Today
-            </AppText>
-            <View style={styles.statRow}>
-              <StatPill label="Calories" value={`${data?.caloriesToday ?? 0}${calorieTarget ? `/${calorieTarget}` : ''}`} />
-              <StatPill label="Protein" value={`${Math.round(data?.proteinToday ?? 0)}g${proteinTarget ? `/${proteinTarget}g` : ''}`} accent />
-              <StatPill label="Streak" value={`${data?.streak ?? 0}d`} />
-            </View>
-          </Card>
-        )}
-      </Animated.View>
-
-      <Animated.View entering={FadeInDown.delay(300).duration(400)}>
         {summaryLoading && !data ? (
           <Card style={styles.progressCard}>
             <SkeletonBlock height={14} width="30%" />
@@ -287,14 +337,14 @@ export default function DashboardScreen() {
               {units.formatWeight(data?.currentWeightKg)}
             </AppText>
             <AppText variant="footnote" color="textSecondary">
-              Current weight · {data?.weeklyWorkouts ?? 0} workouts this week
+              Current weight · {data?.weeklyWorkouts ?? 0} workouts this week · {data?.streak ?? 0}d streak
             </AppText>
           </Card>
         )}
       </Animated.View>
 
       {insight ? (
-        <Animated.View entering={FadeInDown.delay(360).duration(400)}>
+        <Animated.View entering={FadeInDown.delay(300).duration(400)}>
           <AppText variant="subhead" color="textSecondary" style={styles.insightLabel}>
             Today&apos;s Insight
           </AppText>
@@ -317,19 +367,6 @@ function SkeletonBlock({
   return <View style={[styles.skeleton, { height, width }, style]} />;
 }
 
-function StatPill({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
-  return (
-    <View style={[styles.statPill, accent && styles.statPillAccent]}>
-      <AppText variant="caption" color="textTertiary">
-        {label}
-      </AppText>
-      <AppText variant="bodyBold" color={accent ? 'accent' : 'textPrimary'}>
-        {value}
-      </AppText>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   header: {
     gap: Spacing.sm,
@@ -348,6 +385,12 @@ const styles = StyleSheet.create({
   gaugeRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',
+    alignItems: 'center',
+  },
+  trainingBadge: {
+    alignItems: 'center',
+    gap: Spacing.xs,
+    maxWidth: 140,
   },
   aiOuter: {
     marginBottom: Spacing.lg,
@@ -367,30 +410,6 @@ const styles = StyleSheet.create({
   emptyWorkout: {
     gap: Spacing.md,
     marginBottom: Spacing.lg,
-  },
-  statsCard: {
-    gap: Spacing.md,
-    marginBottom: Spacing.lg,
-  },
-  statRow: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
-  },
-  statSkeleton: {
-    flex: 1,
-  },
-  statPill: {
-    flex: 1,
-    backgroundColor: LiftFlowColors.backgroundSecondary,
-    borderRadius: Radius.md,
-    padding: Spacing.md,
-    gap: Spacing.xs,
-    borderWidth: 1,
-    borderColor: LiftFlowColors.border,
-  },
-  statPillAccent: {
-    borderColor: LiftFlowColors.accent,
-    backgroundColor: LiftFlowColors.accentGlow,
   },
   progressCard: {
     gap: Spacing.sm,

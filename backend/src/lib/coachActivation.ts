@@ -1,4 +1,5 @@
 import { generateWeeklyMealPlan } from './aiCoach.js';
+import { pruneDuplicateMeals, removePlannedMealsForWeek, weekEndDate } from './mealCleanup.js';
 import { captureOutcomeBaseline } from './outcomeEngine.js';
 import { generateTrainingProgram, getProgramDashboard } from './programEngine.js';
 import { inferNutritionGoal, inferProgramFrequency, inferProgramType } from './programSelection.js';
@@ -117,6 +118,12 @@ export async function activateCoachSystem(userId: string) {
   });
 
   const mealPlan = generateWeeklyMealPlan(macroTargets.proteinG, macroTargets.calories);
+  const planWeekStart = mealPlan.weekStartDate ?? weekStartDate();
+  const planWeekEnd = weekEndDate(planWeekStart);
+
+  await pruneDuplicateMeals(db, userId);
+  await removePlannedMealsForWeek(db, userId, planWeekStart, planWeekEnd);
+
   const { data: savedPlan } = await db
     .from('meal_plans')
     .insert({

@@ -1,5 +1,8 @@
+import { api } from '@/api/client';
 import { mapGroceryList, mapMeal, mapMealPlan, mapNutritionGoals } from '@/lib/db-mappers';
 import { aggregateWeeklyGroceries } from '@/lib/groceryAggregation';
+import { aggregateDailyMeals } from '@/lib/mealAggregation';
+import { isReplaceablePlannedMeal, pickMealsToKeep, weekEndDate } from '@/lib/mealCleanup';
 import { enrichMealMeta, serializeMealMeta } from '@/lib/mealIngredients';
 import { fail, fromError, ok } from '@/lib/serviceResult';
 import type { INutritionService } from '@/services/interfaces';
@@ -132,6 +135,57 @@ export const nutritionService: INutritionService = {
     return this.updateMeal(mealId, { instructions: serializeMealMeta(meta) });
   },
 
+  async pruneDuplicateMeals(userId: string, range?: { from?: string; to?: string }) {
+    try {
+      let query = supabase
+        .from('meals')
+        .select('id, user_id, meal_type, meal_plan_id, name, scheduled_date, calories, protein_g, carbs_g, fat_g, instructions, created_at')
+        .eq('user_id', userId);
+
+      if (range?.from) query = query.gte('scheduled_date', range.from);
+      if (range?.to) query = query.lte('scheduled_date', range.to);
+
+      const { data, error } = await query;
+      if (error) return fail(error.message);
+
+      const { removeIds } = pickMealsToKeep((data ?? []).map(mapMeal));
+      if (removeIds.length === 0) return ok(0);
+
+      const { error: deleteError } = await supabase.from('meals').delete().in('id', removeIds);
+      if (deleteError) return fail(deleteError.message);
+      return ok(removeIds.length);
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
+  async removePlannedMealsForWeek(userId: string, weekStart: string) {
+    try {
+      const weekEnd = weekEndDate(weekStart);
+      const { data, error } = await supabase
+        .from('meals')
+        .select('id, user_id, meal_type, meal_plan_id, name, scheduled_date, calories, protein_g, carbs_g, fat_g, instructions, created_at')
+        .eq('user_id', userId)
+        .gte('scheduled_date', weekStart)
+        .lte('scheduled_date', weekEnd);
+
+      if (error) return fail(error.message);
+
+      const removeIds = (data ?? [])
+        .map(mapMeal)
+        .filter(isReplaceablePlannedMeal)
+        .map((meal) => meal.id);
+
+      if (removeIds.length === 0) return ok(0);
+
+      const { error: deleteError } = await supabase.from('meals').delete().in('id', removeIds);
+      if (deleteError) return fail(deleteError.message);
+      return ok(removeIds.length);
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
   async getMealsForDate(userId, date: string) {
     try {
       const { data, error } = await supabase
@@ -152,21 +206,26 @@ export const nutritionService: INutritionService = {
     try {
       const targetDate = date ?? todayDate();
       const [mealsResult, goalsResult, hydrationResult] = await Promise.all([
-        supabase.from('meals').select('calories, protein_g, carbs_g, fat_g').eq('user_id', userId).eq('scheduled_date', targetDate),
+        supabase
+          .from('meals')
+          .select('id, user_id, meal_type, meal_plan_id, name, calories, protein_g, carbs_g, fat_g, instructions, created_at')
+          .eq('user_id', userId)
+          .eq('scheduled_date', targetDate),
         supabase.from('nutrition_goals').select('*').eq('user_id', userId).eq('is_active', true).limit(1).maybeSingle(),
         supabase.from('hydration_logs').select('amount_ml').eq('user_id', userId).gte('logged_at', `${targetDate}T00:00:00`).lte('logged_at', `${targetDate}T23:59:59`),
       ]);
 
       if (mealsResult.error) return fail(mealsResult.error.message);
 
-      const meals = mealsResult.data ?? [];
+      const meals = (mealsResult.data ?? []).map(mapMeal);
+      const aggregated = aggregateDailyMeals(meals);
       const summary: DailyNutritionSummary = {
         date: targetDate,
-        caloriesConsumed: meals.reduce((s, m) => s + (m.calories ?? 0), 0),
+        caloriesConsumed: aggregated.caloriesConsumed,
         caloriesTarget: goalsResult.data?.daily_calories ?? undefined,
-        proteinG: meals.reduce((s, m) => s + Number(m.protein_g ?? 0), 0),
-        carbsG: meals.reduce((s, m) => s + Number(m.carbs_g ?? 0), 0),
-        fatG: meals.reduce((s, m) => s + Number(m.fat_g ?? 0), 0),
+        proteinG: aggregated.proteinG,
+        carbsG: aggregated.carbsG,
+        fatG: aggregated.fatG,
         waterMl: (hydrationResult.data ?? []).reduce((s, h) => s + h.amount_ml, 0),
         waterTargetMl: goalsResult.data?.water_ml ?? undefined,
       };
@@ -196,6 +255,25 @@ export const nutritionService: INutritionService = {
     try {
       const token = await getAccessToken();
       const plan = await api.generateMealPlan(userId, token);
+      const weekStart = plan.weekStartDate ?? weekStartDate();
+      const weekEnd = weekEndDate(weekStart);
+
+      await this.pruneDuplicateMeals(userId);
+      await this.removePlannedMealsForWeek(userId, weekStart);
+
+      const { data: existingMeals } = await supabase
+        .from('meals')
+        .select('id, user_id, meal_type, meal_plan_id, name, scheduled_date, calories, protein_g, carbs_g, fat_g, instructions, created_at')
+        .eq('user_id', userId)
+        .gte('scheduled_date', weekStart)
+        .lte('scheduled_date', weekEnd);
+
+      const occupiedSlots = new Set(
+        (existingMeals ?? [])
+          .map(mapMeal)
+          .filter((meal) => !isReplaceablePlannedMeal(meal))
+          .map((meal) => `${meal.scheduledDate}:${meal.mealType}`),
+      );
 
       const { data: saved, error } = await supabase
         .from('meal_plans')
@@ -212,9 +290,11 @@ export const nutritionService: INutritionService = {
       if (error) return fail(error.message);
 
       const meals: Meal[] = plan.meals ?? [];
-      if (meals.length > 0) {
+      const mealsToInsert = meals.filter((meal) => !occupiedSlots.has(`${meal.scheduledDate}:${meal.mealType}`));
+
+      if (mealsToInsert.length > 0) {
         await supabase.from('meals').insert(
-          meals.map((m) => ({
+          mealsToInsert.map((m) => ({
             meal_plan_id: saved.id,
             user_id: userId,
             meal_type: m.mealType,
