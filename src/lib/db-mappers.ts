@@ -42,6 +42,11 @@ type ProfileRow = {
   available_equipment: string[] | null;
   primary_training_goal: string | null;
   onboarding_completed: boolean;
+  is_founder?: boolean | null;
+  is_beta_tester?: boolean | null;
+  is_internal_tester?: boolean | null;
+  beta_tester_tag?: string | null;
+  beta_invite_code?: string | null;
   metadata: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
@@ -74,6 +79,11 @@ export function mapProfile(row: ProfileRow): UserProfile {
     availableEquipment: (row.available_equipment ?? undefined) as UserProfile['availableEquipment'],
     primaryTrainingGoal: (row.primary_training_goal as UserProfile['primaryTrainingGoal']) ?? undefined,
     onboardingCompleted: row.onboarding_completed,
+    isFounder: row.is_founder ?? undefined,
+    isBetaTester: row.is_beta_tester ?? undefined,
+    isInternalTester: row.is_internal_tester ?? undefined,
+    betaTesterTag: row.beta_tester_tag ?? undefined,
+    betaInviteCode: row.beta_invite_code ?? undefined,
     metadata: (row.metadata as UserProfile['metadata']) ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

@@ -1,7 +1,7 @@
 import Constants from 'expo-constants';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, StyleSheet, TextInput, View } from 'react-native';
+import { Alert, Linking, StyleSheet, TextInput, View } from 'react-native';
 
 import { Card } from '@/components/layout/Card';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
@@ -33,7 +33,7 @@ import type { VoiceInputMode } from '@/types/voice';
 export default function SettingsScreen() {
   const { user, signOut, refreshProfile, deleteAccount } = useAuth();
   const units = useUnits();
-  const { isPremium } = useSubscription();
+  const { isPremium, isFounder, isBetaTester, accessOverrideLabel } = useSubscription();
   const [confirmationMode, setConfirmationMode] = useState<ConfirmationMode>('smart');
   const [voiceAutoLog, setVoiceAutoLog] = useState(true);
   const [voiceFeedback, setVoiceFeedback] = useState(true);
@@ -327,13 +327,59 @@ export default function SettingsScreen() {
         </AppText>
       ) : null}
 
+      {accessOverrideLabel ? (
+        <>
+          <View style={styles.sectionGap}>
+            <SectionHeader title="Access" subtitle="Admin visibility — Build 156A" />
+          </View>
+          <Card style={styles.group}>
+            <SettingsRow
+              label="Access level"
+              value={accessOverrideLabel}
+              icon={
+                <AppSymbol name="sparkles" fallback={SYMBOL_FALLBACKS.sparkles} size={20} tintColor={LiftFlowColors.accent} />
+              }
+            />
+            <SettingsRow
+              label="Premium entitlement"
+              value="Full Pro (no subscription required)"
+              icon={
+                <AppSymbol name="sparkles" fallback={SYMBOL_FALLBACKS.sparkles} size={20} tintColor={LiftFlowColors.textSecondary} />
+              }
+            />
+            {isFounder ? (
+              <SettingsRow
+                label="Founder dashboard"
+                value="Open in browser"
+                icon={
+                  <AppSymbol name="chart.line.uptrend.xyaxis" fallback={SYMBOL_FALLBACKS['chart.line.uptrend.xyaxis']} size={20} tintColor={LiftFlowColors.textSecondary} />
+                }
+                onPress={() => {
+                  const url = `${process.env.EXPO_PUBLIC_API_URL ?? 'https://liftflow-api.onrender.com'}/admin/founder`;
+                  void Linking.openURL(url);
+                }}
+              />
+            ) : null}
+            {isBetaTester && !isFounder ? (
+              <SettingsRow
+                label="Beta program"
+                value="Active tester"
+                icon={
+                  <AppSymbol name="person.fill" fallback={SYMBOL_FALLBACKS['person.fill']} size={20} tintColor={LiftFlowColors.textSecondary} />
+                }
+              />
+            ) : null}
+          </Card>
+        </>
+      ) : null}
+
       <View style={styles.sectionGap}>
         <SectionHeader title="ONE MORE Pro" />
       </View>
       <Card style={styles.group}>
         <SettingsRow
           label="Subscription"
-          value={isPremium ? 'Pro' : 'Free'}
+          value={accessOverrideLabel ? `${accessOverrideLabel} · Pro` : isPremium ? 'Pro' : 'Free'}
           icon={
             <AppSymbol name="creditcard.fill" fallback={SYMBOL_FALLBACKS['creditcard.fill']} size={20} tintColor={LiftFlowColors.textSecondary} />
           }

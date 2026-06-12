@@ -2,6 +2,12 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 
 import { PRO_FEATURE_LABELS, type ProFeatureId } from '@/constants/subscription';
 import { useAuth } from '@/hooks/useAuth';
+import {
+    accessOverrideLabel,
+    hasPremiumAccessOverride,
+    isBetaTesterUser,
+    isFounderUser,
+} from '@/lib/accessOverride';
 import { hasProFeature, isTrialingSubscription } from '@/lib/entitlements';
 import { notificationService } from '@/services/notificationService';
 import { productAnalyticsService } from '@/services/productAnalyticsService';
@@ -16,6 +22,12 @@ type SubscriptionContextValue = {
   loading: boolean;
   isNativePurchasesAvailable: boolean;
   isRevenueCatConfigured: boolean;
+  /** Founder flag — full premium without subscription. */
+  isFounder: boolean;
+  /** Beta tester flag — full premium without subscription. */
+  isBetaTester: boolean;
+  /** Human-readable override label for admin visibility. */
+  accessOverrideLabel: string | null;
   hasFeature: (featureId: ProFeatureId) => boolean;
   featureLabel: (featureId: ProFeatureId) => string;
   refresh: () => Promise<void>;
@@ -104,12 +116,16 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     };
   }, [user, refresh]);
 
-  const isPremium = subscriptionService.isPremium(subscription);
-  const isTrialing = isTrialingSubscription(subscription);
+  const premiumOverride = hasPremiumAccessOverride(user);
+  const isPremium = premiumOverride || subscriptionService.isPremium(subscription);
+  const isTrialing = !premiumOverride && isTrialingSubscription(subscription);
+  const isFounder = isFounderUser(user);
+  const isBetaTester = isBetaTesterUser(user);
+  const overrideLabel = accessOverrideLabel(user);
 
   const hasFeature = useCallback(
-    (featureId: ProFeatureId) => hasProFeature(subscription, featureId),
-    [subscription],
+    (featureId: ProFeatureId) => premiumOverride || hasProFeature(subscription, featureId),
+    [subscription, premiumOverride],
   );
 
   const featureLabel = useCallback((featureId: ProFeatureId) => PRO_FEATURE_LABELS[featureId], []);
@@ -123,11 +139,25 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
       loading,
       isNativePurchasesAvailable: subscriptionService.isNativePurchasesAvailable(),
       isRevenueCatConfigured: subscriptionService.isRevenueCatConfigured(),
+      isFounder,
+      isBetaTester,
+      accessOverrideLabel: overrideLabel,
       hasFeature,
       featureLabel,
       refresh,
     }),
-    [subscription, isPremium, isTrialing, loading, hasFeature, featureLabel, refresh],
+    [
+      subscription,
+      isPremium,
+      isTrialing,
+      loading,
+      isFounder,
+      isBetaTester,
+      overrideLabel,
+      hasFeature,
+      featureLabel,
+      refresh,
+    ],
   );
 
   return <SubscriptionContext.Provider value={value}>{children}</SubscriptionContext.Provider>;

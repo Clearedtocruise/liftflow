@@ -56,6 +56,14 @@ export type UserProfile = BaseEntity & {
   /** Nutrition driver — synced from fitnessGoals[0] */
   primaryTrainingGoal?: TrainingGoal;
   onboardingCompleted: boolean;
+  /** Full premium without subscription (Build 156A). */
+  isFounder?: boolean;
+  /** Full premium without subscription (Build 156A). */
+  isBetaTester?: boolean;
+  /** Legacy Sprint 8.5 beta ops — still honored for beta override. */
+  isInternalTester?: boolean;
+  betaTesterTag?: string;
+  betaInviteCode?: string;
   metadata?: UserProfileMetadata;
   updatedAt?: string;
 };
