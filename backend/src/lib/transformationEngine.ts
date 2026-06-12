@@ -261,7 +261,10 @@ export async function getLatestTransformationProjection(userId: string): Promise
     .limit(1)
     .maybeSingle();
 
-  if (error) throw new Error(error.message);
+  if (error) {
+    if (/transformation_projections|schema cache/i.test(error.message)) return null;
+    throw new Error(error.message);
+  }
   if (!data) return null;
 
   const photoIds = [data.before_photo_id, data.current_photo_id].filter(Boolean) as string[];

@@ -10,7 +10,7 @@ function authLandingPage(options: {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>${title} — LiftFlow</title>
+  <title>${title} — ONE MORE</title>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0A0A0B; color: #F4F4F5; margin: 0; padding: 2rem; text-align: center; }
     main { max-width: 28rem; margin: 4rem auto; }
@@ -25,7 +25,7 @@ function authLandingPage(options: {
     <h1>${title}</h1>
     <p>${message}</p>
     <a id="open-app" href="#">${fallbackLabel}</a>
-    <p id="status">Opening LiftFlow…</p>
+    <p id="status">Opening ONE MORE…</p>
   </main>
   <script>
     (function () {
@@ -38,7 +38,7 @@ function authLandingPage(options: {
       window.location.replace(appUrl);
       setTimeout(function () {
         document.getElementById('status').textContent =
-          'If LiftFlow did not open automatically, tap the button above or open the app and sign in.';
+          'If ONE MORE did not open automatically, tap the button above or open the app and sign in.';
       }, 2500);
     })();
   </script>
@@ -49,17 +49,17 @@ function authLandingPage(options: {
 export function emailConfirmHtml(): string {
   return authLandingPage({
     title: 'Email verified',
-    message: 'Your LiftFlow account is confirmed. Return to the app to sign in.',
+    message: 'Your ONE MORE account is confirmed. Return to the app to sign in.',
     deepLinkPath: 'auth/confirm',
-    fallbackLabel: 'Open LiftFlow',
+    fallbackLabel: 'Open ONE MORE',
   });
 }
 
 export function passwordResetHtml(): string {
   return authLandingPage({
     title: 'Reset your password',
-    message: 'Continue in LiftFlow to choose a new password.',
+    message: 'Continue in ONE MORE to choose a new password.',
     deepLinkPath: 'reset-password',
-    fallbackLabel: 'Open LiftFlow',
+    fallbackLabel: 'Open ONE MORE',
   });
 }

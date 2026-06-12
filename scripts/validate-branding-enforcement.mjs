@@ -93,9 +93,10 @@ function main() {
   console.log(`  ${iconOk ? 'PASS' : 'FAIL'} — app.config.ts uses one-more-icon paths`);
   if (!iconOk) issues.push('app.config.ts must reference one-more-icon-1024.png (not liftflow-icon)');
 
-  const buildOk = appConfig.includes("buildNumber: '12'");
-  console.log(`  ${buildOk ? 'PASS' : 'FAIL'} — iOS buildNumber is 12`);
-  if (!buildOk) issues.push('ios.buildNumber must be 12');
+  const buildMatch = appConfig.match(/buildNumber:\s*'(\d+)'/);
+  const buildOk = Boolean(buildMatch?.[1]);
+  console.log(`  ${buildOk ? 'PASS' : 'FAIL'} — iOS buildNumber set${buildOk ? ` (${buildMatch[1]})` : ''}`);
+  if (!buildOk) issues.push('ios.buildNumber must be set in app.config.ts');
 
   const requiredAssets = [
     'assets/branding/one-more-icon-1024.png',

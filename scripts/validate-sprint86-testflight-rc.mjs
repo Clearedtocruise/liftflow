@@ -33,6 +33,20 @@ function read(rel) {
   return fs.readFileSync(path.join(root, rel), 'utf8');
 }
 
+function readFirstExisting(rels) {
+  for (const rel of rels) {
+    if (exists(rel)) return read(rel);
+  }
+  return '';
+}
+
+function workoutTabSource() {
+  return readFirstExisting([
+    'src/app/(tabs)/workout.tsx',
+    'src/app/(tabs)/workout/index.tsx',
+  ]);
+}
+
 function runValidator(script) {
   const r = spawnSync('node', [script], { cwd: root, encoding: 'utf8', timeout: 180000, shell: false });
   const out = `${r.stdout ?? ''}${r.stderr ?? ''}`;
@@ -200,7 +214,11 @@ console.log('\n--- Core systems ---');
 record('Authentication', exists('src/services/authService.ts') && exists('src/app/(auth)/login.tsx'));
 record('Onboarding', read('src/app/(onboarding)/profile.tsx').includes('onboardingCompleted'));
 record('Workout logging', exists('src/state/workout/WorkoutSessionContext.tsx'));
-record('Voice logging', read('src/app/(tabs)/workout.tsx').includes('processVoiceTranscript'));
+record(
+  'Voice logging',
+  read('src/services/voiceService.ts').includes('processVoiceTranscript') ||
+    workoutTabSource().includes('processVoiceTranscript'),
+);
 record('AI Coach', exists('src/app/(features)/coach-chat.tsx'));
 record('Recovery Intelligence', exists('src/app/(features)/recovery-analysis.tsx'));
 record('Nutrition Intelligence', exists('src/app/(features)/nutrition-intelligence.tsx'));
