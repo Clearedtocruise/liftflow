@@ -199,7 +199,7 @@ export function WorkoutSessionProvider({
       setLastLoggedSet(result.data);
       await refreshSession();
 
-      if (activeSession?.status === 'active') {
+      if (activeSession?.status === 'active' && !payload.skipRest) {
         const restSeconds = payload.restSeconds ?? DEFAULT_REST_SECONDS;
         const restResult = await workoutService.startRestTimer(
           activeSession.id,

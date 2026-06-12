@@ -5,6 +5,8 @@ export type EditableWorkoutExercise = {
   repRange?: string;
   restSeconds?: number;
   weightLbs?: number;
+  /** Exercises sharing an id are performed as a superset (back-to-back sets). */
+  supersetGroupId?: string;
 };
 
 export type ExerciseHistorySet = {

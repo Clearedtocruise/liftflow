@@ -42,6 +42,8 @@ export type TemplateExercise = {
   weightLbs?: number;
   restSeconds?: number;
   notes?: string;
+  /** Exercises sharing an id are performed as a superset (back-to-back sets). */
+  supersetGroupId?: string;
 };
 
 export type PlannedWorkoutMetadata = {

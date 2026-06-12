@@ -1,5 +1,5 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Pressable, StyleSheet, View } from 'react-native';
 
 import { Card } from '@/components/layout/Card';
@@ -20,6 +20,13 @@ import {
     formatSetLoggedLabel,
     getExerciseLoggingMode,
 } from '@/lib/exerciseModality';
+import {
+    getSupersetGroupForIndex,
+    getSupersetLabel,
+    isSupersetGroupComplete,
+    nextExerciseIndexAfterGroup,
+    resolvePostSetSupersetAction,
+} from '@/lib/supersetFlow';
 import { formatWorkoutWeightForInput } from '@/lib/unitConversion';
 import { parseTargetReps } from '@/lib/workoutPlan';
 import { workoutService } from '@/services/workoutService';
@@ -68,6 +75,7 @@ export function ActiveWorkoutScreen({ session, planExercises, onFinish, onCancel
   const [exerciseHadPr, setExerciseHadPr] = useState(false);
   const [restPaused, setRestPaused] = useState(false);
   const [restTargetSeconds, setRestTargetSeconds] = useState(DEFAULT_REST_SECONDS);
+  const pendingAdvanceRef = useRef<number | null>(null);
 
   const currentExercise = sortedExercises[currentIndex];
   const planMeta = planExercises[currentIndex] ?? planExercises.find(
@@ -88,6 +96,13 @@ export function ActiveWorkoutScreen({ session, planExercises, onFinish, onCancel
     currentExercise?.exercise?.name,
   );
   const nextSetNumber = Math.min(completedSets.length + 1, targetSets);
+  const supersetGroup = getSupersetGroupForIndex(currentIndex, planExercises);
+  const supersetLabel = getSupersetLabel(supersetGroup, currentIndex);
+  const inSuperset = Boolean(supersetGroup && supersetGroup.memberIndices.length >= 2);
+  const groupComplete =
+    inSuperset && supersetGroup
+      ? isSupersetGroupComplete(supersetGroup, sortedExercises, planExercises)
+      : allSetsDone;
   const currentSessionSets = useMemo(
     () =>
       completedSets.map((set, index) => ({
@@ -167,11 +182,20 @@ export function ActiveWorkoutScreen({ session, planExercises, onFinish, onCancel
   }, [currentExercise?.id, currentExercise?.exerciseId, currentExercise?.exercise, currentExercise?.suggestedWeight, repRange, user]);
 
   useEffect(() => {
-    if (allSetsDone && completedSets.length > 0) {
+    if (groupComplete && completedSets.length > 0) {
       setShowComplete(true);
       setExerciseHadPr(completedSets.some((set) => set.isPr));
+    } else {
+      setShowComplete(false);
     }
-  }, [allSetsDone, completedSets]);
+  }, [groupComplete, completedSets]);
+
+  useEffect(() => {
+    if (restSecondsRemaining !== 0 || pendingAdvanceRef.current === null) return;
+    setCurrentIndex(pendingAdvanceRef.current);
+    pendingAdvanceRef.current = null;
+    setShowComplete(false);
+  }, [restSecondsRemaining]);
 
   const exerciseVolume = completedSets.reduce((total, set) => {
     if (!set.weight || !set.reps) return total;
@@ -179,7 +203,7 @@ export function ActiveWorkoutScreen({ session, planExercises, onFinish, onCancel
   }, 0);
 
   async function handleLogSet() {
-    if (!currentExercise || isPaused || allSetsDone) return;
+    if (!currentExercise || isPaused || groupComplete) return;
 
     setLogging(true);
     const base = {
@@ -187,12 +211,19 @@ export function ActiveWorkoutScreen({ session, planExercises, onFinish, onCancel
       restSeconds: restTargetSeconds,
     };
 
+    const postSetAction = resolvePostSetSupersetAction(
+      currentIndex,
+      planExercises,
+      sortedExercises,
+      completedSets.length + 1,
+    );
+
     const logged =
       loggingMode === 'timed'
-        ? await logSet({ ...base, durationSeconds, reps: 1 })
+        ? await logSet({ ...base, durationSeconds, reps: 1, skipRest: postSetAction.skipRest })
         : loggingMode === 'bodyweight'
-          ? await logSet({ ...base, reps })
-          : await logSet({ ...base, weight: weightKg, reps });
+          ? await logSet({ ...base, reps, skipRest: postSetAction.skipRest })
+          : await logSet({ ...base, weight: weightKg, reps, skipRest: postSetAction.skipRest });
     setLogging(false);
 
     if (logged?.isPr) {
@@ -200,9 +231,25 @@ export function ActiveWorkoutScreen({ session, planExercises, onFinish, onCancel
     }
 
     await refreshSession();
+
+    if (postSetAction.immediateAdvanceIndex != null) {
+      pendingAdvanceRef.current = null;
+      setCurrentIndex(postSetAction.immediateAdvanceIndex);
+      setShowComplete(false);
+    } else if (postSetAction.afterRestAdvanceIndex != null) {
+      pendingAdvanceRef.current = postSetAction.afterRestAdvanceIndex;
+    }
   }
 
   function handleNextExercise() {
+    if (supersetGroup && supersetGroup.memberIndices.length >= 2) {
+      const next = nextExerciseIndexAfterGroup(supersetGroup, sortedExercises.length);
+      if (next != null) {
+        setCurrentIndex(next);
+        setShowComplete(false);
+        return;
+      }
+    }
     if (isLastExercise) {
       onFinish();
       return;
@@ -268,8 +315,20 @@ export function ActiveWorkoutScreen({ session, planExercises, onFinish, onCancel
                 {(currentExercise.exercise?.name ?? 'Exercise').toUpperCase()}
               </AppText>
 
+              {supersetLabel ? (
+                <AppText variant="caption" color="accent">
+                  Superset {supersetGroup?.id.replace('ss-', '')} · Exercise {supersetLabel}
+                </AppText>
+              ) : null}
+
               <AppText variant="footnote" color="textSecondary">
-                {loggingMode === 'timed'
+                {inSuperset
+                  ? loggingMode === 'timed'
+                    ? `Target ${targetSets} sets · ${repRange} · No rest between paired exercises`
+                    : loggingMode === 'bodyweight'
+                      ? `Target ${targetSets} sets · ${repRange} reps · Superset pair`
+                      : `Target ${targetSets} sets · ${repRange} reps · Rest after both exercises`
+                  : loggingMode === 'timed'
                   ? `Target ${targetSets} sets · ${repRange}`
                   : loggingMode === 'bodyweight'
                     ? `Target ${targetSets} sets · ${repRange} reps · Bodyweight`
@@ -338,10 +397,10 @@ export function ActiveWorkoutScreen({ session, planExercises, onFinish, onCancel
                     disabled={isPaused || logging}
                   />
                   <PrimaryButton
-                    label={allSetsDone ? 'All sets logged' : `Log Set · Set ${nextSetNumber} of ${targetSets}`}
+                    label={groupComplete ? 'All sets logged' : `Log Set · Set ${nextSetNumber} of ${targetSets}`}
                     size="large"
                     loading={logging}
-                    disabled={isPaused || allSetsDone}
+                    disabled={isPaused || groupComplete}
                     onPress={handleLogSet}
                   />
                 </>
@@ -388,7 +447,7 @@ export function ActiveWorkoutScreen({ session, planExercises, onFinish, onCancel
             volumeKg={exerciseVolume}
             hasPr={exerciseHadPr}
             onNext={handleNextExercise}
-            isLastExercise={isLastExercise}
+            isLastExercise={inSuperset ? nextExerciseIndexAfterGroup(supersetGroup!, sortedExercises.length) === null : isLastExercise}
           />
         ) : null}
 

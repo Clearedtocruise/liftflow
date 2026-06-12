@@ -27,6 +27,7 @@ export function WorkoutExerciseDetailList({ exercises }: WorkoutExerciseDetailLi
             <AppText variant="bodyBold">{exercise.name}</AppText>
             <AppText variant="footnote" color="textSecondary">
               {exercise.sets} sets · {exercise.repRange ?? '8-10'} reps · Rest {formatRest(exercise.restSeconds ?? 90)}
+              {exercise.supersetGroupId ? ` · Superset ${exercise.supersetGroupId.replace('ss-', '')}` : ''}
             </AppText>
           </View>
         </View>

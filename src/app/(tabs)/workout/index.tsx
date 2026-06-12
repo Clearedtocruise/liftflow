@@ -7,6 +7,7 @@ import { ActiveWorkoutScreen } from '@/components/workout/execution/ActiveWorkou
 import { WorkoutWeeklyPlanScreen } from '@/components/workout/execution/WorkoutWeeklyPlanScreen';
 import { LiftFlowColors } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
+import { enrichWithSupersetGroups } from '@/lib/supersetFlow';
 import { buildWeekPlan, getWeekRange, isConditioningWorkout, type WeekDayPlan } from '@/lib/weekPlan';
 import { coachActivationService } from '@/services/coachActivationService';
 import { productAnalyticsService } from '@/services/productAnalyticsService';
@@ -103,7 +104,7 @@ export default function WorkoutScreen() {
   }
 
   if (session) {
-    const planForSession =
+    const planForSession = enrichWithSupersetGroups(
       exercises.length > 0
         ? exercises
         : [...session.exercises]
@@ -114,7 +115,8 @@ export default function WorkoutScreen() {
               sets: Math.max(exercise.sets.length + 1, 3),
               repRange: exercise.suggestedReps ?? '8-10',
               restSeconds: 90,
-            }));
+            })),
+    );
 
     return (
       <ActiveWorkoutScreen

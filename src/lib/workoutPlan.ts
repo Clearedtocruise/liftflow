@@ -1,3 +1,4 @@
+import { enrichWithSupersetGroups } from '@/lib/supersetFlow';
 import type { PlannedWorkout, TemplateExercise } from '@/types/training';
 import type { EditableWorkoutExercise } from '@/types/workoutExecution';
 
@@ -10,12 +11,13 @@ function templateToEditable(exercise: TemplateExercise, index: number): Editable
     repRange: exercise.repRange ?? exercise.reps,
     restSeconds: exercise.restSeconds,
     weightLbs: exercise.weightLbs,
+    supersetGroupId: exercise.supersetGroupId,
   };
 }
 
 export function exercisesFromPlannedWorkout(workout: PlannedWorkout | null): EditableWorkoutExercise[] {
   const raw = workout?.metadata?.exercises ?? [];
-  return raw.map(templateToEditable);
+  return enrichWithSupersetGroups(raw.map(templateToEditable));
 }
 
 export function estimateWorkoutDurationMinutes(exercises: EditableWorkoutExercise[]): number {
