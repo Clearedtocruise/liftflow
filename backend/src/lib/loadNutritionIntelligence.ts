@@ -1,4 +1,9 @@
 import { addDays } from './programTypes.js';
+import {
+  aggregateDailyMeals,
+  countNutritionLogDays,
+  type MealRow,
+} from './mealAggregation.js';
 import { loadRecoveryIntelligence } from './loadRecoveryIntelligence.js';
 import { requireAdmin } from './supabase.js';
 import { resolveRankedGoals, toNutritionGoal } from './trainingGoals.js';
@@ -43,12 +48,12 @@ export async function loadNutritionIntelligence(userId: string): Promise<Nutriti
         .order('scheduled_date', { ascending: true }),
       db
         .from('meals')
-        .select('scheduled_date')
+        .select('id, scheduled_date, meal_type, meal_plan_id, calories, protein_g, carbs_g, fat_g, instructions, created_at')
         .eq('user_id', userId)
         .gte('scheduled_date', sevenDaysAgo.toISOString().slice(0, 10)),
       db
         .from('meals')
-        .select('calories, protein_g, carbs_g, fat_g')
+        .select('id, scheduled_date, meal_type, meal_plan_id, calories, protein_g, carbs_g, fat_g, instructions, created_at')
         .eq('user_id', userId)
         .eq('scheduled_date', today),
       db
@@ -106,19 +111,13 @@ export async function loadNutritionIntelligence(userId: string): Promise<Nutriti
       ? Number(profileRes.data.weight_kg)
       : undefined;
 
-  const logDays = new Set((meals7dRes.data ?? []).map((m) => m.scheduled_date)).size;
+  const meals7d = (meals7dRes.data ?? []) as MealRow[];
+  const todayMeals = (todayMealsRes.data ?? []) as MealRow[];
+  const todayAggregation = aggregateDailyMeals(todayMeals);
+
+  const logDays = countNutritionLogDays(meals7d);
   const adherencePct = computeNutritionAdherence(logDays);
 
-  let caloriesToday = 0;
-  let proteinToday = 0;
-  let carbsToday = 0;
-  let fatToday = 0;
-  for (const meal of todayMealsRes.data ?? []) {
-    caloriesToday += Number(meal.calories ?? 0);
-    proteinToday += Number(meal.protein_g ?? 0);
-    carbsToday += Number(meal.carbs_g ?? 0);
-    fatToday += Number(meal.fat_g ?? 0);
-  }
   const waterMlToday = (hydrationRes.data ?? []).reduce((sum, h) => sum + Number(h.amount_ml ?? 0), 0);
 
   const trainingDaysThisWeek = (plannedRes.data ?? [])
@@ -147,10 +146,10 @@ export async function loadNutritionIntelligence(userId: string): Promise<Nutriti
     adherencePct,
     nutritionLogDays7d: logDays,
     intakeToday: {
-      calories: caloriesToday,
-      proteinG: proteinToday,
-      carbsG: carbsToday,
-      fatG: fatToday,
+      calories: todayAggregation.caloriesConsumed,
+      proteinG: todayAggregation.proteinG,
+      carbsG: todayAggregation.carbsG,
+      fatG: todayAggregation.fatG,
       waterMl: waterMlToday,
     },
     dietaryStyle,

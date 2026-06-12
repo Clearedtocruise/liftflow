@@ -1,10 +1,18 @@
-type MealRow = {
+export type MealCleanupRow = {
   id: string;
   scheduled_date: string | null;
   meal_type: string;
   instructions: string | null;
   created_at: string;
+  meal_plan_id?: string | null;
+  name?: string | null;
+  calories?: number | null;
+  protein_g?: number | null;
+  carbs_g?: number | null;
+  fat_g?: number | null;
 };
+
+type MealRow = MealCleanupRow;
 
 type MealStatus = 'planned' | 'completed' | 'modified' | 'skipped';
 
@@ -28,6 +36,49 @@ function parseMealStatus(instructions: string | null | undefined): MealStatus {
 function slotKey(row: MealRow): string | null {
   if (!row.scheduled_date) return null;
   return `${row.scheduled_date}:${row.meal_type}`;
+}
+
+/** Pick one keeper per date+meal_type; prefer completed/modified, then newest. */
+export function pickMealsToKeep(meals: MealRow[]): { keep: MealRow[]; removeIds: string[] } {
+  const groups = new Map<string, MealRow[]>();
+
+  for (const meal of meals) {
+    const key = slotKey(meal);
+    if (!key) continue;
+    const bucket = groups.get(key) ?? [];
+    bucket.push(meal);
+    groups.set(key, bucket);
+  }
+
+  const keep: MealRow[] = [];
+  const removeIds: string[] = [];
+
+  for (const group of groups.values()) {
+    if (group.length === 1) {
+      keep.push(group[0]);
+      continue;
+    }
+
+    const sorted = [...group].sort((a, b) => {
+      const rankDiff = STATUS_RANK[parseMealStatus(b.instructions)] - STATUS_RANK[parseMealStatus(a.instructions)];
+      if (rankDiff !== 0) return rankDiff;
+      return b.created_at.localeCompare(a.created_at);
+    });
+
+    keep.push(sorted[0]);
+    for (let index = 1; index < sorted.length; index += 1) {
+      removeIds.push(sorted[index].id);
+    }
+  }
+
+  const slottedIds = new Set(keep.map((meal) => meal.id));
+  for (const meal of meals) {
+    if (!slotKey(meal) && !slottedIds.has(meal.id)) {
+      keep.push(meal);
+    }
+  }
+
+  return { keep, removeIds };
 }
 
 export function weekEndDate(weekStart: string): string {
@@ -76,28 +127,7 @@ export async function pruneDuplicateMeals(
   if (error) throw new Error(error.message);
 
   const rows = (data ?? []) as MealRow[];
-  const groups = new Map<string, MealRow[]>();
-
-  for (const row of rows) {
-    const key = slotKey(row);
-    if (!key) continue;
-    const bucket = groups.get(key) ?? [];
-    bucket.push(row);
-    groups.set(key, bucket);
-  }
-
-  const removeIds: string[] = [];
-  for (const group of groups.values()) {
-    if (group.length <= 1) continue;
-    const sorted = [...group].sort((a, b) => {
-      const rankDiff = STATUS_RANK[parseMealStatus(b.instructions)] - STATUS_RANK[parseMealStatus(a.instructions)];
-      if (rankDiff !== 0) return rankDiff;
-      return b.created_at.localeCompare(a.created_at);
-    });
-    for (let index = 1; index < sorted.length; index += 1) {
-      removeIds.push(sorted[index].id);
-    }
-  }
+  const { removeIds } = pickMealsToKeep(rows);
 
   if (removeIds.length === 0) return 0;
 

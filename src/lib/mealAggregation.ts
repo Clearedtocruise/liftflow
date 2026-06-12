@@ -24,6 +24,10 @@ export type DailyMealAggregation = {
   plannedProteinG: number;
 };
 
+export type WeeklyMealAggregation = Omit<DailyMealAggregation, 'dedupedMeals'> & {
+  byDate: Record<string, Omit<DailyMealAggregation, 'dedupedMeals'>>;
+};
+
 function mealStatus(meal: Meal) {
   return enrichMealMeta(meal.name, meal.instructions).status ?? 'planned';
 }
@@ -78,6 +82,66 @@ export function aggregateDailyMeals(meals: Meal[]): DailyMealAggregation {
     plannedCalories: dedupedMeals.reduce((sum, meal) => sum + (meal.calories ?? 0), 0),
     plannedProteinG: dedupedMeals.reduce((sum, meal) => sum + Number(meal.proteinG ?? 0), 0),
   };
+}
+
+function dailyTotalsWithoutMeals(aggregation: DailyMealAggregation): Omit<DailyMealAggregation, 'dedupedMeals'> {
+  const { dedupedMeals: _dedupedMeals, ...totals } = aggregation;
+  return totals;
+}
+
+export function aggregateWeeklyMeals(meals: Meal[]): WeeklyMealAggregation {
+  const dates = [...new Set(meals.map((meal) => meal.scheduledDate).filter(Boolean))] as string[];
+  const byDate: WeeklyMealAggregation['byDate'] = {};
+
+  for (const date of dates) {
+    byDate[date] = dailyTotalsWithoutMeals(aggregateDailyMeals(meals.filter((meal) => meal.scheduledDate === date)));
+  }
+
+  const weekTotals = Object.values(byDate).reduce<Omit<DailyMealAggregation, 'dedupedMeals'>>(
+    (totals, day) => ({
+      caloriesConsumed: totals.caloriesConsumed + day.caloriesConsumed,
+      proteinG: totals.proteinG + day.proteinG,
+      carbsG: totals.carbsG + day.carbsG,
+      fatG: totals.fatG + day.fatG,
+      mealsCompleted: totals.mealsCompleted + day.mealsCompleted,
+      mealsTotal: totals.mealsTotal + day.mealsTotal,
+      plannedCalories: totals.plannedCalories + day.plannedCalories,
+      plannedProteinG: totals.plannedProteinG + day.plannedProteinG,
+    }),
+    {
+      caloriesConsumed: 0,
+      proteinG: 0,
+      carbsG: 0,
+      fatG: 0,
+      mealsCompleted: 0,
+      mealsTotal: 0,
+      plannedCalories: 0,
+      plannedProteinG: 0,
+    },
+  );
+
+  return { ...weekTotals, byDate };
+}
+
+export function countNutritionLogDays(meals: Meal[]): number {
+  const dates = new Set<string>();
+  const byDate = new Map<string, Meal[]>();
+
+  for (const meal of meals) {
+    if (!meal.scheduledDate) continue;
+    const bucket = byDate.get(meal.scheduledDate) ?? [];
+    bucket.push(meal);
+    byDate.set(meal.scheduledDate, bucket);
+  }
+
+  for (const [date, dayMeals] of byDate.entries()) {
+    const aggregated = aggregateDailyMeals(dayMeals);
+    if (aggregated.caloriesConsumed > 0 || aggregated.mealsCompleted > 0) {
+      dates.add(date);
+    }
+  }
+
+  return dates.size;
 }
 
 export function findNextMeal(

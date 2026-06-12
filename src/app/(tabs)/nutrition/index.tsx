@@ -14,7 +14,7 @@ import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 import { aggregateWeeklyGroceries, groupGroceriesByCategory } from '@/lib/groceryAggregation';
-import { aggregateDailyMeals, dedupeMealsByType } from '@/lib/mealAggregation';
+import { aggregateDailyMeals, aggregateWeeklyMeals, dedupeMealsByType } from '@/lib/mealAggregation';
 import {
   enrichMealMeta,
   serializeMealMeta,
@@ -100,6 +100,8 @@ export default function NutritionScreen() {
       meals: dedupeMealsByType(weekMeals.filter((meal) => meal.scheduledDate === date)),
     }));
   }, [weekMeals]);
+
+  const weekAggregation = useMemo(() => aggregateWeeklyMeals(weekMeals), [weekMeals]);
 
   const shoppingItems = useMemo(() => {
     if (groceryList?.items?.length) {
@@ -224,7 +226,18 @@ export default function NutritionScreen() {
           {weekMeals.length === 0 ? (
             <PrimaryButton label="Generate Weekly Meal Plan" onPress={ensureMealPlan} />
           ) : (
-            weekDays.map((day) => (
+            <>
+              <Card style={styles.weekSummary}>
+                <AppText variant="label" color="accent">
+                  Week totals
+                </AppText>
+                <AppText variant="body" color="textSecondary">
+                  {weekAggregation.caloriesConsumed} / {weekAggregation.plannedCalories} cal consumed ·{' '}
+                  {Math.round(weekAggregation.proteinG)} / {Math.round(weekAggregation.plannedProteinG)}g protein ·{' '}
+                  {weekAggregation.mealsCompleted} / {weekAggregation.mealsTotal} meals logged
+                </AppText>
+              </Card>
+              {weekDays.map((day) => (
               <Card key={day.date} style={styles.dayCard}>
                 <Pressable onPress={() => setExpandedDay(expandedDay === day.date ? null : day.date)} style={styles.dayHeader}>
                   <AppText variant="bodyBold">{day.label}</AppText>
@@ -254,7 +267,8 @@ export default function NutritionScreen() {
                     })
                   : null}
               </Card>
-            ))
+              ))}
+            </>
           )}
         </>
       ) : null}
@@ -342,6 +356,9 @@ const styles = StyleSheet.create({
   },
   dayCard: {
     gap: Spacing.sm,
+  },
+  weekSummary: {
+    gap: Spacing.xs,
   },
   dayHeader: {
     flexDirection: 'row',
