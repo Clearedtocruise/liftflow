@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from 'react-native';
 
+import { api } from '@/api/client';
 import { Card } from '@/components/layout/Card';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
@@ -12,17 +13,18 @@ import { NutritionSectionTabs, type NutritionSection } from '@/components/nutrit
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
-import { aggregateWeeklyGroceries } from '@/lib/groceryAggregation';
+import { aggregateWeeklyGroceries, groupGroceriesByCategory } from '@/lib/groceryAggregation';
 import { aggregateDailyMeals, dedupeMealsByType } from '@/lib/mealAggregation';
 import {
-    enrichMealMeta,
-    ingredientsForMealName,
-    serializeMealMeta,
+  enrichMealMeta,
+  serializeMealMeta,
 } from '@/lib/mealIngredients';
-import { scheduleFromProfile, scheduledTimesForDay } from '@/lib/mealSchedule';
+import { formatScheduleSubtitle, scheduleFromProfile, scheduledTimesForDay } from '@/lib/mealSchedule';
 import { WEEKDAY_LABELS, getWeekRange } from '@/lib/weekPlan';
+import type { MealAlternativeOption } from '@/services/nutritionAdvisoryService';
 import { nutritionService } from '@/services/nutritionService';
 import { trainingService } from '@/services/trainingService';
+import { getAccessToken } from '@/supabase/client';
 import type { DailyNutritionSummary, GroceryList, Meal, NutritionGoals } from '@/types';
 
 export default function NutritionScreen() {
@@ -38,24 +40,37 @@ export default function NutritionScreen() {
   const [replaceMode, setReplaceMode] = useState<'meal' | 'ingredient'>('meal');
   const [detailMeal, setDetailMeal] = useState<Meal | null>(null);
   const [hasWorkoutToday, setHasWorkoutToday] = useState(false);
+  const [recoverySleepHours, setRecoverySleepHours] = useState<number | undefined>();
 
   const today = new Date().toISOString().slice(0, 10);
-  const schedule = scheduleFromProfile(user, hasWorkoutToday);
+  const schedule = scheduleFromProfile(user, hasWorkoutToday, recoverySleepHours);
+  const dietaryRestrictions = user?.metadata?.coachProfile?.dietaryRestrictions ?? [];
 
   const load = useCallback(async () => {
     if (!user) return;
     const { from, to } = getWeekRange();
     await nutritionService.pruneDuplicateMeals(user.id, { from, to });
-    const [goalsRes, summaryRes, weekRes, dashRes] = await Promise.all([
+
+    const token = await getAccessToken();
+    const recoveryPromise = token
+      ? api.getRecoveryToday(user.id, token).catch(() => null)
+      : Promise.resolve(null);
+
+    const [goalsRes, summaryRes, weekRes, dashRes, recoveryToday] = await Promise.all([
       nutritionService.getGoals(user.id),
       nutritionService.getDailySummary(user.id, today),
       nutritionService.getMealsForWeek(user.id, from, to),
       trainingService.getDashboard(user.id),
+      recoveryPromise,
     ]);
+
     if (goalsRes.success) setGoals(goalsRes.data);
     if (summaryRes.success) setSummary(summaryRes.data);
     if (weekRes.success) setWeekMeals(weekRes.data);
     if (dashRes.success) setHasWorkoutToday(Boolean(dashRes.data.nextWorkout));
+
+    const sleepHours = recoveryToday?.sleepHours;
+    setRecoverySleepHours(typeof sleepHours === 'number' ? sleepHours : undefined);
     setLoading(false);
   }, [user, today]);
 
@@ -72,30 +87,32 @@ export default function NutritionScreen() {
     [todayMeals, schedule, hasWorkoutToday],
   );
 
-  const mealAggregation = useMemo(() => aggregateDailyMeals(weekMeals.filter((m) => m.scheduledDate === today)), [weekMeals, today]);
-  const mealsCompleted = mealAggregation.mealsCompleted;
+  const mealAggregation = useMemo(
+    () => aggregateDailyMeals(weekMeals.filter((m) => m.scheduledDate === today)),
+    [weekMeals, today],
+  );
 
   const weekDays = useMemo(() => {
     const { dates } = getWeekRange();
     return dates.map((date, index) => ({
       date,
       label: WEEKDAY_LABELS[index],
-      meals: weekMeals.filter((meal) => meal.scheduledDate === date),
+      meals: dedupeMealsByType(weekMeals.filter((meal) => meal.scheduledDate === date)),
     }));
   }, [weekMeals]);
 
   const shoppingItems = useMemo(() => {
-    if (groceryList?.items?.length) return groceryList.items;
-    return aggregateWeeklyGroceries(weekMeals).map((item, index) => ({
-      id: `local-${index}`,
-      name: item.name,
-      quantity: parseFloat(item.quantity) || 1,
-      unit: item.quantity.replace(/^[\d.]+\s*/, '') || 'serving',
-      category: item.category,
-      isChecked: false,
-      sortOrder: index,
-    }));
+    if (groceryList?.items?.length) {
+      return groceryList.items.map((item) => ({
+        name: item.name,
+        quantity: `${item.quantity} ${item.unit}`.trim(),
+        category: item.category ?? 'Pantry',
+      }));
+    }
+    return aggregateWeeklyGroceries(weekMeals);
   }, [groceryList, weekMeals]);
+
+  const groupedShopping = useMemo(() => groupGroceriesByCategory(shoppingItems), [shoppingItems]);
 
   async function ensureMealPlan() {
     if (!user) return;
@@ -119,16 +136,19 @@ export default function NutritionScreen() {
     load();
   }
 
-  async function handleReplaceMeal(newName: string) {
-    if (!replaceMeal) return;
-    const templateIngredients = ingredientsForMealName(newName);
-    const meta = enrichMealMeta(replaceMeal.name, replaceMeal.instructions);
+  async function handleReplaceMeal(meal: Meal, option: MealAlternativeOption) {
+    const meta = enrichMealMeta(meal.name, meal.instructions);
     meta.status = 'modified';
-    meta.ingredients = templateIngredients;
-    await nutritionService.updateMeal(replaceMeal.id, {
-      name: newName,
+    meta.ingredients = option.ingredients;
+    await nutritionService.updateMeal(meal.id, {
+      name: option.name,
+      calories: option.calories,
+      proteinG: option.proteinG,
+      carbsG: option.carbsG,
+      fatG: option.fatG,
       instructions: serializeMealMeta(meta),
     });
+    setReplaceMeal(null);
     load();
   }
 
@@ -140,6 +160,7 @@ export default function NutritionScreen() {
     );
     meta.status = 'modified';
     await nutritionService.updateMeal(replaceMeal.id, { instructions: serializeMealMeta(meta) });
+    setReplaceMeal(null);
     load();
   }
 
@@ -155,7 +176,7 @@ export default function NutritionScreen() {
     <ScreenContainer contentContainerStyle={styles.content}>
       <AppText variant="headline">Nutrition</AppText>
       <AppText variant="footnote" color="textSecondary">
-        Wake ~4:00 AM · Workout ~{schedule.workoutHour ?? 9}:00 · Sleep ~{schedule.sleepHour ?? 21}:00
+        {formatScheduleSubtitle(schedule)}
       </AppText>
 
       <NutritionSectionTabs active={section} onChange={setSection} />
@@ -165,8 +186,10 @@ export default function NutritionScreen() {
           <NutritionProgressHeader
             summary={summary}
             goals={goals}
-            mealsCompleted={mealsCompleted}
-            mealsTotal={todayMeals.length}
+            mealsCompleted={mealAggregation.mealsCompleted}
+            mealsTotal={mealAggregation.mealsTotal}
+            caloriesConsumed={mealAggregation.caloriesConsumed}
+            proteinG={mealAggregation.proteinG}
           />
           <AppText variant="label" color="accent">
             Today&apos;s Plan
@@ -211,7 +234,11 @@ export default function NutritionScreen() {
                 </Pressable>
                 {expandedDay === day.date
                   ? day.meals.map((meal, index) => {
-                      const times = scheduledTimesForDay(day.meals.map((m) => m.mealType), schedule, day.date === today && hasWorkoutToday);
+                      const times = scheduledTimesForDay(
+                        day.meals.map((m) => m.mealType),
+                        schedule,
+                        day.date === today && hasWorkoutToday,
+                      );
                       return (
                         <View key={meal.id} style={styles.weekMealRow}>
                           <AppText variant="footnote" color="accent">
@@ -219,7 +246,8 @@ export default function NutritionScreen() {
                           </AppText>
                           <AppText variant="body">{meal.name}</AppText>
                           <AppText variant="caption" color="textSecondary">
-                            {meal.calories ?? 0} cal · {Math.round(meal.proteinG ?? 0)}P
+                            {meal.calories ?? 0} cal · {Math.round(meal.proteinG ?? 0)}P · {Math.round(meal.carbsG ?? 0)}C ·{' '}
+                            {Math.round(meal.fatG ?? 0)}F
                           </AppText>
                         </View>
                       );
@@ -234,22 +262,29 @@ export default function NutritionScreen() {
       {section === 'shopping' ? (
         <>
           <PrimaryButton label="Generate Shopping List" variant="secondary" onPress={handleGenerateShoppingList} />
-          <Card style={styles.shoppingCard}>
-            {shoppingItems.length === 0 ? (
+          {shoppingItems.length === 0 ? (
+            <Card style={styles.shoppingCard}>
               <AppText variant="body" color="textSecondary">
                 Generate a meal plan first.
               </AppText>
-            ) : (
-              shoppingItems.map((item) => (
-                <View key={item.id} style={styles.shoppingRow}>
-                  <AppText variant="bodyBold">{item.name}</AppText>
-                  <AppText variant="footnote" color="textSecondary">
-                    {item.quantity} {item.unit}
-                  </AppText>
-                </View>
-              ))
-            )}
-          </Card>
+            </Card>
+          ) : (
+            Object.entries(groupedShopping).map(([category, items]) => (
+              <Card key={category} style={styles.shoppingCard}>
+                <AppText variant="label" color="accent">
+                  {category}
+                </AppText>
+                {items.map((item) => (
+                  <View key={`${category}-${item.name}`} style={styles.shoppingRow}>
+                    <AppText variant="bodyBold">{item.name}</AppText>
+                    <AppText variant="footnote" color="textSecondary">
+                      {item.quantity}
+                    </AppText>
+                  </View>
+                ))}
+              </Card>
+            ))
+          )}
         </>
       ) : null}
 
@@ -264,8 +299,11 @@ export default function NutritionScreen() {
         meal={replaceMeal}
         scheduledTime={todayTimes[todayMeals.findIndex((m) => m.id === replaceMeal?.id)]}
         mode={replaceMode}
+        dietaryRestrictions={dietaryRestrictions}
         onClose={() => setReplaceMeal(null)}
-        onReplaceMeal={handleReplaceMeal}
+        onReplaceMeal={(option) => {
+          if (replaceMeal) void handleReplaceMeal(replaceMeal, option);
+        }}
         onReplaceIngredient={handleReplaceIngredient}
       />
 
@@ -275,10 +313,10 @@ export default function NutritionScreen() {
           meal={detailMeal}
           scheduledTime={todayTimes[todayMeals.findIndex((m) => m.id === detailMeal.id)]}
           mode="meal"
+          dietaryRestrictions={dietaryRestrictions}
           onClose={() => setDetailMeal(null)}
-          onReplaceMeal={async (name) => {
-            setReplaceMeal(detailMeal);
-            await handleReplaceMeal(name);
+          onReplaceMeal={(option) => {
+            void handleReplaceMeal(detailMeal, option);
             setDetailMeal(null);
           }}
           onReplaceIngredient={handleReplaceIngredient}

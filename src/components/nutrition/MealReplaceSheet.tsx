@@ -1,10 +1,15 @@
-import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
-import { alternativesForIngredient, enrichMealMeta, mealAlternatives } from '@/lib/mealIngredients';
+import { enrichMealMeta, type MealReplacementReason } from '@/lib/mealIngredients';
 import { mealTypeLabel } from '@/lib/mealSchedule';
+import {
+  nutritionAdvisoryService,
+  type MealAlternativeOption,
+} from '@/services/nutritionAdvisoryService';
 import type { Meal } from '@/types';
 
 type MealReplaceSheetProps = {
@@ -13,12 +18,13 @@ type MealReplaceSheetProps = {
   scheduledTime?: string;
   mode: 'meal' | 'ingredient';
   ingredientName?: string;
+  dietaryRestrictions?: string[];
   onClose: () => void;
-  onReplaceMeal: (newName: string, reason: string) => void;
+  onReplaceMeal: (option: MealAlternativeOption, reason: MealReplacementReason) => void;
   onReplaceIngredient: (ingredientName: string, replacement: string) => void;
 };
 
-const MEAL_REASONS = [
+const MEAL_REASONS: Array<{ id: MealReplacementReason; label: string }> = [
   { id: 'default', label: "I don't want this" },
   { id: 'faster', label: 'Need faster option' },
   { id: 'restaurant', label: 'Need restaurant option' },
@@ -32,17 +38,43 @@ export function MealReplaceSheet({
   scheduledTime,
   mode,
   ingredientName,
+  dietaryRestrictions = [],
   onClose,
   onReplaceMeal,
   onReplaceIngredient,
 }: MealReplaceSheetProps) {
+  const [reason, setReason] = useState<MealReplacementReason>('default');
+  const [loading, setLoading] = useState(false);
+  const [alternatives, setAlternatives] = useState<MealAlternativeOption[]>([]);
+  const [ingredientAlternatives, setIngredientAlternatives] = useState<
+    Array<{ from: string; to: string; reason: string }>
+  >([]);
+  const [reasoning, setReasoning] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!visible || !meal || mode !== 'meal') return;
+
+    let cancelled = false;
+    setLoading(true);
+
+    void nutritionAdvisoryService.getMealAlternatives(meal, reason, dietaryRestrictions).then((result) => {
+      if (cancelled) return;
+      if (result.success) {
+        setAlternatives(result.data.alternatives);
+        setIngredientAlternatives(result.data.ingredientAlternatives);
+        setReasoning(result.data.reasoning);
+      }
+      setLoading(false);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, meal, mode, reason, dietaryRestrictions]);
+
   if (!meal) return null;
 
   const meta = enrichMealMeta(meal.name, meal.instructions);
-  const options =
-    mode === 'ingredient' && ingredientName
-      ? alternativesForIngredient(ingredientName)
-      : mealAlternatives(meal.name, 'default');
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
@@ -55,48 +87,72 @@ export function MealReplaceSheet({
 
         {mode === 'meal' ? (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.reasonRow}>
-            {MEAL_REASONS.map((reason) => (
+            {MEAL_REASONS.map((item) => (
               <Pressable
-                key={reason.id}
-                style={styles.reasonChip}
-                onPress={() => {
-                  const alt = mealAlternatives(meal.name, reason.id)[0];
-                  onReplaceMeal(alt, reason.id);
-                  onClose();
-                }}>
-                <AppText variant="caption">{reason.label}</AppText>
+                key={item.id}
+                style={[styles.reasonChip, reason === item.id && styles.reasonChipActive]}
+                onPress={() => setReason(item.id)}>
+                <AppText variant="caption" color={reason === item.id ? 'accent' : 'textSecondary'}>
+                  {item.label}
+                </AppText>
               </Pressable>
             ))}
           </ScrollView>
         ) : null}
 
-        <ScrollView contentContainerStyle={styles.list}>
-          {options.map((option) => (
-            <Pressable
-              key={option}
-              style={styles.option}
-              onPress={() => {
-                if (mode === 'ingredient' && ingredientName) {
-                  onReplaceIngredient(ingredientName, option);
-                } else {
-                  onReplaceMeal(option, 'default');
-                }
-                onClose();
-              }}>
-              <AppText variant="body">{option}</AppText>
-            </Pressable>
-          ))}
-        </ScrollView>
+        {reasoning && mode === 'meal' ? (
+          <AppText variant="footnote" color="textTertiary">
+            {reasoning}
+          </AppText>
+        ) : null}
+
+        {loading && mode === 'meal' ? (
+          <View style={styles.loading}>
+            <ActivityIndicator color={LiftFlowColors.accent} />
+          </View>
+        ) : (
+          <ScrollView contentContainerStyle={styles.list}>
+            {mode === 'meal'
+              ? alternatives.map((option) => (
+                  <Pressable
+                    key={option.name}
+                    style={styles.option}
+                    onPress={() => {
+                      onReplaceMeal(option, reason);
+                      onClose();
+                    }}>
+                    <AppText variant="body">{option.name}</AppText>
+                    <AppText variant="caption" color="textSecondary">
+                      {option.calories} cal · {Math.round(option.proteinG)}P · {Math.round(option.carbsG)}C ·{' '}
+                      {Math.round(option.fatG)}F
+                    </AppText>
+                  </Pressable>
+                ))
+              : null}
+          </ScrollView>
+        )}
 
         {mode === 'meal' ? (
           <View style={styles.ingredientSection}>
             <AppText variant="label" color="textSecondary">
               Replace ingredient
             </AppText>
-            {(meta.ingredients ?? []).map((ingredient) => (
-              <Pressable key={ingredient.name} style={styles.option} onPress={() => onReplaceIngredient(ingredient.name, alternativesForIngredient(ingredient.name)[0])}>
+            {(ingredientAlternatives.length > 0 ? ingredientAlternatives : (meta.ingredients ?? []).map((item) => ({
+              from: item.name,
+              to: item.name,
+              reason: '',
+            }))).map((item) => (
+              <Pressable
+                key={item.from}
+                style={styles.option}
+                onPress={() => {
+                  if (item.to && item.to !== item.from) {
+                    onReplaceIngredient(item.from, item.to);
+                    onClose();
+                  }
+                }}>
                 <AppText variant="footnote">
-                  {ingredient.name} → {alternativesForIngredient(ingredient.name)[0]}
+                  {item.from} → {item.to}
                 </AppText>
               </Pressable>
             ))}
@@ -128,6 +184,14 @@ const styles = StyleSheet.create({
     borderColor: LiftFlowColors.border,
     marginRight: Spacing.sm,
   },
+  reasonChipActive: {
+    borderColor: LiftFlowColors.accent,
+    backgroundColor: LiftFlowColors.accentGlow,
+  },
+  loading: {
+    paddingVertical: Spacing.xl,
+    alignItems: 'center',
+  },
   list: {
     gap: Spacing.sm,
   },
@@ -137,6 +201,7 @@ const styles = StyleSheet.create({
     backgroundColor: LiftFlowColors.surface,
     borderWidth: 1,
     borderColor: LiftFlowColors.border,
+    gap: Spacing.xs,
   },
   ingredientSection: {
     gap: Spacing.sm,

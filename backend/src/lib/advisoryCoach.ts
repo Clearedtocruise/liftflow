@@ -215,3 +215,94 @@ Explain today's workout clearly for a lifter. No auto-prescription of unsafe loa
 
   return fallbackExplainWorkout(context);
 }
+
+export type MealReplacementReason =
+  | 'default'
+  | 'faster'
+  | 'restaurant'
+  | 'higher_protein'
+  | 'lower_calorie';
+
+export type MealAlternativeOption = {
+  name: string;
+  calories: number;
+  proteinG: number;
+  carbsG: number;
+  fatG: number;
+  ingredients: Array<{ name: string; serving: string }>;
+};
+
+export type MealAlternativesResponse = {
+  reasoning: string;
+  alternatives: MealAlternativeOption[];
+  ingredientAlternatives: Array<{ from: string; to: string; reason: string }>;
+};
+
+function fallbackMealAlternatives(context: {
+  mealName: string;
+  reason: MealReplacementReason;
+  ingredients?: Array<{ name: string; serving: string }>;
+}): MealAlternativesResponse {
+  const reason = context.reason ?? 'default';
+  const pools: Record<MealReplacementReason, MealAlternativeOption[]> = {
+    default: [
+      { name: 'Turkey rice bowl', calories: 600, proteinG: 46, carbsG: 58, fatG: 12, ingredients: [{ name: 'Turkey breast', serving: '6 oz' }, { name: 'White rice', serving: '1 cup cooked' }] },
+      { name: 'Grilled chicken and quinoa', calories: 580, proteinG: 48, carbsG: 52, fatG: 12, ingredients: [{ name: 'Chicken breast', serving: '6 oz' }, { name: 'Quinoa', serving: '1 cup cooked' }] },
+    ],
+    higher_protein: [
+      { name: 'Egg white omelette with turkey', calories: 320, proteinG: 42, carbsG: 8, fatG: 8, ingredients: [{ name: 'Egg whites', serving: '1 cup' }, { name: 'Turkey breast', serving: '4 oz' }] },
+      { name: 'Protein-forward Greek bowl', calories: 420, proteinG: 45, carbsG: 35, fatG: 8, ingredients: [{ name: 'Greek yogurt', serving: '1.5 cups' }, { name: 'Whey protein', serving: '1 scoop' }] },
+    ],
+    lower_calorie: [
+      { name: 'Large salad with grilled fish', calories: 380, proteinG: 38, carbsG: 18, fatG: 16, ingredients: [{ name: 'Mixed greens', serving: '3 cups' }, { name: 'White fish', serving: '5 oz' }] },
+      { name: 'Zucchini noodle bowl', calories: 420, proteinG: 32, carbsG: 28, fatG: 14, ingredients: [{ name: 'Zucchini noodles', serving: '2 cups' }, { name: 'Turkey meatballs', serving: '4 oz' }] },
+    ],
+    faster: [
+      { name: 'Protein shake with banana', calories: 300, proteinG: 30, carbsG: 30, fatG: 5, ingredients: [{ name: 'Whey protein', serving: '1 scoop' }, { name: 'Banana', serving: '1 medium' }] },
+      { name: 'Deli turkey sandwich', calories: 440, proteinG: 36, carbsG: 42, fatG: 12, ingredients: [{ name: 'Turkey breast', serving: '5 oz' }, { name: 'Whole grain bread', serving: '2 slices' }] },
+    ],
+    restaurant: [
+      { name: 'Grilled chicken restaurant bowl', calories: 620, proteinG: 46, carbsG: 58, fatG: 16, ingredients: [{ name: 'Grilled chicken', serving: '6 oz' }, { name: 'Rice', serving: '1 cup' }] },
+      { name: 'Sushi or poke bowl', calories: 580, proteinG: 38, carbsG: 62, fatG: 14, ingredients: [{ name: 'Salmon', serving: '5 oz' }, { name: 'Rice', serving: '3/4 cup' }] },
+    ],
+  };
+
+  const ingredientAlternatives = (context.ingredients ?? []).slice(0, 4).map((item) => ({
+    from: item.name,
+    to: item.name.toLowerCase().includes('chicken') ? 'Turkey breast' : 'Similar swap',
+    reason: 'Equipment- and preference-friendly substitute.',
+  }));
+
+  return {
+    reasoning: `Rule-based alternatives for "${context.mealName}" (${reason}). Review before applying.`,
+    alternatives: pools[reason] ?? pools.default,
+    ingredientAlternatives,
+  };
+}
+
+export async function generateMealAlternatives(context: {
+  mealName: string;
+  reason: MealReplacementReason;
+  mealType?: string;
+  ingredients?: Array<{ name: string; serving: string }>;
+  dietaryRestrictions?: string[];
+}): Promise<MealAlternativesResponse> {
+  const prompt = JSON.stringify(context);
+  const ai = await callOpenAiJson<MealAlternativesResponse>(
+    `You are an advisory nutrition coach. Return JSON only with keys:
+reasoning, alternatives[{name,calories,proteinG,carbsG,fatG,ingredients[{name,serving}]}], ingredientAlternatives[{from,to,reason}].
+Suggest 3 meal swaps for the requested reason. Respect dietaryRestrictions. Keep calories within ~25% of a typical meal slot.
+This is advisory only — no medical claims.`,
+    prompt,
+  );
+
+  if (ai?.reasoning && Array.isArray(ai.alternatives) && ai.alternatives.length > 0) {
+    return {
+      reasoning: ai.reasoning,
+      alternatives: ai.alternatives,
+      ingredientAlternatives: Array.isArray(ai.ingredientAlternatives) ? ai.ingredientAlternatives : [],
+    };
+  }
+
+  return fallbackMealAlternatives(context);
+}

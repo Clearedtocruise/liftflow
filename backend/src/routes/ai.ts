@@ -2,10 +2,12 @@ import { Router } from 'express';
 
 import {
     generateExplainWorkoutAdvisory,
+    generateMealAlternatives,
     generateNutritionAdvisory,
     generateWorkoutAdvisory,
     type AdvisoryNutritionKind,
     type AdvisoryWorkoutKind,
+    type MealReplacementReason,
 } from '../lib/advisoryCoach.js';
 import {
     assessRecovery,
@@ -202,6 +204,35 @@ aiRouter.post('/workout/generate', requireProSubscription, async (req, res) => {
     res.json({ ...plan, id: data.id, scheduledDate: data.scheduled_date });
   } catch (error) {
     res.status(500).json({ message: error instanceof Error ? error.message : 'Workout generation failed' });
+  }
+});
+
+aiRouter.post('/advisory/nutrition/meal-alternatives', async (req, res) => {
+  try {
+    const { mealName, reason, mealType, ingredients, dietaryRestrictions } = req.body as {
+      mealName?: string;
+      reason?: MealReplacementReason;
+      mealType?: string;
+      ingredients?: Array<{ name: string; serving: string }>;
+      dietaryRestrictions?: string[];
+    };
+
+    if (!mealName || !reason) {
+      res.status(400).json({ message: 'mealName and reason are required' });
+      return;
+    }
+
+    const data = await generateMealAlternatives({
+      mealName,
+      reason,
+      mealType,
+      ingredients,
+      dietaryRestrictions,
+    });
+    res.json({ data });
+  } catch (error) {
+    captureAiError(error, '/api/ai/advisory/nutrition/meal-alternatives');
+    res.status(500).json({ message: error instanceof Error ? error.message : 'Meal alternatives failed' });
   }
 });
 
