@@ -22,6 +22,7 @@ type StartWorkoutPromptProps = {
   nearbyMatch?: NearbyWorkoutLocationMatch | null;
   locationChecking?: boolean;
   onEnableLocation?: () => void;
+  hideStartButton?: boolean;
 };
 
 function locationTypeLabel(type: WorkoutLocation['locationType']): string {
@@ -41,6 +42,7 @@ export function StartWorkoutPrompt({
   nearbyMatch,
   locationChecking,
   onEnableLocation,
+  hideStartButton,
 }: StartWorkoutPromptProps) {
   const legacyLabel = user ? getPrimaryGymLabel(user) : null;
   const selected = locations.find((l) => l.id === selectedLocationId) ?? locations[0];
@@ -48,7 +50,7 @@ export function StartWorkoutPrompt({
   return (
     <Card style={styles.card}>
       <AppText variant="headline" style={styles.question}>
-        Are you starting a workout?
+        {hideStartButton ? 'Training location' : 'Are you starting a workout?'}
       </AppText>
 
       {locationChecking ? (
@@ -114,13 +116,15 @@ export function StartWorkoutPrompt({
       )}
 
       <View style={styles.actions}>
-        <PrimaryButton
-          label={loading ? 'Starting…' : 'Yes, start workout'}
-          size="large"
-          loading={loading}
-          disabled={locations.length > 0 && !selectedLocationId && !selected}
-          onPress={onStart}
-        />
+        {!hideStartButton ? (
+          <PrimaryButton
+            label={loading ? 'Starting…' : 'Yes, start workout'}
+            size="large"
+            loading={loading}
+            disabled={locations.length > 0 && !selectedLocationId && !selected}
+            onPress={onStart}
+          />
+        ) : null}
         {onEnableLocation ? (
           <PrimaryButton label="Enable location access" variant="secondary" onPress={onEnableLocation} />
         ) : null}

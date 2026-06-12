@@ -40,6 +40,8 @@ type WorkoutSessionActions = {
   setListening: (listening: boolean) => void;
   startRestTimer: (setId: string, seconds?: number) => Promise<void>;
   adjustRestTimer: (deltaSeconds: number) => void;
+  pauseRestTimer: () => void;
+  resumeRestTimer: () => void;
   skipRestTimer: () => Promise<void>;
   endRestTimer: () => Promise<void>;
 };
@@ -65,6 +67,7 @@ export function WorkoutSessionProvider({
   const [lastLoggedSet, setLastLoggedSet] = useState<WorkoutSet | null>(null);
   const restEndAtRef = useRef<number | null>(null);
   const hapticFiredRef = useRef(false);
+  const pausedRemainingRef = useRef<number | null>(null);
 
   const refreshSession = useCallback(async () => {
     if (!activeSession?.id) return;
@@ -281,10 +284,28 @@ export function WorkoutSessionProvider({
   );
 
   const adjustRestTimer = useCallback((deltaSeconds: number) => {
+    if (restEndAtRef.current === null && pausedRemainingRef.current != null) {
+      pausedRemainingRef.current = Math.max(0, pausedRemainingRef.current + deltaSeconds);
+      setRestSecondsRemaining(pausedRemainingRef.current);
+      return;
+    }
     if (restEndAtRef.current === null) return;
     restEndAtRef.current += deltaSeconds * 1000;
     const remaining = Math.max(0, Math.ceil((restEndAtRef.current - Date.now()) / 1000));
     setRestSecondsRemaining(remaining);
+  }, []);
+
+  const pauseRestTimer = useCallback(() => {
+    if (restEndAtRef.current === null) return;
+    pausedRemainingRef.current = Math.max(0, Math.ceil((restEndAtRef.current - Date.now()) / 1000));
+    restEndAtRef.current = null;
+    setRestSecondsRemaining(pausedRemainingRef.current);
+  }, []);
+
+  const resumeRestTimer = useCallback(() => {
+    if (pausedRemainingRef.current == null) return;
+    restEndAtRef.current = Date.now() + pausedRemainingRef.current * 1000;
+    pausedRemainingRef.current = null;
   }, []);
 
   const skipRestTimer = useCallback(async () => {
@@ -295,6 +316,7 @@ export function WorkoutSessionProvider({
     setActiveRestPeriod(null);
     setRestSecondsRemaining(null);
     restEndAtRef.current = null;
+    pausedRemainingRef.current = null;
   }, [activeRestPeriod, userId]);
 
   const endRestTimer = useCallback(async () => {
@@ -305,6 +327,7 @@ export function WorkoutSessionProvider({
     setActiveRestPeriod(null);
     setRestSecondsRemaining(null);
     restEndAtRef.current = null;
+    pausedRemainingRef.current = null;
   }, [activeRestPeriod, userId]);
 
   const value = useMemo<WorkoutSessionContextValue>(
@@ -330,6 +353,8 @@ export function WorkoutSessionProvider({
       setListening: setIsListening,
       startRestTimer,
       adjustRestTimer,
+      pauseRestTimer,
+      resumeRestTimer,
       skipRestTimer,
       endRestTimer,
     }),
@@ -354,6 +379,8 @@ export function WorkoutSessionProvider({
       addExerciseByName,
       startRestTimer,
       adjustRestTimer,
+      pauseRestTimer,
+      resumeRestTimer,
       skipRestTimer,
       endRestTimer,
     ],
