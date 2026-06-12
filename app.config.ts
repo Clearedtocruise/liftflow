@@ -94,14 +94,8 @@ const config: ExpoConfig = {
           'ONE MORE uses your location to detect when you arrive at a saved gym and suggest starting a workout.',
       },
     ],
-    [
-      'expo-notifications',
-      {
-        icon: './assets/branding/one-more-icon-256.png',
-        color: '#0E90FF',
-        sounds: [],
-      },
-    ],
+    // expo-notifications plugin omitted — package autolinks; strip push entitlement below.
+    './plugins/withLocalNotificationsOnly.js',
     [
       'expo-splash-screen',
       {
