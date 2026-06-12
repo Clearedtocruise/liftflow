@@ -18,7 +18,7 @@ type SubscriptionContextValue = {
   isRevenueCatConfigured: boolean;
   hasFeature: (featureId: ProFeatureId) => boolean;
   featureLabel: (featureId: ProFeatureId) => string;
-  refresh: () => Promise<void>;
+  refresh: (options?: { showLoading?: boolean }) => Promise<void>;
 };
 
 const SubscriptionContext = createContext<SubscriptionContextValue | null>(null);
@@ -26,30 +26,32 @@ const SubscriptionContext = createContext<SubscriptionContextValue | null>(null)
 export function SubscriptionProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [subscription, setSubscription] = useState<Subscription | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const prevSubscriptionRef = useRef<Subscription | null>(null);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (options?: { showLoading?: boolean }) => {
     if (!user) {
       setSubscription(null);
-      setLoading(false);
       return;
     }
 
-    setLoading(true);
+    if (options?.showLoading) setLoading(true);
     try {
-      const rcResult = await subscriptionService.syncFromRevenueCat(user.id);
-      if (rcResult.success) {
-        setSubscription(rcResult.data);
-        setLoading(false);
-        return;
+      try {
+        const rcResult = await subscriptionService.syncFromRevenueCat(user.id);
+        if (rcResult.success) {
+          setSubscription(rcResult.data);
+          return;
+        }
+      } catch {
+        // RevenueCat not configured — fall back to Supabase
       }
-    } catch {
-      // RevenueCat not configured — fall back to Supabase
+
+      const result = await subscriptionService.getSubscription(user.id);
+      if (result.success) setSubscription(result.data);
+    } finally {
+      if (options?.showLoading) setLoading(false);
     }
-    const result = await subscriptionService.getSubscription(user.id);
-    if (result.success) setSubscription(result.data);
-    setLoading(false);
   }, [user]);
 
   useEffect(() => {

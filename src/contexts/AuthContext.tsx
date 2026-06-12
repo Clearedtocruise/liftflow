@@ -1,12 +1,14 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import { useAuthDeepLink } from '@/hooks/useAuthDeepLink';
+import { logStartup } from '@/lib/startupLogger';
 import { authService, type SignUpResult } from '@/services/authService';
 import type { PasswordResetPayload, SignInPayload, SignUpPayload, UserProfile } from '@/types/user';
 
 type AuthContextValue = {
   user: UserProfile | null;
   isLoading: boolean;
+  isProfileReady: boolean;
   isAuthenticated: boolean;
   signIn: (payload: SignInPayload) => Promise<void>;
   signUp: (payload: SignUpPayload) => Promise<SignUpResult>;
@@ -22,33 +24,72 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isProfileReady, setIsProfileReady] = useState(false);
 
   useAuthDeepLink();
 
   useEffect(() => {
-    authService
-      .getSession()
-      .then(setUser)
-      .catch(() => setUser(null))
-      .finally(() => setIsLoading(false));
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const authUser = await authService.getAuthSessionUser();
+        if (cancelled) return;
+
+        if (!authUser) {
+          setUser(null);
+          setIsProfileReady(true);
+          logStartup('AUTH_READY', { authenticated: false });
+          return;
+        }
+
+        setUser(authService.stubProfileFromAuth(authUser));
+        logStartup('AUTH_READY', { authenticated: true });
+
+        const profile = await authService.loadProfile(
+          authUser.id,
+          authUser.email ?? '',
+          authUser.user_metadata,
+        );
+        if (cancelled) return;
+
+        setUser(profile);
+        setIsProfileReady(true);
+        logStartup('PROFILE_LOADED');
+      } catch {
+        if (!cancelled) {
+          setUser(null);
+          setIsProfileReady(true);
+          logStartup('AUTH_READY', { authenticated: false });
+        }
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    })();
 
     const { data: subscription } = authService.onAuthStateChange((profile) => {
       setUser(profile);
-      setIsLoading(false);
+      setIsProfileReady(true);
+      if (profile) logStartup('PROFILE_LOADED');
     });
 
-    return () => subscription.subscription.unsubscribe();
+    return () => {
+      cancelled = true;
+      subscription.subscription.unsubscribe();
+    };
   }, []);
 
   const signIn = useCallback(async (payload: SignInPayload) => {
     const profile = await authService.signIn(payload);
     setUser(profile);
+    setIsProfileReady(true);
   }, []);
 
   const signUp = useCallback(async (payload: SignUpPayload) => {
     const result = await authService.signUp(payload);
     if (result.status === 'session') {
       setUser(result.profile);
+      setIsProfileReady(true);
     }
     return result;
   }, []);
@@ -56,6 +97,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = useCallback(async () => {
     await authService.signOut();
     setUser(null);
+    setIsProfileReady(true);
   }, []);
 
   const resetPassword = useCallback(async (payload: PasswordResetPayload) => {
@@ -69,17 +111,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const deleteAccount = useCallback(async () => {
     await authService.deleteAccount();
     setUser(null);
+    setIsProfileReady(true);
   }, []);
 
   const refreshProfile = useCallback(async () => {
     const profile = await authService.getSession();
     setUser(profile);
+    setIsProfileReady(true);
   }, []);
 
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
       isLoading,
+      isProfileReady,
       isAuthenticated: Boolean(user),
       signIn,
       signUp,
@@ -89,7 +134,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       deleteAccount,
       refreshProfile,
     }),
-    [user, isLoading, signIn, signUp, signOut, resetPassword, updatePassword, deleteAccount, refreshProfile],
+    [
+      user,
+      isLoading,
+      isProfileReady,
+      signIn,
+      signUp,
+      signOut,
+      resetPassword,
+      updatePassword,
+      deleteAccount,
+      refreshProfile,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
