@@ -42,6 +42,7 @@ type ProfileRow = {
   available_equipment: string[] | null;
   primary_training_goal: string | null;
   onboarding_completed: boolean;
+  is_beta_tester?: boolean | null;
   metadata: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
@@ -74,6 +75,7 @@ export function mapProfile(row: ProfileRow): UserProfile {
     availableEquipment: (row.available_equipment ?? undefined) as UserProfile['availableEquipment'],
     primaryTrainingGoal: (row.primary_training_goal as UserProfile['primaryTrainingGoal']) ?? undefined,
     onboardingCompleted: row.onboarding_completed,
+    isBetaTester: row.is_beta_tester ?? undefined,
     metadata: (row.metadata as UserProfile['metadata']) ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

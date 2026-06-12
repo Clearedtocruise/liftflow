@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 
 import { PRO_FEATURE_LABELS, type ProFeatureId } from '@/constants/subscription';
 import { useAuth } from '@/hooks/useAuth';
+import { hasPremiumAccessOverride } from '@/lib/accessOverride';
 import { hasProFeature, isTrialingSubscription } from '@/lib/entitlements';
 import { productAnalyticsService } from '@/services/productAnalyticsService';
 import { subscriptionService } from '@/services/subscriptionService';
@@ -104,12 +105,13 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     };
   }, [user, refresh]);
 
-  const isPremium = subscriptionService.isPremium(subscription);
-  const isTrialing = isTrialingSubscription(subscription);
+  const premiumOverride = hasPremiumAccessOverride(user);
+  const isPremium = premiumOverride || subscriptionService.isPremium(subscription);
+  const isTrialing = !premiumOverride && isTrialingSubscription(subscription);
 
   const hasFeature = useCallback(
-    (featureId: ProFeatureId) => hasProFeature(subscription, featureId),
-    [subscription],
+    (featureId: ProFeatureId) => premiumOverride || hasProFeature(subscription, featureId),
+    [subscription, premiumOverride],
   );
 
   const featureLabel = useCallback((featureId: ProFeatureId) => PRO_FEATURE_LABELS[featureId], []);

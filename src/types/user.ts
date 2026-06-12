@@ -56,6 +56,8 @@ export type UserProfile = BaseEntity & {
   /** Nutrition driver — synced from fitnessGoals[0] */
   primaryTrainingGoal?: TrainingGoal;
   onboardingCompleted: boolean;
+  /** Grants Pro access when true (see accessOverride.ts) */
+  isBetaTester?: boolean;
   metadata?: UserProfileMetadata;
   updatedAt?: string;
 };
