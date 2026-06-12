@@ -50,6 +50,38 @@ export const RECOVERY_COMPOSITE_WEIGHTS = {
 
 export type RecoveryInputSource = 'check_in' | 'health_kit' | 'default_estimate';
 
+export type RecoveryTransparency = {
+  recoveryFormula: {
+    subjectiveWeight: number;
+    trainingLoadWeight: number;
+    muscleReadinessWeight: number;
+    trendAdjustment: number;
+    description: string;
+  };
+  readinessFormula: {
+    description: string;
+    muscleCount: number;
+    defaultWhenNoData: number;
+  };
+  subjectiveInputs: Array<{
+    key: SubjectiveInputKey;
+    label: string;
+    weight: number;
+    score: number;
+    provided: boolean;
+    source: RecoveryInputSource;
+  }>;
+  dataSources: {
+    checkIn: boolean;
+    healthKitSleep: boolean;
+    workoutSessions7d: number;
+    workoutSessions3d: number;
+    trendDays: number;
+  };
+  estimatedFromDefaults: boolean;
+  missingInputs: SubjectiveInputKey[];
+};
+
 export type RecoveryIntelligenceInput = {
   checkIn?: DailyRecoveryInput & { recoveryScore?: number; recoveryModeActive?: boolean };
   inputSources?: Partial<Record<SubjectiveInputKey, 'check_in' | 'health_kit'>>;
