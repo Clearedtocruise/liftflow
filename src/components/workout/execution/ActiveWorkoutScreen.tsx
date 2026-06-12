@@ -1,5 +1,5 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, StyleSheet, View } from 'react-native';
 
 import { Card } from '@/components/layout/Card';
@@ -9,6 +9,7 @@ import { AppText } from '@/components/ui/AppText';
 import { ExerciseCompleteCard } from '@/components/workout/execution/ExerciseCompleteCard';
 import { RestTimerOverlay } from '@/components/workout/execution/RestTimerOverlay';
 import { SetLoggingControls } from '@/components/workout/execution/SetLoggingControls';
+import { SmartProgressionCard } from '@/components/workout/SmartProgressionCard';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import { DEFAULT_REST_SECONDS } from '@/constants/workout';
 import { useAuth } from '@/hooks/useAuth';
@@ -87,6 +88,29 @@ export function ActiveWorkoutScreen({ session, planExercises, onFinish, onCancel
     currentExercise?.exercise?.name,
   );
   const nextSetNumber = Math.min(completedSets.length + 1, targetSets);
+  const currentSessionSets = useMemo(
+    () =>
+      completedSets.map((set, index) => ({
+        weightKg: set.weight ?? 0,
+        reps: set.reps ?? 0,
+        setNumber: index + 1,
+      })),
+    [completedSets],
+  );
+
+  const handleApplyCoachTarget = useCallback(
+    (recommended: { weightKg: number; reps: number }) => {
+      if (loggingMode === 'bodyweight') {
+        setReps(recommended.reps);
+        return;
+      }
+      if (loggingMode === 'weighted' && recommended.weightKg > 0) {
+        setWeightKg(recommended.weightKg);
+        setReps(recommended.reps);
+      }
+    },
+    [loggingMode],
+  );
 
   useEffect(() => {
     if (restSecondsRemaining === 0) {
@@ -251,6 +275,19 @@ export function ActiveWorkoutScreen({ session, planExercises, onFinish, onCancel
                     ? `Target ${targetSets} sets · ${repRange} reps · Bodyweight`
                     : `Target ${targetSets} sets · ${repRange} reps · Rest ${restTargetSeconds}s`}
               </AppText>
+
+              {user && currentExercise.exerciseId && loggingMode !== 'timed' && !showComplete ? (
+                <SmartProgressionCard
+                  variant="inline"
+                  loggingMode={loggingMode}
+                  userId={user.id}
+                  exerciseId={currentExercise.exerciseId}
+                  exerciseName={currentExercise.exercise?.name ?? 'Exercise'}
+                  sessionId={session.id}
+                  currentSessionSets={currentSessionSets}
+                  onApplyTarget={handleApplyCoachTarget}
+                />
+              ) : null}
 
               <View style={styles.restPresetRow}>
                 {[60, 90, 120, 150].map((seconds) => (
