@@ -90,6 +90,7 @@
     "validate:sprint86": "node scripts/validate-sprint86-testflight-rc.mjs",
     "validate:sprint5-nutrition": "node scripts/validate-sprint5-nutrition-audit.mjs",
     "validate:sprint6-recovery": "node scripts/validate-sprint6-recovery-audit.mjs",
+    "validate:sprint7-adaptation": "node scripts/validate-sprint7-adaptation.mjs",
     "migrate:015": "node scripts/apply-migration-015.mjs",
     "seed:beta-invites": "node scripts/seed-beta-invites.mjs",
     "verify:sentry": "node scripts/verify-sentry-backend.mjs",

@@ -282,6 +282,18 @@ export default function SettingsScreen() {
           onPress={() => router.push('/(features)/equipment')}
         />
         <SettingsRow
+          label="Nutrition preferences"
+          value={
+            user?.metadata?.coachProfile?.dietaryRestrictions?.length
+              ? `${user.metadata.coachProfile.dietaryRestrictions.length} restriction(s)`
+              : 'Allergies, diet, schedule'
+          }
+          icon={
+            <AppSymbol name="leaf.fill" fallback="🥗" size={20} tintColor={LiftFlowColors.textSecondary} />
+          }
+          onPress={() => router.push('/(features)/nutrition-preferences')}
+        />
+        <SettingsRow
           label="Workout locations"
           value={user ? (getPrimaryGymLabel(user) ?? 'Add gyms') : 'Add gyms'}
           icon={

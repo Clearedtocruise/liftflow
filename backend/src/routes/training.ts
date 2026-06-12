@@ -1,6 +1,7 @@
 import { Router } from 'express';
 
 import { adaptActiveProgram } from '../lib/adaptiveProgram.js';
+import { adaptToPreferenceChanges } from '../lib/preferenceAdaptation.js';
 import { assessRecovery, suggestMuscleGroups } from '../lib/aiCoach.js';
 import { activateCoachSystem } from '../lib/coachActivation.js';
 import {
@@ -656,5 +657,18 @@ trainingRouter.post('/programs/adapt', async (req, res) => {
     res.json(await adaptActiveProgram(userId));
   } catch (error) {
     res.status(500).json({ message: error instanceof Error ? error.message : 'Program adaptation failed' });
+  }
+});
+
+trainingRouter.post('/preferences/adapt', async (req, res) => {
+  try {
+    const { userId, trigger } = req.body as { userId?: string; trigger?: 'equipment' | 'nutrition' | 'all' };
+    if (!userId) {
+      res.status(400).json({ message: 'userId is required' });
+      return;
+    }
+    res.json(await adaptToPreferenceChanges(userId, trigger ?? 'all'));
+  } catch (error) {
+    res.status(500).json({ message: error instanceof Error ? error.message : 'Preference adaptation failed' });
   }
 });

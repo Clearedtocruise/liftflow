@@ -8,6 +8,7 @@ import { LiftFlowColors } from '@/constants/theme';
 
 import AppleWatchScreen from './apple-watch';
 import CardioTrackingScreen from './cardio-tracking';
+import NutritionPreferencesScreen from './nutrition-preferences';
 import EquipmentScreen from './equipment';
 import HealthKitScreen from './healthkit';
 import SubscriptionScreen from './subscription';
@@ -23,6 +24,7 @@ export default function FeatureScreen() {
 
   if (feature === 'training-goals') return <TrainingGoalsScreen />;
   if (feature === 'equipment') return <EquipmentScreen />;
+  if (feature === 'nutrition-preferences') return <NutritionPreferencesScreen />;
   if (feature === 'subscription') return <SubscriptionScreen />;
   if (feature === 'healthkit') return <HealthKitScreen />;
   if (feature === 'training-profile') return <TrainingProfileScreen />;

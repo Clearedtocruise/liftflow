@@ -10,6 +10,7 @@ import { AppText } from '@/components/ui/AppText';
 import { summarizeEquipment, type EquipmentId } from '@/constants/equipmentCatalog';
 import { Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
+import { adaptationService } from '@/services/adaptationService';
 import { userService } from '@/services/userService';
 import { workoutLocationService } from '@/services/workoutLocationService';
 
@@ -53,8 +54,17 @@ export default function EquipmentScreen() {
     }
 
     await refreshProfile();
+
+    const adaptResult = await adaptationService.applyChanges(user.id, 'equipment');
     setSaving(false);
-    Alert.alert('Saved', 'Equipment preferences updated. Workout recommendations will match your selection.');
+
+    if (adaptResult.success && adaptResult.data.adapted) {
+      Alert.alert(adaptResult.data.notificationTitle, adaptResult.data.notificationBody);
+    } else if (adaptResult.success) {
+      Alert.alert('Saved', 'Equipment updated. Your current plan already matches this setup.');
+    } else {
+      Alert.alert('Saved', 'Equipment preferences updated. Workouts will match on next program refresh.');
+    }
     router.back();
   }, [user, selected, refreshProfile]);
 
