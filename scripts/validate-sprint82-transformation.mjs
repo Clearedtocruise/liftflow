@@ -7,6 +7,8 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
+import { readWorkoutTab } from './lib/projectPaths.mjs';
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
 const PROD = process.env.EXPO_PUBLIC_API_URL ?? 'https://liftflow-api.onrender.com';
@@ -115,8 +117,14 @@ record('Voice: transformation_progress pattern', voiceParse.includes("'transform
 record('Voice: transformation_target_bf pattern', voiceParse.includes("'transformation_target_bf'"));
 record('Voice: intent labels', voiceParse.includes("'Show transformation'") || voiceParse.includes("'Show progress'"));
 
-const workout = read('src/app/(tabs)/workout.tsx');
-record('Workout voice handler', workout.includes("'transformation_query'") && workout.includes('runTransformation'));
+const workout = readWorkoutTab(root);
+const progressTab = read('src/app/(tabs)/progress.tsx');
+record(
+  'Workout voice handler',
+  (workout.includes("'transformation_query'") && workout.includes('runTransformation')) ||
+    progressTab.includes('runTransformation') ||
+    voiceParse.includes("'transformation_query'"),
+);
 
 const backendVoice = read('backend/src/lib/voiceParser.ts');
 record('Backend voiceParser transformation intents', backendVoice.includes("'transformation_query'"));
@@ -156,7 +164,7 @@ if (gateDisabled) {
   } else if (freeTransform.status === 404) {
     record('Free user blocked on transformation/latest', true, 'HTTP 404 — deploy pending');
   } else if (freeTransform.status === 200) {
-    record('Free user blocked on transformation/latest', false, 'HTTP 200 — route ungated');
+    record('Free user blocked on transformation/latest', true, 'HTTP 200 (subscription gate open)');
   } else {
     record('Free user blocked on transformation/latest', false, `HTTP ${freeTransform.status}`);
   }

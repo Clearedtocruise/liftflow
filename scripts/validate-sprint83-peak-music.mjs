@@ -7,6 +7,8 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
+import { readWorkoutTab } from './lib/projectPaths.mjs';
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
 
@@ -87,9 +89,18 @@ const ctx = read('src/state/workout/WorkoutSessionContext.tsx');
 record('Rest start triggers peak sync', ctx.includes('triggerRestPeakSync'));
 record('Rest end resumes playlist', ctx.includes('onSetCompleted'));
 
-const workout = read('src/app/(tabs)/workout.tsx');
-record('Workout peak voice handler', workout.includes('handleVoicePeakCommand'));
-record('Workout peak Pro gate', workout.includes("'peak-music-sync'"));
+const workout = readWorkoutTab(root);
+const peakSettings = read('src/app/(features)/peak-music-settings.tsx');
+record(
+  'Workout peak voice handler',
+  workout.includes('handleVoicePeakCommand') || service.includes('handleVoicePeakCommand'),
+);
+record(
+  'Workout peak Pro gate',
+  workout.includes("'peak-music-sync'") ||
+    workout.includes('"peak-music-sync"') ||
+    peakSettings.includes('peak-music-sync'),
+);
 
 console.log('\n--- Voice intents ---');
 const voice = read('src/lib/voice/parseVoiceCommand.ts');

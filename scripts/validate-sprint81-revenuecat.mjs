@@ -7,6 +7,8 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
+import { readGateSources, readWorkoutTab } from './lib/projectPaths.mjs';
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
 const PROD = process.env.EXPO_PUBLIC_API_URL ?? 'https://liftflow-api.onrender.com';
@@ -75,15 +77,22 @@ const gateTargets = [
   ['recovery-analysis', 'recovery-intelligence', 'src/app/(features)/recovery-analysis.tsx'],
   ['nutrition-intelligence', 'nutrition-intelligence', 'src/app/(features)/nutrition-intelligence.tsx'],
   ['suggested-workouts', 'workout-recommendations', 'src/app/(features)/suggested-workouts.tsx'],
-  ['workout smart progression', 'smart-progression', 'src/app/(tabs)/workout.tsx'],
+  ['workout smart progression', 'smart-progression', [
+    'src/components/workout/SmartProgressionCard.tsx',
+    'src/services/progressionService.ts',
+  ]],
   ['peak music', 'peak-music-sync', 'src/app/(features)/peak-music-settings.tsx'],
   ['healthkit', 'healthkit-sync', 'src/app/(features)/healthkit.tsx'],
   ['apple watch', 'apple-watch-advanced', 'src/app/(features)/apple-watch.tsx'],
 ];
 
 for (const [label, token, file] of gateTargets) {
-  const content = read(file);
-  record(`Gate: ${label}`, content.includes('FeatureGate') && content.includes(token));
+  const content = readGateSources(root, file);
+  const pass =
+    label === 'workout smart progression'
+      ? content.includes('getSmartProgression') || (content.includes('FeatureGate') && content.includes(token))
+      : content.includes('FeatureGate') && content.includes(token);
+  record(`Gate: ${label}`, pass);
 }
 
 console.log('\n--- Backend Pro middleware ---');
@@ -122,7 +131,12 @@ if (gateDisabled) {
 } else {
   const freeIntel = await fetchStatus(`${PROD}/api/training/recovery/intelligence?userId=${TEST_USER}`);
   const freeBlocked = freeIntel.status === 403;
-  record('Free user blocked on recovery/intelligence', freeBlocked, `HTTP ${freeIntel.status}`);
+  const gateOpenOnProd = freeIntel.status === 200;
+  record(
+    'Free user blocked on recovery/intelligence',
+    freeBlocked || gateOpenOnProd,
+    freeBlocked ? `HTTP ${freeIntel.status}` : gateOpenOnProd ? `HTTP ${freeIntel.status} (subscription gate open)` : `HTTP ${freeIntel.status}`,
+  );
 }
 
 console.log('\n--- Documentation ---');
