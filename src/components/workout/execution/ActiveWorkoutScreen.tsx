@@ -13,6 +13,12 @@ import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import { DEFAULT_REST_SECONDS } from '@/constants/workout';
 import { useAuth } from '@/hooks/useAuth';
 import { useUnits } from '@/hooks/useUnits';
+import { formatWorkoutElapsed, useWorkoutElapsedSeconds } from '@/hooks/useWorkoutElapsedSeconds';
+import {
+    defaultTimedDurationSeconds,
+    formatSetLoggedLabel,
+    getExerciseLoggingMode,
+} from '@/lib/exerciseModality';
 import { formatWorkoutWeightForInput } from '@/lib/unitConversion';
 import { parseTargetReps } from '@/lib/workoutPlan';
 import { workoutService } from '@/services/workoutService';
@@ -44,6 +50,8 @@ export function ActiveWorkoutScreen({ session, planExercises, onFinish, onCancel
     refreshSession,
   } = useWorkoutSession();
 
+  const elapsedSeconds = useWorkoutElapsedSeconds(session.startedAt, session.status);
+
   const sortedExercises = useMemo(
     () => [...session.exercises].sort((a, b) => a.sortOrder - b.sortOrder),
     [session.exercises],
@@ -52,6 +60,7 @@ export function ActiveWorkoutScreen({ session, planExercises, onFinish, onCancel
   const [currentIndex, setCurrentIndex] = useState(0);
   const [weightKg, setWeightKg] = useState(0);
   const [reps, setReps] = useState(8);
+  const [durationSeconds, setDurationSeconds] = useState(30);
   const [logging, setLogging] = useState(false);
   const [historySets, setHistorySets] = useState<Array<{ weightKg: number; reps: number }>>([]);
   const [showComplete, setShowComplete] = useState(false);
@@ -71,6 +80,13 @@ export function ActiveWorkoutScreen({ session, planExercises, onFinish, onCancel
   const allSetsDone = completedSets.length >= targetSets;
   const isLastExercise = currentIndex >= sortedExercises.length - 1;
   const nextExercise = sortedExercises[currentIndex + 1];
+  const nextPlanMeta = planExercises[currentIndex + 1];
+  const loggingMode = getExerciseLoggingMode(
+    currentExercise?.exercise,
+    repRange,
+    currentExercise?.exercise?.name,
+  );
+  const nextSetNumber = Math.min(completedSets.length + 1, targetSets);
 
   useEffect(() => {
     if (restSecondsRemaining === 0) {
@@ -86,12 +102,27 @@ export function ActiveWorkoutScreen({ session, planExercises, onFinish, onCancel
   useEffect(() => {
     if (!user || !currentExercise?.exerciseId) return;
 
+    const mode = getExerciseLoggingMode(
+      currentExercise.exercise,
+      repRange,
+      currentExercise.exercise?.name,
+    );
+    setDurationSeconds(defaultTimedDurationSeconds(repRange));
+
     let cancelled = false;
     void workoutService.getRecentSetsForExercise(user.id, currentExercise.exerciseId, 5).then((result) => {
       if (cancelled || !result.success) return;
       setHistorySets(result.data);
 
       const last = result.data[0];
+      if (mode === 'timed') {
+        setReps(1);
+        return;
+      }
+      if (mode === 'bodyweight') {
+        setReps(last?.reps ?? parseTargetReps(repRange));
+        return;
+      }
       if (last) {
         setWeightKg(last.weightKg);
         setReps(last.reps);
@@ -109,7 +140,7 @@ export function ActiveWorkoutScreen({ session, planExercises, onFinish, onCancel
     return () => {
       cancelled = true;
     };
-  }, [currentExercise?.id, currentExercise?.exerciseId, currentExercise?.suggestedWeight, repRange, user]);
+  }, [currentExercise?.id, currentExercise?.exerciseId, currentExercise?.exercise, currentExercise?.suggestedWeight, repRange, user]);
 
   useEffect(() => {
     if (allSetsDone && completedSets.length > 0) {
@@ -127,12 +158,17 @@ export function ActiveWorkoutScreen({ session, planExercises, onFinish, onCancel
     if (!currentExercise || isPaused || allSetsDone) return;
 
     setLogging(true);
-    const logged = await logSet({
+    const base = {
       workoutExerciseId: currentExercise.id,
-      weight: weightKg,
-      reps,
       restSeconds: restTargetSeconds,
-    });
+    };
+
+    const logged =
+      loggingMode === 'timed'
+        ? await logSet({ ...base, durationSeconds, reps: 1 })
+        : loggingMode === 'bodyweight'
+          ? await logSet({ ...base, reps })
+          : await logSet({ ...base, weight: weightKg, reps });
     setLogging(false);
 
     if (logged?.isPr) {
@@ -181,10 +217,15 @@ export function ActiveWorkoutScreen({ session, planExercises, onFinish, onCancel
     <View style={styles.root}>
       <ScreenContainer contentContainerStyle={styles.content}>
         <View style={styles.header}>
-          <View>
-            <AppText variant="caption" color="accent">
-              Exercise {currentIndex + 1} of {sortedExercises.length}
-            </AppText>
+          <View style={styles.headerMain}>
+            <View style={styles.headerMeta}>
+              <AppText variant="caption" color="accent">
+                Exercise {currentIndex + 1} of {sortedExercises.length}
+              </AppText>
+              <AppText variant="caption" color="textSecondary">
+                {formatWorkoutElapsed(elapsedSeconds)}
+              </AppText>
+            </View>
             <AppText variant="title">{session.name}</AppText>
           </View>
           <View style={styles.headerActions}>
@@ -204,7 +245,11 @@ export function ActiveWorkoutScreen({ session, planExercises, onFinish, onCancel
               </AppText>
 
               <AppText variant="footnote" color="textSecondary">
-                Target {targetSets} sets · {repRange} reps · Rest {restTargetSeconds}s
+                {loggingMode === 'timed'
+                  ? `Target ${targetSets} sets · ${repRange}`
+                  : loggingMode === 'bodyweight'
+                    ? `Target ${targetSets} sets · ${repRange} reps · Bodyweight`
+                    : `Target ${targetSets} sets · ${repRange} reps · Rest ${restTargetSeconds}s`}
               </AppText>
 
               <View style={styles.restPresetRow}>
@@ -217,7 +262,7 @@ export function ActiveWorkoutScreen({ session, planExercises, onFinish, onCancel
                 ))}
               </View>
 
-              {historySets.length > 0 ? (
+              {historySets.length > 0 && loggingMode === 'weighted' ? (
                 <View style={styles.historyBlock}>
                   <AppText variant="label" color="textSecondary">
                     Previous Performance
@@ -230,17 +275,33 @@ export function ActiveWorkoutScreen({ session, planExercises, onFinish, onCancel
                 </View>
               ) : null}
 
+              {historySets.length > 0 && loggingMode === 'bodyweight' ? (
+                <View style={styles.historyBlock}>
+                  <AppText variant="label" color="textSecondary">
+                    Previous Performance
+                  </AppText>
+                  {historySets.slice(0, 3).map((set, index) => (
+                    <AppText key={`${set.reps}-${index}`} variant="footnote" color="textSecondary">
+                      {set.reps} reps
+                    </AppText>
+                  ))}
+                </View>
+              ) : null}
+
               {!showComplete ? (
                 <>
                   <SetLoggingControls
+                    mode={loggingMode}
                     weightKg={weightKg}
                     reps={reps}
+                    durationSeconds={durationSeconds}
                     onChangeWeight={setWeightKg}
                     onChangeReps={setReps}
+                    onChangeDuration={setDurationSeconds}
                     disabled={isPaused || logging}
                   />
                   <PrimaryButton
-                    label="Log Set"
+                    label={allSetsDone ? 'All sets logged' : `Log Set · Set ${nextSetNumber} of ${targetSets}`}
                     size="large"
                     loading={logging}
                     disabled={isPaused || allSetsDone}
@@ -263,7 +324,12 @@ export function ActiveWorkoutScreen({ session, planExercises, onFinish, onCancel
                 </AppText>
                 {!pending ? (
                   <AppText variant="footnote" color="textSecondary">
-                    {formatWorkoutWeightForInput(set.weight ?? 0, units.preferredWeightUnit)} {units.weightLabel} × {set.reps ?? '—'}
+                    {formatSetLoggedLabel(
+                      loggingMode,
+                      set,
+                      (kg) => formatWorkoutWeightForInput(kg, units.preferredWeightUnit),
+                      units.weightLabel,
+                    )}
                   </AppText>
                 ) : null}
               </View>
@@ -314,6 +380,14 @@ export function ActiveWorkoutScreen({ session, planExercises, onFinish, onCancel
         onSkip={handleSkipRest}
         onAdjust={adjustRestTimer}
         onSetRest={setRestTimer}
+        nextExerciseName={nextExercise?.exercise?.name}
+        nextExerciseDetail={
+          nextPlanMeta
+            ? `${nextPlanMeta.sets} sets · ${nextPlanMeta.repRange ?? '8-10'} reps`
+            : nextExercise?.suggestedReps
+              ? `${nextExercise.suggestedReps} reps`
+              : null
+        }
       />
     </View>
   );
@@ -332,6 +406,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
+    gap: Spacing.md,
+  },
+  headerMain: {
+    flex: 1,
+    gap: Spacing.xs,
+  },
+  headerMeta: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     gap: Spacing.md,
   },
   headerActions: {

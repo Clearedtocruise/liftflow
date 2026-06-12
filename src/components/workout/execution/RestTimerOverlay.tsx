@@ -14,6 +14,8 @@ type RestTimerOverlayProps = {
   onSkip: () => void;
   onAdjust: (deltaSeconds: number) => void;
   onSetRest: (seconds: number) => void;
+  nextExerciseName?: string | null;
+  nextExerciseDetail?: string | null;
 };
 
 const REST_PRESETS = [60, 90, 120, 150, 180];
@@ -34,6 +36,8 @@ export function RestTimerOverlay({
   onSkip,
   onAdjust,
   onSetRest,
+  nextExerciseName,
+  nextExerciseDetail,
 }: RestTimerOverlayProps) {
   const displaySeconds = secondsRemaining ?? recommendedSeconds;
 
@@ -79,6 +83,22 @@ export function RestTimerOverlay({
               </Pressable>
             ))}
           </ScrollView>
+
+          {nextExerciseName ? (
+            <View style={styles.nextPreview}>
+              <AppText variant="label" color="textSecondary" align="center">
+                Next up
+              </AppText>
+              <AppText variant="bodyBold" align="center">
+                {nextExerciseName}
+              </AppText>
+              {nextExerciseDetail ? (
+                <AppText variant="caption" color="textTertiary" align="center">
+                  {nextExerciseDetail}
+                </AppText>
+              ) : null}
+            </View>
+          ) : null}
 
           <PrimaryButton label="Continue" onPress={onSkip} variant="secondary" />
         </View>
@@ -134,5 +154,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: LiftFlowColors.border,
     marginRight: Spacing.sm,
+  },
+  nextPreview: {
+    gap: Spacing.xs,
+    paddingTop: Spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: LiftFlowColors.border,
   },
 });
