@@ -18,6 +18,7 @@ import {
     generateTrainingProgram,
     getPlannedWorkoutsInRange,
     getProgramDashboard,
+    regenerateActiveProgram,
     reschedulePlannedWorkout,
     type CreateProgramInput,
 } from '../lib/programEngine.js';
@@ -570,6 +571,20 @@ trainingRouter.post('/coach/post-workout', async (req, res) => {
     res.json(await generatePostWorkoutCoachSummary(userId, sessionId));
   } catch (error) {
     res.status(500).json({ message: error instanceof Error ? error.message : 'Post-workout coach failed' });
+  }
+});
+
+trainingRouter.post('/programs/regenerate', async (req, res) => {
+  try {
+    const { userId } = req.body as { userId?: string };
+    if (!userId) {
+      res.status(400).json({ message: 'userId is required' });
+      return;
+    }
+    const result = await regenerateActiveProgram(userId);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ message: error instanceof Error ? error.message : 'Program regeneration failed' });
   }
 });
 

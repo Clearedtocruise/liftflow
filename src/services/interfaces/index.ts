@@ -136,6 +136,7 @@ export interface ITrainingService {
   assessRecovery(userId: string): Promise<ServiceResult<RecoveryAssessment>>;
   createPlannedWorkout(userId: string, workout: Omit<PlannedWorkout, 'id' | 'createdAt'>): Promise<ServiceResult<PlannedWorkout>>;
   generateProgram(userId: string, payload: import('@/types').CreateProgramPayload): Promise<ServiceResult<import('@/types').ProgramDashboard | null>>;
+  regenerateProgramIfNeeded(userId: string): Promise<ServiceResult<{ regenerated: boolean }>>;
   getDashboard(userId: string): Promise<ServiceResult<import('@/types').ProgramDashboard | null>>;
   adaptProgram(userId: string): Promise<ServiceResult<import('@/types').ProgramDashboard | null>>;
   rescheduleWorkout(plannedWorkoutId: string, scheduledDate: string): Promise<ServiceResult<PlannedWorkout>>;

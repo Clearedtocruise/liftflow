@@ -58,6 +58,8 @@ export type PlannedWorkoutMetadata = {
   rescheduledFrom?: string;
   recoveryAdjusted?: boolean;
   limitationAdjusted?: boolean;
+  sessionKind?: 'strength' | 'cardio' | 'mobility';
+  cardioType?: string;
 };
 
 export type PlannedWorkout = BaseEntity & {

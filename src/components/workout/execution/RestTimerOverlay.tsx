@@ -1,4 +1,4 @@
-import { Modal, Pressable, StyleSheet, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { AppText } from '@/components/ui/AppText';
@@ -13,7 +13,10 @@ type RestTimerOverlayProps = {
   onResume: () => void;
   onSkip: () => void;
   onAdjust: (deltaSeconds: number) => void;
+  onSetRest: (seconds: number) => void;
 };
+
+const REST_PRESETS = [60, 90, 120, 150, 180];
 
 function formatTime(totalSeconds: number): string {
   const minutes = Math.floor(totalSeconds / 60);
@@ -30,6 +33,7 @@ export function RestTimerOverlay({
   onResume,
   onSkip,
   onAdjust,
+  onSetRest,
 }: RestTimerOverlayProps) {
   const displaySeconds = secondsRemaining ?? recommendedSeconds;
 
@@ -44,20 +48,37 @@ export function RestTimerOverlay({
             {formatTime(displaySeconds)}
           </AppText>
           <AppText variant="footnote" color="textSecondary" align="center">
-            {isPaused ? 'Paused' : 'Recover before your next set'}
+            {isPaused ? 'Paused' : 'Adjust rest before your next set'}
           </AppText>
 
           <View style={styles.controls}>
+            <Pressable style={styles.controlButton} onPress={() => onAdjust(-30)}>
+              <AppText variant="bodyBold">−30s</AppText>
+            </Pressable>
             <Pressable style={styles.controlButton} onPress={isPaused ? onResume : onPause}>
               <AppText variant="bodyBold">{isPaused ? 'Resume' : 'Pause'}</AppText>
+            </Pressable>
+            <Pressable style={styles.controlButton} onPress={() => onAdjust(30)}>
+              <AppText variant="bodyBold">+30s</AppText>
+            </Pressable>
+          </View>
+
+          <View style={styles.controls}>
+            <Pressable style={styles.controlButton} onPress={() => onAdjust(60)}>
+              <AppText variant="bodyBold">+1 min</AppText>
             </Pressable>
             <Pressable style={styles.controlButton} onPress={onSkip}>
               <AppText variant="bodyBold">Skip</AppText>
             </Pressable>
-            <Pressable style={styles.controlButton} onPress={() => onAdjust(30)}>
-              <AppText variant="bodyBold">+30 sec</AppText>
-            </Pressable>
           </View>
+
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.presetRow}>
+            {REST_PRESETS.map((seconds) => (
+              <Pressable key={seconds} style={styles.presetButton} onPress={() => onSetRest(seconds)}>
+                <AppText variant="caption">{seconds}s</AppText>
+              </Pressable>
+            ))}
+          </ScrollView>
 
           <PrimaryButton label="Continue" onPress={onSkip} variant="secondary" />
         </View>
@@ -101,5 +122,17 @@ const styles = StyleSheet.create({
     backgroundColor: LiftFlowColors.backgroundSecondary,
     borderWidth: 1,
     borderColor: LiftFlowColors.border,
+  },
+  presetRow: {
+    gap: Spacing.sm,
+  },
+  presetButton: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.full,
+    backgroundColor: LiftFlowColors.surfaceElevated,
+    borderWidth: 1,
+    borderColor: LiftFlowColors.border,
+    marginRight: Spacing.sm,
   },
 });

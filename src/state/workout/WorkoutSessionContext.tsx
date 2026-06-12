@@ -40,6 +40,7 @@ type WorkoutSessionActions = {
   setListening: (listening: boolean) => void;
   startRestTimer: (setId: string, seconds?: number) => Promise<void>;
   adjustRestTimer: (deltaSeconds: number) => void;
+  setRestTimer: (seconds: number) => void;
   pauseRestTimer: () => void;
   resumeRestTimer: () => void;
   skipRestTimer: () => Promise<void>;
@@ -199,10 +200,11 @@ export function WorkoutSessionProvider({
       await refreshSession();
 
       if (activeSession?.status === 'active') {
+        const restSeconds = payload.restSeconds ?? DEFAULT_REST_SECONDS;
         const restResult = await workoutService.startRestTimer(
           activeSession.id,
           result.data.id,
-          DEFAULT_REST_SECONDS,
+          restSeconds,
         );
         if (restResult.success) {
           hapticFiredRef.current = false;
@@ -295,6 +297,13 @@ export function WorkoutSessionProvider({
     setRestSecondsRemaining(remaining);
   }, []);
 
+  const setRestTimer = useCallback((seconds: number) => {
+    const next = Math.max(0, seconds);
+    pausedRemainingRef.current = next;
+    restEndAtRef.current = Date.now() + next * 1000;
+    setRestSecondsRemaining(next);
+  }, []);
+
   const pauseRestTimer = useCallback(() => {
     if (restEndAtRef.current === null) return;
     pausedRemainingRef.current = Math.max(0, Math.ceil((restEndAtRef.current - Date.now()) / 1000));
@@ -353,6 +362,7 @@ export function WorkoutSessionProvider({
       setListening: setIsListening,
       startRestTimer,
       adjustRestTimer,
+      setRestTimer,
       pauseRestTimer,
       resumeRestTimer,
       skipRestTimer,
@@ -379,6 +389,7 @@ export function WorkoutSessionProvider({
       addExerciseByName,
       startRestTimer,
       adjustRestTimer,
+      setRestTimer,
       pauseRestTimer,
       resumeRestTimer,
       skipRestTimer,

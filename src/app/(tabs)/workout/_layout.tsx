@@ -13,6 +13,7 @@ export default function WorkoutLayout() {
           animation: 'slide_from_right',
         }}>
         <Stack.Screen name="index" />
+        <Stack.Screen name="day" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="edit" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="manual-log" options={{ animation: 'slide_from_bottom' }} />
       </Stack>

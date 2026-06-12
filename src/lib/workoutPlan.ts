@@ -19,9 +19,12 @@ export function exercisesFromPlannedWorkout(workout: PlannedWorkout | null): Edi
 }
 
 export function estimateWorkoutDurationMinutes(exercises: EditableWorkoutExercise[]): number {
-  if (exercises.length === 0) return 45;
-  const minutes = exercises.reduce((total, exercise) => total + Math.max(6, exercise.sets * 3), 0);
-  return Math.max(30, minutes);
+  if (exercises.length === 0) return 60;
+  const minutes = exercises.reduce((total, exercise) => {
+    const restMinutes = ((exercise.restSeconds ?? 90) / 60) * Math.max(exercise.sets - 1, 0);
+    return total + Math.max(exercise.sets * 2, 6) + restMinutes;
+  }, 0);
+  return Math.max(45, Math.min(75, Math.round(minutes)));
 }
 
 export function parseTargetReps(repRange?: string): number {

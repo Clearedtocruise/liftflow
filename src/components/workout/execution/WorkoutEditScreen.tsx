@@ -50,6 +50,7 @@ export function WorkoutEditScreen({ workoutName, exercises, onChange, onDone }: 
       name: exercise.name,
       sets: 3,
       repRange: '8-10',
+      restSeconds: 90,
     };
 
     if (replaceIndex != null) {
@@ -77,13 +78,29 @@ export function WorkoutEditScreen({ workoutName, exercises, onChange, onDone }: 
         <Card key={exercise.id} style={styles.row}>
           <AppText variant="bodyBold">{exercise.name}</AppText>
           <AppText variant="caption" color="textSecondary">
-            {exercise.sets} sets{exercise.repRange ? ` · ${exercise.repRange}` : ''}
+            {exercise.sets} sets{exercise.repRange ? ` · ${exercise.repRange}` : ''}{exercise.restSeconds ? ` · Rest ${exercise.restSeconds}s` : ''}
           </AppText>
+          <View style={styles.restRow}>
+            <Pressable onPress={() => updateAt(index, { ...exercise, restSeconds: Math.max(30, (exercise.restSeconds ?? 90) - 15) })}>
+              <AppText variant="caption" color="textSecondary">Rest −15s</AppText>
+            </Pressable>
+            <Pressable onPress={() => updateAt(index, { ...exercise, restSeconds: (exercise.restSeconds ?? 90) + 15 })}>
+              <AppText variant="caption" color="textSecondary">Rest +15s</AppText>
+            </Pressable>
+          </View>
           <View style={styles.actions}>
-            <ActionChip label="Replace" onPress={() => { setReplaceIndex(index); setPickerVisible(true); }} />
-            <ActionChip label="Remove" onPress={() => removeAt(index)} />
-            <ActionChip label="Move Up" onPress={() => moveAt(index, -1)} disabled={index === 0} />
-            <ActionChip label="Move Down" onPress={() => moveAt(index, 1)} disabled={index === exercises.length - 1} />
+            <Pressable onPress={() => { setReplaceIndex(index); setPickerVisible(true); }}>
+              <AppText variant="footnote" color="accent">Replace</AppText>
+            </Pressable>
+            <Pressable onPress={() => removeAt(index)}>
+              <AppText variant="footnote" color="textSecondary">Remove</AppText>
+            </Pressable>
+            <Pressable onPress={() => moveAt(index, -1)} disabled={index === 0}>
+              <AppText variant="footnote" color={index === 0 ? 'textTertiary' : 'textSecondary'}>Move up</AppText>
+            </Pressable>
+            <Pressable onPress={() => moveAt(index, 1)} disabled={index === exercises.length - 1}>
+              <AppText variant="footnote" color={index === exercises.length - 1 ? 'textTertiary' : 'textSecondary'}>Move down</AppText>
+            </Pressable>
           </View>
         </Card>
       ))}
@@ -113,19 +130,6 @@ export function WorkoutEditScreen({ workoutName, exercises, onChange, onDone }: 
   );
 }
 
-function ActionChip({ label, onPress, disabled }: { label: string; onPress: () => void; disabled?: boolean }) {
-  return (
-    <Pressable
-      style={({ pressed }) => [styles.chip, disabled && styles.chipDisabled, pressed && !disabled && styles.chipPressed]}
-      onPress={onPress}
-      disabled={disabled}>
-      <AppText variant="caption" color={disabled ? 'textTertiary' : 'textPrimary'}>
-        {label}
-      </AppText>
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
   content: {
     gap: Spacing.md,
@@ -140,22 +144,12 @@ const styles = StyleSheet.create({
   actions: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: Spacing.sm,
+    gap: Spacing.lg,
     marginTop: Spacing.sm,
   },
-  chip: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    borderRadius: Radius.full,
-    backgroundColor: LiftFlowColors.surfaceElevated,
-    borderWidth: 1,
-    borderColor: LiftFlowColors.border,
-  },
-  chipPressed: {
-    backgroundColor: LiftFlowColors.surfaceHighlight,
-  },
-  chipDisabled: {
-    opacity: 0.45,
+  restRow: {
+    flexDirection: 'row',
+    gap: Spacing.lg,
   },
   addCard: {
     alignItems: 'center',

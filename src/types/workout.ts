@@ -138,6 +138,7 @@ export type CreateSetPayload = {
   reps?: number;
   type?: SetType;
   durationSeconds?: number;
+  restSeconds?: number;
 };
 
 export type UpdateSetPayload = {

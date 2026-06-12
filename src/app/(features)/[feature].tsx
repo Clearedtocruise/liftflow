@@ -7,6 +7,7 @@ import { FEATURE_MAP } from '@/constants/features';
 import { LiftFlowColors } from '@/constants/theme';
 
 import AppleWatchScreen from './apple-watch';
+import CardioTrackingScreen from './cardio-tracking';
 import EquipmentScreen from './equipment';
 import HealthKitScreen from './healthkit';
 import SubscriptionScreen from './subscription';
@@ -27,6 +28,9 @@ export default function FeatureScreen() {
   if (feature === 'training-profile') return <TrainingProfileScreen />;
   if (feature === 'apple-watch' || feature === 'rep-counting' || feature === 'motion-detection') {
     return <AppleWatchScreen />;
+  }
+  if (feature === 'cardio-tracking') {
+    return <CardioTrackingScreen />;
   }
 
   const definition = feature ? FEATURE_MAP[feature] : undefined;

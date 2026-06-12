@@ -1,6 +1,6 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, View } from 'react-native';
 
 import { Card } from '@/components/layout/Card';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
@@ -39,6 +39,7 @@ export function ActiveWorkoutScreen({ session, planExercises, onFinish, onCancel
     pauseRestTimer,
     resumeRestTimer,
     adjustRestTimer,
+    setRestTimer,
     skipRestTimer,
     refreshSession,
   } = useWorkoutSession();
@@ -56,6 +57,7 @@ export function ActiveWorkoutScreen({ session, planExercises, onFinish, onCancel
   const [showComplete, setShowComplete] = useState(false);
   const [exerciseHadPr, setExerciseHadPr] = useState(false);
   const [restPaused, setRestPaused] = useState(false);
+  const [restTargetSeconds, setRestTargetSeconds] = useState(DEFAULT_REST_SECONDS);
 
   const currentExercise = sortedExercises[currentIndex];
   const planMeta = planExercises[currentIndex] ?? planExercises.find(
@@ -68,12 +70,18 @@ export function ActiveWorkoutScreen({ session, planExercises, onFinish, onCancel
   const restActive = restSecondsRemaining !== null && restSecondsRemaining > 0;
   const allSetsDone = completedSets.length >= targetSets;
   const isLastExercise = currentIndex >= sortedExercises.length - 1;
+  const nextExercise = sortedExercises[currentIndex + 1];
 
   useEffect(() => {
     if (restSecondsRemaining === 0) {
       setRestPaused(false);
     }
   }, [restSecondsRemaining]);
+
+  useEffect(() => {
+    const nextRest = planMeta?.restSeconds ?? DEFAULT_REST_SECONDS;
+    setRestTargetSeconds(nextRest);
+  }, [currentExercise?.id, planMeta?.restSeconds]);
 
   useEffect(() => {
     if (!user || !currentExercise?.exerciseId) return;
@@ -123,6 +131,7 @@ export function ActiveWorkoutScreen({ session, planExercises, onFinish, onCancel
       workoutExerciseId: currentExercise.id,
       weight: weightKg,
       reps,
+      restSeconds: restTargetSeconds,
     });
     setLogging(false);
 
@@ -194,9 +203,18 @@ export function ActiveWorkoutScreen({ session, planExercises, onFinish, onCancel
                 {(currentExercise.exercise?.name ?? 'Exercise').toUpperCase()}
               </AppText>
 
-              <View style={styles.targetRow}>
-                <TargetPill label="Target" value={`${targetSets} Sets`} />
-                <TargetPill label="Rep Range" value={repRange} />
+              <AppText variant="footnote" color="textSecondary">
+                Target {targetSets} sets · {repRange} reps · Rest {restTargetSeconds}s
+              </AppText>
+
+              <View style={styles.restPresetRow}>
+                {[60, 90, 120, 150].map((seconds) => (
+                  <Pressable key={seconds} onPress={() => setRestTargetSeconds(seconds)}>
+                    <AppText variant="caption" color={restTargetSeconds === seconds ? 'accent' : 'textSecondary'}>
+                      {seconds}s rest
+                    </AppText>
+                  </Pressable>
+                ))}
               </View>
 
               {historySets.length > 0 ? (
@@ -253,6 +271,15 @@ export function ActiveWorkoutScreen({ session, planExercises, onFinish, onCancel
           })}
         </Card>
 
+        {!showComplete && nextExercise ? (
+          <Card style={styles.nextPreview}>
+            <AppText variant="label" color="textSecondary">
+              Next exercise
+            </AppText>
+            <AppText variant="bodyBold">{nextExercise.exercise?.name ?? 'Up next'}</AppText>
+          </Card>
+        ) : null}
+
         {showComplete ? (
           <ExerciseCompleteCard
             volumeKg={exerciseVolume}
@@ -280,24 +307,14 @@ export function ActiveWorkoutScreen({ session, planExercises, onFinish, onCancel
       <RestTimerOverlay
         visible={restActive && !showComplete}
         secondsRemaining={restSecondsRemaining}
-        recommendedSeconds={activeRestPeriod?.recommendedSeconds ?? DEFAULT_REST_SECONDS}
+        recommendedSeconds={activeRestPeriod?.recommendedSeconds ?? restTargetSeconds}
         isPaused={restPaused}
         onPause={handlePauseRest}
         onResume={handleResumeRest}
         onSkip={handleSkipRest}
         onAdjust={adjustRestTimer}
+        onSetRest={setRestTimer}
       />
-    </View>
-  );
-}
-
-function TargetPill({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.pill}>
-      <AppText variant="caption" color="textTertiary">
-        {label}
-      </AppText>
-      <AppText variant="bodyBold">{value}</AppText>
     </View>
   );
 }
@@ -337,21 +354,16 @@ const styles = StyleSheet.create({
   exerciseName: {
     letterSpacing: 1,
   },
-  targetRow: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
-  },
-  pill: {
-    flex: 1,
-    backgroundColor: LiftFlowColors.backgroundSecondary,
-    borderRadius: Radius.md,
-    padding: Spacing.md,
+  nextPreview: {
     gap: Spacing.xs,
-    borderWidth: 1,
-    borderColor: LiftFlowColors.border,
   },
   historyBlock: {
     gap: Spacing.xs,
+  },
+  restPresetRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.md,
   },
   setProgress: {
     gap: Spacing.sm,

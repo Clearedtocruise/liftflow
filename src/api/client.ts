@@ -177,6 +177,12 @@ export const api = {
     ),
   getProgramDashboard: (userId: string, token?: string) =>
     apiClient.get<Record<string, unknown> | null>(`/api/training/programs/dashboard?userId=${userId}`, token),
+  regenerateProgram: (userId: string, token?: string) =>
+    apiClient.post<{ regenerated: boolean; plannedCount?: number; reason?: string }>(
+      '/api/training/programs/regenerate',
+      { userId },
+      token,
+    ),
   adaptProgram: (userId: string, token?: string) =>
     apiClient.post<{ adapted: boolean; changes: string[] }>('/api/training/programs/adapt', { userId }, token),
   getPlannedWorkoutsRange: (userId: string, from: string, to: string, token?: string) =>

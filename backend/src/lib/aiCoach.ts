@@ -225,10 +225,12 @@ export async function coachResponse(context: string, message: string, userId: st
 export function generateWeeklyMealPlan(proteinG = 180, calories = 2400) {
   const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   const templates = [
+    { type: 'pre_workout', name: 'Pre-workout banana and oats', calories: 280, proteinG: 12, carbsG: 48, fatG: 5 },
+    { type: 'post_workout', name: 'Protein shake with banana', calories: 300, proteinG: 30, carbsG: 30, fatG: 5 },
     { type: 'breakfast', name: 'Greek yogurt bowl with berries', calories: 450, proteinG: 35, carbsG: 45, fatG: 12 },
     { type: 'lunch', name: 'Grilled chicken rice bowl', calories: 650, proteinG: 50, carbsG: 60, fatG: 15 },
+    { type: 'snack', name: 'Apple with almond butter', calories: 220, proteinG: 6, carbsG: 24, fatG: 12 },
     { type: 'dinner', name: 'Salmon with roasted vegetables', calories: 700, proteinG: 45, carbsG: 35, fatG: 28 },
-    { type: 'snack', name: 'Protein shake with banana', calories: 300, proteinG: 30, carbsG: 30, fatG: 5 },
   ];
 
   const start = new Date();

@@ -15,6 +15,7 @@ export type DaySlot = {
   isRest: boolean;
   muscleGroups: string[];
   workoutType?: string;
+  sessionKind?: 'strength' | 'cardio' | 'mobility';
 };
 
 export type PhaseSpec = {
@@ -33,21 +34,22 @@ export function dayLabel(index: number): string {
 
 export function muscleGroupsForWorkout(label: string): string[] {
   const key = label.toLowerCase();
-  if (key.includes('push')) return ['chest', 'shoulders', 'triceps'];
-  if (key.includes('pull')) return ['back', 'biceps'];
-  if (key.includes('leg')) return ['legs', 'glutes', 'hamstrings'];
-  if (key.includes('upper')) return ['chest', 'back', 'shoulders', 'arms'];
-  if (key.includes('lower')) return ['legs', 'glutes', 'hamstrings'];
-  if (key.includes('full')) return ['chest', 'back', 'legs', 'shoulders'];
-  if (key.includes('chest')) return ['chest', 'triceps'];
-  if (key.includes('back')) return ['back', 'biceps'];
-  if (key.includes('shoulder')) return ['shoulders'];
+  if (key.includes('condition')) return ['core', 'legs'];
+  if (key.includes('push')) return ['chest', 'shoulders', 'triceps', 'core'];
+  if (key.includes('pull')) return ['back', 'biceps', 'core'];
+  if (key.includes('leg')) return ['legs', 'glutes', 'hamstrings', 'core'];
+  if (key.includes('upper')) return ['chest', 'back', 'shoulders', 'core'];
+  if (key.includes('lower')) return ['legs', 'glutes', 'hamstrings', 'core'];
+  if (key.includes('full')) return ['chest', 'back', 'legs', 'shoulders', 'core'];
+  if (key.includes('chest')) return ['chest', 'triceps', 'core'];
+  if (key.includes('back')) return ['back', 'biceps', 'core'];
+  if (key.includes('shoulder')) return ['shoulders', 'core'];
   if (key.includes('arm')) return ['arms', 'biceps', 'triceps'];
-  if (key.includes('squat')) return ['legs', 'glutes'];
-  if (key.includes('bench') || key.includes('press')) return ['chest', 'shoulders', 'triceps'];
-  if (key.includes('deadlift')) return ['back', 'legs', 'hamstrings'];
+  if (key.includes('squat')) return ['legs', 'glutes', 'core'];
+  if (key.includes('bench') || key.includes('press')) return ['chest', 'shoulders', 'triceps', 'core'];
+  if (key.includes('deadlift')) return ['back', 'legs', 'hamstrings', 'core'];
   if (key.includes('recovery') || key.includes('rest')) return ['core'];
-  return ['chest', 'back', 'legs'];
+  return ['chest', 'back', 'legs', 'core'];
 }
 
 function restDay(index: number): DaySlot {
@@ -55,45 +57,47 @@ function restDay(index: number): DaySlot {
 }
 
 function workoutDay(index: number, label: string): DaySlot {
+  const isConditioning = label.toLowerCase().includes('condition');
   return {
     dayIndex: index,
     label,
     isRest: false,
     muscleGroups: muscleGroupsForWorkout(label),
     workoutType: label.toLowerCase().replace(/\s+/g, '_'),
+    sessionKind: isConditioning ? 'cardio' : 'strength',
   };
 }
 
 const SCHEDULES: Record<ProgramType, Record<number, string[]>> = {
   push_pull_legs: {
     3: ['Push', 'Pull', 'Legs', 'Rest', 'Rest', 'Rest', 'Rest'],
-    4: ['Push', 'Pull', 'Rest', 'Legs', 'Rest', 'Rest', 'Rest'],
-    5: ['Push', 'Pull', 'Legs', 'Push', 'Pull', 'Rest', 'Rest'],
-    6: ['Push', 'Pull', 'Legs', 'Push', 'Pull', 'Legs', 'Rest'],
+    4: ['Push', 'Pull', 'Rest', 'Legs', 'Rest', 'Conditioning', 'Rest'],
+    5: ['Push', 'Pull', 'Legs', 'Push', 'Pull', 'Conditioning', 'Rest'],
+    6: ['Push', 'Pull', 'Legs', 'Push', 'Pull', 'Conditioning', 'Rest'],
   },
   upper_lower: {
     3: ['Upper', 'Lower', 'Rest', 'Upper', 'Rest', 'Rest', 'Rest'],
-    4: ['Upper', 'Lower', 'Rest', 'Upper', 'Lower', 'Rest', 'Rest'],
-    5: ['Upper', 'Lower', 'Upper', 'Lower', 'Rest', 'Rest', 'Rest'],
-    6: ['Upper', 'Lower', 'Upper', 'Lower', 'Upper', 'Lower', 'Rest'],
+    4: ['Upper', 'Lower', 'Rest', 'Upper', 'Lower', 'Conditioning', 'Rest'],
+    5: ['Upper', 'Lower', 'Upper', 'Lower', 'Rest', 'Conditioning', 'Rest'],
+    6: ['Upper', 'Lower', 'Upper', 'Lower', 'Upper', 'Conditioning', 'Rest'],
   },
   full_body: {
     3: ['Full Body', 'Rest', 'Full Body', 'Rest', 'Full Body', 'Rest', 'Rest'],
-    4: ['Full Body', 'Rest', 'Full Body', 'Rest', 'Full Body', 'Rest', 'Full Body'],
-    5: ['Full Body', 'Rest', 'Full Body', 'Rest', 'Full Body', 'Rest', 'Full Body'],
-    6: ['Full Body', 'Rest', 'Full Body', 'Rest', 'Full Body', 'Rest', 'Full Body'],
+    4: ['Full Body', 'Rest', 'Full Body', 'Rest', 'Full Body', 'Conditioning', 'Rest'],
+    5: ['Full Body', 'Rest', 'Full Body', 'Rest', 'Full Body', 'Conditioning', 'Rest'],
+    6: ['Full Body', 'Rest', 'Full Body', 'Rest', 'Full Body', 'Conditioning', 'Rest'],
   },
   body_part_split: {
     3: ['Chest', 'Back', 'Legs', 'Rest', 'Rest', 'Rest', 'Rest'],
-    4: ['Chest', 'Back', 'Legs', 'Shoulders', 'Rest', 'Rest', 'Rest'],
-    5: ['Chest', 'Back', 'Shoulders', 'Legs', 'Arms', 'Rest', 'Rest'],
-    6: ['Chest', 'Back', 'Shoulders', 'Legs', 'Arms', 'Core', 'Rest'],
+    4: ['Chest', 'Back', 'Legs', 'Shoulders', 'Rest', 'Conditioning', 'Rest'],
+    5: ['Chest', 'Back', 'Shoulders', 'Legs', 'Arms', 'Conditioning', 'Rest'],
+    6: ['Chest', 'Back', 'Shoulders', 'Legs', 'Arms', 'Conditioning', 'Rest'],
   },
   strength: {
     3: ['Squat Day', 'Bench Day', 'Deadlift Day', 'Rest', 'Rest', 'Rest', 'Rest'],
-    4: ['Squat Day', 'Bench Day', 'Rest', 'Deadlift Day', 'Press Day', 'Rest', 'Rest'],
-    5: ['Squat Day', 'Bench Day', 'Rest', 'Deadlift Day', 'Press Day', 'Rest', 'Rest'],
-    6: ['Squat Day', 'Bench Day', 'Deadlift Day', 'Press Day', 'Squat Day', 'Rest', 'Rest'],
+    4: ['Squat Day', 'Bench Day', 'Rest', 'Deadlift Day', 'Press Day', 'Conditioning', 'Rest'],
+    5: ['Squat Day', 'Bench Day', 'Rest', 'Deadlift Day', 'Press Day', 'Conditioning', 'Rest'],
+    6: ['Squat Day', 'Bench Day', 'Deadlift Day', 'Press Day', 'Squat Day', 'Conditioning', 'Rest'],
   },
 };
 

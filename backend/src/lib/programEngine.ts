@@ -1,5 +1,6 @@
 import { applySubstitutionsToExercises, type LimitationContext } from './exerciseSubstitution.js';
 import { applyWeeklyProgression, totalPlannedVolume } from './programProgression.js';
+import { inferProgramFrequency, inferProgramType } from './programSelection.js';
 import {
     addDays,
     buildWeeklySchedule,
@@ -13,11 +14,15 @@ import {
     type ProgramType,
 } from './programTypes.js';
 import { requireAdmin } from './supabase.js';
+import { resolveRankedGoals } from './trainingGoals.js';
 import {
     buildAdaptiveWorkoutPlan,
     getLastPerformanceBySlug,
     loadActiveLimitations,
     loadRecoveryModifiers,
+    WORKOUT_MIN_EXERCISES,
+    WORKOUT_MIN_SETS,
+    WORKOUT_TARGET_EXERCISES,
     type GeneratedWorkoutExercise
 } from './workoutPlanner.js';
 
@@ -32,6 +37,22 @@ export type CreateProgramInput = {
   locationId?: string;
   locationName?: string;
   customSchedule?: string[];
+};
+
+/** Bump when workout planning rules change so existing programs can be regenerated. */
+export const PLAN_RULES_VERSION = 2;
+
+type StoredProgramMetadata = {
+  programType?: ProgramType;
+  frequency?: ProgramFrequency;
+  goal?: string;
+  experience?: string;
+  equipment?: string[];
+  locationId?: string;
+  locationName?: string;
+  customSchedule?: string[];
+  planRulesVersion?: number;
+  startDate?: string;
 };
 
 export type ProgramDashboard = {
@@ -52,9 +73,15 @@ function scaleExercises(
 ): GeneratedWorkoutExercise[] {
   return exercises.map((ex) => ({
     ...ex,
-    sets: Math.max(1, Math.round(ex.sets * volumeMultiplier)),
+    sets: Math.max(3, Math.round(ex.sets * volumeMultiplier)),
     reps: repRangeAdjust ?? ex.reps,
   }));
+}
+
+function shouldIncludeCore(slot: DaySlot): boolean {
+  if (slot.sessionKind === 'cardio') return false;
+  const key = slot.label.toLowerCase();
+  return key.includes('leg') || key.includes('lower') || key.includes('full') || key.includes('push');
 }
 
 async function ensurePhaseForWeek(
@@ -150,6 +177,7 @@ export async function generateTrainingProgram(input: CreateProgramInput) {
         startDate,
         schedule: schedule.map((d) => ({ label: d.label, isRest: d.isRest })),
         customSchedule: input.customSchedule,
+        planRulesVersion: PLAN_RULES_VERSION,
       },
     })
     .select('*')
@@ -168,6 +196,34 @@ export async function generateTrainingProgram(input: CreateProgramInput) {
       if (slot.isRest) continue;
 
       const date = addDays(startDate, (week - 1) * 7 + slot.dayIndex);
+
+      if (slot.sessionKind === 'cardio') {
+        await db.from('planned_workouts').insert({
+          user_id: input.userId,
+          training_phase_id: phaseId,
+          name: `${slot.label} — Week ${week}`,
+          scheduled_date: date,
+          status: 'planned',
+          suggested_muscle_groups: slot.muscleGroups,
+          ai_rationale: `${dayLabel(slot.dayIndex)} · Cardio / HIIT · ${programTypeLabel(input.programType)}`,
+          metadata: {
+            programId: program.id,
+            weekNumber: week,
+            dayIndex: slot.dayIndex,
+            dayLabel: dayLabel(slot.dayIndex),
+            slotLabel: slot.label,
+            sprintPhase: phaseSpec.sprintPhase,
+            sessionKind: 'cardio',
+            cardioType: 'hiit',
+            exercises: [],
+            locationId: input.locationId,
+            locationName: input.locationName,
+          },
+        });
+        plannedCount += 1;
+        continue;
+      }
+
       const cacheKey = `${slot.label}-${phaseSpec.sprintPhase}`;
 
       let templateId = templateCache.get(cacheKey);
@@ -176,7 +232,13 @@ export async function generateTrainingProgram(input: CreateProgramInput) {
           input.userId,
           slot.muscleGroups,
           `${programTypeLabel(input.programType)} ${slot.label} — ${phaseSpec.sprintPhase}`,
-          equipment?.length ? { equipmentOverride: equipment } : undefined,
+          {
+            ...(equipment?.length ? { equipmentOverride: equipment } : {}),
+            includeCore: shouldIncludeCore(slot),
+            targetExerciseCount: WORKOUT_TARGET_EXERCISES,
+            minimumExercises: WORKOUT_MIN_EXERCISES,
+            minimumSets: WORKOUT_MIN_SETS,
+          },
         );
 
         let exercises = scaleExercises(plan.exercises, phaseSpec.volumeMultiplier, phaseSpec.repRangeAdjust);
@@ -252,6 +314,77 @@ export async function generateTrainingProgram(input: CreateProgramInput) {
   }
 
   return { program, plannedCount, startDate, schedule };
+}
+
+async function buildProgramInputFromProfile(userId: string): Promise<CreateProgramInput> {
+  const db = requireAdmin();
+  const { data: profile, error } = await db.from('profiles').select('*').eq('id', userId).single();
+  if (error || !profile) throw new Error('Profile not found');
+
+  const coachProfile = ((profile.metadata ?? {}) as { coachProfile?: { daysPerWeek?: number; timeline?: string } })
+    .coachProfile ?? {};
+  const rankedGoals = resolveRankedGoals(profile.fitness_goals, profile.primary_training_goal);
+  const primaryGoal = rankedGoals[0];
+  const daysPerWeek = coachProfile.daysPerWeek ?? 4;
+
+  return {
+    userId,
+    programType: inferProgramType({
+      fitnessGoals: rankedGoals,
+      primaryGoal,
+      experience: profile.training_experience ?? undefined,
+      daysPerWeek,
+      timeline: coachProfile.timeline as 'aggressive' | 'moderate' | 'conservative' | undefined,
+    }),
+    frequency: inferProgramFrequency({
+      daysPerWeek,
+      fitnessGoals: rankedGoals,
+      primaryGoal,
+    }),
+    goal: primaryGoal,
+    experience: profile.training_experience ?? 'intermediate',
+    durationWeeks: 12,
+    equipment: profile.available_equipment ?? undefined,
+  };
+}
+
+export async function regenerateActiveProgram(userId: string) {
+  const db = requireAdmin();
+  const { data: program } = await db
+    .from('training_programs')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('is_active', true)
+    .maybeSingle();
+
+  if (program) {
+    const meta = (program.metadata ?? {}) as StoredProgramMetadata;
+    if (meta.planRulesVersion === PLAN_RULES_VERSION) {
+      return { regenerated: false as const, reason: 'already_current' as const, program, plannedCount: 0 };
+    }
+
+    const fallback = !meta.programType || !meta.frequency ? await buildProgramInputFromProfile(userId) : null;
+
+    const input: CreateProgramInput = {
+      userId,
+      programType: meta.programType ?? fallback!.programType,
+      frequency: meta.frequency ?? fallback!.frequency,
+      goal: meta.goal ?? fallback?.goal,
+      experience: meta.experience ?? fallback?.experience,
+      durationWeeks: program.duration_weeks ?? 12,
+      equipment: meta.equipment ?? fallback?.equipment,
+      locationId: meta.locationId,
+      locationName: meta.locationName,
+      customSchedule: meta.customSchedule,
+    };
+
+    const result = await generateTrainingProgram(input);
+    return { regenerated: true as const, ...result };
+  }
+
+  const input = await buildProgramInputFromProfile(userId);
+  const result = await generateTrainingProgram(input);
+  return { regenerated: true as const, ...result };
 }
 
 export async function getProgramDashboard(userId: string): Promise<ProgramDashboard | null> {

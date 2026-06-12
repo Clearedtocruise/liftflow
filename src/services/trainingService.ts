@@ -1,4 +1,5 @@
 import { api, apiClient } from '@/api/client';
+import { WORKOUT_PLAN_RULES_VERSION } from '@/constants/workout';
 import { fail, fromError, ok } from '@/lib/serviceResult';
 import type { ITrainingService } from '@/services/interfaces';
 import { getAccessToken, supabase } from '@/supabase/client';
@@ -262,6 +263,24 @@ export const trainingService: ITrainingService = {
       const token = await getAccessToken();
       await apiClient.post('/api/training/programs/generate', { userId, ...payload }, token);
       return this.getDashboard(userId);
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
+  async regenerateProgramIfNeeded(userId: string) {
+    try {
+      const dashboard = await this.getDashboard(userId);
+      if (dashboard.success && dashboard.data) {
+        const version = dashboard.data.program.metadata?.planRulesVersion;
+        if (version === WORKOUT_PLAN_RULES_VERSION) {
+          return ok({ regenerated: false });
+        }
+      }
+
+      const token = await getAccessToken();
+      const result = await api.regenerateProgram(userId, token);
+      return ok({ regenerated: result.regenerated });
     } catch (e) {
       return fromError(e);
     }

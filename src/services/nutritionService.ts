@@ -1,5 +1,6 @@
-import { api } from '@/api/client';
 import { mapGroceryList, mapMeal, mapMealPlan, mapNutritionGoals } from '@/lib/db-mappers';
+import { aggregateWeeklyGroceries } from '@/lib/groceryAggregation';
+import { enrichMealMeta, serializeMealMeta } from '@/lib/mealIngredients';
 import { fail, fromError, ok } from '@/lib/serviceResult';
 import type { INutritionService } from '@/services/interfaces';
 import { getAccessToken, supabase } from '@/supabase/client';
@@ -86,6 +87,49 @@ export const nutritionService: INutritionService = {
     } catch (e) {
       return fromError(e);
     }
+  },
+
+  async getMealsForWeek(userId: string, from: string, to: string) {
+    try {
+      const { data, error } = await supabase
+        .from('meals')
+        .select('*')
+        .eq('user_id', userId)
+        .gte('scheduled_date', from)
+        .lte('scheduled_date', to)
+        .order('scheduled_date', { ascending: true })
+        .order('created_at', { ascending: true });
+
+      if (error) return fail(error.message);
+      return ok((data ?? []).map(mapMeal));
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
+  async updateMeal(mealId: string, updates: Partial<Pick<Meal, 'name' | 'calories' | 'proteinG' | 'carbsG' | 'fatG' | 'instructions' | 'mealType'>>) {
+    try {
+      const payload: Record<string, unknown> = {};
+      if (updates.name !== undefined) payload.name = updates.name;
+      if (updates.calories !== undefined) payload.calories = updates.calories;
+      if (updates.proteinG !== undefined) payload.protein_g = updates.proteinG;
+      if (updates.carbsG !== undefined) payload.carbs_g = updates.carbsG;
+      if (updates.fatG !== undefined) payload.fat_g = updates.fatG;
+      if (updates.instructions !== undefined) payload.instructions = updates.instructions;
+      if (updates.mealType !== undefined) payload.meal_type = updates.mealType;
+
+      const { data, error } = await supabase.from('meals').update(payload).eq('id', mealId).select('*').single();
+      if (error) return fail(error.message);
+      return ok(mapMeal(data));
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
+  async markMealStatus(mealId: string, name: string, instructions: string | undefined, status: 'completed' | 'skipped' | 'modified' | 'planned') {
+    const meta = enrichMealMeta(name, instructions);
+    meta.status = status;
+    return this.updateMeal(mealId, { instructions: serializeMealMeta(meta) });
   },
 
   async getMealsForDate(userId, date: string) {
@@ -180,7 +224,7 @@ export const nutritionService: INutritionService = {
             protein_g: m.proteinG,
             carbs_g: m.carbsG,
             fat_g: m.fatG,
-            instructions: m.instructions,
+            instructions: m.instructions ?? serializeMealMeta(enrichMealMeta(m.name)),
           })),
         );
       }
@@ -211,15 +255,12 @@ export const nutritionService: INutritionService = {
         planId = latest?.id;
       }
 
-      const { data: meals } = planId
-        ? await supabase.from('meals').select('name').eq('meal_plan_id', planId)
-        : await supabase.from('meals').select('name').eq('user_id', userId).gte('scheduled_date', weekStartDate());
+      const { data: mealsData } = planId
+        ? await supabase.from('meals').select('*').eq('meal_plan_id', planId)
+        : await supabase.from('meals').select('*').eq('user_id', userId).gte('scheduled_date', weekStartDate());
 
-      const ingredientCounts = new Map<string, number>();
-      for (const meal of meals ?? []) {
-        const key = meal.name.toLowerCase();
-        ingredientCounts.set(key, (ingredientCounts.get(key) ?? 0) + 1);
-      }
+      const meals = (mealsData ?? []).map(mapMeal);
+      const aggregated = aggregateWeeklyGroceries(meals);
 
       const { data: list, error } = await supabase
         .from('grocery_lists')
@@ -234,12 +275,12 @@ export const nutritionService: INutritionService = {
 
       if (error) return fail(error.message);
 
-      const items = Array.from(ingredientCounts.entries()).map(([name], index) => ({
+      const items = aggregated.map((item, index) => ({
         grocery_list_id: list.id,
-        name: name.charAt(0).toUpperCase() + name.slice(1),
-        quantity: 1,
-        unit: 'serving',
-        category: 'general',
+        name: item.name,
+        quantity: parseFloat(item.quantity) || 1,
+        unit: item.quantity.replace(/^[\d.]+\s*/, '') || 'serving',
+        category: item.category,
         sort_order: index,
       }));
 

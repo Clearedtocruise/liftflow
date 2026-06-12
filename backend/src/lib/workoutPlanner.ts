@@ -77,11 +77,16 @@ const GOAL_PRESETS: Record<
   TrainingGoal,
   { sets: number; reps: string; restSeconds: number; exerciseCount: number }
 > = {
-  fat_loss: { sets: 3, reps: '12-15', restSeconds: 45, exerciseCount: 5 },
-  muscle_gain: { sets: 4, reps: '8-12', restSeconds: 90, exerciseCount: 5 },
-  strength: { sets: 5, reps: '4-6', restSeconds: 150, exerciseCount: 4 },
-  general_fitness: { sets: 3, reps: '10-12', restSeconds: 60, exerciseCount: 5 },
+  fat_loss: { sets: 3, reps: '12-15', restSeconds: 45, exerciseCount: 10 },
+  muscle_gain: { sets: 3, reps: '8-12', restSeconds: 90, exerciseCount: 10 },
+  strength: { sets: 3, reps: '4-6', restSeconds: 150, exerciseCount: 10 },
+  general_fitness: { sets: 3, reps: '10-12', restSeconds: 60, exerciseCount: 10 },
 };
+
+export const WORKOUT_MIN_EXERCISES = 4;
+export const WORKOUT_MIN_SETS = 3;
+export const WORKOUT_TARGET_EXERCISES = 10;
+export const WORKOUT_TARGET_MINUTES = 60;
 
 export function expandAvailableEquipment(raw: string[]): Set<string> {
   return expandEquipmentRequirements(raw);
@@ -410,7 +415,25 @@ export function selectRotatedExercises(
 
 export type BuildWorkoutPlanOptions = {
   equipmentOverride?: string[];
+  includeCore?: boolean;
+  targetExerciseCount?: number;
+  minimumExercises?: number;
+  minimumSets?: number;
 };
+
+export function normalizeTargetMuscleGroups(muscles: string[]): string[] {
+  const normalized = [...new Set(muscles.map((muscle) => muscle.trim().toLowerCase()).filter(Boolean))];
+  if (normalized.length >= 2) return normalized;
+
+  const primary = normalized[0];
+  if (primary === 'chest') return ['chest', 'shoulders', 'triceps'];
+  if (primary === 'back') return ['back', 'biceps'];
+  if (primary === 'legs' || primary === 'quads') return ['legs', 'glutes', 'hamstrings'];
+  if (primary === 'shoulders') return ['shoulders', 'triceps'];
+  if (primary === 'arms') return ['biceps', 'triceps'];
+  if (primary === 'core') return ['core', 'legs'];
+  return ['chest', 'back', 'legs', 'shoulders'];
+}
 
 export async function buildAdaptiveWorkoutPlan(
   userId: string,
@@ -418,6 +441,7 @@ export async function buildAdaptiveWorkoutPlan(
   rationale: string,
   options?: BuildWorkoutPlanOptions,
 ): Promise<GeneratedWorkoutPlan> {
+  const normalizedMuscles = normalizeTargetMuscleGroups(targetMuscles);
   const profile = await loadUserTrainingProfile(userId);
   const basePreset = GOAL_PRESETS[profile.primaryTrainingGoal];
   const preset = blendWorkoutPreset(
@@ -425,8 +449,8 @@ export async function buildAdaptiveWorkoutPlan(
       sets: basePreset.sets,
       reps: basePreset.reps,
       restSeconds: basePreset.restSeconds,
-      exerciseCount: basePreset.exerciseCount,
-      includeMobilityFinisher: false,
+      exerciseCount: options?.targetExerciseCount ?? basePreset.exerciseCount,
+      includeMobilityFinisher: options?.includeCore ?? false,
       rationaleTags: [],
     },
     profile.fitnessGoals,
@@ -437,9 +461,16 @@ export async function buildAdaptiveWorkoutPlan(
   const limitations = await loadActiveLimitations(userId);
   const recoveryMods = await loadRecoveryModifiers(userId);
 
+  const targetCount = Math.max(
+    options?.minimumExercises ?? WORKOUT_MIN_EXERCISES,
+    options?.targetExerciseCount ?? preset.exerciseCount,
+  );
+  const minimumSets = Math.max(WORKOUT_MIN_SETS, options?.minimumSets ?? WORKOUT_MIN_SETS);
+
   const adjustedPreset = {
     ...preset,
-    sets: Math.max(1, Math.round(preset.sets * recoveryMods.volumeMultiplier)),
+    sets: Math.max(minimumSets, Math.round(preset.sets * recoveryMods.volumeMultiplier)),
+    exerciseCount: targetCount,
     restSeconds: recoveryMods.recoveryModeActive
       ? Math.round(preset.restSeconds * 1.15)
       : preset.restSeconds,
@@ -449,18 +480,38 @@ export async function buildAdaptiveWorkoutPlan(
     return {
       name: recoveryMods.recoveryModeActive ? 'Recovery Mobility Session' : 'Bodyweight Workout',
       rationale: 'No equipment-matched exercises found — update equipment in onboarding or Settings.',
-      muscleGroups: targetMuscles,
+      muscleGroups: normalizedMuscles,
       exercises: [
         { name: 'Push-Up', sets: adjustedPreset.sets, reps: '12-15', restSeconds: adjustedPreset.restSeconds },
         { name: 'Bodyweight Squat', sets: adjustedPreset.sets, reps: '15-20', restSeconds: adjustedPreset.restSeconds },
         { name: 'Plank', sets: adjustedPreset.sets, reps: '45-60 sec', restSeconds: 45 },
+        { name: 'Glute Bridge', sets: adjustedPreset.sets, reps: '12-15', restSeconds: 45 },
       ],
-      estimatedMinutes: 35,
+      estimatedMinutes: WORKOUT_TARGET_MINUTES,
       aiGenerated: false,
     };
   }
 
-  const picked = selectRotatedExercises(pool, targetMuscles, recentSlugs, adjustedPreset.exerciseCount);
+  let picked = selectRotatedExercises(pool, normalizedMuscles, recentSlugs, adjustedPreset.exerciseCount);
+
+  if (options?.includeCore && !picked.some((exercise) => exercise.muscle_groups?.includes('core'))) {
+    const corePick = pool.find(
+      (exercise) =>
+        exercise.muscle_groups?.includes('core') ||
+        exercise.metadata?.movement_family === 'core' ||
+        exercise.name.toLowerCase().includes('plank'),
+    );
+    if (corePick && !picked.some((exercise) => exercise.slug === corePick.slug)) {
+      picked = [...picked, corePick];
+    }
+  }
+
+  if (picked.length < (options?.minimumExercises ?? WORKOUT_MIN_EXERCISES)) {
+    const fillers = pool
+      .filter((exercise) => !picked.some((item) => item.slug === exercise.slug))
+      .slice(0, (options?.minimumExercises ?? WORKOUT_MIN_EXERCISES) - picked.length);
+    picked = [...picked, ...fillers];
+  }
 
   let exercises: GeneratedWorkoutExercise[] = picked.map((exercise) => {
     const history = performance.get(exercise.slug);
@@ -521,11 +572,20 @@ export async function buildAdaptiveWorkoutPlan(
   return {
     name: recoveryMods.recoveryModeActive
       ? 'Recovery Session'
-      : `${targetMuscles.join(' & ')} — ${goalLabel}`,
+      : `${normalizedMuscles.slice(0, 3).join(' & ')} — ${goalLabel}`,
     rationale: `${rationale}${rotationNote}${recoveryNote}${limitationNote}`,
-    muscleGroups: targetMuscles,
+    muscleGroups: normalizedMuscles,
     exercises,
-    estimatedMinutes: Math.round(adjustedPreset.exerciseCount * adjustedPreset.sets * (adjustedPreset.restSeconds / 60 + 0.75)),
+    estimatedMinutes: Math.max(
+      45,
+      Math.min(
+        75,
+        Math.round(
+          exercises.length * adjustedPreset.sets * 2 +
+            exercises.length * (adjustedPreset.restSeconds / 60) * 0.35,
+        ),
+      ),
+    ),
     aiGenerated: false,
   };
 }

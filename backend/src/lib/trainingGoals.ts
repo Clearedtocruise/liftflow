@@ -52,7 +52,7 @@ export function blendWorkoutPreset(
         break;
       case 'mobility':
         includeMobilityFinisher = true;
-        exerciseCount = Math.min(exerciseCount + 1, 7);
+        exerciseCount = Math.min(exerciseCount + 1, 10);
         break;
       case 'strength':
         sets = Math.min(sets + 1, 6);
