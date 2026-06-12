@@ -1,4 +1,10 @@
-import { calculateRecoveryScore, mergeTrainingLoadScore, type DailyRecoveryInput } from './recoveryScore.js';
+import {
+  calculateRecoveryScore,
+  describeSubjectiveInputs,
+  mergeTrainingLoadScore,
+  type DailyRecoveryInput,
+  type SubjectiveInputKey,
+} from './recoveryScore.js';
 
 export type RecoveryIntelligenceStatus = 'fully_recovered' | 'recovering' | 'fatigued' | 'overtrained';
 
@@ -36,8 +42,17 @@ export type SessionMuscleLoad = {
   volumeByMuscle: Record<string, number>;
 };
 
+export const RECOVERY_COMPOSITE_WEIGHTS = {
+  subjective: 0.45,
+  trainingLoad: 0.3,
+  muscleReadiness: 0.25,
+} as const;
+
+export type RecoveryInputSource = 'check_in' | 'health_kit' | 'default_estimate';
+
 export type RecoveryIntelligenceInput = {
   checkIn?: DailyRecoveryInput & { recoveryScore?: number; recoveryModeActive?: boolean };
+  inputSources?: Partial<Record<SubjectiveInputKey, 'check_in' | 'health_kit'>>;
   sessions7d: SessionMuscleLoad[];
   sessions3d: SessionMuscleLoad[];
   consecutiveTrainingDays: number;
@@ -84,6 +99,7 @@ export type RecoveryIntelligenceReport = {
     sleepDataAvailable: boolean;
     healthKitAvailable: boolean;
   };
+  transparency: RecoveryTransparency;
   trend: Array<{ date: string; score: number; status: RecoveryIntelligenceStatus }>;
 };
 
@@ -305,6 +321,51 @@ function buildRationale(
   return parts.join(' ');
 }
 
+const MUSCLE_READINESS_DEFAULT = 75;
+
+function buildTransparency(
+  input: RecoveryIntelligenceInput,
+  subjectiveDescription: ReturnType<typeof describeSubjectiveInputs>,
+  trendAdjustment: number,
+  muscleRecovery: MuscleRecoveryState[],
+): RecoveryTransparency {
+  const sources = input.inputSources ?? {};
+
+  const subjectiveInputs = subjectiveDescription.breakdown.map((row) => ({
+    ...row,
+    source: row.provided
+      ? (sources[row.key] ?? 'check_in')
+      : ('default_estimate' as RecoveryInputSource),
+  }));
+
+  return {
+    recoveryFormula: {
+      subjectiveWeight: RECOVERY_COMPOSITE_WEIGHTS.subjective,
+      trainingLoadWeight: RECOVERY_COMPOSITE_WEIGHTS.trainingLoad,
+      muscleReadinessWeight: RECOVERY_COMPOSITE_WEIGHTS.muscleReadiness,
+      trendAdjustment,
+      description:
+        'Recovery % = 45% subjective check-in + 30% training load + 25% muscle readiness ± trend adjustment',
+    },
+    readinessFormula: {
+      description:
+        'Readiness % = average per-muscle score from hours since last trained, 7-day volume/sets, and soreness',
+      muscleCount: muscleRecovery.length,
+      defaultWhenNoData: MUSCLE_READINESS_DEFAULT,
+    },
+    subjectiveInputs,
+    dataSources: {
+      checkIn: Boolean(input.checkIn && Object.keys(input.checkIn).length > 0),
+      healthKitSleep: sources.sleepHours === 'health_kit',
+      workoutSessions7d: input.sessions7d.length,
+      workoutSessions3d: input.sessions3d.length,
+      trendDays: input.trendScores?.length ?? 0,
+    },
+    estimatedFromDefaults: subjectiveDescription.estimatedFromDefaults,
+    missingInputs: subjectiveDescription.missingInputs,
+  };
+}
+
 export function computeRecoveryIntelligence(input: RecoveryIntelligenceInput): RecoveryIntelligenceReport {
   const sessionCount3d = input.sessions3d.length;
   const totalVolume3d = input.sessions3d.reduce((s, x) => s + x.totalVolume, 0);
@@ -314,6 +375,7 @@ export function computeRecoveryIntelligence(input: RecoveryIntelligenceInput): R
       : 0;
 
   const subjectiveResult = calculateRecoveryScore(input.checkIn ?? {});
+  const subjectiveDescription = describeSubjectiveInputs(input.checkIn ?? {});
   const subjectiveScore =
     input.checkIn?.recoveryScore ??
     mergeTrainingLoadScore(subjectiveResult.recoveryScore, sessionCount3d, totalVolume3d);
@@ -329,7 +391,7 @@ export function computeRecoveryIntelligence(input: RecoveryIntelligenceInput): R
   const muscleReadinessScore =
     muscleRecovery.length > 0
       ? Math.round(muscleRecovery.reduce((s, m) => s + m.score, 0) / muscleRecovery.length)
-      : 75;
+      : MUSCLE_READINESS_DEFAULT;
 
   const trendAdjustment =
     input.trendScores && input.trendScores.length >= 2
@@ -375,6 +437,8 @@ export function computeRecoveryIntelligence(input: RecoveryIntelligenceInput): R
 
   const rationale = buildRationale(recoveryStatus, trainingRecommendation, factors, suggestedMuscleGroups);
 
+  const transparency = buildTransparency(input, subjectiveDescription, trendAdjustment, muscleRecovery);
+
   const voiceRecoveryLine = `Your recovery score is ${recoveryScore} out of 100. You're ${statusLabel(recoveryStatus).toLowerCase()}. ${trainingRecommendationLabel(trainingRecommendation)} is recommended today.`;
 
   const voiceTrainTodayLine =
@@ -407,6 +471,7 @@ export function computeRecoveryIntelligence(input: RecoveryIntelligenceInput): R
     suggestedMuscleGroups,
     avoidMuscleGroups,
     factors,
+    transparency,
     trend,
   };
 }

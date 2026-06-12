@@ -48,12 +48,69 @@ export function RecoveryIntelligenceDashboard({ report, compact = false }: Recov
 
         {!compact ? (
           <View style={styles.factorRow}>
-            <Factor label="Subjective" value={report.factors.subjectiveScore} />
-            <Factor label="Load" value={report.factors.trainingLoadScore} />
-            <Factor label="Muscles" value={report.factors.muscleReadinessScore} />
+            <Factor label="Subjective" value={report.factors.subjectiveScore} weight="45%" />
+            <Factor label="Load" value={report.factors.trainingLoadScore} weight="30%" />
+            <Factor label="Readiness" value={report.factors.muscleReadinessScore} weight="25%" />
           </View>
         ) : null}
+
+        {report.transparency?.estimatedFromDefaults ? (
+          <AppText variant="caption" color="textTertiary">
+            Missing check-in fields use a neutral default (70) — complete your check-in for a fully personalized score.
+          </AppText>
+        ) : null}
       </Card>
+
+      {!compact && report.transparency ? (
+        <Card style={styles.section}>
+          <AppText variant="bodyBold">How this score works</AppText>
+          <AppText variant="caption" color="textSecondary">
+            {report.transparency.recoveryFormula.description}
+          </AppText>
+          <AppText variant="caption" color="textSecondary" style={styles.formulaLine}>
+            Readiness %: {report.transparency.readinessFormula.description}
+          </AppText>
+
+          <AppText variant="footnote" color="textTertiary">
+            Subjective inputs (today)
+          </AppText>
+          {report.transparency.subjectiveInputs.map((input) => (
+            <View key={input.key} style={styles.inputRow}>
+              <AppText variant="footnote" color="textSecondary">
+                {input.label} ({Math.round(input.weight * 100)}%)
+              </AppText>
+              <AppText variant="footnote" color={input.provided ? 'textPrimary' : 'textTertiary'}>
+                {input.provided ? `${input.score}` : `~${input.score} est.`}
+                {' · '}
+                {input.source === 'health_kit' ? 'HealthKit' : input.source === 'check_in' ? 'Check-in' : 'Default'}
+              </AppText>
+            </View>
+          ))}
+
+          <AppText variant="footnote" color="textTertiary">
+            Data sources
+          </AppText>
+          <LoadSignal
+            label="Check-in today"
+            value={report.transparency.dataSources.checkIn ? 'Yes' : 'No'}
+          />
+          <LoadSignal
+            label="HealthKit sleep"
+            value={report.transparency.dataSources.healthKitSleep ? 'Yes' : 'No'}
+          />
+          <LoadSignal
+            label="Workouts (7d / 3d)"
+            value={`${report.transparency.dataSources.workoutSessions7d} / ${report.transparency.dataSources.workoutSessions3d}`}
+          />
+          <LoadSignal label="Trend days" value={String(report.transparency.dataSources.trendDays)} />
+          {report.transparency.recoveryFormula.trendAdjustment !== 0 ? (
+            <LoadSignal
+              label="Trend adjustment"
+              value={`${report.transparency.recoveryFormula.trendAdjustment > 0 ? '+' : ''}${report.transparency.recoveryFormula.trendAdjustment}`}
+            />
+          ) : null}
+        </Card>
+      ) : null}
 
       {!compact ? (
         <>
@@ -105,11 +162,11 @@ export function RecoveryIntelligenceDashboard({ report, compact = false }: Recov
   );
 }
 
-function Factor({ label, value }: { label: string; value: number }) {
+function Factor({ label, value, weight }: { label: string; value: number; weight?: string }) {
   return (
     <View style={styles.factor}>
       <AppText variant="caption" color="textTertiary">
-        {label}
+        {label}{weight ? ` ${weight}` : ''}
       </AppText>
       <AppText variant="bodyBold">{value}</AppText>
     </View>
@@ -153,4 +210,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: Spacing.xs,
   },
+  inputRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 2,
+    gap: Spacing.sm,
+  },
+  formulaLine: { marginTop: Spacing.xs },
 });

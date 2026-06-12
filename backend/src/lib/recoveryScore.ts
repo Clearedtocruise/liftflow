@@ -6,6 +6,20 @@ export type DailyRecoveryInput = {
   sorenessLevel?: number;
 };
 
+export type SubjectiveInputKey = keyof DailyRecoveryInput;
+
+/** Weights for subjective check-in score (must sum to 1). */
+export const SUBJECTIVE_INPUT_WEIGHTS: Record<SubjectiveInputKey, number> = {
+  sleepHours: 0.25,
+  sleepQuality: 0.2,
+  energyLevel: 0.25,
+  stressLevel: 0.15,
+  sorenessLevel: 0.15,
+};
+
+/** Neutral score used when a check-in field is missing (documented default, not a fake user score). */
+export const MISSING_INPUT_DEFAULT_SCORE = 70;
+
 export type RecoveryResult = {
   recoveryScore: number;
   status: 'optimal' | 'moderate' | 'fatigued' | 'overreached' | 'unknown';
@@ -20,7 +34,7 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 function scoreSleepHours(hours?: number): number {
-  if (hours == null) return 70;
+  if (hours == null) return MISSING_INPUT_DEFAULT_SCORE;
   if (hours >= 7 && hours <= 9) return 100;
   if (hours >= 6 && hours < 7) return 75;
   if (hours > 9 && hours <= 10) return 85;
@@ -29,7 +43,7 @@ function scoreSleepHours(hours?: number): number {
 }
 
 function scoreScale(value: number | undefined, invert = false): number {
-  if (value == null) return 70;
+  if (value == null) return MISSING_INPUT_DEFAULT_SCORE;
   const normalized = clamp(value, 1, 10);
   const score = invert ? (11 - normalized) * 10 : normalized * 10;
   return clamp(score, 0, 100);
@@ -96,4 +110,53 @@ export function mergeTrainingLoadScore(
   if (sessionCount3d >= 4 || totalVolume3d > 50000) adjusted -= 15;
   else if (sessionCount3d >= 3) adjusted -= 8;
   return clamp(Math.round(adjusted), 0, 100);
+}
+
+export type SubjectiveInputBreakdown = {
+  key: SubjectiveInputKey;
+  label: string;
+  weight: number;
+  score: number;
+  provided: boolean;
+};
+
+export function describeSubjectiveInputs(input: DailyRecoveryInput): {
+  breakdown: SubjectiveInputBreakdown[];
+  missingInputs: SubjectiveInputKey[];
+  estimatedFromDefaults: boolean;
+} {
+  const labels: Record<SubjectiveInputKey, string> = {
+    sleepHours: 'Sleep hours',
+    sleepQuality: 'Sleep quality',
+    energyLevel: 'Energy',
+    stressLevel: 'Stress',
+    sorenessLevel: 'Soreness',
+  };
+
+  const breakdown: SubjectiveInputBreakdown[] = (Object.keys(SUBJECTIVE_INPUT_WEIGHTS) as SubjectiveInputKey[]).map(
+    (key) => {
+      const provided = input[key] != null;
+      let score = MISSING_INPUT_DEFAULT_SCORE;
+      if (key === 'sleepHours') score = scoreSleepHours(input.sleepHours);
+      else if (key === 'sleepQuality') score = scoreScale(input.sleepQuality);
+      else if (key === 'energyLevel') score = scoreScale(input.energyLevel);
+      else if (key === 'stressLevel') score = scoreScale(input.stressLevel, true);
+      else if (key === 'sorenessLevel') score = scoreScale(input.sorenessLevel, true);
+
+      return {
+        key,
+        label: labels[key],
+        weight: SUBJECTIVE_INPUT_WEIGHTS[key],
+        score,
+        provided,
+      };
+    },
+  );
+
+  const missingInputs = breakdown.filter((row) => !row.provided).map((row) => row.key);
+  return {
+    breakdown,
+    missingInputs,
+    estimatedFromDefaults: missingInputs.length > 0,
+  };
 }

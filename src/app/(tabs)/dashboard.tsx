@@ -133,12 +133,11 @@ export default function DashboardScreen() {
   }, [load]);
 
   const nextPlanned = program?.nextWorkout;
-  const displayRecoveryScore =
-    recoveryScore ??
-    (data?.recoveryStatus === 'optimal' ? 88 : data?.recoveryStatus === 'moderate' ? 72 : 65);
+  const hasRecoveryScore = recoveryScore != null;
 
   const trainingLabel =
-    recoveryIntel?.trainingRecommendationLabel ?? trainingLabelFromRecoveryScore(displayRecoveryScore);
+    recoveryIntel?.trainingRecommendationLabel ??
+    (hasRecoveryScore ? trainingLabelFromRecoveryScore(recoveryScore) : 'Check in');
 
   const mealAggregation = useMemo(() => aggregateDailyMeals(todayMeals), [todayMeals]);
   const todayTimes = useMemo(
@@ -157,18 +156,22 @@ export default function DashboardScreen() {
 
   const coachHeadline = recoveryIntel?.trainingRecommendationLabel
     ? `${trainingLabel} recommended today`
-    : displayRecoveryScore >= 75
-      ? 'You are cleared to train.'
-      : displayRecoveryScore >= 55
-        ? 'Keep training lighter today.'
-        : 'Prioritize recovery before intensity.';
+    : hasRecoveryScore
+      ? recoveryScore! >= 75
+        ? 'You are cleared to train.'
+        : recoveryScore! >= 55
+          ? 'Keep training lighter today.'
+          : 'Prioritize recovery before intensity.'
+      : 'Log a recovery check-in to personalize coaching.';
 
   const coachMessage =
     recoveryIntel?.rationale ??
     user?.metadata?.coachActivation?.coachMessage ??
-    (displayRecoveryScore >= 80
-      ? 'Recovery is high. Increase training volume slightly if warm-ups feel strong.'
-      : 'Prioritize quality over volume. Match nutrition to your remaining macros.');
+    (hasRecoveryScore
+      ? recoveryScore! >= 80
+        ? 'Recovery is high. Increase training volume slightly if warm-ups feel strong.'
+        : 'Prioritize quality over volume. Match nutrition to your remaining macros.'
+      : 'Complete today\'s recovery check-in for an accurate score and training guidance.');
 
   const workoutDurationMin = nextPlanned
     ? estimateWorkoutDurationMinutes(exercisesFromPlannedWorkout(nextPlanned)) ||
@@ -265,7 +268,7 @@ export default function DashboardScreen() {
                     durationMin: workoutDurationMin,
                     startTime: formatWorkoutTime(schedule),
                     trainingLabel,
-                    recoveryScore: displayRecoveryScore,
+                    recoveryScore: hasRecoveryScore ? recoveryScore : null,
                   }
                 : null
             }
@@ -302,7 +305,7 @@ export default function DashboardScreen() {
               Recovery
             </AppText>
             <View style={styles.gaugeRow}>
-              <RingGauge label="Score" value={displayRecoveryScore} color={LiftFlowColors.success} />
+              <RingGauge label="Score" value={recoveryScore} color={LiftFlowColors.success} />
               <View style={styles.trainingBadge}>
                 <AppText variant="caption" color="textTertiary">
                   Today
@@ -313,6 +316,15 @@ export default function DashboardScreen() {
                 {recoveryIntel?.recoveryStatusLabel ? (
                   <AppText variant="footnote" color="textSecondary" align="center">
                     {recoveryIntel.recoveryStatusLabel}
+                  </AppText>
+                ) : !hasRecoveryScore ? (
+                  <AppText variant="footnote" color="textSecondary" align="center">
+                    Check in for your score
+                  </AppText>
+                ) : null}
+                {recoveryIntel?.transparency?.estimatedFromDefaults ? (
+                  <AppText variant="caption" color="textTertiary" align="center">
+                    Partial check-in — some inputs estimated
                   </AppText>
                 ) : null}
               </View>

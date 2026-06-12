@@ -41,6 +41,40 @@ export type RecoveryIntelligenceFactors = {
   healthKitAvailable: boolean;
 };
 
+export type RecoveryInputSource = 'check_in' | 'health_kit' | 'default_estimate';
+
+export type RecoveryTransparency = {
+  recoveryFormula: {
+    subjectiveWeight: number;
+    trainingLoadWeight: number;
+    muscleReadinessWeight: number;
+    trendAdjustment: number;
+    description: string;
+  };
+  readinessFormula: {
+    description: string;
+    muscleCount: number;
+    defaultWhenNoData: number;
+  };
+  subjectiveInputs: Array<{
+    key: string;
+    label: string;
+    weight: number;
+    score: number;
+    provided: boolean;
+    source: RecoveryInputSource;
+  }>;
+  dataSources: {
+    checkIn: boolean;
+    healthKitSleep: boolean;
+    workoutSessions7d: number;
+    workoutSessions3d: number;
+    trendDays: number;
+  };
+  estimatedFromDefaults: boolean;
+  missingInputs: string[];
+};
+
 export type RecoveryIntelligenceTrendPoint = {
   date: string;
   score: number;
@@ -61,5 +95,6 @@ export type RecoveryIntelligenceReport = {
   suggestedMuscleGroups: RecoveryMuscleGroup[];
   avoidMuscleGroups: RecoveryMuscleGroup[];
   factors: RecoveryIntelligenceFactors;
+  transparency: RecoveryTransparency;
   trend: RecoveryIntelligenceTrendPoint[];
 };

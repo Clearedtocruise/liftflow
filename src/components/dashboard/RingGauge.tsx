@@ -10,7 +10,7 @@ const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
 type RingGaugeProps = {
   label: string;
-  value: number;
+  value?: number | null;
   color?: string;
   size?: number;
 };
@@ -19,12 +19,13 @@ export function RingGauge({ label, value, color = LiftFlowColors.accent, size = 
   const stroke = 8;
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
-  const clamped = Math.min(100, Math.max(0, value));
+  const hasValue = value != null;
+  const clamped = hasValue ? Math.min(100, Math.max(0, value)) : 0;
   const progress = useSharedValue(0);
 
   useEffect(() => {
-    progress.value = withTiming(clamped, { duration: 900 });
-  }, [clamped, progress]);
+    progress.value = withTiming(hasValue ? clamped : 0, { duration: 900 });
+  }, [clamped, hasValue, progress]);
 
   const animatedProps = useAnimatedProps(() => ({
     strokeDashoffset: circumference - (progress.value / 100) * circumference,
@@ -55,7 +56,7 @@ export function RingGauge({ label, value, color = LiftFlowColors.accent, size = 
         />
       </Svg>
       <View style={[styles.center, { width: size, height: size }]}>
-        <AppText variant="headline">{Math.round(clamped)}%</AppText>
+        <AppText variant="headline">{hasValue ? `${Math.round(clamped)}%` : '—'}</AppText>
       </View>
       <AppText variant="caption" color="textSecondary" align="center">
         {label}

@@ -51,7 +51,7 @@ export default function RecoveryAnalysisScreen() {
       }>
       <AppText variant="title">Recovery Intelligence</AppText>
       <AppText variant="body" color="textSecondary" style={styles.subtitle}>
-        Readiness from training load, muscle fatigue, and your check-in signals
+        Recovery % combines check-in signals, training load, and muscle readiness (Readiness %)
       </AppText>
 
       <FeatureGate featureId="recovery-intelligence">

@@ -22,7 +22,7 @@ type HomeNextUpCardProps = {
     durationMin?: number;
     startTime?: string;
     trainingLabel: string;
-    recoveryScore: number;
+    recoveryScore?: number | null;
   } | null;
   onLogMeal: () => void;
   onStartWorkout: () => void;
@@ -96,7 +96,10 @@ export function HomeNextUpCard({
                 <AppText variant="body">{workout.title}</AppText>
                 <AppText variant="footnote" color="textSecondary">
                   {workout.durationMin ? `${workout.durationMin} min · ` : ''}
-                  Recovery {workout.recoveryScore}% · {workout.trainingLabel}
+                  {workout.recoveryScore != null
+                    ? `Recovery ${workout.recoveryScore}% · `
+                    : 'Complete check-in for recovery · '}
+                  {workout.trainingLabel}
                 </AppText>
                 <PrimaryButton label="START WORKOUT" onPress={onStartWorkout} loading={startingWorkout} size="large" />
               </View>

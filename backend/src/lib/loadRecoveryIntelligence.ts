@@ -108,6 +108,8 @@ export async function loadRecoveryIntelligence(userId: string): Promise<Recovery
   }));
   const sleepFromHealth = healthContext.latestSleepHours;
   const checkInSleep = checkIn?.sleep_hours ?? undefined;
+  const sleepSource =
+    checkInSleep != null ? ('check_in' as const) : sleepFromHealth != null ? ('health_kit' as const) : undefined;
 
   return computeRecoveryIntelligence({
     checkIn: checkIn || sleepFromHealth != null
@@ -121,6 +123,7 @@ export async function loadRecoveryIntelligence(userId: string): Promise<Recovery
           recoveryModeActive: checkIn?.recovery_mode_active ?? undefined,
         }
       : undefined,
+    inputSources: sleepSource ? { sleepHours: sleepSource } : undefined,
     sessions7d,
     sessions3d,
     consecutiveTrainingDays,
