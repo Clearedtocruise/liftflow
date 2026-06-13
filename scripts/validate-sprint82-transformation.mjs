@@ -107,8 +107,8 @@ record('BF preset chips in dashboard', dashboard.includes('TRANSFORMATION_BF_PRE
 
 const progress = read('src/app/(tabs)/progress.tsx');
 record('Progress tab FeatureGate', progress.includes('FeatureGate') && progress.includes('transformation-engine'));
-record('Progress tab TransformationDashboard', progress.includes('TransformationDashboard'));
-record('Progress tab PhotoTimeline', progress.includes('PhotoTimeline'));
+record('Progress tab transformation UI', progress.includes('TransformationStoryHero') || progress.includes('TransformationDashboard'));
+record('Progress tab photo UI', progress.includes('PhotoProgressGuide') || progress.includes('PhotoTimeline'));
 
 console.log('\n--- Voice intents ---');
 const voiceParse = read('src/lib/voice/parseVoiceCommand.ts');

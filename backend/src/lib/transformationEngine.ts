@@ -3,7 +3,7 @@ import { computeAdherence, getUserOutcomeSummary } from './outcomeEngine.js';
 import { requireAdmin } from './supabase.js';
 
 export const TRANSFORMATION_ENGINE_VERSION = 'transformation-v1';
-export const TRANSFORMATION_BF_PRESETS = [20, 15, 12, 10] as const;
+export const TRANSFORMATION_BF_PRESETS = [20, 18, 15, 12, 10] as const;
 
 export type BodyCompositionSnapshot = {
   weightKg: number;

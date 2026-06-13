@@ -3,6 +3,7 @@ import { StyleSheet, View } from 'react-native';
 import { Card } from '@/components/layout/Card';
 import { AppText } from '@/components/ui/AppText';
 import { Spacing } from '@/constants/theme';
+import { formatMassFromKg } from '@/lib/transformation/transformationStory';
 import type { BodyCompositionRecord } from '@/types';
 import type { BodyCompositionSnapshot, TransformationProjection } from '@/types/transformation';
 
@@ -46,13 +47,13 @@ export function BodyCompositionSummary({
   return (
     <Card style={styles.card}>
       <AppText variant="label" color="accent">
-        Body Composition
+        Body composition
       </AppText>
       <View style={styles.grid}>
         <Stat label="Body fat" value={`${snapshot.bodyFatPct}%`} />
         <Stat label="Weight" value={formatWeight(snapshot.weightKg)} />
-        <Stat label="Lean mass" value={`${snapshot.leanMassKg} kg`} />
-        <Stat label="Fat mass" value={`${snapshot.fatMassKg} kg`} />
+        <Stat label="Lean mass" value={formatMassFromKg(snapshot.leanMassKg, formatWeight)} />
+        <Stat label="Fat mass" value={formatMassFromKg(snapshot.fatMassKg, formatWeight)} />
       </View>
       {projection?.workoutAdherencePct != null ? (
         <AppText variant="footnote" color="textTertiary">

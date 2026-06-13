@@ -32,4 +32,31 @@ export type TransformationProjection = {
   createdAt: string;
 };
 
-export const TRANSFORMATION_BF_PRESETS = [20, 15, 12, 10] as const;
+export const TRANSFORMATION_BF_PRESETS = [20, 18, 15, 12, 10] as const;
+
+export type ScheduleStatus = 'ahead' | 'on_track' | 'behind' | 'at_goal' | 'unknown';
+
+export type BodyFatMilestone = {
+  bodyFatPct: number;
+  estimatedDate?: string;
+  reached: boolean;
+};
+
+export type TransformationStory = {
+  currentWeightKg: number;
+  currentBodyFatPct: number;
+  goalWeightKg: number;
+  goalBodyFatPct: number;
+  daysRemaining?: number;
+  estimatedCompletionDate?: string;
+  progressPercent: number;
+  startWeightKg?: number;
+  startBodyFatPct?: number;
+  requiredFatLossKg: number;
+  currentPaceKgPerWeek?: number;
+  scheduleStatus: ScheduleStatus;
+  scheduleLabel: string;
+  weeksAhead?: number;
+  coachInsights: string[];
+  milestones: BodyFatMilestone[];
+};

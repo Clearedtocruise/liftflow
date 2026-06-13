@@ -1,25 +1,39 @@
 import * as ImagePicker from 'expo-image-picker';
-import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, StyleSheet, TextInput, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Alert, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { BodyCompositionSummary } from '@/components/body/BodyCompositionSummary';
-import { PhotoAnglePicker } from '@/components/body/PhotoAnglePicker';
-import { PhotoTimeline } from '@/components/body/PhotoTimeline';
-import { TransformationDashboard } from '@/components/body/TransformationDashboard';
+import { CoachInsightsPanel } from '@/components/body/CoachInsightsPanel';
+import { CoachProjectionCard } from '@/components/body/CoachProjectionCard';
+import { PhotoProgressGuide } from '@/components/body/PhotoProgressGuide';
+import { TransformationMilestones } from '@/components/body/TransformationMilestones';
+import { TransformationProgressTimeline } from '@/components/body/TransformationProgressTimeline';
+import { TransformationStoryHero } from '@/components/body/TransformationStoryHero';
 import { Card } from '@/components/layout/Card';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
-import { SectionHeader } from '@/components/layout/SectionHeader';
 import { FeatureGate } from '@/components/subscription/PremiumGate';
 import { AppText } from '@/components/ui/AppText';
-import { LiftFlowColors, Spacing } from '@/constants/theme';
+import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 import { useEntitlement } from '@/hooks/useEntitlement';
 import { useUnits } from '@/hooks/useUnits';
+import { buildTransformationStory } from '@/lib/transformation/transformationStory';
 import { bodyService } from '@/services/bodyService';
 import { productAnalyticsService } from '@/services/productAnalyticsService';
-import type { BodyCompositionRecord, PhotoAngle, PhysiqueProjection, ProgressPhoto } from '@/types';
-import type { TransformationProjection } from '@/types/transformation';
+import type { BodyCompositionRecord, PhotoAngle, ProgressPhoto } from '@/types';
+import { TRANSFORMATION_BF_PRESETS, type TransformationProjection } from '@/types/transformation';
+
+function isValidProjection(projection: TransformationProjection | null): projection is TransformationProjection {
+  if (!projection?.current || !projection?.projected) return false;
+  const { current, projected } = projection;
+  return (
+    Number.isFinite(current.weightKg) &&
+    Number.isFinite(current.bodyFatPct) &&
+    Number.isFinite(projected.weightKg) &&
+    Number.isFinite(projected.bodyFatPct)
+  );
+}
 
 export default function ProgressScreen() {
   const { user } = useAuth();
@@ -27,32 +41,40 @@ export default function ProgressScreen() {
   const { allowed: transformationAllowed } = useEntitlement('transformation-engine');
   const [photos, setPhotos] = useState<ProgressPhoto[]>([]);
   const [measurements, setMeasurements] = useState<BodyCompositionRecord[]>([]);
-  const [projections, setProjections] = useState<PhysiqueProjection[]>([]);
   const [transformation, setTransformation] = useState<TransformationProjection | null>(null);
-  const [transformHistory, setTransformHistory] = useState<TransformationProjection[]>([]);
   const [loading, setLoading] = useState(true);
   const [runningTransform, setRunningTransform] = useState(false);
+  const [showLogForm, setShowLogForm] = useState(false);
   const [weight, setWeight] = useState('');
   const [waist, setWaist] = useState('');
   const [bodyFat, setBodyFat] = useState('');
   const [targetBf, setTargetBf] = useState('12');
-  const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
   const [uploadAngle, setUploadAngle] = useState<PhotoAngle>('front');
 
+  const story = useMemo(() => {
+    if (!isValidProjection(transformation)) return null;
+    try {
+      return buildTransformationStory(transformation, measurements);
+    } catch {
+      return null;
+    }
+  }, [transformation, measurements]);
+
   const load = useCallback(async () => {
-    if (!user) return;
-    const [photosRes, bodyRes, projRes, transformRes, historyRes] = await Promise.all([
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+    const [photosRes, bodyRes, transformRes] = await Promise.all([
       bodyService.getProgressPhotos(user.id),
       bodyService.getCompositionHistory(user.id),
-      transformationAllowed ? bodyService.getProjections(user.id) : Promise.resolve({ success: true as const, data: [] }),
-      transformationAllowed ? bodyService.getLatestTransformation(user.id) : Promise.resolve({ success: true as const, data: null }),
-      transformationAllowed ? bodyService.getTransformationHistory(user.id) : Promise.resolve({ success: true as const, data: [] }),
+      transformationAllowed
+        ? bodyService.getLatestTransformation(user.id)
+        : Promise.resolve({ success: true as const, data: null }),
     ]);
     if (photosRes.success) setPhotos(photosRes.data);
     if (bodyRes.success) setMeasurements(bodyRes.data);
-    if (projRes.success) setProjections(projRes.data);
     if (transformRes.success) setTransformation(transformRes.data);
-    if (historyRes.success) setTransformHistory(historyRes.data);
     setLoading(false);
   }, [user, transformationAllowed]);
 
@@ -77,7 +99,6 @@ export default function ProgressScreen() {
 
     const upload = await bodyService.uploadFromPicker(user.id, result.assets[0].uri, uploadAngle);
     if (upload.success) {
-      setSelectedPhotoId(upload.data.id);
       load();
     } else {
       Alert.alert('Upload failed', upload.error);
@@ -104,35 +125,8 @@ export default function ProgressScreen() {
       setWeight('');
       setWaist('');
       setBodyFat('');
+      setShowLogForm(false);
       load();
-    } else {
-      Alert.alert('Error', result.error);
-    }
-  }
-
-  async function handleEstimateBodyFat() {
-    if (!user || !selectedPhotoId) {
-      Alert.alert('Select a photo', 'Upload or select a progress photo first.');
-      return;
-    }
-    const result = await bodyService.estimateBodyFat(user.id, selectedPhotoId);
-    if (result.success) {
-      Alert.alert('Body Fat Estimate', `${result.data.bodyFatPct}% — ${result.data.analysis}`);
-      load();
-    } else {
-      Alert.alert('Error', result.error);
-    }
-  }
-
-  async function handleGenerateProjection() {
-    if (!user || !selectedPhotoId) {
-      Alert.alert('Select a photo', 'Upload a current photo first.');
-      return;
-    }
-    const result = await bodyService.generatePhysiqueProjection(user.id, selectedPhotoId, targetBf);
-    if (result.success) {
-      load();
-      Alert.alert('Projection saved', 'View comparison in the dashboard.');
     } else {
       Alert.alert('Error', result.error);
     }
@@ -140,8 +134,9 @@ export default function ProgressScreen() {
 
   async function handleRunTransformation() {
     if (!user) return;
-    if (photos.length === 0) {
-      Alert.alert('Add a photo', 'Upload at least one progress photo to run a transformation projection.');
+    if (measurements.length === 0 && !bodyFat) {
+      Alert.alert('Log your stats', 'Add weight and body fat % so your coach can project your timeline.');
+      setShowLogForm(true);
       return;
     }
     const sorted = [...photos].sort(
@@ -152,16 +147,14 @@ export default function ProgressScreen() {
     setRunningTransform(true);
     const result = await bodyService.runTransformation(user.id, parseFloat(targetBf) || 12, {
       beforePhotoId: beforePhoto?.id,
-      currentPhotoId: currentPhoto?.id ?? selectedPhotoId ?? undefined,
+      currentPhotoId: currentPhoto?.id ?? undefined,
     });
     setRunningTransform(false);
     if (result.success) {
       setTransformation(result.data);
       void productAnalyticsService.trackTransformation(user.id, parseFloat(targetBf) || 12);
-      const history = await bodyService.getTransformationHistory(user.id);
-      if (history.success) setTransformHistory(history.data);
     } else {
-      Alert.alert('Transformation failed', result.error);
+      Alert.alert('Projection failed', result.error);
     }
   }
 
@@ -169,6 +162,9 @@ export default function ProgressScreen() {
     return (
       <View style={styles.loading}>
         <ActivityIndicator size="large" color={LiftFlowColors.accent} />
+        <AppText variant="caption" color="textSecondary">
+          Loading your transformation…
+        </AppText>
       </View>
     );
   }
@@ -176,73 +172,111 @@ export default function ProgressScreen() {
   return (
     <ScreenContainer>
       <View style={styles.header}>
-        <AppText variant="headline">Progress</AppText>
+        <AppText variant="headline">Your Transformation</AppText>
         <AppText variant="body" color="textSecondary">
-          Photo timeline, body composition, and transformation projections
+          Where you are, where you&apos;re going, and how to get there.
         </AppText>
       </View>
 
-      <SectionHeader title="Photo Timeline" />
-      <PhotoAnglePicker value={uploadAngle} onChange={setUploadAngle} />
-      <PrimaryButton label="Upload Photo" onPress={handleUploadPhoto} variant="secondary" />
-      <PhotoTimeline photos={photos} selectedId={selectedPhotoId} onSelect={(p) => setSelectedPhotoId(p.id)} />
+      <FeatureGate featureId="transformation-engine">
+        {story ? (
+          <>
+            <TransformationStoryHero story={story} formatWeight={units.formatWeight} />
+            <CoachProjectionCard
+              story={story}
+              formatWeight={units.formatWeight}
+              weightUnit={units.preferredWeightUnit}
+            />
+            <TransformationProgressTimeline progressPercent={story.progressPercent} />
+            <CoachInsightsPanel insights={story.coachInsights} />
+            <TransformationMilestones milestones={story.milestones} />
+          </>
+        ) : (
+          <Card style={styles.setupCard}>
+            <AppText variant="label" color="accent">
+              Start your story
+            </AppText>
+            <AppText variant="footnote" color="textSecondary">
+              Log weight and body fat, set a goal, and your coach will map the path to your target physique.
+            </AppText>
+            <View style={styles.presets}>
+              {TRANSFORMATION_BF_PRESETS.map((pct) => (
+                <Pressable
+                  key={pct}
+                  style={[styles.presetChip, targetBf === String(pct) && styles.presetActive]}
+                  onPress={() => setTargetBf(String(pct))}>
+                  <AppText variant="caption">{pct}% goal</AppText>
+                </Pressable>
+              ))}
+            </View>
+            <PrimaryButton
+              label={runningTransform ? 'Building projection…' : 'Generate coach projection'}
+              onPress={handleRunTransformation}
+              disabled={runningTransform}
+            />
+          </Card>
+        )}
 
-      <SectionHeader title="Body Measurements" />
+        {story ? (
+          <Pressable onPress={handleRunTransformation} disabled={runningTransform}>
+            <AppText variant="caption" color="accent" style={styles.refreshLink}>
+              Refresh projection
+            </AppText>
+          </Pressable>
+        ) : null}
+      </FeatureGate>
+
+      <PhotoProgressGuide
+        photos={photos}
+        uploadAngle={uploadAngle}
+        onSelectAngle={setUploadAngle}
+        onUpload={handleUploadPhoto}
+      />
+
       <BodyCompositionSummary
         latestMeasurement={measurements[0]}
         projection={transformationAllowed ? transformation : null}
         formatWeight={units.formatWeight}
       />
-      <Card style={styles.form}>
-        <TextInput
-          style={styles.input}
-          placeholder={`Weight (${units.weightLabel})`}
-          placeholderTextColor={LiftFlowColors.textTertiary}
-          keyboardType="numeric"
-          value={weight}
-          onChangeText={setWeight}
-        />
-        <TextInput
-          style={styles.input}
-          placeholder={`Waist (${units.measurementLabel})`}
-          placeholderTextColor={LiftFlowColors.textTertiary}
-          keyboardType="numeric"
-          value={waist}
-          onChangeText={setWaist}
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Body fat %"
-          placeholderTextColor={LiftFlowColors.textTertiary}
-          keyboardType="numeric"
-          value={bodyFat}
-          onChangeText={setBodyFat}
-        />
-        <PrimaryButton label="Save Measurement" onPress={handleSaveMeasurement} />
-      </Card>
 
-      <SectionHeader title="Transformation Engine" />
-      <FeatureGate featureId="transformation-engine">
-        <TransformationDashboard
-          photos={photos}
-          measurements={measurements}
-          projection={transformation}
-          history={transformHistory}
-          targetBf={targetBf}
-          onTargetBfChange={setTargetBf}
-          onRun={handleRunTransformation}
-          running={runningTransform}
-          formatWeight={units.formatWeight}
-          projectedImageUrl={projections[0]?.projectedImageUrl}
-        />
+      <Pressable onPress={() => setShowLogForm((value) => !value)}>
+        <AppText variant="label" color="accent">
+          {showLogForm ? 'Hide log form' : 'Log measurement'}
+        </AppText>
+      </Pressable>
+
+      {showLogForm ? (
         <Card style={styles.form}>
-          <PrimaryButton label="Estimate Body Fat (AI)" onPress={handleEstimateBodyFat} variant="secondary" />
-          <PrimaryButton label="Generate AI Physique Image" onPress={handleGenerateProjection} variant="secondary" />
+          <TextInput
+            style={styles.input}
+            placeholder={`Weight (${units.weightLabel})`}
+            placeholderTextColor={LiftFlowColors.textTertiary}
+            keyboardType="numeric"
+            value={weight}
+            onChangeText={setWeight}
+          />
+          <TextInput
+            style={styles.input}
+            placeholder={`Waist (${units.measurementLabel})`}
+            placeholderTextColor={LiftFlowColors.textTertiary}
+            keyboardType="numeric"
+            value={waist}
+            onChangeText={setWaist}
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Body fat %"
+            placeholderTextColor={LiftFlowColors.textTertiary}
+            keyboardType="numeric"
+            value={bodyFat}
+            onChangeText={setBodyFat}
+          />
+          <PrimaryButton label="Save measurement" onPress={handleSaveMeasurement} />
         </Card>
-      </FeatureGate>
+      ) : null}
 
       <AppText variant="caption" color="textTertiary" style={styles.disclaimer}>
-        Projections are estimates based on your logged data — not medical advice.
+        Projections are coach estimates from your logged data — not medical advice.
       </AppText>
     </ScreenContainer>
   );
@@ -253,16 +287,28 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: Spacing.md,
     backgroundColor: LiftFlowColors.background,
   },
   header: {
     gap: Spacing.xs,
-    marginBottom: Spacing.xxl,
+    marginBottom: Spacing.xl,
   },
-  form: {
-    gap: Spacing.md,
-    marginBottom: Spacing.xxl,
+  setupCard: { gap: Spacing.md, marginBottom: Spacing.lg },
+  presets: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
+  presetChip: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+    borderRadius: Radius.full,
+    borderWidth: 1,
+    borderColor: LiftFlowColors.border,
   },
+  presetActive: {
+    borderColor: LiftFlowColors.accent,
+    backgroundColor: LiftFlowColors.accentGlow,
+  },
+  refreshLink: { marginBottom: Spacing.lg, textAlign: 'center' },
+  form: { gap: Spacing.md, marginTop: Spacing.md, marginBottom: Spacing.lg },
   input: {
     backgroundColor: LiftFlowColors.background,
     borderRadius: 8,
