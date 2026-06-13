@@ -13,7 +13,8 @@ export type EditableWorkoutExercise = {
 };
 
 export type ExerciseHistorySet = {
-  weightKg: number;
-  reps: number;
+  weightKg?: number;
+  reps?: number;
+  durationSeconds?: number;
   loggedAt: string;
 };

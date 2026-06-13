@@ -6,7 +6,9 @@ import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import type { ExerciseLoggingMode } from '@/lib/exerciseModality';
 import { coachAdjustmentColor, coachAdjustmentLabel } from '@/lib/coachAdjustmentLabels';
+import { formatCoachTargetLine } from '@/lib/activeWorkoutMetrics';
 import { kgToDisplayWeight } from '@/lib/smartProgressionEngine';
+import { defaultTimedDurationSeconds } from '@/lib/exerciseModality';
 import { exerciseCoachService } from '@/services/exerciseCoachService';
 import { useUnits } from '@/hooks/useUnits';
 import type { ExerciseCoachPrescription, ExercisePrescriptionPlanInput } from '@/types/exerciseCoach';
@@ -21,7 +23,10 @@ type ExerciseCoachCardProps = {
   loggingMode?: ExerciseLoggingMode;
   variant?: 'default' | 'inline' | 'compact';
   setNumber?: number;
-  onApplyTarget?: (recommended: { weightKg: number; reps: number }) => void;
+  titleLabel?: string;
+  showPerformanceSummary?: boolean;
+  onPrescription?: (prescription: ExerciseCoachPrescription | null) => void;
+  onApplyTarget?: (recommended: { weightKg: number; reps: number; durationSeconds?: number }) => void;
 };
 
 function formatRest(seconds: number): string {
@@ -38,6 +43,9 @@ export function ExerciseCoachCard({
   loggingMode = 'weighted',
   variant = 'default',
   setNumber,
+  titleLabel = 'Coach prescription',
+  showPerformanceSummary = true,
+  onPrescription,
   onApplyTarget,
 }: ExerciseCoachCardProps) {
   const units = useUnits();
@@ -56,7 +64,9 @@ export function ExerciseCoachCard({
       })
       .then((result) => {
         if (cancelled) return;
-        setPrescription(result.success ? result.data : null);
+        const next = result.success ? result.data : null;
+        setPrescription(next);
+        onPrescription?.(next);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -64,7 +74,7 @@ export function ExerciseCoachCard({
     return () => {
       cancelled = true;
     };
-  }, [userId, exerciseId, plan, sessionId, currentSessionSets]);
+  }, [userId, exerciseId, plan, sessionId, currentSessionSets, onPrescription]);
 
   if (loading) {
     return (
@@ -80,28 +90,37 @@ export function ExerciseCoachCard({
   if (!prescription) return null;
 
   const { targets } = prescription;
-  const weightDisplay =
-    targets.weightKg > 0 ? kgToDisplayWeight(targets.weightKg, units.preferredWeightUnit) : null;
-  const targetLine =
-    loggingMode === 'bodyweight'
-      ? `${targets.sets} sets × ${targets.reps} reps`
-      : weightDisplay != null
-        ? `${targets.sets} sets × ${weightDisplay} ${units.weightLabel} × ${targets.reps}`
-        : `${targets.sets} sets × ${targets.reps} reps`;
+  const targetLine = formatCoachTargetLine(
+    targets,
+    loggingMode,
+    (kg) => kgToDisplayWeight(kg, units.preferredWeightUnit),
+    units.weightLabel,
+    plan?.plannedReps,
+  );
 
   const adjColor = coachAdjustmentColor(prescription.adjustmentLabel);
   const content = (
     <>
-      <View style={styles.headerRow}>
-        <AppText variant="label" color="accent">
-          Coach prescription{setNumber ? ` · Set ${setNumber}` : ''}
-        </AppText>
-        <AppText variant="caption" color={adjColor}>
-          {coachAdjustmentLabel(prescription.adjustmentLabel)}
-        </AppText>
-      </View>
+      {showPerformanceSummary ? (
+        <>
+          <View style={styles.headerRow}>
+            <AppText variant="label" color="accent">
+              {titleLabel}{setNumber ? ` · Set ${setNumber}` : ''}
+            </AppText>
+            <AppText variant="caption" color={adjColor}>
+              {coachAdjustmentLabel(prescription.adjustmentLabel)}
+            </AppText>
+          </View>
 
-      <AppText variant="bodyBold">{targetLine}</AppText>
+          <AppText variant="bodyBold">{targetLine}</AppText>
+        </>
+      ) : (
+        <View style={styles.headerRow}>
+          <AppText variant="caption" color={adjColor}>
+            {coachAdjustmentLabel(prescription.adjustmentLabel)}
+          </AppText>
+        </View>
+      )}
       <AppText variant="footnote" color="textSecondary">
         Rest {formatRest(targets.restSeconds)} · Recovery {prescription.contextUsed.recoveryScore} · Readiness{' '}
         {prescription.contextUsed.readinessScore}
@@ -145,12 +164,21 @@ export function ExerciseCoachCard({
         </Pressable>
       )}
 
-      {onApplyTarget && loggingMode !== 'timed' ? (
+      {onApplyTarget ? (
         <Pressable
           style={({ pressed }) => [styles.applyButton, pressed && styles.applyButtonPressed]}
-          onPress={() => onApplyTarget({ weightKg: targets.weightKg, reps: targets.reps })}>
+          onPress={() =>
+            onApplyTarget({
+              weightKg: targets.weightKg,
+              reps: targets.reps,
+              durationSeconds:
+                loggingMode === 'timed'
+                  ? defaultTimedDurationSeconds(targets.repRange || plan?.plannedReps)
+                  : undefined,
+            })
+          }>
           <AppText variant="caption" color="accent">
-            Use coach target
+            Use target
           </AppText>
         </Pressable>
       ) : null}

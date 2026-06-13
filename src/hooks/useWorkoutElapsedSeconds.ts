@@ -37,3 +37,10 @@ export function formatWorkoutElapsed(totalSeconds: number): string {
   if (minutes < 1) return '<1 min elapsed';
   return `${minutes} min elapsed`;
 }
+
+/** Sprint 5 — clock display for guided active workout (mm:ss). */
+export function formatWorkoutClockTime(totalSeconds: number): string {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}

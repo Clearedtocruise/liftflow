@@ -7,6 +7,7 @@ import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { AppText } from '@/components/ui/AppText';
 import { ExerciseCompleteCard } from '@/components/workout/execution/ExerciseCompleteCard';
+import { GuidedWorkoutMetrics, WorkoutProgressBar } from '@/components/workout/execution/GuidedWorkoutMetrics';
 import { RestTimerOverlay } from '@/components/workout/execution/RestTimerOverlay';
 import { SetLoggingControls } from '@/components/workout/execution/SetLoggingControls';
 import { WorkoutChallengeModal } from '@/components/workout/execution/WorkoutChallengeModal';
@@ -15,7 +16,11 @@ import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import { DEFAULT_REST_SECONDS } from '@/constants/workout';
 import { useAuth } from '@/hooks/useAuth';
 import { useUnits } from '@/hooks/useUnits';
-import { formatWorkoutElapsed, useWorkoutElapsedSeconds } from '@/hooks/useWorkoutElapsedSeconds';
+import { formatWorkoutClockTime, useWorkoutElapsedSeconds } from '@/hooks/useWorkoutElapsedSeconds';
+import {
+    computeWorkoutSetProgress,
+    formatCoachTargetLine,
+} from '@/lib/activeWorkoutMetrics';
 import {
     defaultTimedDurationSeconds,
     formatSetLoggedLabel,
@@ -39,7 +44,8 @@ import type {
     WorkoutChallengeTemplate,
     WorkoutChallengeTrigger,
 } from '@/types/workoutChallenge';
-import type { EditableWorkoutExercise } from '@/types/workoutExecution';
+import type { EditableWorkoutExercise, ExerciseHistorySet } from '@/types/workoutExecution';
+import type { ExerciseCoachPrescription } from '@/types/exerciseCoach';
 
 type ActiveWorkoutScreenProps = {
   session: WorkoutSession;
@@ -86,7 +92,8 @@ export function ActiveWorkoutScreen({
   const [reps, setReps] = useState(8);
   const [durationSeconds, setDurationSeconds] = useState(30);
   const [logging, setLogging] = useState(false);
-  const [historySets, setHistorySets] = useState<Array<{ weightKg: number; reps: number }>>([]);
+  const [historySets, setHistorySets] = useState<ExerciseHistorySet[]>([]);
+  const [coachPrescription, setCoachPrescription] = useState<ExerciseCoachPrescription | null>(null);
   const [showComplete, setShowComplete] = useState(false);
   const [exerciseHadPr, setExerciseHadPr] = useState(false);
   const [restPaused, setRestPaused] = useState(false);
@@ -115,6 +122,21 @@ export function ActiveWorkoutScreen({
     currentExercise?.exercise?.name,
   );
   const nextSetNumber = Math.min(completedSets.length + 1, targetSets);
+  const remainingSets = Math.max(targetSets - completedSets.length, 0);
+  const workoutProgress = useMemo(
+    () => computeWorkoutSetProgress(session.exercises, planExercises),
+    [session.exercises, planExercises],
+  );
+  const coachTargetLine = useMemo(() => {
+    if (!coachPrescription) return null;
+    return formatCoachTargetLine(
+      coachPrescription.targets,
+      loggingMode,
+      (kg) => formatWorkoutWeightForInput(kg, units.preferredWeightUnit),
+      units.weightLabel,
+      repRange,
+    );
+  }, [coachPrescription, loggingMode, units.preferredWeightUnit, units.weightLabel, repRange]);
   const supersetGroup = getSupersetGroupForIndex(currentIndex, planExercises);
   const supersetLabel = getSupersetLabel(supersetGroup, currentIndex);
   const inSuperset = Boolean(supersetGroup && supersetGroup.memberIndices.length >= 2);
@@ -145,7 +167,12 @@ export function ActiveWorkoutScreen({
   );
 
   const handleApplyCoachTarget = useCallback(
-    (recommended: { weightKg: number; reps: number }) => {
+    (recommended: { weightKg: number; reps: number; durationSeconds?: number }) => {
+      if (loggingMode === 'timed') {
+        setDurationSeconds(recommended.durationSeconds ?? durationSeconds);
+        setReps(1);
+        return;
+      }
       if (loggingMode === 'bodyweight') {
         setReps(recommended.reps);
         return;
@@ -155,7 +182,7 @@ export function ActiveWorkoutScreen({
         setReps(recommended.reps);
       }
     },
-    [loggingMode],
+    [loggingMode, durationSeconds],
   );
 
   useEffect(() => {
@@ -178,22 +205,26 @@ export function ActiveWorkoutScreen({
       currentExercise.exercise?.name,
     );
     setDurationSeconds(defaultTimedDurationSeconds(repRange));
+    setCoachPrescription(null);
 
     let cancelled = false;
-    void workoutService.getRecentSetsForExercise(user.id, currentExercise.exerciseId, 5).then((result) => {
+    void workoutService.getRecentSetsForExercise(user.id, currentExercise.exerciseId, 5, mode).then((result) => {
       if (cancelled || !result.success) return;
       setHistorySets(result.data);
 
       const last = result.data[0];
       if (mode === 'timed') {
         setReps(1);
+        if (last?.durationSeconds) {
+          setDurationSeconds(last.durationSeconds);
+        }
         return;
       }
       if (mode === 'bodyweight') {
         setReps(last?.reps ?? parseTargetReps(repRange));
         return;
       }
-      if (last) {
+      if (last?.weightKg != null && last.reps != null) {
         setWeightKg(last.weightKg);
         setReps(last.reps);
       } else if (currentExercise.suggestedWeight) {
@@ -378,11 +409,17 @@ export function ActiveWorkoutScreen({
               <AppText variant="caption" color="accent">
                 Exercise {currentIndex + 1} of {sortedExercises.length}
               </AppText>
-              <AppText variant="caption" color="textSecondary">
-                {formatWorkoutElapsed(elapsedSeconds)}
-              </AppText>
+              <View style={styles.workoutTimeBlock}>
+                <AppText variant="caption" color="textSecondary">
+                  Workout Time
+                </AppText>
+                <AppText variant="caption" color="textSecondary">
+                  {formatWorkoutClockTime(elapsedSeconds)}
+                </AppText>
+              </View>
             </View>
             <AppText variant="title">{session.name}</AppText>
+            <WorkoutProgressBar percent={workoutProgress.percent} />
           </View>
           <View style={styles.headerActions}>
             {isPaused ? (
@@ -406,23 +443,25 @@ export function ActiveWorkoutScreen({
                 </AppText>
               ) : null}
 
-              <AppText variant="footnote" color="textSecondary">
-                {inSuperset
-                  ? loggingMode === 'timed'
-                    ? `Target ${targetSets} sets · ${repRange} · No rest between paired exercises`
-                    : loggingMode === 'bodyweight'
-                      ? `Target ${targetSets} sets · ${repRange} reps · Superset pair`
-                      : `Target ${targetSets} sets · ${repRange} reps · Rest after both exercises`
-                  : loggingMode === 'timed'
-                  ? `Target ${targetSets} sets · ${repRange}`
-                  : loggingMode === 'bodyweight'
-                    ? `Target ${targetSets} sets · ${repRange} reps · Bodyweight`
-                    : `Target ${targetSets} sets · ${repRange} reps · Rest ${restTargetSeconds}s`}
-              </AppText>
+              {!showComplete ? (
+                <GuidedWorkoutMetrics
+                  currentSet={nextSetNumber}
+                  targetSets={targetSets}
+                  remainingSets={remainingSets}
+                  loggingMode={loggingMode}
+                  repRange={repRange}
+                  historySets={historySets}
+                  targetPerformanceLine={coachTargetLine}
+                  formatWeight={(kg) => formatWorkoutWeightForInput(kg, units.preferredWeightUnit)}
+                  weightLabel={units.weightLabel}
+                  fallbackWeightKg={weightKg > 0 ? weightKg : currentExercise.suggestedWeight}
+                />
+              ) : null}
 
-              {user && currentExercise.exerciseId && loggingMode !== 'timed' && !showComplete ? (
+              {user && currentExercise.exerciseId && !showComplete ? (
                 <ExerciseCoachCard
                   variant="inline"
+                  showPerformanceSummary={false}
                   loggingMode={loggingMode}
                   userId={user.id}
                   exerciseId={currentExercise.exerciseId}
@@ -430,6 +469,7 @@ export function ActiveWorkoutScreen({
                   sessionId={session.id}
                   currentSessionSets={currentSessionSets}
                   setNumber={nextSetNumber}
+                  onPrescription={setCoachPrescription}
                   onApplyTarget={handleApplyCoachTarget}
                 />
               ) : null}
@@ -444,32 +484,6 @@ export function ActiveWorkoutScreen({
                 ))}
               </View>
 
-              {historySets.length > 0 && loggingMode === 'weighted' ? (
-                <View style={styles.historyBlock}>
-                  <AppText variant="label" color="textSecondary">
-                    Previous Performance
-                  </AppText>
-                  {historySets.slice(0, 3).map((set, index) => (
-                    <AppText key={`${set.weightKg}-${set.reps}-${index}`} variant="footnote" color="textSecondary">
-                      {formatWorkoutWeightForInput(set.weightKg, units.preferredWeightUnit)} {units.weightLabel} × {set.reps}
-                    </AppText>
-                  ))}
-                </View>
-              ) : null}
-
-              {historySets.length > 0 && loggingMode === 'bodyweight' ? (
-                <View style={styles.historyBlock}>
-                  <AppText variant="label" color="textSecondary">
-                    Previous Performance
-                  </AppText>
-                  {historySets.slice(0, 3).map((set, index) => (
-                    <AppText key={`${set.reps}-${index}`} variant="footnote" color="textSecondary">
-                      {set.reps} reps
-                    </AppText>
-                  ))}
-                </View>
-              ) : null}
-
               {!showComplete ? (
                 <>
                   <SetLoggingControls
@@ -483,7 +497,7 @@ export function ActiveWorkoutScreen({
                     disabled={isPaused || logging}
                   />
                   <PrimaryButton
-                    label={groupComplete ? 'All sets logged' : `Log Set · Set ${nextSetNumber} of ${targetSets}`}
+                    label={groupComplete ? 'All sets logged' : `Log Set ${nextSetNumber}`}
                     size="large"
                     loading={logging}
                     disabled={isPaused || groupComplete}
@@ -606,8 +620,12 @@ const styles = StyleSheet.create({
   headerMeta: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: Spacing.md,
+  },
+  workoutTimeBlock: {
+    alignItems: 'flex-end',
+    gap: 2,
   },
   headerActions: {
     minWidth: 96,
@@ -630,9 +648,6 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   nextPreview: {
-    gap: Spacing.xs,
-  },
-  historyBlock: {
     gap: Spacing.xs,
   },
   restPresetRow: {

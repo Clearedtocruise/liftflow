@@ -822,7 +822,12 @@ export const workoutService: IWorkoutService = {
     }
   },
 
-  async getRecentSetsForExercise(userId: string, exerciseId: string, limit = 5) {
+  async getRecentSetsForExercise(
+    userId: string,
+    exerciseId: string,
+    limit = 5,
+    mode: import('@/lib/exerciseModality').ExerciseLoggingMode = 'weighted',
+  ) {
     try {
       const { data: exerciseRows, error: exerciseError } = await supabase
         .from('workout_exercises')
@@ -837,22 +842,26 @@ export const workoutService: IWorkoutService = {
 
       const { data, error } = await supabase
         .from('workout_sets')
-        .select('weight, reps, logged_at')
+        .select('weight, reps, duration_seconds, logged_at')
         .in('workout_exercise_id', workoutExerciseIds)
-        .not('weight', 'is', null)
-        .not('reps', 'is', null)
         .order('logged_at', { ascending: false })
-        .limit(limit);
+        .limit(Math.max(limit * 3, limit));
 
       if (error) return fail(error.message);
 
       const sets: ExerciseHistorySet[] = (data ?? [])
-        .filter((row) => row.weight != null && row.reps != null)
         .map((row) => ({
-          weightKg: row.weight as number,
-          reps: row.reps as number,
+          weightKg: row.weight != null ? (row.weight as number) : undefined,
+          reps: row.reps != null ? (row.reps as number) : undefined,
+          durationSeconds: row.duration_seconds != null ? (row.duration_seconds as number) : undefined,
           loggedAt: row.logged_at as string,
-        }));
+        }))
+        .filter((set) => {
+          if (mode === 'timed') return set.durationSeconds != null && set.durationSeconds > 0;
+          if (mode === 'bodyweight') return set.reps != null && (!set.weightKg || set.weightKg <= 0);
+          return set.weightKg != null && set.weightKg > 0 && set.reps != null;
+        })
+        .slice(0, limit);
 
       return ok(sets);
     } catch (e) {
