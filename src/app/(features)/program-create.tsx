@@ -87,9 +87,15 @@ export default function ProgramCreateScreen() {
         />
       </Section>
 
-      <Section title="Training Frequency">
+      <Section title="Lifting days per week">
         <ChipRow
-          options={FREQUENCIES.map((f) => ({ id: String(f), label: f === 'custom' ? 'Custom' : `${f} days` }))}
+          options={[
+            ...FREQUENCIES.filter((f) => f !== 'custom').map((f) => ({
+              id: String(f),
+              label: `${f} lift days`,
+            })),
+            { id: 'custom', label: 'Custom' },
+          ]}
           value={String(frequency)}
           onChange={(v) => setFrequency(v === 'custom' ? 'custom' : (parseInt(v, 10) as ProgramFrequency))}
         />

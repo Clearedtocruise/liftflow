@@ -82,8 +82,8 @@ const STEP_META: Record<
     insightCategory: 'coaching',
   },
   5: {
-    title: 'Your schedule',
-    subtitle: 'When and how often you train shapes your program.',
+    title: 'Your lifting schedule',
+    subtitle: 'How many days you lift sets your weekly program. Cardio and sports are optional add-ons — they never replace lifting.',
     insightCategory: 'training',
   },
   6: {
@@ -404,10 +404,15 @@ export default function ProfileOnboardingScreen() {
       case 5:
         return (
           <View style={styles.stack}>
-            <AppText variant="footnote" color="textSecondary">Days per week</AppText>
+            <AppText variant="footnote" color="textSecondary">How many days do you lift?</AppText>
             <ChipGrid>
               {DAYS_PER_WEEK_OPTIONS.map((n) => (
-                <SelectableChip key={n} label={`${n}x`} selected={daysPerWeek === n} onPress={() => setDaysPerWeek(n)} />
+                <SelectableChip
+                  key={n}
+                  label={n === 6 ? `${n} days (max)` : `${n} lift days`}
+                  selected={daysPerWeek === n}
+                  onPress={() => setDaysPerWeek(n)}
+                />
               ))}
             </ChipGrid>
             <AppText variant="footnote" color="textSecondary">Minutes per workout</AppText>
@@ -543,7 +548,7 @@ export default function ProfileOnboardingScreen() {
         return (
           <View style={styles.review}>
             <AppText variant="body">Goals: {premiumGoals.length} selected</AppText>
-            <AppText variant="body">Schedule: {daysPerWeek}x/week · {minutesPerWorkout} min</AppText>
+            <AppText variant="body">Lifting: {daysPerWeek} days/week · {minutesPerWorkout} min</AppText>
             <AppText variant="body">Gym: {trainingLocation ?? '—'}</AppText>
             <AppText variant="body">Equipment: {equipment.length} items</AppText>
             <AppText variant="body">Timeline: {timeline ?? '—'}</AppText>

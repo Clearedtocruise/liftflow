@@ -1,3 +1,5 @@
+import { getWeeklyLiftingPatternForFrequency } from './weeklyLiftingGenerator.js';
+
 export type ProgramType =
   | 'push_pull_legs'
   | 'upper_lower'
@@ -68,39 +70,6 @@ function workoutDay(index: number, label: string): DaySlot {
   };
 }
 
-const SCHEDULES: Record<ProgramType, Record<number, string[]>> = {
-  push_pull_legs: {
-    3: ['Push', 'Pull', 'Legs', 'Rest', 'Rest', 'Rest', 'Rest'],
-    4: ['Push', 'Pull', 'Rest', 'Legs', 'Rest', 'Conditioning', 'Rest'],
-    5: ['Push', 'Pull', 'Legs', 'Push', 'Pull', 'Conditioning', 'Rest'],
-    6: ['Push', 'Pull', 'Legs', 'Push', 'Pull', 'Conditioning', 'Rest'],
-  },
-  upper_lower: {
-    3: ['Upper', 'Lower', 'Rest', 'Upper', 'Rest', 'Rest', 'Rest'],
-    4: ['Upper', 'Lower', 'Rest', 'Upper', 'Lower', 'Conditioning', 'Rest'],
-    5: ['Upper', 'Lower', 'Upper', 'Lower', 'Rest', 'Conditioning', 'Rest'],
-    6: ['Upper', 'Lower', 'Upper', 'Lower', 'Upper', 'Conditioning', 'Rest'],
-  },
-  full_body: {
-    3: ['Full Body', 'Rest', 'Full Body', 'Rest', 'Full Body', 'Rest', 'Rest'],
-    4: ['Full Body', 'Rest', 'Full Body', 'Rest', 'Full Body', 'Conditioning', 'Rest'],
-    5: ['Full Body', 'Rest', 'Full Body', 'Rest', 'Full Body', 'Conditioning', 'Rest'],
-    6: ['Full Body', 'Rest', 'Full Body', 'Rest', 'Full Body', 'Conditioning', 'Rest'],
-  },
-  body_part_split: {
-    3: ['Chest', 'Back', 'Legs', 'Rest', 'Rest', 'Rest', 'Rest'],
-    4: ['Chest', 'Back', 'Legs', 'Shoulders', 'Rest', 'Conditioning', 'Rest'],
-    5: ['Chest', 'Back', 'Shoulders', 'Legs', 'Arms', 'Conditioning', 'Rest'],
-    6: ['Chest', 'Back', 'Shoulders', 'Legs', 'Arms', 'Conditioning', 'Rest'],
-  },
-  strength: {
-    3: ['Squat Day', 'Bench Day', 'Deadlift Day', 'Rest', 'Rest', 'Rest', 'Rest'],
-    4: ['Squat Day', 'Bench Day', 'Rest', 'Deadlift Day', 'Press Day', 'Conditioning', 'Rest'],
-    5: ['Squat Day', 'Bench Day', 'Rest', 'Deadlift Day', 'Press Day', 'Conditioning', 'Rest'],
-    6: ['Squat Day', 'Bench Day', 'Deadlift Day', 'Press Day', 'Squat Day', 'Conditioning', 'Rest'],
-  },
-};
-
 export function buildWeeklySchedule(
   programType: ProgramType,
   frequency: ProgramFrequency,
@@ -112,8 +81,7 @@ export function buildWeeklySchedule(
     );
   }
 
-  const freq = frequency === 'custom' ? 4 : frequency;
-  const pattern = SCHEDULES[programType][freq] ?? SCHEDULES[programType][4];
+  const pattern = getWeeklyLiftingPatternForFrequency(programType, frequency);
 
   return pattern.map((label, index) =>
     label === 'Rest' ? restDay(index) : workoutDay(index, label),

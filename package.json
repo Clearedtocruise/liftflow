@@ -97,6 +97,7 @@
     "validate:sprint11-transformation": "node scripts/validate-sprint11-transformation.mjs",
     "validate:sprint1-exercise-classification": "node scripts/validate-sprint1-exercise-classification.mjs",
     "validate:sprint2-workout-execution-modes": "node scripts/validate-sprint2-workout-execution-modes.mjs",
+    "validate:sprint3-weekly-lifting": "node scripts/validate-sprint3-weekly-lifting.mjs",
     "migrate:019": "node scripts/apply-migration-019.mjs",
     "migrate:015": "node scripts/apply-migration-015.mjs",
     "seed:beta-invites": "node scripts/seed-beta-invites.mjs",
