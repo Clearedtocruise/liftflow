@@ -14,6 +14,7 @@ import type { EditableWorkoutExercise } from '@/types/workoutExecution';
 type WorkoutDayOverviewScreenProps = {
   workout: PlannedWorkout;
   exercises: EditableWorkoutExercise[];
+  userId?: string;
   starting: boolean;
   onStart: () => void;
   onEdit: () => void;
@@ -23,6 +24,7 @@ type WorkoutDayOverviewScreenProps = {
 export function WorkoutDayOverviewScreen({
   workout,
   exercises,
+  userId,
   starting,
   onStart,
   onEdit,
@@ -48,7 +50,7 @@ export function WorkoutDayOverviewScreen({
       <AppText variant="label" color="textSecondary">
         Exercises
       </AppText>
-      <WorkoutExerciseDetailList exercises={exercises} />
+      <WorkoutExerciseDetailList exercises={exercises} userId={userId} />
 
       <View style={styles.actions}>
         <PrimaryButton label={starting ? 'Starting…' : 'Start Workout'} size="large" loading={starting} onPress={onStart} />

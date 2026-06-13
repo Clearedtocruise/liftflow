@@ -10,7 +10,7 @@ import { ExerciseCompleteCard } from '@/components/workout/execution/ExerciseCom
 import { RestTimerOverlay } from '@/components/workout/execution/RestTimerOverlay';
 import { SetLoggingControls } from '@/components/workout/execution/SetLoggingControls';
 import { WorkoutChallengeModal } from '@/components/workout/execution/WorkoutChallengeModal';
-import { SmartProgressionCard } from '@/components/workout/SmartProgressionCard';
+import { ExerciseCoachCard } from '@/components/workout/ExerciseCoachCard';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import { DEFAULT_REST_SECONDS } from '@/constants/workout';
 import { useAuth } from '@/hooks/useAuth';
@@ -130,6 +130,18 @@ export function ActiveWorkoutScreen({
         setNumber: index + 1,
       })),
     [completedSets],
+  );
+  const coachPlan = useMemo(
+    () =>
+      planMeta
+        ? {
+            plannedSets: planMeta.sets,
+            plannedReps: planMeta.repRange,
+            plannedRestSeconds: planMeta.restSeconds,
+            exerciseName: currentExercise?.exercise?.name,
+          }
+        : undefined,
+    [planMeta, currentExercise?.exercise?.name],
   );
 
   const handleApplyCoachTarget = useCallback(
@@ -409,14 +421,15 @@ export function ActiveWorkoutScreen({
               </AppText>
 
               {user && currentExercise.exerciseId && loggingMode !== 'timed' && !showComplete ? (
-                <SmartProgressionCard
+                <ExerciseCoachCard
                   variant="inline"
                   loggingMode={loggingMode}
                   userId={user.id}
                   exerciseId={currentExercise.exerciseId}
-                  exerciseName={currentExercise.exercise?.name ?? 'Exercise'}
+                  plan={coachPlan}
                   sessionId={session.id}
                   currentSessionSets={currentSessionSets}
+                  setNumber={nextSetNumber}
                   onApplyTarget={handleApplyCoachTarget}
                 />
               ) : null}

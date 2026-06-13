@@ -2,6 +2,10 @@ import { Router } from 'express';
 
 import { adaptActiveProgram } from '../lib/adaptiveProgram.js';
 import { adaptToPreferenceChanges } from '../lib/preferenceAdaptation.js';
+import {
+  loadExerciseCoachPrescription,
+  loadWorkoutExercisePrescriptions,
+} from '../lib/exerciseCoachPrescription.js';
 import { assessRecovery, suggestMuscleGroups } from '../lib/aiCoach.js';
 import { activateCoachSystem } from '../lib/coachActivation.js';
 import {
@@ -670,5 +674,38 @@ trainingRouter.post('/preferences/adapt', async (req, res) => {
     res.json(await adaptToPreferenceChanges(userId, trigger ?? 'all'));
   } catch (error) {
     res.status(500).json({ message: error instanceof Error ? error.message : 'Preference adaptation failed' });
+  }
+});
+
+trainingRouter.post('/coaching/exercise-prescription', requireProSubscription, async (req, res) => {
+  try {
+    const { userId, exerciseId, plan } = req.body as {
+      userId?: string;
+      exerciseId?: string;
+      plan?: Record<string, unknown>;
+    };
+    if (!userId || !exerciseId) {
+      res.status(400).json({ message: 'userId and exerciseId are required' });
+      return;
+    }
+    res.json(await loadExerciseCoachPrescription(userId, exerciseId, plan as Parameters<typeof loadExerciseCoachPrescription>[2]));
+  } catch (error) {
+    res.status(500).json({ message: error instanceof Error ? error.message : 'Exercise prescription failed' });
+  }
+});
+
+trainingRouter.post('/coaching/workout-prescriptions', requireProSubscription, async (req, res) => {
+  try {
+    const { userId, exercises } = req.body as {
+      userId?: string;
+      exercises?: Parameters<typeof loadWorkoutExercisePrescriptions>[1];
+    };
+    if (!userId || !exercises?.length) {
+      res.status(400).json({ message: 'userId and exercises are required' });
+      return;
+    }
+    res.json(await loadWorkoutExercisePrescriptions(userId, exercises));
+  } catch (error) {
+    res.status(500).json({ message: error instanceof Error ? error.message : 'Workout prescriptions failed' });
   }
 });
