@@ -465,4 +465,42 @@ export const nutritionService: INutritionService = {
       return fromError(e);
     }
   },
+
+  async syncGroceryListFromMeals(userId: string, from: string, to: string) {
+    try {
+      const listsResult = await this.getGroceryLists(userId);
+      if (!listsResult.success || !listsResult.data?.length) return ok(null);
+
+      const list = listsResult.data[0];
+      const mealsResult = await this.getMealsForWeek(userId, from, to);
+      if (!mealsResult.success) return fail(mealsResult.error);
+
+      const aggregated = aggregateWeeklyGroceries(mealsResult.data);
+      await supabase.from('grocery_list_items').delete().eq('grocery_list_id', list.id);
+
+      const items = aggregated.map((item, index) => ({
+        grocery_list_id: list.id,
+        name: item.name,
+        quantity: parseFloat(item.quantity) || 1,
+        unit: item.quantity.replace(/^[\d.]+\s*/, '') || 'serving',
+        category: item.category,
+        sort_order: index,
+      }));
+
+      if (items.length > 0) {
+        await supabase.from('grocery_list_items').insert(items);
+      }
+
+      const { data: full, error } = await supabase
+        .from('grocery_lists')
+        .select('*, grocery_list_items(*)')
+        .eq('id', list.id)
+        .single();
+
+      if (error) return fail(error.message);
+      return ok(mapGroceryList(full!));
+    } catch (e) {
+      return fromError(e);
+    }
+  },
 };

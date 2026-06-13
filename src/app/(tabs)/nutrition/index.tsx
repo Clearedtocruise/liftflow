@@ -7,7 +7,7 @@ import { Card } from '@/components/layout/Card';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { MealPlanCard } from '@/components/nutrition/MealPlanCard';
-import { MealReplaceSheet } from '@/components/nutrition/MealReplaceSheet';
+import { MealReplaceSheet, type SmartReplacementPayload } from '@/components/nutrition/MealReplaceSheet';
 import { NutritionProgressHeader } from '@/components/nutrition/NutritionProgressHeader';
 import { NutritionSectionTabs, type NutritionSection } from '@/components/nutrition/NutritionSectionTabs';
 import { AppText } from '@/components/ui/AppText';
@@ -19,6 +19,10 @@ import {
   enrichMealMeta,
   serializeMealMeta,
 } from '@/lib/mealIngredients';
+import {
+  buildSmartReplacementUpdate,
+  selectMealsForScope,
+} from '@/lib/mealReplacement';
 import { formatScheduleSubtitle, scheduleFromProfile, scheduledTimesForDay } from '@/lib/mealSchedule';
 import { WEEKDAY_LABELS, getWeekRange } from '@/lib/weekPlan';
 import type { MealAlternativeOption } from '@/services/nutritionAdvisoryService';
@@ -38,6 +42,7 @@ export default function NutritionScreen() {
   const [loading, setLoading] = useState(true);
   const [replaceMeal, setReplaceMeal] = useState<Meal | null>(null);
   const [replaceMode, setReplaceMode] = useState<'meal' | 'ingredient'>('meal');
+  const [replaceIngredientName, setReplaceIngredientName] = useState<string | null>(null);
   const [detailMeal, setDetailMeal] = useState<Meal | null>(null);
   const [hasWorkoutToday, setHasWorkoutToday] = useState(false);
   const [recoverySleepHours, setRecoverySleepHours] = useState<number | undefined>();
@@ -56,17 +61,19 @@ export default function NutritionScreen() {
       ? api.getRecoveryToday(user.id, token).catch(() => null)
       : Promise.resolve(null);
 
-    const [goalsRes, summaryRes, weekRes, dashRes, recoveryToday] = await Promise.all([
+    const [goalsRes, summaryRes, weekRes, dashRes, recoveryToday, groceryRes] = await Promise.all([
       nutritionService.getGoals(user.id),
       nutritionService.getDailySummary(user.id, today),
       nutritionService.getMealsForWeek(user.id, from, to),
       trainingService.getDashboard(user.id),
       recoveryPromise,
+      nutritionService.getGroceryLists(user.id),
     ]);
 
     if (goalsRes.success) setGoals(goalsRes.data);
     if (summaryRes.success) setSummary(summaryRes.data);
     if (weekRes.success) setWeekMeals(weekRes.data);
+    if (groceryRes.success && groceryRes.data?.[0]) setGroceryList(groceryRes.data[0]);
     if (dashRes.success) setHasWorkoutToday(Boolean(dashRes.data.nextWorkout));
 
     const sleepHours = recoveryToday?.sleepHours;
@@ -166,6 +173,40 @@ export default function NutritionScreen() {
     load();
   }
 
+  async function handleSmartReplace(anchorMeal: Meal, payload: SmartReplacementPayload) {
+    if (!user) return;
+    const { from, to } = getWeekRange();
+    const targets = selectMealsForScope(
+      anchorMeal,
+      weekMeals,
+      payload.scope,
+      replaceMode === 'ingredient' ? replaceIngredientName ?? undefined : undefined,
+    );
+
+    for (const target of targets) {
+      const updates = buildSmartReplacementUpdate(
+        target,
+        replaceMode,
+        replaceIngredientName ?? undefined,
+        {
+          foodName: payload.foodName,
+          servingSize: payload.servingSize,
+          macros: payload.macros,
+        },
+      );
+      await nutritionService.updateMeal(target.id, updates);
+    }
+
+    const grocerySync = await nutritionService.syncGroceryListFromMeals(user.id, from, to);
+    if (grocerySync.success && grocerySync.data) {
+      setGroceryList(grocerySync.data);
+    }
+
+    setReplaceMeal(null);
+    setReplaceIngredientName(null);
+    load();
+  }
+
   if (loading) {
     return (
       <View style={styles.loading}>
@@ -213,6 +254,12 @@ export default function NutritionScreen() {
                 onReplace={() => {
                   setReplaceMeal(meal);
                   setReplaceMode('meal');
+                  setReplaceIngredientName(null);
+                }}
+                onReplaceIngredient={(ingredientName) => {
+                  setReplaceMeal(meal);
+                  setReplaceMode('ingredient');
+                  setReplaceIngredientName(ingredientName);
                 }}
                 onOpenDetail={() => setDetailMeal(meal)}
               />
@@ -313,12 +360,19 @@ export default function NutritionScreen() {
         meal={replaceMeal}
         scheduledTime={todayTimes[todayMeals.findIndex((m) => m.id === replaceMeal?.id)]}
         mode={replaceMode}
+        ingredientName={replaceIngredientName ?? undefined}
         dietaryRestrictions={dietaryRestrictions}
-        onClose={() => setReplaceMeal(null)}
+        onClose={() => {
+          setReplaceMeal(null);
+          setReplaceIngredientName(null);
+        }}
         onReplaceMeal={(option) => {
           if (replaceMeal) void handleReplaceMeal(replaceMeal, option);
         }}
         onReplaceIngredient={handleReplaceIngredient}
+        onSmartReplace={(payload) => {
+          if (replaceMeal) void handleSmartReplace(replaceMeal, payload);
+        }}
       />
 
       {detailMeal ? (
@@ -334,6 +388,10 @@ export default function NutritionScreen() {
             setDetailMeal(null);
           }}
           onReplaceIngredient={handleReplaceIngredient}
+          onSmartReplace={(payload) => {
+            void handleSmartReplace(detailMeal, payload);
+            setDetailMeal(null);
+          }}
         />
       ) : null}
     </ScreenContainer>

@@ -24,6 +24,7 @@ import {
     loadConversationalCoachHistory,
 } from '../lib/conversationalCoachEngine.js';
 import { generateExerciseAlternatives } from '../lib/exerciseReplacementEngine.js';
+import { estimateFoodMacros } from '../lib/foodMacroEstimator.js';
 import { requireAdmin } from '../lib/supabase.js';
 import { requireProSubscription } from '../middleware/requireProSubscription.js';
 
@@ -234,6 +235,26 @@ aiRouter.post('/advisory/nutrition/meal-alternatives', async (req, res) => {
   } catch (error) {
     captureAiError(error, '/api/ai/advisory/nutrition/meal-alternatives');
     res.status(500).json({ message: error instanceof Error ? error.message : 'Meal alternatives failed' });
+  }
+});
+
+aiRouter.post('/advisory/nutrition/food-macros', async (req, res) => {
+  try {
+    const { foodName, servingSize } = req.body as {
+      foodName?: string;
+      servingSize?: string;
+    };
+
+    if (!foodName?.trim() || !servingSize?.trim()) {
+      res.status(400).json({ message: 'foodName and servingSize are required' });
+      return;
+    }
+
+    const data = await estimateFoodMacros(foodName.trim(), servingSize.trim());
+    res.json({ data });
+  } catch (error) {
+    captureAiError(error, '/api/ai/advisory/nutrition/food-macros');
+    res.status(500).json({ message: error instanceof Error ? error.message : 'Food macro estimate failed' });
   }
 });
 

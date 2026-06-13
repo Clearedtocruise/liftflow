@@ -95,6 +95,7 @@
     "validate:sprint9-private-beta": "node scripts/validate-sprint9-private-beta.mjs",
     "validate:sprint10-production-polish": "node scripts/validate-sprint10-production-polish.mjs",
     "validate:sprint11-transformation": "node scripts/validate-sprint11-transformation.mjs",
+    "validate:sprint11-smart-nutrition": "node scripts/validate-sprint11-smart-nutrition.mjs",
     "validate:sprint1-exercise-classification": "node scripts/validate-sprint1-exercise-classification.mjs",
     "validate:sprint2-workout-execution-modes": "node scripts/validate-sprint2-workout-execution-modes.mjs",
     "validate:sprint3-weekly-lifting": "node scripts/validate-sprint3-weekly-lifting.mjs",

@@ -77,3 +77,13 @@ export type DailyNutritionSummary = {
   waterMl: number;
   waterTargetMl?: number;
 };
+
+export type MealReplacementScope = 'meal' | 'day' | 'week';
+
+export type FoodMacroEstimate = {
+  calories: number;
+  proteinG: number;
+  carbsG: number;
+  fatG: number;
+  reasoning?: string;
+};

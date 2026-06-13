@@ -170,7 +170,9 @@ export function ActiveWorkoutScreen({
     );
   }, [coachPrescription, loggingMode, units.preferredWeightUnit, units.weightLabel, repRange]);
   const supersetGroup = getSupersetGroupForIndex(currentIndex, planExercises);
-  const stationLabel = formatExerciseStationLabel(planMeta ?? planExercises[currentIndex], currentIndex, planExercises);
+  const stationLabel = planMeta
+    ? formatExerciseStationLabel(planMeta, currentIndex, planExercises)
+    : null;
   const inSuperset = Boolean(supersetGroup && supersetGroup.memberIndices.length >= 2);
   const groupComplete =
     inSuperset && supersetGroup

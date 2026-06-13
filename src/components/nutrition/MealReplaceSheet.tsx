@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
+import { SmartMealReplaceForm } from '@/components/nutrition/SmartMealReplaceForm';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import { enrichMealMeta, type MealReplacementReason } from '@/lib/mealIngredients';
@@ -10,7 +11,17 @@ import {
   nutritionAdvisoryService,
   type MealAlternativeOption,
 } from '@/services/nutritionAdvisoryService';
+import type { FoodMacroEstimate, MealReplacementScope } from '@/types/nutrition';
 import type { Meal } from '@/types';
+
+export type ReplacementMethod = 'smart' | 'ai';
+
+export type SmartReplacementPayload = {
+  foodName: string;
+  servingSize: string;
+  macros: FoodMacroEstimate;
+  scope: MealReplacementScope;
+};
 
 type MealReplaceSheetProps = {
   visible: boolean;
@@ -22,6 +33,7 @@ type MealReplaceSheetProps = {
   onClose: () => void;
   onReplaceMeal: (option: MealAlternativeOption, reason: MealReplacementReason) => void;
   onReplaceIngredient: (ingredientName: string, replacement: string) => void;
+  onSmartReplace: (payload: SmartReplacementPayload) => void;
 };
 
 const MEAL_REASONS: Array<{ id: MealReplacementReason; label: string }> = [
@@ -42,7 +54,9 @@ export function MealReplaceSheet({
   onClose,
   onReplaceMeal,
   onReplaceIngredient,
+  onSmartReplace,
 }: MealReplaceSheetProps) {
+  const [replacementMethod, setReplacementMethod] = useState<ReplacementMethod>('smart');
   const [reason, setReason] = useState<MealReplacementReason>('default');
   const [loading, setLoading] = useState(false);
   const [alternatives, setAlternatives] = useState<MealAlternativeOption[]>([]);
@@ -52,7 +66,14 @@ export function MealReplaceSheet({
   const [reasoning, setReasoning] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!visible || !meal || mode !== 'meal') return;
+    if (!visible) {
+      setReplacementMethod('smart');
+      return;
+    }
+  }, [visible]);
+
+  useEffect(() => {
+    if (!visible || !meal || mode !== 'meal' || replacementMethod !== 'ai') return;
 
     let cancelled = false;
     setLoading(true);
@@ -70,107 +91,155 @@ export function MealReplaceSheet({
     return () => {
       cancelled = true;
     };
-  }, [visible, meal, mode, reason, dietaryRestrictions]);
+  }, [visible, meal, mode, reason, dietaryRestrictions, replacementMethod]);
 
   if (!meal) return null;
 
   const meta = enrichMealMeta(meal.name, meal.instructions);
+  const replacingLabel = mode === 'ingredient' && ingredientName ? ingredientName : meal.name;
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <View style={styles.container}>
-        <AppText variant="title">{mode === 'ingredient' ? 'Replace Ingredient' : 'Replace Meal'}</AppText>
+      <ScrollView contentContainerStyle={styles.container}>
+        <AppText variant="title">{mode === 'ingredient' ? 'Replace Food' : 'Replace Meal'}</AppText>
         <AppText variant="footnote" color="textSecondary">
           {scheduledTime ?? 'Scheduled'} · {mealTypeLabel(meal.mealType)}
         </AppText>
-        <AppText variant="bodyBold">{mode === 'ingredient' ? ingredientName : meal.name}</AppText>
+        <AppText variant="bodyBold">{replacingLabel}</AppText>
 
-        {mode === 'meal' ? (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.reasonRow}>
-            {MEAL_REASONS.map((item) => (
-              <Pressable
-                key={item.id}
-                style={[styles.reasonChip, reason === item.id && styles.reasonChipActive]}
-                onPress={() => setReason(item.id)}>
-                <AppText variant="caption" color={reason === item.id ? 'accent' : 'textSecondary'}>
-                  {item.label}
-                </AppText>
-              </Pressable>
-            ))}
-          </ScrollView>
-        ) : null}
+        <View style={styles.methodRow}>
+          <Pressable
+            style={[styles.methodChip, replacementMethod === 'smart' && styles.methodChipActive]}
+            onPress={() => setReplacementMethod('smart')}>
+            <AppText variant="caption" color={replacementMethod === 'smart' ? 'accent' : 'textSecondary'}>
+              Smart Replacement
+            </AppText>
+          </Pressable>
+          <Pressable
+            style={[styles.methodChip, replacementMethod === 'ai' && styles.methodChipActive]}
+            onPress={() => setReplacementMethod('ai')}>
+            <AppText variant="caption" color={replacementMethod === 'ai' ? 'accent' : 'textSecondary'}>
+              AI Replacement
+            </AppText>
+          </Pressable>
+        </View>
 
-        {reasoning && mode === 'meal' ? (
-          <AppText variant="footnote" color="textTertiary">
-            {reasoning}
-          </AppText>
-        ) : null}
-
-        {loading && mode === 'meal' ? (
-          <View style={styles.loading}>
-            <ActivityIndicator color={LiftFlowColors.accent} />
-          </View>
+        {replacementMethod === 'smart' ? (
+          <SmartMealReplaceForm
+            replacingLabel={replacingLabel}
+            onConfirm={(payload) => {
+              onSmartReplace(payload);
+              onClose();
+            }}
+          />
         ) : (
-          <ScrollView contentContainerStyle={styles.list}>
-            {mode === 'meal'
-              ? alternatives.map((option) => (
+          <>
+            {mode === 'meal' ? (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.reasonRow}>
+                {MEAL_REASONS.map((item) => (
                   <Pressable
-                    key={option.name}
-                    style={styles.option}
-                    onPress={() => {
-                      onReplaceMeal(option, reason);
-                      onClose();
-                    }}>
-                    <AppText variant="body">{option.name}</AppText>
-                    <AppText variant="caption" color="textSecondary">
-                      {option.calories} cal · {Math.round(option.proteinG)}P · {Math.round(option.carbsG)}C ·{' '}
-                      {Math.round(option.fatG)}F
+                    key={item.id}
+                    style={[styles.reasonChip, reason === item.id && styles.reasonChipActive]}
+                    onPress={() => setReason(item.id)}>
+                    <AppText variant="caption" color={reason === item.id ? 'accent' : 'textSecondary'}>
+                      {item.label}
                     </AppText>
                   </Pressable>
-                ))
-              : null}
-          </ScrollView>
+                ))}
+              </ScrollView>
+            ) : null}
+
+            {reasoning && mode === 'meal' ? (
+              <AppText variant="footnote" color="textTertiary">
+                {reasoning}
+              </AppText>
+            ) : null}
+
+            {loading && mode === 'meal' ? (
+              <View style={styles.loading}>
+                <ActivityIndicator color={LiftFlowColors.accent} />
+              </View>
+            ) : (
+              <View style={styles.list}>
+                {mode === 'meal'
+                  ? alternatives.map((option) => (
+                      <Pressable
+                        key={option.name}
+                        style={styles.option}
+                        onPress={() => {
+                          onReplaceMeal(option, reason);
+                          onClose();
+                        }}>
+                        <AppText variant="body">{option.name}</AppText>
+                        <AppText variant="caption" color="textSecondary">
+                          {option.calories} cal · {Math.round(option.proteinG)}P · {Math.round(option.carbsG)}C ·{' '}
+                          {Math.round(option.fatG)}F
+                        </AppText>
+                      </Pressable>
+                    ))
+                  : null}
+              </View>
+            )}
+
+            {mode === 'meal' ? (
+              <View style={styles.ingredientSection}>
+                <AppText variant="label" color="textSecondary">
+                  Replace ingredient
+                </AppText>
+                {(ingredientAlternatives.length > 0 ? ingredientAlternatives : (meta.ingredients ?? []).map((item) => ({
+                  from: item.name,
+                  to: item.name,
+                  reason: '',
+                }))).map((item) => (
+                  <Pressable
+                    key={item.from}
+                    style={styles.option}
+                    onPress={() => {
+                      if (item.to && item.to !== item.from) {
+                        onReplaceIngredient(item.from, item.to);
+                        onClose();
+                      }
+                    }}>
+                    <AppText variant="footnote">
+                      {item.from} → {item.to}
+                    </AppText>
+                  </Pressable>
+                ))}
+              </View>
+            ) : null}
+          </>
         )}
 
-        {mode === 'meal' ? (
-          <View style={styles.ingredientSection}>
-            <AppText variant="label" color="textSecondary">
-              Replace ingredient
-            </AppText>
-            {(ingredientAlternatives.length > 0 ? ingredientAlternatives : (meta.ingredients ?? []).map((item) => ({
-              from: item.name,
-              to: item.name,
-              reason: '',
-            }))).map((item) => (
-              <Pressable
-                key={item.from}
-                style={styles.option}
-                onPress={() => {
-                  if (item.to && item.to !== item.from) {
-                    onReplaceIngredient(item.from, item.to);
-                    onClose();
-                  }
-                }}>
-                <AppText variant="footnote">
-                  {item.from} → {item.to}
-                </AppText>
-              </Pressable>
-            ))}
-          </View>
-        ) : null}
-
         <PrimaryButton label="Close" variant="secondary" onPress={onClose} />
-      </View>
+      </ScrollView>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
+    flexGrow: 1,
     backgroundColor: LiftFlowColors.background,
     padding: Spacing.lg,
     gap: Spacing.md,
+  },
+  methodRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  methodChip: {
+    flex: 1,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.full,
+    backgroundColor: LiftFlowColors.surfaceElevated,
+    borderWidth: 1,
+    borderColor: LiftFlowColors.border,
+    alignItems: 'center',
+  },
+  methodChipActive: {
+    borderColor: LiftFlowColors.accent,
+    backgroundColor: LiftFlowColors.accentGlow,
   },
   reasonRow: {
     gap: Spacing.sm,

@@ -57,10 +57,13 @@ export function ExerciseReplaceSheet({
       .then((result) => {
         if (cancelled) return;
         if (result.success) {
-          setAlternatives(result.data.alternatives);
+          setAlternatives(result.data.alternatives ?? []);
           setReasoning(result.data.reasoning);
         }
         setLoading(false);
+      })
+      .catch(() => {
+        if (!cancelled) setLoading(false);
       });
 
     return () => {

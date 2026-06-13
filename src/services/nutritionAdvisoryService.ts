@@ -1,4 +1,5 @@
 import { apiClient } from '@/api/client';
+import { estimateFoodMacrosLocal } from '@/lib/foodMacroLookup';
 import {
   alternativesForIngredient,
   buildLocalMealAlternatives,
@@ -7,6 +8,7 @@ import {
 } from '@/lib/mealIngredients';
 import { fromError, ok } from '@/lib/serviceResult';
 import { getAccessToken } from '@/supabase/client';
+import type { FoodMacroEstimate } from '@/types/nutrition';
 import type { Meal } from '@/types';
 
 export type MealAlternativeOption = {
@@ -67,5 +69,29 @@ export const nutritionAdvisoryService = {
       alternatives: local,
       ingredientAlternatives,
     } satisfies MealAlternativesResult);
+  },
+
+  async estimateFoodMacros(foodName: string, servingSize: string) {
+    try {
+      const token = await getAccessToken();
+      const raw = await apiClient.post<{ data: FoodMacroEstimate }>(
+        '/api/ai/advisory/nutrition/food-macros',
+        { foodName, servingSize },
+        token,
+      );
+
+      if (raw.data?.calories != null) {
+        return ok(raw.data);
+      }
+    } catch (e) {
+      if (__DEV__) {
+        console.warn('[nutritionAdvisoryService] food macros fallback', e);
+      }
+    }
+
+    return ok({
+      ...estimateFoodMacrosLocal(foodName, servingSize),
+      reasoning: 'On-device macro estimate while coach AI is unavailable.',
+    } satisfies FoodMacroEstimate);
   },
 };

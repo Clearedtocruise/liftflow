@@ -68,7 +68,8 @@ export default function WorkoutDayScreen() {
 
   const handleReplaceExercise = useCallback(
     async (index: number, option: ExerciseAlternativeOption) => {
-      if (!workout) return;
+      if (!workout || index < 0 || index >= exercises.length) return;
+      const previousExercises = exercises;
       const nextExercises = exercises.map((exercise, exerciseIndex) =>
         exerciseIndex === index
           ? {
@@ -79,15 +80,21 @@ export default function WorkoutDayScreen() {
           : exercise,
       );
       setExercises(nextExercises);
-      const result = await trainingService.updatePlannedWorkoutExercises(
-        workout.id,
-        nextExercises,
-        workout.metadata,
-      );
-      if (result.success) {
-        setWorkout(result.data);
-        setPlannedWorkout(result.data);
-        setExercises(exercisesFromPlannedWorkout(result.data));
+      try {
+        const result = await trainingService.updatePlannedWorkoutExercises(
+          workout.id,
+          nextExercises,
+          workout.metadata,
+        );
+        if (result.success) {
+          setWorkout(result.data);
+          setPlannedWorkout(result.data);
+          setExercises(exercisesFromPlannedWorkout(result.data));
+        } else {
+          setExercises(previousExercises);
+        }
+      } catch {
+        setExercises(previousExercises);
       }
     },
     [workout, exercises, setExercises, setPlannedWorkout],

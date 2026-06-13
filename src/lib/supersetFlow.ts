@@ -92,10 +92,11 @@ export function formatSupersetStationLabel(
 }
 
 export function formatExerciseStationLabel(
-  exercise: EditableWorkoutExercise,
+  exercise: EditableWorkoutExercise | undefined,
   index: number,
   planExercises: EditableWorkoutExercise[],
 ): string | null {
+  if (!exercise?.supersetGroupId) return null;
   const group = getSupersetGroupForIndex(index, planExercises);
   if (!group) return null;
   const position = group.memberIndices.indexOf(index);

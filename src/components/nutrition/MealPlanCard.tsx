@@ -13,10 +13,18 @@ type MealPlanCardProps = {
   scheduledTime?: string;
   onMarkComplete: (status: 'completed' | 'modified' | 'skipped') => void;
   onReplace: () => void;
+  onReplaceIngredient?: (ingredientName: string) => void;
   onOpenDetail: () => void;
 };
 
-export function MealPlanCard({ meal, scheduledTime, onMarkComplete, onReplace, onOpenDetail }: MealPlanCardProps) {
+export function MealPlanCard({
+  meal,
+  scheduledTime,
+  onMarkComplete,
+  onReplace,
+  onReplaceIngredient,
+  onOpenDetail,
+}: MealPlanCardProps) {
   const meta = enrichMealMeta(meal.name, meal.instructions);
   const completed = meta.status === 'completed';
 
@@ -39,9 +47,23 @@ export function MealPlanCard({ meal, scheduledTime, onMarkComplete, onReplace, o
 
         <View style={styles.ingredients}>
           {(meta.ingredients ?? []).map((ingredient) => (
-            <AppText key={`${meal.id}-${ingredient.name}`} variant="footnote" color="textSecondary">
-              {ingredient.name} · {ingredient.serving}
-            </AppText>
+            <View key={`${meal.id}-${ingredient.name}`} style={styles.ingredientRow}>
+              <AppText variant="footnote" color="textSecondary" style={styles.ingredientText}>
+                {ingredient.name} · {ingredient.serving}
+              </AppText>
+              {!completed && onReplaceIngredient ? (
+                <Pressable
+                  hitSlop={8}
+                  onPress={(event) => {
+                    event.stopPropagation?.();
+                    onReplaceIngredient(ingredient.name);
+                  }}>
+                  <AppText variant="caption" color="accent">
+                    Replace
+                  </AppText>
+                </Pressable>
+              ) : null}
+            </View>
           ))}
         </View>
 
@@ -63,9 +85,14 @@ export function MealPlanCard({ meal, scheduledTime, onMarkComplete, onReplace, o
                   Skipped
                 </AppText>
               </Pressable>
-              <Pressable style={styles.linkButton} onPress={onReplace}>
+              <Pressable
+                style={styles.linkButton}
+                onPress={(event) => {
+                  event.stopPropagation?.();
+                  onReplace();
+                }}>
                 <AppText variant="caption" color="accent">
-                  Replace
+                  Replace Meal
                 </AppText>
               </Pressable>
             </View>
@@ -90,7 +117,16 @@ const styles = StyleSheet.create({
     gap: Spacing.xs,
   },
   ingredients: {
-    gap: 2,
+    gap: Spacing.xs,
+  },
+  ingredientRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: Spacing.md,
+  },
+  ingredientText: {
+    flex: 1,
   },
   actions: {
     gap: Spacing.sm,
@@ -98,6 +134,7 @@ const styles = StyleSheet.create({
   },
   secondaryRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: Spacing.md,
   },
   linkButton: {
