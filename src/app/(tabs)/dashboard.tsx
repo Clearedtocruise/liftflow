@@ -42,7 +42,7 @@ import type { RecoveryIntelligenceReport } from '@/types/recoveryIntelligence';
 
 export default function DashboardScreen() {
   const { user, isProfileReady } = useAuth();
-  const { adjustment } = usePlanAdjustment();
+  const { adjustment, revision } = usePlanAdjustment();
   const { isPremium } = useSubscription();
   const units = useUnits();
   const { insight } = useInsightRotator();
@@ -149,7 +149,7 @@ export default function DashboardScreen() {
 
   useEffect(() => {
     if (adjustment && user) load();
-  }, [adjustment?.id, user, load]);
+  }, [adjustment?.id, revision, user, load]);
 
   const nextPlanned = program?.nextWorkout;
   const hasWorkoutToday = nextPlanned?.scheduledDate === today;

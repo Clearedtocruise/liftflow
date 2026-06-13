@@ -40,20 +40,20 @@ export async function loadNutritionIntelligence(userId: string): Promise<Nutriti
         .gte('started_at', sevenDaysAgo.toISOString()),
       db
         .from('planned_workouts')
-        .select('id, name, scheduled_date, status, suggested_muscle_groups')
+        .select('id, name, scheduled_date, status, suggested_muscle_groups, metadata')
         .eq('user_id', userId)
         .gte('scheduled_date', today)
         .lte('scheduled_date', weekEnd)
-        .neq('status', 'cancelled')
+        .eq('status', 'planned')
         .order('scheduled_date', { ascending: true }),
       db
         .from('meals')
-        .select('id, scheduled_date, meal_type, meal_plan_id, calories, protein_g, carbs_g, fat_g, instructions, created_at')
+        .select('id, scheduled_date, meal_type, name, meal_plan_id, calories, protein_g, carbs_g, fat_g, instructions, created_at')
         .eq('user_id', userId)
         .gte('scheduled_date', sevenDaysAgo.toISOString().slice(0, 10)),
       db
         .from('meals')
-        .select('id, scheduled_date, meal_type, meal_plan_id, calories, protein_g, carbs_g, fat_g, instructions, created_at')
+        .select('id, scheduled_date, meal_type, name, meal_plan_id, calories, protein_g, carbs_g, fat_g, instructions, created_at')
         .eq('user_id', userId)
         .eq('scheduled_date', today),
       db
@@ -87,7 +87,9 @@ export async function loadNutritionIntelligence(userId: string): Promise<Nutriti
   const plannedToday = (plannedRes.data ?? []).find((p) => p.scheduled_date === today);
   const nextPlanned = plannedToday ?? (plannedRes.data ?? [])[0];
   const muscleGroups = (nextPlanned?.suggested_muscle_groups as string[] | null) ?? [];
-  const isTrainingDay = !!plannedToday || (nextPlanned?.scheduled_date === today);
+  const sessionKind = (nextPlanned?.metadata as { sessionKind?: 'strength' | 'cardio' | 'mobility' } | null)
+    ?.sessionKind;
+  const isTrainingDay = !!plannedToday;
 
   const weightSamples: Array<{ weightKg: number; recordedAt: string }> = [];
   for (const row of bodyCompRes.data ?? []) {
@@ -120,9 +122,21 @@ export async function loadNutritionIntelligence(userId: string): Promise<Nutriti
 
   const waterMlToday = (hydrationRes.data ?? []).reduce((sum, h) => sum + Number(h.amount_ml ?? 0), 0);
 
-  const trainingDaysThisWeek = (plannedRes.data ?? [])
-    .filter((p) => p.status !== 'cancelled')
-    .map((p) => p.scheduled_date);
+  const trainingDaysThisWeek = (plannedRes.data ?? []).map((p) => p.scheduled_date);
+
+  const todayPlanMeals =
+    todayMeals.length > 0
+      ? todayMeals
+          .filter((m) => m.name && m.meal_type)
+          .map((m) => ({
+            mealType: m.meal_type as string,
+            name: m.name as string,
+            calories: Number(m.calories ?? 0),
+            proteinG: Number(m.protein_g ?? 0),
+            carbsG: Number(m.carbs_g ?? 0),
+            fatG: Number(m.fat_g ?? 0),
+          }))
+      : undefined;
 
   const engineInput: NutritionEngineInput = {
     userId,
@@ -138,9 +152,11 @@ export async function loadNutritionIntelligence(userId: string): Promise<Nutriti
           date: nextPlanned.scheduled_date,
           name: nextPlanned.name,
           muscleGroups,
-          isTrainingDay: isTrainingDay || nextPlanned.scheduled_date === today,
+          isTrainingDay,
+          sessionKind,
         }
       : undefined,
+    todayPlanMeals,
     weightTrend,
     weightDeltaKg,
     adherencePct,

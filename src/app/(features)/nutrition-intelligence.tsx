@@ -1,6 +1,7 @@
 import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, RefreshControl, StyleSheet, View } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
@@ -10,6 +11,7 @@ import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 import { useEntitlement } from '@/hooks/useEntitlement';
+import { usePlanAdjustment } from '@/contexts/PlanAdjustmentContext';
 import { nutritionIntelligenceService } from '@/services/nutritionIntelligenceService';
 import { productAnalyticsService } from '@/services/productAnalyticsService';
 import type { NutritionIntelligenceReport } from '@/types/nutritionIntelligence';
@@ -17,6 +19,7 @@ import type { NutritionIntelligenceReport } from '@/types/nutritionIntelligence'
 export default function NutritionIntelligenceScreen() {
   const { user } = useAuth();
   const { allowed } = useEntitlement('nutrition-intelligence');
+  const { revision } = usePlanAdjustment();
   const [report, setReport] = useState<NutritionIntelligenceReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -43,6 +46,16 @@ export default function NutritionIntelligenceScreen() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (user && allowed) void load();
+    }, [user, allowed, load]),
+  );
+
+  useEffect(() => {
+    if (revision > 0 && user && allowed) void load();
+  }, [revision, user, allowed, load]);
 
   return (
     <ScreenContainer

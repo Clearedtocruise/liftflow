@@ -1,6 +1,7 @@
 import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 
 import { api } from '@/api/client';
 import { Card } from '@/components/layout/Card';
@@ -13,6 +14,7 @@ import { NutritionSectionTabs, type NutritionSection } from '@/components/nutrit
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
+import { usePlanAdjustment } from '@/contexts/PlanAdjustmentContext';
 import { aggregateWeeklyGroceries, groupGroceriesByCategory } from '@/lib/groceryAggregation';
 import { localDateString } from '@/lib/localDate';
 import { aggregateDailyMeals, aggregateWeeklyMeals, dedupeMealsByType } from '@/lib/mealAggregation';
@@ -34,6 +36,7 @@ import type { DailyNutritionSummary, GroceryList, Meal, NutritionGoals } from '@
 
 export default function NutritionScreen() {
   const { user } = useAuth();
+  const { revision } = usePlanAdjustment();
   const [section, setSection] = useState<NutritionSection>('today');
   const [goals, setGoals] = useState<NutritionGoals | null>(null);
   const [summary, setSummary] = useState<DailyNutritionSummary | null>(null);
@@ -87,6 +90,16 @@ export default function NutritionScreen() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (user) void load();
+    }, [user, load]),
+  );
+
+  useEffect(() => {
+    if (revision > 0 && user) void load();
+  }, [revision, user, load]);
 
   const todayMeals = useMemo(
     () => dedupeMealsByType(weekMeals.filter((meal) => meal.scheduledDate === today)),

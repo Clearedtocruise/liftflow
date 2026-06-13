@@ -29,7 +29,10 @@ export type NutritionEngineInput = {
     name: string;
     muscleGroups: string[];
     isTrainingDay: boolean;
+    sessionKind?: 'strength' | 'cardio' | 'mobility';
   };
+  /** When set, today's meal suggestions reflect the user's stored meal plan (post-adaptation). */
+  todayPlanMeals?: MealSuggestion[];
   weightTrend: WeightTrend;
   weightDeltaKg?: number;
   adherencePct: number;
@@ -373,7 +376,15 @@ function buildVoiceLines(
 
 export function computeNutritionIntelligence(input: NutritionEngineInput): NutritionIntelligenceReport {
   const muscleGroups = input.upcomingWorkout?.muscleGroups ?? [];
-  const workoutType = muscleGroups.length ? inferWorkoutType(muscleGroups) : 'rest';
+  const sessionKind = input.upcomingWorkout?.sessionKind;
+  const workoutType =
+    sessionKind === 'cardio'
+      ? 'cardio'
+      : sessionKind === 'mobility'
+        ? 'rest'
+        : muscleGroups.length
+          ? inferWorkoutType(muscleGroups)
+          : 'rest';
   const isTrainingDay = input.upcomingWorkout?.isTrainingDay ?? false;
 
   let baseMacros = calculateMacroTargets({
@@ -383,6 +394,7 @@ export function computeNutritionIntelligence(input: NutritionEngineInput): Nutri
     recoveryModeActive: input.recoveryModeActive,
     trainingVolume: input.trainingVolume7d,
     workoutType,
+    sessionKind,
     isTrainingDay,
     dietaryStyle: input.dietaryStyle ?? 'balanced',
   });
@@ -402,17 +414,21 @@ export function computeNutritionIntelligence(input: NutritionEngineInput): Nutri
 
   const coachingTips = buildCoachingTips(input, macroTargets, gaps);
   const mealRows = generateDailyMeals(input.today, baseMacros, input.dietaryStyle ?? 'balanced');
-  const mealSuggestions: MealSuggestion[] = mealRows.map((m) => ({
-    mealType: m.mealType,
-    name: m.name,
-    calories: m.calories,
-    proteinG: m.proteinG,
-    carbsG: m.carbsG,
-    fatG: m.fatG,
-    rationale: isTrainingDay && m.mealType === 'lunch'
-      ? 'Fuel before training'
-      : undefined,
-  }));
+  const mealSuggestions: MealSuggestion[] =
+    input.todayPlanMeals && input.todayPlanMeals.length > 0
+      ? input.todayPlanMeals.map((m) => ({
+          ...m,
+          rationale: m.rationale ?? 'From your adapted meal plan',
+        }))
+      : mealRows.map((m) => ({
+          mealType: m.mealType,
+          name: m.name,
+          calories: m.calories,
+          proteinG: m.proteinG,
+          carbsG: m.carbsG,
+          fatG: m.fatG,
+          rationale: isTrainingDay && m.mealType === 'lunch' ? 'Fuel before training' : undefined,
+        }));
 
   const weeklyPlan = buildWeeklyPlan(input, baseMacros, input.dietaryStyle ?? 'balanced');
   const groceryList = buildGroceryList(mealSuggestions, weeklyPlan);

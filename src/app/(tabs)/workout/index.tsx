@@ -1,12 +1,14 @@
 import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { ActiveWorkoutScreen } from '@/components/workout/execution/ActiveWorkoutScreen';
 import { WorkoutWeeklyPlanScreen } from '@/components/workout/execution/WorkoutWeeklyPlanScreen';
 import { LiftFlowColors } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
+import { usePlanAdjustment } from '@/contexts/PlanAdjustmentContext';
 import { localDateString } from '@/lib/localDate';
 import { enrichWithSupersetGroups } from '@/lib/supersetFlow';
 import { normalizeExecutionMode } from '@/lib/workoutExecutionMode';
@@ -21,6 +23,7 @@ import type { WorkoutChallengeRecord } from '@/types/workoutChallenge';
 
 export default function WorkoutScreen() {
   const { user } = useAuth();
+  const { revision } = usePlanAdjustment();
   const { exercises, setPlannedWorkout, plannedWorkout } = useWorkoutPlanDraft();
   const { activeSession: session, isLoading: loading, endSession, cancelSession } = useWorkoutSession();
 
@@ -83,6 +86,16 @@ export default function WorkoutScreen() {
       cancelled = true;
     };
   }, [user?.id, loadWeekPlan]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (user?.id) void loadWeekPlan({ silent: true });
+    }, [user?.id, loadWeekPlan]),
+  );
+
+  useEffect(() => {
+    if (revision > 0 && user?.id) void loadWeekPlan({ silent: true });
+  }, [revision, user?.id, loadWeekPlan]);
 
   const handleSelectDay = useCallback(
     (day: WeekDayPlan) => {

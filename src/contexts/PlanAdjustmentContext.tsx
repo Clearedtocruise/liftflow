@@ -4,6 +4,8 @@ import type { PlanAdaptationResult, PlanAdjustment } from '@/types/planAdaptatio
 
 type PlanAdjustmentContextValue = {
   adjustment: PlanAdjustment | null;
+  /** Increments on each adaptation so tabs can reload plan data. */
+  revision: number;
   setFromAdaptation: (result: PlanAdaptationResult) => void;
   dismiss: () => void;
 };
@@ -12,6 +14,7 @@ const PlanAdjustmentContext = createContext<PlanAdjustmentContextValue | null>(n
 
 export function PlanAdjustmentProvider({ children }: { children: ReactNode }) {
   const [adjustment, setAdjustment] = useState<PlanAdjustment | null>(null);
+  const [revision, setRevision] = useState(0);
 
   const setFromAdaptation = useCallback((result: PlanAdaptationResult) => {
     setAdjustment({
@@ -20,13 +23,14 @@ export function PlanAdjustmentProvider({ children }: { children: ReactNode }) {
       createdAt: new Date().toISOString(),
       affectedDates: result.affectedDates,
     });
+    setRevision((n) => n + 1);
   }, []);
 
   const dismiss = useCallback(() => setAdjustment(null), []);
 
   const value = useMemo(
-    () => ({ adjustment, setFromAdaptation, dismiss }),
-    [adjustment, setFromAdaptation, dismiss],
+    () => ({ adjustment, revision, setFromAdaptation, dismiss }),
+    [adjustment, revision, setFromAdaptation, dismiss],
   );
 
   return <PlanAdjustmentContext.Provider value={value}>{children}</PlanAdjustmentContext.Provider>;

@@ -67,7 +67,16 @@ record('Calendar cardio and recovery convert', calendar.includes('to_cardio') &&
 record('Home Plan Adjusted banner', banner.includes('Plan Adjusted') || banner.includes('adjustment.headline'));
 record('Dashboard shows banner + reloads on adjustment', dashboard.includes('HomePlanAdjustedBanner') && dashboard.includes('usePlanAdjustment'));
 
-console.log('\nPhases: move · swap/skip · cardio/recovery conversion');
+console.log('\nPhase 4 — polish');
+record('Grocery sync after plan adapt', read('src/lib/planAdaptationClient.ts').includes('syncGroceryListFromMeals'));
+record('Calendar triggers grocery sync', calendar.includes('syncGroceriesAfterPlanAdaptation'));
+record('Plan adjustment revision counter', read('src/contexts/PlanAdjustmentContext.tsx').includes('revision'));
+record('Workout tab reloads on adaptation', read('src/app/(tabs)/workout/index.tsx').includes('revision'));
+record('Nutrition tab focus + revision reload', read('src/app/(tabs)/nutrition/index.tsx').includes('useFocusEffect') && read('src/app/(tabs)/nutrition/index.tsx').includes('revision'));
+record('Nutrition intelligence DB meal merge', read('backend/src/lib/loadNutritionIntelligence.ts').includes('todayPlanMeals'));
+record('Intelligence engine uses adapted meals', read('backend/src/lib/nutritionIntelligenceEngine.ts').includes('todayPlanMeals'));
+
+console.log('\nPhases: move · swap/skip · cardio/recovery · polish');
 const pass = checks.filter((c) => c.pass).length;
 console.log(`\nSummary: ${pass}/${checks.length} checks`);
 if (pass !== checks.length) process.exit(1);

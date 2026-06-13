@@ -6,6 +6,7 @@ import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import { usePlanAdjustment } from '@/contexts/PlanAdjustmentContext';
 import { localDateString } from '@/lib/localDate';
+import { syncGroceriesAfterPlanAdaptation } from '@/lib/planAdaptationClient';
 import { trainingService } from '@/services/trainingService';
 import type { PlannedWorkout } from '@/types';
 
@@ -69,6 +70,7 @@ export function WorkoutCalendar({ userId, workouts, view = 'week', onReschedule 
     setBusy(false);
     if (result.success) {
       setFromAdaptation(result.data);
+      void syncGroceriesAfterPlanAdaptation(userId, result.data);
       onReschedule?.();
     } else {
       Alert.alert('Could not adjust plan', result.error);
