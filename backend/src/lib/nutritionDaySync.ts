@@ -46,11 +46,20 @@ type MealRow = {
 const PRE_WORKOUT = { mealType: 'pre_workout', name: 'Pre-workout banana and oats' };
 const POST_WORKOUT = { mealType: 'post_workout', name: 'Protein shake with banana' };
 
-function hydrationNote(bodyWeightKg: number, isTrainingDay: boolean): string {
-  const ml = Math.round(bodyWeightKg * (isTrainingDay ? 35 : 30));
-  return isTrainingDay
-    ? `Training day — aim for ~${ml}ml water including pre- and post-workout.`
-    : `Recovery day — aim for ~${ml}ml water.`;
+function hydrationNote(bodyWeightKg: number, sessionKind: 'rest' | 'strength' | 'cardio' | 'mobility'): string {
+  const ml = Math.round(
+    bodyWeightKg * (sessionKind === 'cardio' ? 40 : sessionKind === 'rest' ? 30 : sessionKind === 'mobility' ? 32 : 35),
+  );
+  if (sessionKind === 'cardio') {
+    return `Cardio day — aim for ~${ml}ml water including electrolytes during and after.`;
+  }
+  if (sessionKind === 'mobility') {
+    return `Recovery session — aim for ~${ml}ml water with steady hydration through the day.`;
+  }
+  if (sessionKind === 'strength') {
+    return `Training day — aim for ~${ml}ml water including pre- and post-workout.`;
+  }
+  return `Recovery day — aim for ~${ml}ml water.`;
 }
 
 function mealTimingLabels(isTrainingDay: boolean, count: number): string[] {
@@ -101,8 +110,55 @@ function trainingDayMeals(date: string, macros: MacroTargets, style: NutritionCo
   });
 }
 
+function cardioDayMeals(date: string, macros: MacroTargets, style: NutritionContext['dietaryStyle']) {
+  const base = generateDailyMeals(date, macros, style);
+  const split = {
+    pre_workout: 0.1,
+    post_workout: 0.14,
+    breakfast: 0.22,
+    lunch: 0.28,
+    snack: 0.1,
+    dinner: 0.16,
+  } as const;
+
+  const templates = base.reduce(
+    (acc, meal) => {
+      acc[meal.mealType] = meal;
+      return acc;
+    },
+    {} as Record<string, (typeof base)[number]>,
+  );
+
+  const names: Record<string, string> = {
+    pre_workout: 'Light carb snack — banana or toast',
+    post_workout: 'Electrolyte drink with moderate carbs',
+    breakfast: templates.breakfast?.name ?? base[0].name,
+    lunch: templates.lunch?.name ?? base[0].name,
+    snack: templates.snack?.name ?? base[0].name,
+    dinner: templates.dinner?.name ?? base[0].name,
+  };
+
+  return (['pre_workout', 'post_workout', 'breakfast', 'lunch', 'snack', 'dinner'] as const).map((mealType) => ({
+    mealType,
+    name: names[mealType],
+    scheduledDate: date,
+    calories: Math.round(macros.calories * split[mealType]),
+    proteinG: Math.round(macros.proteinG * split[mealType]),
+    carbsG: Math.round(macros.carbsG * split[mealType]),
+    fatG: Math.round(macros.fatG * split[mealType]),
+  }));
+}
+
 function restDayMeals(date: string, macros: MacroTargets, style: NutritionContext['dietaryStyle']) {
   return generateDailyMeals(date, macros, style);
+}
+
+function sessionKindForRow(workout: PlannedWorkoutRow | null): 'rest' | 'strength' | 'cardio' | 'mobility' {
+  if (!workout || workout.status !== 'planned') return 'rest';
+  const kind = workout.metadata?.sessionKind;
+  if (kind === 'cardio') return 'cardio';
+  if (kind === 'mobility') return 'mobility';
+  return 'strength';
 }
 
 function workoutTypeForRow(workout: PlannedWorkoutRow | null): NutritionContext['workoutType'] {
@@ -136,7 +192,8 @@ export async function syncNutritionForDate(userId: string, date: string): Promis
 
   const profile = profileRes.data;
   const workout = (workoutRes.data as PlannedWorkoutRow | null) ?? null;
-  const isTrainingDay = !!workout && workout.status === 'planned';
+  const sessionKind = sessionKindForRow(workout);
+  const isTrainingDay = sessionKind !== 'rest';
   const workoutType = workoutTypeForRow(workout);
   const rankedGoals = resolveRankedGoals(profile?.fitness_goals, profile?.primary_training_goal);
   const dietaryStyle =
@@ -151,13 +208,17 @@ export async function syncNutritionForDate(userId: string, date: string): Promis
     recoveryScore: recoveryRes.data?.recovery_score ?? undefined,
     recoveryModeActive: recoveryRes.data?.recovery_mode_active ?? false,
     workoutType,
+    sessionKind: sessionKind === 'rest' ? undefined : sessionKind,
     isTrainingDay,
     dietaryStyle,
   });
 
-  const targetMeals = isTrainingDay
-    ? trainingDayMeals(date, macros, dietaryStyle)
-    : restDayMeals(date, macros, dietaryStyle);
+  const targetMeals =
+    sessionKind === 'cardio'
+      ? cardioDayMeals(date, macros, dietaryStyle)
+      : sessionKind === 'strength'
+        ? trainingDayMeals(date, macros, dietaryStyle)
+        : restDayMeals(date, macros, dietaryStyle);
   const targetTypes = new Set<string>(targetMeals.map((m) => m.mealType));
 
   const existing = (mealsRes.data ?? []) as MealRow[];
@@ -214,8 +275,8 @@ export async function syncNutritionForDate(userId: string, date: string): Promis
   return {
     date,
     macros,
-    mealTiming: mealTimingLabels(isTrainingDay, targetMeals.length),
-    hydrationNote: hydrationNote(profile?.weight_kg ?? 75, isTrainingDay),
+    mealTiming: mealTimingLabels(sessionKind !== 'rest', targetMeals.length),
+    hydrationNote: hydrationNote(profile?.weight_kg ?? 75, sessionKind),
     isTrainingDay,
     workoutName: workout?.name,
     mealsUpdated,

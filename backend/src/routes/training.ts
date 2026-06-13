@@ -662,6 +662,7 @@ trainingRouter.post('/plan/adapt', async (req, res) => {
         toDate?: string;
         workoutIdA?: string;
         workoutIdB?: string;
+        activity?: string;
       };
     };
     if (!userId || !change?.type) {
@@ -699,6 +700,31 @@ trainingRouter.post('/plan/adapt', async (req, res) => {
         return;
       }
       res.json(await applyScheduleChange(userId, { type: 'skip', workoutId: change.workoutId }));
+      return;
+    }
+
+    if (change.type === 'to_cardio') {
+      if (!change.workoutId || !change.activity) {
+        res.status(400).json({ message: 'change.workoutId and change.activity are required for to_cardio' });
+        return;
+      }
+      const activity = change.activity as import('../lib/planAdaptationEngine.js').CardioActivity;
+      res.json(
+        await applyScheduleChange(userId, {
+          type: 'to_cardio',
+          workoutId: change.workoutId,
+          activity,
+        }),
+      );
+      return;
+    }
+
+    if (change.type === 'to_recovery') {
+      if (!change.workoutId) {
+        res.status(400).json({ message: 'change.workoutId is required for to_recovery' });
+        return;
+      }
+      res.json(await applyScheduleChange(userId, { type: 'to_recovery', workoutId: change.workoutId }));
       return;
     }
 

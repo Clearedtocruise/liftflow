@@ -5,6 +5,7 @@ export type NutritionContext = {
   recoveryModeActive?: boolean;
   trainingVolume?: number;
   workoutType?: 'leg' | 'upper' | 'full' | 'cardio' | 'rest' | 'push' | 'pull';
+  sessionKind?: 'strength' | 'cardio' | 'mobility';
   isTrainingDay?: boolean;
   dietaryStyle?: 'high_protein' | 'low_carb' | 'keto' | 'mediterranean' | 'vegetarian' | 'balanced';
 };
@@ -99,6 +100,14 @@ export function calculateMacroTargets(ctx: NutritionContext): MacroTargets {
   if (ctx.workoutType === 'leg' || ctx.workoutType === 'full') {
     carbsG = Math.round(carbsG * 1.2);
     notes.push('Leg/full day — higher carbs');
+  } else if (ctx.workoutType === 'cardio' || ctx.sessionKind === 'cardio') {
+    carbsG = Math.round(carbsG * 1.15);
+    proteinG = Math.round(proteinG * 0.95);
+    notes.push('Cardio day — higher carbs for endurance');
+  } else if (ctx.sessionKind === 'mobility') {
+    proteinG = Math.round(proteinG * 1.05);
+    carbsG = Math.round(carbsG * 0.85);
+    notes.push('Recovery session — moderate carbs, elevated protein');
   } else if (ctx.workoutType === 'rest' || ctx.isTrainingDay === false) {
     carbsG = Math.round(carbsG * 0.75);
     fatG = Math.round(fatG * 1.05);

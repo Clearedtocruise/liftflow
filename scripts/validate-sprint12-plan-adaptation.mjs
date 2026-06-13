@@ -57,11 +57,17 @@ record('Swap exchanges two planned workouts', engine.includes("type: 'swap'") &&
 record('Volume redistribution after skip', engine.includes('redistributeVolumeAfterSkip'));
 record('Route accepts swap and skip', route.includes("change.type === 'swap'") && route.includes("change.type === 'skip'"));
 record('Calendar skip and swap actions', calendar.includes("'Skip'") && calendar.includes('Swap days'));
+record('Phase 3: convert to cardio', engine.includes("type: 'to_cardio'") && engine.includes('applyToCardio'));
+record('Phase 3: convert to recovery', engine.includes("type: 'to_recovery'") && engine.includes('applyToRecovery'));
+record('Cardio macro targets in nutrition engine', read('backend/src/lib/workoutAwareNutrition.ts').includes("sessionKind === 'cardio'"));
+record('Cardio day meals with endurance fuel', nutrition.includes('cardioDayMeals'));
+record('Route accepts to_cardio and to_recovery', route.includes("change.type === 'to_cardio'") && route.includes("change.type === 'to_recovery'"));
+record('Calendar cardio and recovery convert', calendar.includes('to_cardio') && calendar.includes('to_recovery'));
 
 record('Home Plan Adjusted banner', banner.includes('Plan Adjusted') || banner.includes('adjustment.headline'));
 record('Dashboard shows banner + reloads on adjustment', dashboard.includes('HomePlanAdjustedBanner') && dashboard.includes('usePlanAdjustment'));
 
-console.log('\nPhase 2: swap + skip · Phase 1: move');
+console.log('\nPhases: move · swap/skip · cardio/recovery conversion');
 const pass = checks.filter((c) => c.pass).length;
 console.log(`\nSummary: ${pass}/${checks.length} checks`);
 if (pass !== checks.length) process.exit(1);

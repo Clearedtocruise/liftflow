@@ -24,7 +24,7 @@ export type DayNutritionAdaptation = {
 
 export type PlanAdaptationResult = {
   changeId: string;
-  changeType: 'move' | 'swap' | 'skip';
+  changeType: 'move' | 'swap' | 'skip' | 'to_cardio' | 'to_recovery';
   affectedDates: string[];
   fromDate: string;
   toDate: string;
@@ -57,7 +57,25 @@ export type ScheduleChangeSkip = {
   workoutId: string;
 };
 
-export type ScheduleChange = ScheduleChangeMove | ScheduleChangeSwap | ScheduleChangeSkip;
+export type CardioActivity = 'running' | 'swimming' | 'cycling' | 'sport' | 'conditioning';
+
+export type ScheduleChangeToCardio = {
+  type: 'to_cardio';
+  workoutId: string;
+  activity: CardioActivity;
+};
+
+export type ScheduleChangeToRecovery = {
+  type: 'to_recovery';
+  workoutId: string;
+};
+
+export type ScheduleChange =
+  | ScheduleChangeMove
+  | ScheduleChangeSwap
+  | ScheduleChangeSkip
+  | ScheduleChangeToCardio
+  | ScheduleChangeToRecovery;
 
 export type PlanAdjustment = PlanCoachMessage & {
   id?: string;

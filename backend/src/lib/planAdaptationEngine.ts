@@ -19,7 +19,25 @@ export type ScheduleChangeSkip = {
   workoutId: string;
 };
 
-export type ScheduleChange = ScheduleChangeMove | ScheduleChangeSwap | ScheduleChangeSkip;
+export type CardioActivity = 'running' | 'swimming' | 'cycling' | 'sport' | 'conditioning';
+
+export type ScheduleChangeToCardio = {
+  type: 'to_cardio';
+  workoutId: string;
+  activity: CardioActivity;
+};
+
+export type ScheduleChangeToRecovery = {
+  type: 'to_recovery';
+  workoutId: string;
+};
+
+export type ScheduleChange =
+  | ScheduleChangeMove
+  | ScheduleChangeSwap
+  | ScheduleChangeSkip
+  | ScheduleChangeToCardio
+  | ScheduleChangeToRecovery;
 
 export type PlanCoachMessage = {
   headline: 'Plan Adjusted';
@@ -62,6 +80,24 @@ type PlannedExercise = {
   restSeconds: number;
   notes?: string;
 };
+
+const CARDIO_ACTIVITIES: Record<
+  CardioActivity,
+  { label: string; cardioType: string; nameSuffix: string }
+> = {
+  running: { label: 'Running', cardioType: 'run', nameSuffix: 'Running Session' },
+  swimming: { label: 'Swimming', cardioType: 'swim', nameSuffix: 'Swimming Session' },
+  cycling: { label: 'Cycling', cardioType: 'cycle', nameSuffix: 'Cycling Session' },
+  sport: { label: 'Sport Activity', cardioType: 'other', nameSuffix: 'Sport Activity' },
+  conditioning: { label: 'Conditioning', cardioType: 'hiit', nameSuffix: 'Conditioning / HIIT' },
+};
+
+const RECOVERY_EXERCISES: PlannedExercise[] = [
+  { name: 'Cat-Cow Stretch', sets: 2, reps: '10', restSeconds: 30, notes: 'Recovery flow' },
+  { name: 'Hip Flexor Stretch', sets: 2, reps: '45 sec', restSeconds: 30 },
+  { name: 'Band Pull-Aparts', sets: 2, reps: '15', restSeconds: 45 },
+  { name: 'Walking Lunges', sets: 2, reps: '10/leg', restSeconds: 45, notes: 'Controlled tempo' },
+];
 
 function weekDatesAround(dateStr: string): string[] {
   const d = new Date(`${dateStr}T12:00:00`);
@@ -162,6 +198,82 @@ function buildSkipCoachMessages(
   ].filter(Boolean);
 
   return { headline: 'Plan Adjusted', messages, rationale: rationaleParts.join(' ') };
+}
+
+function buildCardioCoachMessages(
+  activity: CardioActivity,
+  workout: PlannedRow,
+  date: string,
+  nutritionByDate: Record<string, DayNutritionSync>,
+  nextLift?: string,
+): PlanCoachMessage {
+  const label = CARDIO_ACTIVITIES[activity].label;
+  const dayLabel = formatDayLabel(date);
+  const messages = [
+    `${workout.name} converted to ${label.toLowerCase()}.`,
+    `${dayLabel} carbs increased for endurance fuel.`,
+    'Nutrition targets updated.',
+  ];
+  if (nextLift) messages.push(`Next lifting session: ${nextLift}.`);
+
+  const dayNutrition = nutritionByDate[date];
+  return {
+    headline: 'Plan Adjusted',
+    messages,
+    rationale: [
+      `Strength session replaced with ${label} on ${dayLabel}.`,
+      dayNutrition ? `Target ${dayNutrition.macros.calories} kcal with higher carbs and hydration.` : null,
+      nextLift ? `${nextLift} stays on schedule.` : null,
+    ]
+      .filter(Boolean)
+      .join(' '),
+  };
+}
+
+function buildRecoveryCoachMessages(
+  workout: PlannedRow,
+  date: string,
+  nutritionByDate: Record<string, DayNutritionSync>,
+  nextLift?: string,
+): PlanCoachMessage {
+  const dayLabel = formatDayLabel(date);
+  const messages = [
+    `${workout.name} converted to a recovery session.`,
+    'Recovery day activated.',
+    'Nutrition targets updated.',
+  ];
+  if (nextLift) messages.push(`Next lifting session: ${nextLift}.`);
+
+  const dayNutrition = nutritionByDate[date];
+  return {
+    headline: 'Plan Adjusted',
+    messages,
+    rationale: [
+      `${dayLabel} switched to mobility-focused work with moderate macros.`,
+      dayNutrition ? `${dayNutrition.macros.calories} kcal · ${dayNutrition.macros.proteinG}g protein.` : null,
+      nextLift ? `Preserve quality for ${nextLift} — today prioritizes tissue recovery over load.` : null,
+    ]
+      .filter(Boolean)
+      .join(' '),
+  };
+}
+
+async function findNextLiftingSession(userId: string, afterDate: string): Promise<string | undefined> {
+  const db = requireAdmin();
+  const { data } = await db
+    .from('planned_workouts')
+    .select('name, metadata')
+    .eq('user_id', userId)
+    .gt('scheduled_date', afterDate)
+    .eq('status', 'planned')
+    .order('scheduled_date', { ascending: true })
+    .limit(5);
+
+  for (const row of data ?? []) {
+    const kind = (row.metadata as { sessionKind?: string })?.sessionKind;
+    if (kind !== 'cardio' && kind !== 'mobility') return row.name as string;
+  }
+  return undefined;
 }
 
 function appendNutritionMessages(
@@ -461,6 +573,117 @@ async function applySkip(userId: string, change: ScheduleChangeSkip): Promise<Pl
   };
 }
 
+async function applyToCardio(userId: string, change: ScheduleChangeToCardio): Promise<PlanAdaptationResult> {
+  const workout = await loadWorkout(change.workoutId);
+  const date = workout.scheduled_date;
+
+  if (workout.status !== 'planned') {
+    throw new Error('Only planned workouts can be converted');
+  }
+
+  const activity = CARDIO_ACTIVITIES[change.activity];
+  const meta = (workout.metadata ?? {}) as Record<string, unknown>;
+  const slotLabel = (meta.slotLabel as string | undefined) ?? workout.name;
+
+  const db = requireAdmin();
+  await db
+    .from('planned_workouts')
+    .update({
+      name: `${slotLabel} — ${activity.nameSuffix}`,
+      suggested_muscle_groups: ['cardio'],
+      metadata: {
+        ...meta,
+        sessionKind: 'cardio',
+        cardioType: activity.cardioType,
+        convertedFrom: 'strength',
+        convertedActivity: change.activity,
+        convertedAt: new Date().toISOString(),
+        exercises: [],
+        previousExercises: meta.exercises,
+      },
+      ai_rationale: `${workout.ai_rationale ?? ''} · Converted to ${activity.label}`.trim(),
+    })
+    .eq('id', workout.id);
+
+  const nextLift = await findNextLiftingSession(userId, date);
+  const affectedDates = [date];
+  const nutritionResults = await syncNutritionForDates(userId, affectedDates);
+  const nutritionByDate = Object.fromEntries(nutritionResults.map((n) => [n.date, n]));
+  const coach = buildCardioCoachMessages(change.activity, workout, date, nutritionByDate, nextLift);
+
+  await persistPlanAdjustment(userId, coach, affectedDates);
+  void getProgramDashboard(userId);
+
+  return {
+    changeId: crypto.randomUUID(),
+    changeType: 'to_cardio',
+    affectedDates,
+    fromDate: date,
+    toDate: date,
+    workoutName: workout.name,
+    training: {
+      weeklyVolume: await computeWeeklyVolume(userId, date),
+      restDays: await restDaysInWeek(userId, date),
+    },
+    nutrition: { byDate: nutritionByDate },
+    coach,
+  };
+}
+
+async function applyToRecovery(userId: string, change: ScheduleChangeToRecovery): Promise<PlanAdaptationResult> {
+  const workout = await loadWorkout(change.workoutId);
+  const date = workout.scheduled_date;
+
+  if (workout.status !== 'planned') {
+    throw new Error('Only planned workouts can be converted');
+  }
+
+  const meta = (workout.metadata ?? {}) as Record<string, unknown>;
+  const slotLabel = (meta.slotLabel as string | undefined) ?? workout.name;
+
+  const db = requireAdmin();
+  await db
+    .from('planned_workouts')
+    .update({
+      name: `${slotLabel} — Recovery Session`,
+      suggested_muscle_groups: ['mobility'],
+      metadata: {
+        ...meta,
+        sessionKind: 'mobility',
+        convertedFrom: 'strength',
+        convertedAt: new Date().toISOString(),
+        exercises: RECOVERY_EXERCISES,
+        previousExercises: meta.exercises,
+      },
+      ai_rationale: `${workout.ai_rationale ?? ''} · Recovery session — mobility and tissue restoration`.trim(),
+    })
+    .eq('id', workout.id);
+
+  const nextLift = await findNextLiftingSession(userId, date);
+  const affectedDates = [date];
+  const nutritionResults = await syncNutritionForDates(userId, affectedDates);
+  const nutritionByDate = Object.fromEntries(nutritionResults.map((n) => [n.date, n]));
+  const coach = buildRecoveryCoachMessages(workout, date, nutritionByDate, nextLift);
+
+  await persistPlanAdjustment(userId, coach, affectedDates);
+  void getProgramDashboard(userId);
+
+  return {
+    changeId: crypto.randomUUID(),
+    changeType: 'to_recovery',
+    affectedDates,
+    fromDate: date,
+    toDate: date,
+    workoutName: workout.name,
+    training: {
+      weeklyVolume: await computeWeeklyVolume(userId, date),
+      restDays: await restDaysInWeek(userId, date),
+    },
+    nutrition: { byDate: nutritionByDate },
+    coach,
+  };
+}
+
 export async function applyScheduleChange(userId: string, change: ScheduleChange): Promise<PlanAdaptationResult> {
   switch (change.type) {
     case 'move':
@@ -469,6 +692,10 @@ export async function applyScheduleChange(userId: string, change: ScheduleChange
       return applySwap(userId, change);
     case 'skip':
       return applySkip(userId, change);
+    case 'to_cardio':
+      return applyToCardio(userId, change);
+    case 'to_recovery':
+      return applyToRecovery(userId, change);
     default:
       throw new Error(`Unsupported change type: ${(change as ScheduleChange).type}`);
   }
