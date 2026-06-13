@@ -4,10 +4,13 @@ import { Alert, Pressable, StyleSheet, View } from 'react-native';
 import { Card } from '@/components/layout/Card';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
+import { usePlanAdjustment } from '@/contexts/PlanAdjustmentContext';
+import { localDateString } from '@/lib/localDate';
 import { trainingService } from '@/services/trainingService';
 import type { PlannedWorkout } from '@/types';
 
 type WorkoutCalendarProps = {
+  userId: string;
   workouts: PlannedWorkout[];
   view?: 'week' | 'month';
   onReschedule?: () => void;
@@ -25,19 +28,21 @@ function weekStart(date = new Date()): Date {
 }
 
 function formatDate(d: Date): string {
-  return d.toISOString().slice(0, 10);
+  return localDateString(d);
 }
 
 function statusColor(status: string, dateStr: string): string {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDateString();
   if (status === 'completed') return LiftFlowColors.accent;
   if (status === 'planned' && dateStr < today) return LiftFlowColors.restTimer;
   if (status === 'cancelled') return LiftFlowColors.textTertiary;
   return LiftFlowColors.textSecondary;
 }
 
-export function WorkoutCalendar({ workouts, view = 'week', onReschedule }: WorkoutCalendarProps) {
+export function WorkoutCalendar({ userId, workouts, view = 'week', onReschedule }: WorkoutCalendarProps) {
+  const { setFromAdaptation } = usePlanAdjustment();
   const [anchor, setAnchor] = useState(new Date());
+  const [busy, setBusy] = useState(false);
   const start = weekStart(anchor);
   const days = useMemo(() => {
     const count = view === 'month' ? 28 : 7;
@@ -61,14 +66,25 @@ export function WorkoutCalendar({ workouts, view = 'week', onReschedule }: Worko
   async function moveWorkout(workout: PlannedWorkout, deltaDays: number) {
     const d = new Date(workout.scheduledDate + 'T12:00:00');
     d.setDate(d.getDate() + deltaDays);
-    const newDate = formatDate(d);
-    const result = await trainingService.rescheduleWorkout(workout.id, newDate);
-    if (result.success) onReschedule?.();
-    else Alert.alert('Could not reschedule', result.error);
+    const toDate = formatDate(d);
+    setBusy(true);
+    const result = await trainingService.adaptScheduleChange(userId, {
+      type: 'move',
+      workoutId: workout.id,
+      toDate,
+    });
+    setBusy(false);
+    if (result.success) {
+      setFromAdaptation(result.data);
+      onReschedule?.();
+    } else {
+      Alert.alert('Could not adjust plan', result.error);
+    }
   }
 
   function handleWorkoutPress(workout: PlannedWorkout) {
-    Alert.alert(workout.name, 'Reschedule this workout?', [
+    if (busy) return;
+    Alert.alert(workout.name, 'Move this workout? Nutrition and coaching will update automatically.', [
       { text: 'Cancel', style: 'cancel' },
       { text: '+1 day', onPress: () => moveWorkout(workout, 1) },
       { text: '+2 days', onPress: () => moveWorkout(workout, 2) },
@@ -124,7 +140,7 @@ export function WorkoutCalendar({ workouts, view = 'week', onReschedule }: Worko
       </View>
 
       <AppText variant="footnote" color="textTertiary">
-        Tap a workout to reschedule (+/− days). Green = completed, blue = missed.
+        Tap a workout to move it — nutrition and coach messaging update automatically.
       </AppText>
     </View>
   );

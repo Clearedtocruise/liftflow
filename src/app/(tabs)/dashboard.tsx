@@ -6,6 +6,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useFocusEffect } from '@react-navigation/native';
 
 import { HomeNextUpCard } from '@/components/dashboard/HomeNextUpCard';
+import { HomePlanAdjustedBanner } from '@/components/dashboard/HomePlanAdjustedBanner';
 import { RingGauge } from '@/components/dashboard/RingGauge';
 import { InsightCard } from '@/components/insights/InsightCard';
 import { Card } from '@/components/layout/Card';
@@ -15,6 +16,7 @@ import { AppText } from '@/components/ui/AppText';
 import { Brand, LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import { pickDefaultLocation } from '@/constants/trainingProfile';
 import { useAuth } from '@/hooks/useAuth';
+import { usePlanAdjustment } from '@/contexts/PlanAdjustmentContext';
 import { useInsightRotator } from '@/hooks/useInsightRotator';
 import { useSubscription } from '@/hooks/useSubscription';
 import { useUnits } from '@/hooks/useUnits';
@@ -40,6 +42,7 @@ import type { RecoveryIntelligenceReport } from '@/types/recoveryIntelligence';
 
 export default function DashboardScreen() {
   const { user, isProfileReady } = useAuth();
+  const { adjustment } = usePlanAdjustment();
   const { isPremium } = useSubscription();
   const units = useUnits();
   const { insight } = useInsightRotator();
@@ -144,6 +147,10 @@ export default function DashboardScreen() {
     }, [user, load]),
   );
 
+  useEffect(() => {
+    if (adjustment && user) load();
+  }, [adjustment?.id, user, load]);
+
   const nextPlanned = program?.nextWorkout;
   const hasWorkoutToday = nextPlanned?.scheduledDate === today;
   const todaysWorkout = hasWorkoutToday ? nextPlanned : null;
@@ -236,6 +243,8 @@ export default function DashboardScreen() {
           {coachHeadline}
         </AppText>
       </Animated.View>
+
+      <HomePlanAdjustedBanner />
 
       <Animated.View entering={FadeInDown.delay(60).duration(400)}>
         {summaryLoading && !coachMessage ? (

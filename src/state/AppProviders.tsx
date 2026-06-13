@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 
 import { SentryBootstrap } from '@/components/observability/SentryBootstrap';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
+import { PlanAdjustmentProvider } from '@/contexts/PlanAdjustmentContext';
 import { SubscriptionProvider } from '@/contexts/SubscriptionContext';
 import { WatchCompanionBridge } from '@/state/WatchCompanionBridge';
 import { WorkoutSessionProvider } from '@/state/workout/WorkoutSessionContext';
@@ -28,7 +29,9 @@ function AuthenticatedShell({ children }: { children: ReactNode }) {
     <>
       <SentryBootstrap />
       <SubscriptionProvider>
-        <WorkoutSessionBridge>{children}</WorkoutSessionBridge>
+        <PlanAdjustmentProvider>
+          <WorkoutSessionBridge>{children}</WorkoutSessionBridge>
+        </PlanAdjustmentProvider>
       </SubscriptionProvider>
     </>
   );

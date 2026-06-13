@@ -61,7 +61,9 @@ export default function ProgramCalendarScreen() {
         <PrimaryButton label="Month" onPress={() => setView('month')} variant={view === 'month' ? 'primary' : 'secondary'} />
       </View>
 
-      <WorkoutCalendar workouts={workouts} view={view} onReschedule={load} />
+      {user ? (
+        <WorkoutCalendar userId={user.id} workouts={workouts} view={view} onReschedule={load} />
+      ) : null}
     </ScreenContainer>
   );
 }

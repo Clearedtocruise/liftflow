@@ -8,6 +8,7 @@ export * from './exerciseClassification';
 export * from './integrations';
 export * from './nutrition';
 export * from './nutritionIntelligence';
+export * from './planAdaptation';
 export * from './peakMusic';
 export * from './progression';
 export * from './recoveryIntelligence';

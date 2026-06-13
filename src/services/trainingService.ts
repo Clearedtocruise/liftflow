@@ -333,6 +333,19 @@ export const trainingService: ITrainingService = {
     }
   },
 
+  async adaptScheduleChange(
+    userId: string,
+    change: { type: 'move'; workoutId: string; toDate: string },
+  ) {
+    try {
+      const token = await getAccessToken();
+      const result = await api.adaptScheduleChange({ userId, change }, token);
+      return ok(result);
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
   async updatePlannedWorkoutExercises(
     plannedWorkoutId: string,
     exercises: import('@/types/workoutExecution').EditableWorkoutExercise[],
@@ -365,4 +378,8 @@ export type TrainingService = typeof trainingService & {
   getDashboard(userId: string): Promise<import('@/types/common').ServiceResult<ProgramDashboard | null>>;
   adaptProgram(userId: string): Promise<import('@/types/common').ServiceResult<ProgramDashboard | null>>;
   rescheduleWorkout(plannedWorkoutId: string, scheduledDate: string): Promise<import('@/types/common').ServiceResult<PlannedWorkout>>;
+  adaptScheduleChange(
+    userId: string,
+    change: { type: 'move'; workoutId: string; toDate: string },
+  ): Promise<import('@/types/common').ServiceResult<import('@/types/planAdaptation').PlanAdaptationResult>>;
 };

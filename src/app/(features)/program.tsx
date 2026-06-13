@@ -75,7 +75,9 @@ export default function ProgramScreen() {
       <ProgramDashboardCard dashboard={dashboard} onAdapt={handleAdapt} adapting={adapting} />
 
       <SectionHeader title="This Week" subtitle="Tap workout to reschedule" />
-      <WorkoutCalendar workouts={workouts} view="week" onReschedule={load} />
+      {user ? (
+        <WorkoutCalendar userId={user.id} workouts={workouts} view="week" onReschedule={load} />
+      ) : null}
     </ScreenContainer>
   );
 }

@@ -140,6 +140,10 @@ export interface ITrainingService {
   getDashboard(userId: string): Promise<ServiceResult<import('@/types').ProgramDashboard | null>>;
   adaptProgram(userId: string): Promise<ServiceResult<import('@/types').ProgramDashboard | null>>;
   rescheduleWorkout(plannedWorkoutId: string, scheduledDate: string): Promise<ServiceResult<PlannedWorkout>>;
+  adaptScheduleChange(
+    userId: string,
+    change: { type: 'move'; workoutId: string; toDate: string },
+  ): Promise<ServiceResult<import('@/types/planAdaptation').PlanAdaptationResult>>;
 }
 
 // =============================================================================

@@ -2,6 +2,7 @@ import { Router } from 'express';
 
 import { adaptActiveProgram } from '../lib/adaptiveProgram.js';
 import { adaptToPreferenceChanges } from '../lib/preferenceAdaptation.js';
+import { applyScheduleChange } from '../lib/planAdaptationEngine.js';
 import {
   loadExerciseCoachPrescription,
   loadWorkoutExercisePrescriptions,
@@ -648,6 +649,26 @@ trainingRouter.patch('/programs/planned/:id/reschedule', async (req, res) => {
     res.json(await reschedulePlannedWorkout(id, scheduledDate));
   } catch (error) {
     res.status(500).json({ message: error instanceof Error ? error.message : 'Reschedule failed' });
+  }
+});
+
+trainingRouter.post('/plan/adapt', async (req, res) => {
+  try {
+    const { userId, change } = req.body as {
+      userId?: string;
+      change?: { type?: string; workoutId?: string; toDate?: string };
+    };
+    if (!userId || !change?.type || !change.workoutId || !change.toDate) {
+      res.status(400).json({ message: 'userId, change.type, change.workoutId, and change.toDate are required' });
+      return;
+    }
+    if (change.type !== 'move') {
+      res.status(400).json({ message: 'Only move changes are supported in this release' });
+      return;
+    }
+    res.json(await applyScheduleChange(userId, { type: 'move', workoutId: change.workoutId, toDate: change.toDate }));
+  } catch (error) {
+    res.status(500).json({ message: error instanceof Error ? error.message : 'Plan adaptation failed' });
   }
 });
 
