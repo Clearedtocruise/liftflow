@@ -1,5 +1,6 @@
 import { pickMealsToKeep } from '@/lib/mealCleanup';
 import { enrichMealMeta } from '@/lib/mealIngredients';
+import { localMinutesSinceMidnight, parseScheduledTimeToMinutes } from '@/lib/localDate';
 import type { MealType } from '@/types/common';
 import type { Meal } from '@/types/nutrition';
 
@@ -144,19 +145,45 @@ export function countNutritionLogDays(meals: Meal[]): number {
   return dates.size;
 }
 
+export type NextMealEntry = {
+  meal: Meal;
+  scheduledTime: string;
+  overdue: boolean;
+};
+
+/** Upcoming or most-recent overdue slot — skips completed/skipped, keeps modified replacements visible. */
+function isNextMealCandidate(meal: Meal): boolean {
+  const status = mealStatus(meal);
+  return status !== 'completed' && status !== 'skipped';
+}
+
 export function findNextMeal(
   meals: Meal[],
   scheduledTimes: string[],
-): { meal: Meal; scheduledTime: string } | null {
+  now = new Date(),
+  timeZone?: string | null,
+): NextMealEntry | null {
   const deduped = dedupeMealsByType(meals).filter(isScheduledMeal);
+  const currentMinutes = localMinutesSinceMidnight(now, timeZone);
+
+  let fallback: NextMealEntry | null = null;
 
   for (let index = 0; index < deduped.length; index += 1) {
     const meal = deduped[index];
-    if (isConsumedMeal(meal)) continue;
-    return { meal, scheduledTime: scheduledTimes[index] ?? '' };
+    if (!isNextMealCandidate(meal)) continue;
+
+    const scheduledTime = scheduledTimes[index] ?? '';
+    const slotMinutes = parseScheduledTimeToMinutes(scheduledTime);
+    const overdue = slotMinutes != null && slotMinutes < currentMinutes;
+    const entry: NextMealEntry = { meal, scheduledTime, overdue };
+
+    if (slotMinutes == null || slotMinutes >= currentMinutes) {
+      return entry;
+    }
+    fallback = entry;
   }
 
-  return null;
+  return fallback;
 }
 
 export function trainingLabelFromRecoveryScore(score: number): string {

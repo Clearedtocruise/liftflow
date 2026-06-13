@@ -1,4 +1,5 @@
 import { apiClient } from '@/api/client';
+import { localDateString } from '@/lib/localDate';
 import { fail, fromError, ok } from '@/lib/serviceResult';
 import { getAccessToken, supabase } from '@/supabase/client';
 import type { DailyRecoveryCheckIn, RecoveryTrendPoint } from '@/types/coaching';
@@ -52,7 +53,7 @@ export const recoveryService = {
       );
       if (remote) return ok(mapRecovery(remote));
 
-      const today = new Date().toISOString().slice(0, 10);
+      const today = localDateString();
       const { data, error } = await supabase
         .from('recovery_assessments')
         .select('*')

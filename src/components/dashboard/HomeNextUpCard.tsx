@@ -12,6 +12,7 @@ type HomeNextUpCardProps = {
     name: string;
     mealType: MealType;
     scheduledTime: string;
+    overdue?: boolean;
   } | null;
   caloriesRemaining: number;
   proteinRemainingG: number;
@@ -53,7 +54,8 @@ export function HomeNextUpCard({
               <View style={styles.sectionHeader}>
                 <AppText variant="bodyBold">Next meal</AppText>
                 {nextMeal.scheduledTime ? (
-                  <AppText variant="caption" color="accent">
+                  <AppText variant="caption" color={nextMeal.overdue ? 'warning' : 'accent'}>
+                    {nextMeal.overdue ? 'Overdue · ' : ''}
                     {nextMeal.scheduledTime}
                   </AppText>
                 ) : null}

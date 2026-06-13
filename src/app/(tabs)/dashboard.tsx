@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RefreshControl, StyleSheet, View, type ViewStyle } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
+import { useFocusEffect } from '@react-navigation/native';
 
 import { HomeNextUpCard } from '@/components/dashboard/HomeNextUpCard';
 import { RingGauge } from '@/components/dashboard/RingGauge';
@@ -23,6 +24,7 @@ import {
     findNextMeal,
     trainingLabelFromRecoveryScore,
 } from '@/lib/mealAggregation';
+import { deviceTimeZone, formatScheduledDbTime, localDateString } from '@/lib/localDate';
 import { formatWorkoutTime, scheduleFromProfile, scheduledTimesForDay } from '@/lib/mealSchedule';
 import { logStartup } from '@/lib/startupLogger';
 import { getWeekRange } from '@/lib/weekPlan';
@@ -31,6 +33,7 @@ import { analyticsService } from '@/services/analyticsService';
 import { nutritionService } from '@/services/nutritionService';
 import { recoveryService } from '@/services/recoveryService';
 import { trainingService } from '@/services/trainingService';
+import { userService } from '@/services/userService';
 import { useWorkoutSession } from '@/state/workout/WorkoutSessionContext';
 import type { DashboardSummary, Meal, NutritionGoals, PlannedWorkout, ProgramDashboard } from '@/types';
 import type { RecoveryIntelligenceReport } from '@/types/recoveryIntelligence';
@@ -55,9 +58,12 @@ export default function DashboardScreen() {
   const homeRenderedRef = useRef(false);
   const appReadyLoggedRef = useRef(false);
 
-  const today = new Date().toISOString().slice(0, 10);
-  const hasWorkoutToday = Boolean(program?.nextWorkout);
-  const schedule = scheduleFromProfile(user, hasWorkoutToday);
+  const today = useMemo(() => localDateString(new Date(), user?.timezone), [user?.timezone]);
+
+  useEffect(() => {
+    if (!user?.id || user.timezone) return;
+    void userService.updateProfile(user.id, { timezone: deviceTimeZone() });
+  }, [user?.id, user?.timezone]);
 
   useEffect(() => {
     if (homeRenderedRef.current) return;
@@ -132,7 +138,16 @@ export default function DashboardScreen() {
     load();
   }, [load]);
 
+  useFocusEffect(
+    useCallback(() => {
+      if (user) load();
+    }, [user, load]),
+  );
+
   const nextPlanned = program?.nextWorkout;
+  const hasWorkoutToday = nextPlanned?.scheduledDate === today;
+  const todaysWorkout = hasWorkoutToday ? nextPlanned : null;
+  const scheduleWithWorkout = scheduleFromProfile(user, hasWorkoutToday);
   const hasRecoveryScore = recoveryScore != null;
 
   const trainingLabel =
@@ -141,12 +156,17 @@ export default function DashboardScreen() {
 
   const mealAggregation = useMemo(() => aggregateDailyMeals(todayMeals), [todayMeals]);
   const todayTimes = useMemo(
-    () => scheduledTimesForDay(mealAggregation.dedupedMeals.map((meal) => meal.mealType), schedule, hasWorkoutToday),
-    [mealAggregation.dedupedMeals, schedule, hasWorkoutToday],
+    () =>
+      scheduledTimesForDay(
+        mealAggregation.dedupedMeals.map((meal) => meal.mealType),
+        scheduleWithWorkout,
+        hasWorkoutToday,
+      ),
+    [mealAggregation.dedupedMeals, scheduleWithWorkout, hasWorkoutToday],
   );
   const nextMealEntry = useMemo(
-    () => findNextMeal(todayMeals, todayTimes),
-    [todayMeals, todayTimes],
+    () => findNextMeal(todayMeals, todayTimes, new Date(), user?.timezone),
+    [todayMeals, todayTimes, user?.timezone],
   );
 
   const calorieTarget = nutritionGoals?.dailyCalories ?? 0;
@@ -173,11 +193,14 @@ export default function DashboardScreen() {
         : 'Prioritize quality over volume. Match nutrition to your remaining macros.'
       : 'Complete today\'s recovery check-in for an accurate score and training guidance.');
 
-  const workoutDurationMin = nextPlanned
-    ? estimateWorkoutDurationMinutes(exercisesFromPlannedWorkout(nextPlanned)) ||
+  const workoutDurationMin = todaysWorkout
+    ? estimateWorkoutDurationMinutes(exercisesFromPlannedWorkout(todaysWorkout)) ||
       user?.metadata?.coachProfile?.minutesPerWorkout ||
       60
     : undefined;
+
+  const workoutStartTime =
+    formatScheduledDbTime(todaysWorkout?.scheduledTime) ?? formatWorkoutTime(scheduleWithWorkout);
 
   async function handleStartNextWorkout(planned: PlannedWorkout) {
     if (!user) return;
@@ -254,6 +277,7 @@ export default function DashboardScreen() {
                     name: nextMealEntry.meal.name,
                     mealType: nextMealEntry.meal.mealType,
                     scheduledTime: nextMealEntry.scheduledTime,
+                    overdue: nextMealEntry.overdue,
                   }
                 : null
             }
@@ -262,18 +286,18 @@ export default function DashboardScreen() {
             mealsCompleted={mealAggregation.mealsCompleted}
             mealsTotal={mealAggregation.mealsTotal}
             workout={
-              nextPlanned
+              todaysWorkout
                 ? {
-                    title: nextPlanned.name,
+                    title: todaysWorkout.name,
                     durationMin: workoutDurationMin,
-                    startTime: formatWorkoutTime(schedule),
+                    startTime: workoutStartTime,
                     trainingLabel,
                     recoveryScore: hasRecoveryScore ? recoveryScore : null,
                   }
                 : null
             }
             onLogMeal={() => router.push('/(tabs)/nutrition')}
-            onStartWorkout={() => nextPlanned && handleStartNextWorkout(nextPlanned)}
+            onStartWorkout={() => todaysWorkout && handleStartNextWorkout(todaysWorkout)}
             startingWorkout={startingWorkout}
           />
         )}

@@ -1,3 +1,4 @@
+import { localDateString } from '@/lib/localDate';
 import { estimateWorkoutDurationMinutes, exercisesFromPlannedWorkout } from '@/lib/workoutPlan';
 import type { PlannedWorkout } from '@/types/training';
 
@@ -10,7 +11,10 @@ export type WeekDayPlan = {
   isRestDay: boolean;
 };
 
-export function getWeekRange(reference = new Date()): { from: string; to: string; dates: string[] } {
+export function getWeekRange(
+  reference = new Date(),
+  timeZone?: string | null,
+): { from: string; to: string; dates: string[] } {
   const start = new Date(reference);
   const day = start.getDay();
   const diff = start.getDate() - day + (day === 0 ? -6 : 1);
@@ -21,7 +25,7 @@ export function getWeekRange(reference = new Date()): { from: string; to: string
   for (let i = 0; i < 7; i += 1) {
     const d = new Date(start);
     d.setDate(start.getDate() + i);
-    dates.push(d.toISOString().slice(0, 10));
+    dates.push(localDateString(d, timeZone));
   }
 
   return { from: dates[0], to: dates[6], dates };
@@ -74,8 +78,8 @@ export function workoutExerciseSummary(workout: PlannedWorkout, max = 4): string
   return shown;
 }
 
-export function isToday(date: string): boolean {
-  return date === new Date().toISOString().slice(0, 10);
+export function isToday(date: string, timeZone?: string | null): boolean {
+  return date === localDateString(new Date(), timeZone);
 }
 
 export function isConditioningWorkout(workout: PlannedWorkout): boolean {

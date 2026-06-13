@@ -7,6 +7,7 @@ import { ActiveWorkoutScreen } from '@/components/workout/execution/ActiveWorkou
 import { WorkoutWeeklyPlanScreen } from '@/components/workout/execution/WorkoutWeeklyPlanScreen';
 import { LiftFlowColors } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
+import { localDateString } from '@/lib/localDate';
 import { enrichWithSupersetGroups } from '@/lib/supersetFlow';
 import { normalizeExecutionMode } from '@/lib/workoutExecutionMode';
 import { buildWeekPlan, getWeekRange, isConditioningWorkout, type WeekDayPlan } from '@/lib/weekPlan';
@@ -43,7 +44,7 @@ export default function WorkoutScreen() {
         const result = await trainingService.getPlannedWorkouts(user.id, from, to);
         const days = buildWeekPlan(result.success ? result.data : []);
         setWeekDays(days);
-        const today = days.find((day) => day.workout && day.date === new Date().toISOString().slice(0, 10));
+        const today = days.find((day) => day.workout && day.date === localDateString());
         if (today?.workout) setPlannedWorkout(today.workout);
       } catch {
         setWeekDays(buildWeekPlan([]));

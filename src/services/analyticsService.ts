@@ -1,5 +1,6 @@
 import { mapHistoryItem, mapMeal } from '@/lib/db-mappers';
 import { aggregateDailyMeals } from '@/lib/mealAggregation';
+import { localDateString } from '@/lib/localDate';
 import { fail, fromError, ok } from '@/lib/serviceResult';
 import type { IAnalyticsService } from '@/services/interfaces';
 import { supabase } from '@/supabase/client';
@@ -25,18 +26,18 @@ function computeStreak(workoutDates: string[]): number {
   for (let i = 0; i < uniqueDays.length; i++) {
     const expected = new Date(today);
     expected.setDate(expected.getDate() - i);
-    const expectedStr = expected.toISOString().slice(0, 10);
+    const expectedStr = localDateString(expected);
     if (uniqueDays.includes(expectedStr)) {
       streak += 1;
     } else if (i === 0 && uniqueDays[0] !== expectedStr) {
       const yesterday = new Date(today);
       yesterday.setDate(yesterday.getDate() - 1);
-      if (uniqueDays[0] === yesterday.toISOString().slice(0, 10)) {
+      if (uniqueDays[0] === localDateString(yesterday)) {
         streak = 1;
         for (let j = 1; j < uniqueDays.length; j++) {
           const exp = new Date(yesterday);
           exp.setDate(exp.getDate() - j);
-          if (uniqueDays[j] === exp.toISOString().slice(0, 10)) streak += 1;
+          if (uniqueDays[j] === localDateString(exp)) streak += 1;
           else break;
         }
       }
@@ -53,7 +54,7 @@ export const analyticsService: IAnalyticsService = {
   async getDashboard(userId) {
     try {
       const weekStart = startOfWeek().toISOString();
-      const today = new Date().toISOString().slice(0, 10);
+      const today = localDateString();
 
       const [profile, weekWorkouts, recentSessions, metrics, goals, nutrition, allDates] = await Promise.all([
         supabase.from('profiles').select('weight_kg, body_fat_pct').eq('id', userId).single(),

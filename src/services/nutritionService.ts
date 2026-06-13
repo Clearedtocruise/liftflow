@@ -4,21 +4,19 @@ import { aggregateWeeklyGroceries } from '@/lib/groceryAggregation';
 import { aggregateDailyMeals } from '@/lib/mealAggregation';
 import { isReplaceablePlannedMeal, pickMealsToKeep, weekEndDate } from '@/lib/mealCleanup';
 import { enrichMealMeta, serializeMealMeta } from '@/lib/mealIngredients';
+import { localDateString } from '@/lib/localDate';
 import { fail, fromError, ok } from '@/lib/serviceResult';
+import { getWeekRange } from '@/lib/weekPlan';
 import type { INutritionService } from '@/services/interfaces';
 import { getAccessToken, supabase } from '@/supabase/client';
 import type { DailyNutritionSummary, Meal, MealType } from '@/types';
 
 function todayDate(): string {
-  return new Date().toISOString().slice(0, 10);
+  return localDateString();
 }
 
 function weekStartDate(): string {
-  const d = new Date();
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  d.setDate(diff);
-  return d.toISOString().slice(0, 10);
+  return getWeekRange().from;
 }
 
 export const nutritionService: INutritionService = {

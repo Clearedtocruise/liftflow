@@ -14,6 +14,7 @@ import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 import { aggregateWeeklyGroceries, groupGroceriesByCategory } from '@/lib/groceryAggregation';
+import { localDateString } from '@/lib/localDate';
 import { aggregateDailyMeals, aggregateWeeklyMeals, dedupeMealsByType } from '@/lib/mealAggregation';
 import {
   enrichMealMeta,
@@ -47,7 +48,7 @@ export default function NutritionScreen() {
   const [hasWorkoutToday, setHasWorkoutToday] = useState(false);
   const [recoverySleepHours, setRecoverySleepHours] = useState<number | undefined>();
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = useMemo(() => localDateString(new Date(), user?.timezone), [user?.timezone]);
   const schedule = scheduleFromProfile(user, hasWorkoutToday, recoverySleepHours);
   const dietaryRestrictions = user?.metadata?.coachProfile?.dietaryRestrictions ?? [];
 
@@ -74,7 +75,9 @@ export default function NutritionScreen() {
     if (summaryRes.success) setSummary(summaryRes.data);
     if (weekRes.success) setWeekMeals(weekRes.data);
     if (groceryRes.success && groceryRes.data?.[0]) setGroceryList(groceryRes.data[0]);
-    if (dashRes.success) setHasWorkoutToday(Boolean(dashRes.data.nextWorkout));
+    if (dashRes.success) {
+      setHasWorkoutToday(dashRes.data.nextWorkout?.scheduledDate === today);
+    }
 
     const sleepHours = recoveryToday?.sleepHours;
     setRecoverySleepHours(typeof sleepHours === 'number' ? sleepHours : undefined);
@@ -123,6 +126,15 @@ export default function NutritionScreen() {
 
   const groupedShopping = useMemo(() => groupGroceriesByCategory(shoppingItems), [shoppingItems]);
 
+  async function syncGroceriesAfterReplace() {
+    if (!user) return;
+    const { from, to } = getWeekRange(undefined, user.timezone);
+    const grocerySync = await nutritionService.syncGroceryListFromMeals(user.id, from, to);
+    if (grocerySync.success && grocerySync.data) {
+      setGroceryList(grocerySync.data);
+    }
+  }
+
   async function ensureMealPlan() {
     if (!user) return;
     if (weekMeals.length > 0) return;
@@ -149,7 +161,7 @@ export default function NutritionScreen() {
     const meta = enrichMealMeta(meal.name, meal.instructions);
     meta.status = 'modified';
     meta.ingredients = option.ingredients;
-    await nutritionService.updateMeal(meal.id, {
+    const result = await nutritionService.updateMeal(meal.id, {
       name: option.name,
       calories: option.calories,
       proteinG: option.proteinG,
@@ -157,7 +169,12 @@ export default function NutritionScreen() {
       fatG: option.fatG,
       instructions: serializeMealMeta(meta),
     });
+    if (!result.success) {
+      Alert.alert('Error', result.error);
+      return;
+    }
     setReplaceMeal(null);
+    await syncGroceriesAfterReplace();
     load();
   }
 
@@ -168,14 +185,19 @@ export default function NutritionScreen() {
       item.name === ingredientName ? { name: replacement, serving: item.serving } : item,
     );
     meta.status = 'modified';
-    await nutritionService.updateMeal(replaceMeal.id, { instructions: serializeMealMeta(meta) });
+    const result = await nutritionService.updateMeal(replaceMeal.id, { instructions: serializeMealMeta(meta) });
+    if (!result.success) {
+      Alert.alert('Error', result.error);
+      return;
+    }
     setReplaceMeal(null);
+    await syncGroceriesAfterReplace();
     load();
   }
 
   async function handleSmartReplace(anchorMeal: Meal, payload: SmartReplacementPayload) {
     if (!user) return;
-    const { from, to } = getWeekRange();
+    const { from, to } = getWeekRange(undefined, user.timezone);
     const targets = selectMealsForScope(
       anchorMeal,
       weekMeals,
@@ -194,14 +216,14 @@ export default function NutritionScreen() {
           macros: payload.macros,
         },
       );
-      await nutritionService.updateMeal(target.id, updates);
+      const result = await nutritionService.updateMeal(target.id, updates);
+      if (!result.success) {
+        Alert.alert('Error', result.error);
+        return;
+      }
     }
 
-    const grocerySync = await nutritionService.syncGroceryListFromMeals(user.id, from, to);
-    if (grocerySync.success && grocerySync.data) {
-      setGroceryList(grocerySync.data);
-    }
-
+    await syncGroceriesAfterReplace();
     setReplaceMeal(null);
     setReplaceIngredientName(null);
     load();
