@@ -20,6 +20,7 @@ create type public.training_experience as enum ('beginner', 'intermediate', 'adv
 create type public.confirmation_mode as enum ('always', 'smart', 'none');
 create type public.legal_document_type as enum ('terms', 'privacy', 'liability', 'ai_disclaimer', 'health_disclaimer');
 create type public.movement_category as enum ('push', 'pull', 'squat', 'hinge', 'carry', 'cardio', 'core', 'other');
+create type public.exercise_type as enum ('strength', 'bodyweight', 'timed', 'cardio');
 create type public.set_type as enum ('normal', 'warmup', 'dropset', 'failure', 'rest_pause', 'amrap', 'tempo');
 create type public.block_type as enum ('standard', 'superset', 'giant_set', 'circuit', 'drop_set', 'rest_pause');
 create type public.session_status as enum ('planned', 'active', 'paused', 'completed', 'cancelled');
@@ -167,6 +168,7 @@ create table public.exercises (
   name text not null,
   slug text unique,
   category public.movement_category not null,
+  exercise_type public.exercise_type not null default 'strength',
   equipment text not null,
   muscle_groups text[] not null default '{}',
   secondary_muscles text[] default '{}',

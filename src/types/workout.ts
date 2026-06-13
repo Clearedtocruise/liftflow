@@ -5,11 +5,13 @@ import type {
     SessionStatus,
     SetType,
 } from './common';
+import type { ExerciseType } from './exerciseClassification';
 
 export type Exercise = BaseEntity & {
   name: string;
   slug?: string;
   category: MovementCategory;
+  exerciseType: ExerciseType;
   equipment: string;
   muscleGroups: string[];
   secondaryMuscles?: string[];

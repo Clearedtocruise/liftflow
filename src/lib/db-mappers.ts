@@ -1,3 +1,4 @@
+import { classifyExercise } from '@/lib/exerciseClassification';
 import type {
     BodyCompositionRecord,
     Exercise,
@@ -152,6 +153,7 @@ type ExerciseRow = {
   name: string;
   slug: string | null;
   category: string;
+  exercise_type?: string | null;
   equipment: string;
   muscle_groups: string[];
   secondary_muscles: string[] | null;
@@ -169,6 +171,14 @@ export function mapExercise(row: ExerciseRow): Exercise {
     name: row.name,
     slug: row.slug ?? undefined,
     category: row.category as Exercise['category'],
+    exerciseType:
+      (row.exercise_type as Exercise['exerciseType'] | undefined) ??
+      classifyExercise({
+        slug: row.slug,
+        name: row.name,
+        equipment: row.equipment,
+        movementCategory: row.category,
+      }),
     equipment: row.equipment,
     muscleGroups: row.muscle_groups,
     secondaryMuscles: row.secondary_muscles ?? undefined,
