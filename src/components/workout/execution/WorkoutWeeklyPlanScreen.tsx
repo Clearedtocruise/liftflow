@@ -4,14 +4,14 @@ import { Card } from '@/components/layout/Card';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Spacing } from '@/constants/theme';
 import {
-    isConditioningWorkout,
-    isToday,
-    restDayLabel,
-    workoutDurationMinutes,
-    workoutExerciseCount,
-    workoutExerciseSummary,
-    workoutMuscleGroups,
-    type WeekDayPlan,
+  isConditioningWorkout,
+  isToday,
+  restDayLabel,
+  workoutDurationMinutes,
+  workoutExerciseCount,
+  workoutMuscleGroups,
+  workoutTotalSets,
+  type WeekDayPlan,
 } from '@/lib/weekPlan';
 
 type WorkoutWeeklyPlanScreenProps = {
@@ -19,7 +19,6 @@ type WorkoutWeeklyPlanScreenProps = {
   loading: boolean;
   refreshing?: boolean;
   onSelectDay: (day: WeekDayPlan) => void;
-  onConditioning: () => void;
   onManualLog: () => void;
 };
 
@@ -28,7 +27,6 @@ export function WorkoutWeeklyPlanScreen({
   loading,
   refreshing = false,
   onSelectDay,
-  onConditioning,
   onManualLog,
 }: WorkoutWeeklyPlanScreenProps) {
   const showDays = days.length > 0;
@@ -54,20 +52,12 @@ export function WorkoutWeeklyPlanScreen({
 
       {showDays
         ? days.map((day) => {
-          const isConditioning =
-            day.dayLabel === 'Saturday' ||
-            (day.workout ? day.workout.name.toLowerCase().includes('condition') : false);
-          const tappable = Boolean(day.workout) || isConditioning;
+          const hasWorkout = Boolean(day.workout);
+          const isConditioning = hasWorkout && isConditioningWorkout(day.workout!);
 
           return (
-          <Pressable
-            key={day.date}
-            onPress={() => {
-              if (day.workout) onSelectDay(day);
-              else if (isConditioning) onConditioning();
-            }}
-            disabled={!tappable}>
-            <Card style={[styles.dayCard, tappable && styles.dayCardActive, isToday(day.date) && styles.dayCardToday]}>
+          <Pressable key={day.date} onPress={() => onSelectDay(day)}>
+            <Card style={[styles.dayCard, styles.dayCardActive, isToday(day.date) && styles.dayCardToday]}>
               <View style={styles.dayHeader}>
                 <View>
                   <AppText variant="label" color={isToday(day.date) ? 'accent' : 'textSecondary'}>
@@ -75,36 +65,32 @@ export function WorkoutWeeklyPlanScreen({
                     {isToday(day.date) ? ' · Today' : ''}
                   </AppText>
                   <AppText variant="bodyBold">
-                    {day.workout?.name ?? (isConditioning ? 'Conditioning or Recovery' : restDayLabel(day.dayLabel))}
+                    {hasWorkout ? day.workout!.name : restDayLabel(day.dayLabel)}
                   </AppText>
                 </View>
-                {day.workout && !isConditioningWorkout(day.workout) ? (
-                  <AppText variant="footnote" color="textSecondary">
-                    {workoutDurationMinutes(day.workout)} min
-                  </AppText>
-                ) : isConditioning ? (
-                  <AppText variant="footnote" color="accent">
-                    Cardio / HIIT
+                {hasWorkout ? (
+                  <AppText variant="footnote" color={isConditioning ? 'accent' : 'textSecondary'}>
+                    {isConditioning ? 'Cardio / HIIT' : `${workoutDurationMinutes(day.workout!)} min`}
                   </AppText>
                 ) : null}
               </View>
 
-              {day.workout && !isConditioningWorkout(day.workout) ? (
+              {hasWorkout && !isConditioning ? (
                 <>
                   <AppText variant="footnote" color="textSecondary">
-                    {workoutMuscleGroups(day.workout)} · {workoutExerciseCount(day.workout)} exercises
+                    {workoutMuscleGroups(day.workout!)}
                   </AppText>
-                  <AppText variant="caption" color="textTertiary">
-                    {workoutExerciseSummary(day.workout)}
+                  <AppText variant="footnote" color="textSecondary">
+                    {workoutExerciseCount(day.workout!)} exercises · {workoutTotalSets(day.workout!)} sets
                   </AppText>
                 </>
-              ) : isConditioning ? (
+              ) : hasWorkout && isConditioning ? (
                 <AppText variant="footnote" color="textSecondary">
-                  Tabata, HIIT intervals, steady cardio, or recovery walk
+                  Cardio session · tap to log
                 </AppText>
               ) : (
                 <AppText variant="footnote" color="textSecondary">
-                  Recovery, mobility, or optional conditioning
+                  Recovery, mobility, or optional light activity
                 </AppText>
               )}
             </Card>
@@ -127,7 +113,6 @@ const styles = StyleSheet.create({
   },
   dayCard: {
     gap: Spacing.sm,
-    opacity: 0.85,
   },
   dayCardActive: {
     opacity: 1,

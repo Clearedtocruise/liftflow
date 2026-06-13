@@ -88,16 +88,18 @@ export default function WorkoutScreen() {
         router.push('/(features)/cardio-tracking');
         return;
       }
-      if (!day.workout) return;
-      setPlannedWorkout(day.workout);
-      router.push({ pathname: '/(tabs)/workout/day', params: { id: day.workout.id } });
+      if (day.workout) {
+        setPlannedWorkout(day.workout);
+        router.push({ pathname: '/(tabs)/workout/day', params: { id: day.workout.id } });
+        return;
+      }
+      router.push({
+        pathname: '/(tabs)/workout/rest-day',
+        params: { date: day.date, label: day.dayLabel },
+      });
     },
     [setPlannedWorkout],
   );
-
-  const handleConditioning = useCallback(() => {
-    router.push('/(features)/cardio-tracking');
-  }, []);
 
   const handleFinishWorkout = useCallback(async () => {
     const completed = await endSession();
@@ -169,7 +171,6 @@ export default function WorkoutScreen() {
         loading={loadingPlan}
         refreshing={refreshingPlan}
         onSelectDay={handleSelectDay}
-        onConditioning={handleConditioning}
         onManualLog={() => router.push('/(tabs)/workout/manual-log')}
       />
     </ScreenContainer>

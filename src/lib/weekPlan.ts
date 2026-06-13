@@ -42,10 +42,8 @@ export function buildWeekPlan(plannedWorkouts: PlannedWorkout[], reference = new
   });
 }
 
-export function restDayLabel(dayLabel: (typeof WEEKDAY_LABELS)[number]): string {
-  if (dayLabel === 'Saturday') return 'Conditioning or Recovery';
-  if (dayLabel === 'Sunday') return 'Rest or Mobility';
-  return 'Rest / Mobility';
+export function restDayLabel(_dayLabel: (typeof WEEKDAY_LABELS)[number]): string {
+  return 'Rest Day';
 }
 
 export function workoutMuscleGroups(workout: PlannedWorkout): string {
@@ -58,6 +56,10 @@ export function workoutMuscleGroups(workout: PlannedWorkout): string {
 
 export function workoutExerciseCount(workout: PlannedWorkout): number {
   return workout.metadata?.exercises?.length ?? 0;
+}
+
+export function workoutTotalSets(workout: PlannedWorkout): number {
+  return exercisesFromPlannedWorkout(workout).reduce((total, exercise) => total + Math.max(exercise.sets, 0), 0);
 }
 
 export function workoutDurationMinutes(workout: PlannedWorkout): number {

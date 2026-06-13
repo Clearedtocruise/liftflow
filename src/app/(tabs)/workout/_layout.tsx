@@ -14,6 +14,7 @@ export default function WorkoutLayout() {
         }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="day" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="rest-day" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="edit" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="manual-log" options={{ animation: 'slide_from_bottom' }} />
         <Stack.Screen name="summary" options={{ animation: 'slide_from_right', gestureEnabled: false }} />
