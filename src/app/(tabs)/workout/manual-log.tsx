@@ -6,7 +6,7 @@ import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { SectionHeader } from '@/components/layout/SectionHeader';
 import { AppText } from '@/components/ui/AppText';
-import { ManualSetEntry } from '@/components/workout/ManualSetEntry';
+import { ManualSetEntry, type ManualSetLogPayload } from '@/components/workout/ManualSetEntry';
 import { QuickCorrectionButtons } from '@/components/workout/QuickCorrectionButtons';
 import { SetEditModal } from '@/components/workout/SetEditModal';
 import { VoiceComingSoonBanner } from '@/components/workout/VoiceComingSoonBanner';
@@ -55,20 +55,26 @@ export default function ManualLogScreen() {
     })();
   }, [session, isLoading, user, locations, selectedId, startSession]);
 
-  async function handleManualLog(exerciseName: string, weight?: number, reps?: number) {
+  async function handleManualLog(payload: ManualSetLogPayload) {
     if (!session || session.status === 'paused') return false;
 
-    const workoutExerciseId = await addExerciseByName(exerciseName);
+    const workoutExerciseId = await addExerciseByName(payload.exerciseName);
     if (!workoutExerciseId) {
       Alert.alert('Error', 'Could not add exercise.');
       return false;
     }
 
-    const logged = await logSet({ workoutExerciseId, weight, reps });
-    if (logged?.isPr) {
+    const logged = await logSet({
+      workoutExerciseId,
+      weight: payload.weight,
+      reps: payload.reps,
+      durationSeconds: payload.durationSeconds,
+      distanceMeters: payload.distanceMeters,
+    });
+    if (logged?.isPr && payload.weight != null && payload.reps != null) {
       Alert.alert(
         'New PR!',
-        `${exerciseName}: ${formatWorkoutWeightForInput(logged.weight, units.preferredWeightUnit)} ${units.weightLabel} × ${logged.reps ?? reps}`,
+        `${payload.exerciseName}: ${formatWorkoutWeightForInput(logged.weight, units.preferredWeightUnit)} ${units.weightLabel} × ${logged.reps ?? payload.reps}`,
       );
     }
     return !!logged;
@@ -123,7 +129,7 @@ export default function ManualLogScreen() {
         Fallback logging when you are not following today&apos;s planned workout.
       </AppText>
 
-      <SectionHeader title="Log Set" subtitle="Enter weight, reps, and exercise name" />
+      <SectionHeader title="Log Set" subtitle="Fields adapt to the exercise type" />
       <ManualSetEntry exercises={session.exercises} onLogSet={handleManualLog} disabled={isPaused} />
 
       <VoiceComingSoonBanner />

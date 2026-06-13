@@ -5,16 +5,18 @@ import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Radius, Spacing, TouchTarget } from '@/constants/theme';
 import { useUnits } from '@/hooks/useUnits';
 import type { ExerciseLoggingMode } from '@/lib/exerciseModality';
-import { formatWorkoutWeightForInput, parseWeightToKg, weightStepDisplay, weightStepKg } from '@/lib/unitConversion';
+import { formatWorkoutWeightForInput, parseDistanceToKm, parseWeightToKg, weightStepDisplay, weightStepKg } from '@/lib/unitConversion';
 
 type SetLoggingControlsProps = {
   mode: ExerciseLoggingMode;
   weightKg: number;
   reps: number;
   durationSeconds: number;
+  distanceKm: number;
   onChangeWeight: (weightKg: number) => void;
   onChangeReps: (reps: number) => void;
   onChangeDuration: (durationSeconds: number) => void;
+  onChangeDistance: (distanceKm: number) => void;
   disabled?: boolean;
 };
 
@@ -45,7 +47,7 @@ function NumericField({ label, value, onChangeText, onDecrease, onIncrease, step
           style={styles.input}
           value={value}
           onChangeText={onChangeText}
-          keyboardType="number-pad"
+          keyboardType="decimal-pad"
           editable={!disabled}
           selectTextOnFocus
         />
@@ -65,18 +67,23 @@ export function SetLoggingControls({
   weightKg,
   reps,
   durationSeconds,
+  distanceKm,
   onChangeWeight,
   onChangeReps,
   onChangeDuration,
+  onChangeDistance,
   disabled,
 }: SetLoggingControlsProps) {
   const units = useUnits();
   const weightStepKgValue = weightStepKg(units.preferredWeightUnit);
   const weightStepLabel = String(weightStepDisplay(units.preferredWeightUnit));
+  const distanceUnitLabel = units.preferredDistanceUnit === 'km' ? 'km' : 'mi';
+  const distanceStep = units.preferredDistanceUnit === 'km' ? 0.1 : 0.1;
 
   const [weightText, setWeightText] = useState(formatWorkoutWeightForInput(weightKg, units.preferredWeightUnit));
   const [repsText, setRepsText] = useState(String(reps));
   const [durationText, setDurationText] = useState(String(durationSeconds));
+  const [distanceText, setDistanceText] = useState(String(Math.round(distanceKm * 100) / 100));
 
   useEffect(() => {
     setWeightText(formatWorkoutWeightForInput(weightKg, units.preferredWeightUnit));
@@ -89,6 +96,10 @@ export function SetLoggingControls({
   useEffect(() => {
     setDurationText(String(durationSeconds));
   }, [durationSeconds]);
+
+  useEffect(() => {
+    setDistanceText(String(Math.round(distanceKm * 100) / 100));
+  }, [distanceKm]);
 
   function handleWeightText(text: string) {
     setWeightText(text);
@@ -106,6 +117,37 @@ export function SetLoggingControls({
     setDurationText(text);
     const parsed = Number.parseInt(text, 10);
     if (!Number.isNaN(parsed)) onChangeDuration(Math.max(1, parsed));
+  }
+
+  function handleDistanceText(text: string) {
+    setDistanceText(text);
+    const parsed = parseDistanceToKm(text, units.preferredDistanceUnit);
+    if (parsed != null && !Number.isNaN(parsed)) onChangeDistance(Math.max(0, parsed));
+  }
+
+  if (mode === 'cardio') {
+    return (
+      <View style={styles.row}>
+        <NumericField
+          label="TIME (SEC)"
+          value={durationText}
+          onChangeText={handleDurationText}
+          onDecrease={() => onChangeDuration(Math.max(1, durationSeconds - 15))}
+          onIncrease={() => onChangeDuration(durationSeconds + 15)}
+          stepLabel="15"
+          disabled={disabled}
+        />
+        <NumericField
+          label={`DISTANCE (${distanceUnitLabel})`}
+          value={distanceText}
+          onChangeText={handleDistanceText}
+          onDecrease={() => onChangeDistance(Math.max(0, distanceKm - distanceStep))}
+          onIncrease={() => onChangeDistance(distanceKm + distanceStep)}
+          stepLabel={String(distanceStep)}
+          disabled={disabled}
+        />
+      </View>
+    );
   }
 
   if (mode === 'timed') {

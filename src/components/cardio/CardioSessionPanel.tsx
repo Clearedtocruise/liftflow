@@ -1,26 +1,25 @@
 import { useEffect, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, TextInput, View } from 'react-native';
 
 import { IntervalTimerPanel } from '@/components/cardio/IntervalTimerPanel';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { AppText } from '@/components/ui/AppText';
 import type { CardioActivity } from '@/constants/cardioActivities';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
+import { useUnits } from '@/hooks/useUnits';
+import { formatCardioDuration } from '@/lib/exerciseModality';
+import { parseDistanceToKm } from '@/lib/unitConversion';
 
 type CardioSessionPanelProps = {
   activity: CardioActivity;
 };
 
-function formatElapsed(totalSeconds: number): string {
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-}
-
 export function CardioSessionPanel({ activity }: CardioSessionPanelProps) {
+  const units = useUnits();
   const [running, setRunning] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [completed, setCompleted] = useState(false);
+  const [distanceText, setDistanceText] = useState('');
 
   useEffect(() => {
     if (!running || activity.mode !== 'steady') return;
@@ -40,16 +39,40 @@ export function CardioSessionPanel({ activity }: CardioSessionPanelProps) {
     );
   }
 
+  const distanceKm = parseDistanceToKm(distanceText, units.preferredDistanceUnit) ?? 0;
+  const distanceLabel = units.preferredDistanceUnit === 'km' ? 'km' : 'mi';
+
   return (
     <View style={styles.steadyCard}>
       <AppText variant="label" color="accent" align="center">
         {activity.label}
       </AppText>
       <AppText variant="timer" color="restTimer" align="center" style={styles.timer}>
-        {formatElapsed(elapsed)}
+        {formatCardioDuration(elapsed)}
       </AppText>
+
+      {completed || !running ? (
+        <View style={styles.distanceBlock}>
+          <AppText variant="caption" color="textSecondary">
+            Distance ({distanceLabel})
+          </AppText>
+          <TextInput
+            style={styles.distanceInput}
+            value={distanceText}
+            onChangeText={setDistanceText}
+            keyboardType="decimal-pad"
+            placeholder={`0.0 ${distanceLabel}`}
+            placeholderTextColor={LiftFlowColors.textTertiary}
+          />
+        </View>
+      ) : null}
+
       <AppText variant="footnote" color="textSecondary" align="center">
-        {completed ? 'Session logged locally' : running ? 'Session in progress' : 'Ready when you are'}
+        {completed
+          ? `Logged ${formatCardioDuration(elapsed)} · ${units.formatDistance(distanceKm)}`
+          : running
+            ? 'Session in progress'
+            : 'Ready when you are'}
       </AppText>
       <PrimaryButton
         label={running ? 'Pause' : completed ? 'Restart' : 'Start'}
@@ -57,6 +80,7 @@ export function CardioSessionPanel({ activity }: CardioSessionPanelProps) {
           if (completed) {
             setElapsed(0);
             setCompleted(false);
+            setDistanceText('');
             setRunning(true);
             return;
           }
@@ -90,5 +114,19 @@ const styles = StyleSheet.create({
   timer: {
     fontSize: 56,
     lineHeight: 64,
+  },
+  distanceBlock: {
+    gap: Spacing.xs,
+  },
+  distanceInput: {
+    backgroundColor: LiftFlowColors.backgroundSecondary,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: LiftFlowColors.border,
+    padding: Spacing.md,
+    color: LiftFlowColors.textPrimary,
+    textAlign: 'center',
+    fontSize: 20,
+    fontWeight: '700',
   },
 });

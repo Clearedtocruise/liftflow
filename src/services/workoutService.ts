@@ -432,6 +432,9 @@ export const workoutService: IWorkoutService = {
         ? await detectPersonalRecord(userId, payload.workoutExerciseId, payload.weight, payload.reps)
         : false;
 
+      const metadata =
+        payload.distanceMeters != null ? { distanceMeters: payload.distanceMeters } : undefined;
+
       const { data, error } = await supabase
         .from('workout_sets')
         .insert({
@@ -441,6 +444,7 @@ export const workoutService: IWorkoutService = {
           reps: payload.reps,
           set_type: payload.type ?? 'normal',
           duration_seconds: payload.durationSeconds,
+          metadata: metadata ?? {},
           is_pr: isPr,
           logged_at: new Date().toISOString(),
         })
@@ -842,7 +846,7 @@ export const workoutService: IWorkoutService = {
 
       const { data, error } = await supabase
         .from('workout_sets')
-        .select('weight, reps, duration_seconds, logged_at')
+        .select('weight, reps, duration_seconds, metadata, logged_at')
         .in('workout_exercise_id', workoutExerciseIds)
         .order('logged_at', { ascending: false })
         .limit(Math.max(limit * 3, limit));
@@ -850,13 +854,26 @@ export const workoutService: IWorkoutService = {
       if (error) return fail(error.message);
 
       const sets: ExerciseHistorySet[] = (data ?? [])
-        .map((row) => ({
-          weightKg: row.weight != null ? (row.weight as number) : undefined,
-          reps: row.reps != null ? (row.reps as number) : undefined,
-          durationSeconds: row.duration_seconds != null ? (row.duration_seconds as number) : undefined,
-          loggedAt: row.logged_at as string,
-        }))
+        .map((row) => {
+          const metadata = (row.metadata ?? {}) as Record<string, unknown>;
+          const distanceMeters =
+            typeof metadata.distanceMeters === 'number'
+              ? metadata.distanceMeters
+              : typeof metadata.distance_meters === 'number'
+                ? metadata.distance_meters
+                : undefined;
+          return {
+            weightKg: row.weight != null ? (row.weight as number) : undefined,
+            reps: row.reps != null ? (row.reps as number) : undefined,
+            durationSeconds: row.duration_seconds != null ? (row.duration_seconds as number) : undefined,
+            distanceMeters,
+            loggedAt: row.logged_at as string,
+          };
+        })
         .filter((set) => {
+          if (mode === 'cardio') {
+            return set.durationSeconds != null && set.durationSeconds > 0;
+          }
           if (mode === 'timed') return set.durationSeconds != null && set.durationSeconds > 0;
           if (mode === 'bodyweight') return set.reps != null && (!set.weightKg || set.weightKg <= 0);
           return set.weightKg != null && set.weightKg > 0 && set.reps != null;

@@ -1,25 +1,67 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { Card } from '@/components/layout/Card';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { AppText } from '@/components/ui/AppText';
+import { SetLoggingControls } from '@/components/workout/execution/SetLoggingControls';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
-import { useUnits } from '@/hooks/useUnits';
+import { getExerciseLoggingMode, getExerciseLoggingModeByName } from '@/lib/exerciseModality';
 import type { WorkoutExercise } from '@/types';
+
+export type ManualSetLogPayload = {
+  exerciseName: string;
+  weight?: number;
+  reps?: number;
+  durationSeconds?: number;
+  distanceMeters?: number;
+};
 
 type ManualSetEntryProps = {
   exercises: WorkoutExercise[];
-  onLogSet: (exerciseName: string, weight?: number, reps?: number) => Promise<boolean>;
+  onLogSet: (payload: ManualSetLogPayload) => Promise<boolean>;
   disabled?: boolean;
 };
 
 export function ManualSetEntry({ exercises, onLogSet, disabled }: ManualSetEntryProps) {
-  const units = useUnits();
   const [exerciseName, setExerciseName] = useState('');
-  const [weight, setWeight] = useState('');
-  const [reps, setReps] = useState('');
+  const [weightKg, setWeightKg] = useState(0);
+  const [reps, setReps] = useState(8);
+  const [durationSeconds, setDurationSeconds] = useState(30);
+  const [distanceKm, setDistanceKm] = useState(0);
   const [logging, setLogging] = useState(false);
+
+  const selectedExercise = useMemo(
+    () =>
+      exercises.find(
+        (item) => item.exercise?.name?.toLowerCase() === exerciseName.trim().toLowerCase(),
+      ),
+    [exercises, exerciseName],
+  );
+
+  const loggingMode = selectedExercise?.exercise
+    ? getExerciseLoggingMode(
+        selectedExercise.exercise,
+        selectedExercise.suggestedReps,
+        selectedExercise.exercise.name,
+      )
+    : exerciseName.trim()
+      ? getExerciseLoggingModeByName(exerciseName.trim())
+      : 'weighted';
+
+  useEffect(() => {
+    if (loggingMode === 'timed') {
+      setReps(1);
+      return;
+    }
+    if (loggingMode === 'cardio') {
+      setReps(1);
+      return;
+    }
+    if (loggingMode === 'bodyweight') {
+      setWeightKg(0);
+    }
+  }, [loggingMode]);
 
   async function handleLog() {
     const name = exerciseName.trim();
@@ -29,16 +71,21 @@ export function ManualSetEntry({ exercises, onLogSet, disabled }: ManualSetEntry
     }
 
     setLogging(true);
-    const success = await onLogSet(
-      name,
-      weight ? units.parseWeight(weight) : undefined,
-      reps ? parseInt(reps, 10) : undefined,
-    );
+    const success = await onLogSet({
+      exerciseName: name,
+      weight: loggingMode === 'weighted' ? weightKg : undefined,
+      reps: loggingMode === 'weighted' || loggingMode === 'bodyweight' ? reps : undefined,
+      durationSeconds: loggingMode === 'timed' || loggingMode === 'cardio' ? durationSeconds : undefined,
+      distanceMeters: loggingMode === 'cardio' ? Math.round(distanceKm * 1000) : undefined,
+    });
     setLogging(false);
 
     if (success) {
-      setWeight('');
-      setReps('');
+      if (loggingMode === 'weighted') {
+        setReps(reps);
+      } else if (loggingMode === 'bodyweight') {
+        setReps(reps);
+      }
     }
   }
 
@@ -70,26 +117,18 @@ export function ManualSetEntry({ exercises, onLogSet, disabled }: ManualSetEntry
         </View>
       ) : null}
 
-      <View style={styles.inputRow}>
-        <TextInput
-          style={[styles.input, styles.inputHalf]}
-          placeholder={`Weight (${units.weightLabel})`}
-          placeholderTextColor={LiftFlowColors.textTertiary}
-          keyboardType="decimal-pad"
-          value={weight}
-          onChangeText={setWeight}
-          editable={!disabled}
-        />
-        <TextInput
-          style={[styles.input, styles.inputHalf]}
-          placeholder="Reps"
-          placeholderTextColor={LiftFlowColors.textTertiary}
-          keyboardType="number-pad"
-          value={reps}
-          onChangeText={setReps}
-          editable={!disabled}
-        />
-      </View>
+      <SetLoggingControls
+        mode={loggingMode}
+        weightKg={weightKg}
+        reps={reps}
+        durationSeconds={durationSeconds}
+        distanceKm={distanceKm}
+        onChangeWeight={setWeightKg}
+        onChangeReps={setReps}
+        onChangeDuration={setDurationSeconds}
+        onChangeDistance={setDistanceKm}
+        disabled={disabled || logging}
+      />
 
       <PrimaryButton label="Log Set" onPress={handleLog} loading={logging} disabled={disabled} />
     </Card>
@@ -108,13 +147,6 @@ const styles = StyleSheet.create({
     color: LiftFlowColors.textPrimary,
     borderWidth: 1,
     borderColor: LiftFlowColors.border,
-  },
-  inputRow: {
-    flexDirection: 'row',
-    gap: Spacing.md,
-  },
-  inputHalf: {
-    flex: 1,
   },
   chipRow: {
     flexDirection: 'row',

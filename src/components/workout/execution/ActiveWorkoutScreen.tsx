@@ -91,6 +91,7 @@ export function ActiveWorkoutScreen({
   const [weightKg, setWeightKg] = useState(0);
   const [reps, setReps] = useState(8);
   const [durationSeconds, setDurationSeconds] = useState(30);
+  const [distanceKm, setDistanceKm] = useState(0);
   const [logging, setLogging] = useState(false);
   const [historySets, setHistorySets] = useState<ExerciseHistorySet[]>([]);
   const [coachPrescription, setCoachPrescription] = useState<ExerciseCoachPrescription | null>(null);
@@ -220,6 +221,16 @@ export function ActiveWorkoutScreen({
         }
         return;
       }
+      if (mode === 'cardio') {
+        setReps(1);
+        if (last?.durationSeconds) {
+          setDurationSeconds(last.durationSeconds);
+        }
+        if (last?.distanceMeters) {
+          setDistanceKm(last.distanceMeters / 1000);
+        }
+        return;
+      }
       if (mode === 'bodyweight') {
         setReps(last?.reps ?? parseTargetReps(repRange));
         return;
@@ -333,7 +344,15 @@ export function ActiveWorkoutScreen({
     );
 
     const logged =
-      loggingMode === 'timed'
+      loggingMode === 'cardio'
+        ? await logSet({
+            ...base,
+            durationSeconds,
+            distanceMeters: Math.round(distanceKm * 1000),
+            reps: 1,
+            skipRest: true,
+          })
+        : loggingMode === 'timed'
         ? await logSet({ ...base, durationSeconds, reps: 1, skipRest: postSetAction.skipRest })
         : loggingMode === 'bodyweight'
           ? await logSet({ ...base, reps, skipRest: postSetAction.skipRest })
@@ -454,11 +473,12 @@ export function ActiveWorkoutScreen({
                   targetPerformanceLine={coachTargetLine}
                   formatWeight={(kg) => formatWorkoutWeightForInput(kg, units.preferredWeightUnit)}
                   weightLabel={units.weightLabel}
+                  distanceUnit={units.preferredDistanceUnit}
                   fallbackWeightKg={weightKg > 0 ? weightKg : currentExercise.suggestedWeight}
                 />
               ) : null}
 
-              {user && currentExercise.exerciseId && !showComplete ? (
+              {user && currentExercise.exerciseId && loggingMode !== 'cardio' && !showComplete ? (
                 <ExerciseCoachCard
                   variant="inline"
                   showPerformanceSummary={false}
@@ -491,9 +511,11 @@ export function ActiveWorkoutScreen({
                     weightKg={weightKg}
                     reps={reps}
                     durationSeconds={durationSeconds}
+                    distanceKm={distanceKm}
                     onChangeWeight={setWeightKg}
                     onChangeReps={setReps}
                     onChangeDuration={setDurationSeconds}
+                    onChangeDistance={setDistanceKm}
                     disabled={isPaused || logging}
                   />
                   <PrimaryButton
@@ -525,6 +547,7 @@ export function ActiveWorkoutScreen({
                       set,
                       (kg) => formatWorkoutWeightForInput(kg, units.preferredWeightUnit),
                       units.weightLabel,
+                      units.preferredDistanceUnit,
                     )}
                   </AppText>
                 ) : null}

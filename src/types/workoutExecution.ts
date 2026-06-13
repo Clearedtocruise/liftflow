@@ -16,5 +16,6 @@ export type ExerciseHistorySet = {
   weightKg?: number;
   reps?: number;
   durationSeconds?: number;
+  distanceMeters?: number;
   loggedAt: string;
 };

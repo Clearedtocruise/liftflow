@@ -4,7 +4,7 @@ import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import type { ExerciseLoggingMode } from '@/lib/exerciseModality';
 import { formatPreviousPerformanceLine, formatPlanTargetPerformance } from '@/lib/activeWorkoutMetrics';
-import type { ExerciseHistorySet } from '@/types/workoutExecution';
+import type { DistanceUnit } from '@/types/common';
 
 type GuidedWorkoutMetricsProps = {
   currentSet: number;
@@ -16,6 +16,7 @@ type GuidedWorkoutMetricsProps = {
   targetPerformanceLine?: string | null;
   formatWeight: (kg: number) => string;
   weightLabel: string;
+  distanceUnit: DistanceUnit;
   fallbackWeightKg?: number;
 };
 
@@ -29,6 +30,7 @@ export function GuidedWorkoutMetrics({
   targetPerformanceLine,
   formatWeight,
   weightLabel,
+  distanceUnit,
   fallbackWeightKg,
 }: GuidedWorkoutMetricsProps) {
   const planFallback = formatPlanTargetPerformance(
@@ -66,7 +68,7 @@ export function GuidedWorkoutMetrics({
         {historySets.length > 0 ? (
           historySets.slice(0, 3).map((set, index) => (
             <AppText key={`${set.loggedAt}-${index}`} variant="footnote" color="textSecondary">
-              {formatPreviousPerformanceLine(set, loggingMode, formatWeight, weightLabel)}
+              {formatPreviousPerformanceLine(set, loggingMode, formatWeight, weightLabel, distanceUnit)}
             </AppText>
           ))
         ) : (

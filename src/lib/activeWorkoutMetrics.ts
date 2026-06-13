@@ -1,5 +1,7 @@
 import type { ExerciseLoggingMode } from '@/lib/exerciseModality';
-import { defaultTimedDurationSeconds } from '@/lib/exerciseModality';
+import { defaultTimedDurationSeconds, formatCardioDuration } from '@/lib/exerciseModality';
+import type { DistanceUnit } from '@/types/common';
+import { formatDistance } from '@/lib/unitConversion';
 import type { ExerciseCoachPrescription } from '@/types/exerciseCoach';
 import type { WorkoutSession } from '@/types';
 import type { EditableWorkoutExercise } from '@/types/workoutExecution';
@@ -44,11 +46,18 @@ export function computeWorkoutSetProgress(
 }
 
 export function formatPreviousPerformanceLine(
-  set: { weightKg?: number; reps?: number; durationSeconds?: number },
-  mode: 'weighted' | 'bodyweight' | 'timed',
+  set: { weightKg?: number; reps?: number; durationSeconds?: number; distanceMeters?: number },
+  mode: ExerciseLoggingMode,
   formatWeight: (kg: number) => string,
   weightLabel: string,
+  distanceUnit: DistanceUnit = 'mi',
 ): string {
+  if (mode === 'cardio') {
+    const time = set.durationSeconds != null ? formatCardioDuration(set.durationSeconds) : '—';
+    const distance =
+      set.distanceMeters != null ? formatDistance(set.distanceMeters / 1000, distanceUnit) : '—';
+    return `${time} · ${distance}`;
+  }
   if (mode === 'timed' && set.durationSeconds != null) {
     return `${set.durationSeconds}s hold`;
   }
@@ -65,13 +74,16 @@ export function formatPreviousPerformanceLine(
 }
 
 export function formatPlanTargetPerformance(
-  mode: 'weighted' | 'bodyweight' | 'timed',
+  mode: ExerciseLoggingMode,
   targetSets: number,
   repRange: string,
   formatWeight: (kg: number) => string,
   weightLabel: string,
   weightKg?: number,
 ): string {
+  if (mode === 'cardio') {
+    return `${targetSets} set · log time and distance`;
+  }
   if (mode === 'timed') {
     const match = repRange.match(/(\d+)\s*(s|sec|secs|second|seconds|min|mins|minute|minutes)\b/i);
     if (match) {
@@ -97,6 +109,9 @@ export function formatCoachTargetLine(
   weightLabel: string,
   plannedReps?: string,
 ): string {
+  if (mode === 'cardio') {
+    return 'Log time and distance';
+  }
   if (mode === 'timed') {
     return `${targets.sets} sets × ${defaultTimedDurationSeconds(targets.repRange || plannedReps)}s hold`;
   }

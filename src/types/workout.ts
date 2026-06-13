@@ -29,6 +29,7 @@ export type WorkoutSet = BaseEntity & {
   rpe?: number;
   type: SetType;
   durationSeconds?: number;
+  distanceMeters?: number;
   timeUnderTensionSeconds?: number;
   restSeconds?: number;
   isPr?: boolean;
@@ -140,6 +141,7 @@ export type CreateSetPayload = {
   reps?: number;
   type?: SetType;
   durationSeconds?: number;
+  distanceMeters?: number;
   restSeconds?: number;
   skipRest?: boolean;
 };

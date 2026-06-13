@@ -204,7 +204,13 @@ type SetRow = {
   is_pr: boolean | null;
   notes: string | null;
   logged_at: string;
+  metadata?: Record<string, unknown> | null;
 };
+
+function readDistanceMeters(metadata: Record<string, unknown> | null | undefined): number | undefined {
+  const value = metadata?.distanceMeters ?? metadata?.distance_meters;
+  return typeof value === 'number' ? value : undefined;
+}
 
 export function mapSet(row: SetRow): WorkoutSet {
   return {
@@ -216,6 +222,7 @@ export function mapSet(row: SetRow): WorkoutSet {
     rpe: row.rpe ?? undefined,
     type: row.set_type as WorkoutSet['type'],
     durationSeconds: row.duration_seconds ?? undefined,
+    distanceMeters: readDistanceMeters(row.metadata),
     timeUnderTensionSeconds: row.time_under_tension_seconds ?? undefined,
     restSeconds: row.rest_seconds ?? undefined,
     isPr: row.is_pr ?? undefined,
