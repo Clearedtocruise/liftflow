@@ -7,7 +7,25 @@ import { getAccessToken } from '@/supabase/client';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'https://liftflow-api.onrender.com';
 
-export type FeedbackType = 'bug' | 'feature' | 'support';
+export type FeedbackType = 'bug' | 'feature' | 'support' | 'confusion';
+
+export type FeedbackArea =
+  | 'workout'
+  | 'coach'
+  | 'nutrition'
+  | 'recovery'
+  | 'voice'
+  | 'subscription'
+  | 'onboarding'
+  | 'other';
+
+export type FeedbackIssueCategory =
+  | 'crash'
+  | 'confusion'
+  | 'missing_feature'
+  | 'feature_request'
+  | 'support'
+  | 'other';
 
 export type SubmitFeedbackInput = {
   userId: string;
@@ -15,6 +33,8 @@ export type SubmitFeedbackInput = {
   subject: string;
   body: string;
   screenshotUri?: string;
+  area?: FeedbackArea;
+  issueCategory?: FeedbackIssueCategory;
 };
 
 async function collectDeviceMetadata() {
@@ -50,6 +70,8 @@ export const feedbackService = {
           subject: input.subject,
           body: input.body,
           screenshotUrl: input.screenshotUri,
+          area: input.area,
+          issueCategory: input.issueCategory,
           deviceMetadata,
           appVersion: appVersion(),
           appEnvironment: __DEV__ ? 'development' : 'production',
