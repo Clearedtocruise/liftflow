@@ -52,10 +52,16 @@ record('Calendar uses adaptScheduleChange', calendar.includes('adaptScheduleChan
 record('Client adaptScheduleChange API', api.includes('adaptScheduleChange'));
 record('Training service adaptScheduleChange', training.includes('adaptScheduleChange'));
 record('Plan adjustment context provider', read('src/state/AppProviders.tsx').includes('PlanAdjustmentProvider'));
+record('Skip workout marks cancelled + recovery nutrition', engine.includes("type: 'skip'") && engine.includes('userSkipped'));
+record('Swap exchanges two planned workouts', engine.includes("type: 'swap'") && engine.includes('applySwap'));
+record('Volume redistribution after skip', engine.includes('redistributeVolumeAfterSkip'));
+record('Route accepts swap and skip', route.includes("change.type === 'swap'") && route.includes("change.type === 'skip'"));
+record('Calendar skip and swap actions', calendar.includes("'Skip'") && calendar.includes('Swap days'));
+
 record('Home Plan Adjusted banner', banner.includes('Plan Adjusted') || banner.includes('adjustment.headline'));
 record('Dashboard shows banner + reloads on adjustment', dashboard.includes('HomePlanAdjustedBanner') && dashboard.includes('usePlanAdjustment'));
 
-console.log('\nFlow: Move workout → plan/adapt → nutrition patch → Plan Adjusted banner');
+console.log('\nPhase 2: swap + skip · Phase 1: move');
 const pass = checks.filter((c) => c.pass).length;
 console.log(`\nSummary: ${pass}/${checks.length} checks`);
 if (pass !== checks.length) process.exit(1);

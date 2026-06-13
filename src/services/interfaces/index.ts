@@ -142,7 +142,7 @@ export interface ITrainingService {
   rescheduleWorkout(plannedWorkoutId: string, scheduledDate: string): Promise<ServiceResult<PlannedWorkout>>;
   adaptScheduleChange(
     userId: string,
-    change: { type: 'move'; workoutId: string; toDate: string },
+    change: import('@/types/planAdaptation').ScheduleChange,
   ): Promise<ServiceResult<import('@/types/planAdaptation').PlanAdaptationResult>>;
 }
 

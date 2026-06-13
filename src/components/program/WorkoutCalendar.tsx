@@ -63,16 +63,9 @@ export function WorkoutCalendar({ userId, workouts, view = 'week', onReschedule 
     return map;
   }, [workouts]);
 
-  async function moveWorkout(workout: PlannedWorkout, deltaDays: number) {
-    const d = new Date(workout.scheduledDate + 'T12:00:00');
-    d.setDate(d.getDate() + deltaDays);
-    const toDate = formatDate(d);
+  async function adaptChange(change: import('@/types/planAdaptation').ScheduleChange) {
     setBusy(true);
-    const result = await trainingService.adaptScheduleChange(userId, {
-      type: 'move',
-      workoutId: workout.id,
-      toDate,
-    });
+    const result = await trainingService.adaptScheduleChange(userId, change);
     setBusy(false);
     if (result.success) {
       setFromAdaptation(result.data);
@@ -82,10 +75,48 @@ export function WorkoutCalendar({ userId, workouts, view = 'week', onReschedule 
     }
   }
 
-  function handleWorkoutPress(workout: PlannedWorkout) {
-    if (busy) return;
-    Alert.alert(workout.name, 'Move this workout? Nutrition and coaching will update automatically.', [
+  async function moveWorkout(workout: PlannedWorkout, deltaDays: number) {
+    const d = new Date(workout.scheduledDate + 'T12:00:00');
+    d.setDate(d.getDate() + deltaDays);
+    await adaptChange({ type: 'move', workoutId: workout.id, toDate: formatDate(d) });
+  }
+
+  async function skipWorkout(workout: PlannedWorkout) {
+    await adaptChange({ type: 'skip', workoutId: workout.id });
+  }
+
+  async function swapWorkouts(source: PlannedWorkout, target: PlannedWorkout) {
+    await adaptChange({ type: 'swap', workoutIdA: source.id, workoutIdB: target.id });
+  }
+
+  function promptSwap(source: PlannedWorkout) {
+    const others = workouts.filter((w) => w.id !== source.id && w.status === 'planned');
+    if (others.length === 0) {
+      Alert.alert('No swap target', 'No other planned workouts available to swap with.');
+      return;
+    }
+    Alert.alert('Swap with', 'Choose a workout to exchange days with', [
+      ...others.map((w) => ({
+        text: `${w.metadata?.slotLabel ?? w.name} (${w.scheduledDate.slice(5)})`,
+        onPress: () => swapWorkouts(source, w),
+      })),
+      { text: 'Cancel', style: 'cancel' as const },
+    ]);
+  }
+
+  function confirmSkip(workout: PlannedWorkout) {
+    Alert.alert('Skip workout?', `${workout.name} will become a recovery day. Nutrition updates automatically.`, [
       { text: 'Cancel', style: 'cancel' },
+      { text: 'Skip', style: 'destructive', onPress: () => skipWorkout(workout) },
+    ]);
+  }
+
+  function handleWorkoutPress(workout: PlannedWorkout) {
+    if (busy || workout.status !== 'planned') return;
+    Alert.alert(workout.name, 'Adjust this workout? Training and nutrition update automatically.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Swap days', onPress: () => promptSwap(workout) },
+      { text: 'Skip', style: 'destructive', onPress: () => confirmSkip(workout) },
       { text: '+1 day', onPress: () => moveWorkout(workout, 1) },
       { text: '+2 days', onPress: () => moveWorkout(workout, 2) },
       { text: '−1 day', onPress: () => moveWorkout(workout, -1) },
@@ -140,7 +171,7 @@ export function WorkoutCalendar({ userId, workouts, view = 'week', onReschedule 
       </View>
 
       <AppText variant="footnote" color="textTertiary">
-        Tap a workout to move it — nutrition and coach messaging update automatically.
+        Tap a workout to move, swap, or skip — nutrition and coach messaging update automatically.
       </AppText>
     </View>
   );

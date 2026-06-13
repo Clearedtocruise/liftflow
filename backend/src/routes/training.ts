@@ -656,17 +656,53 @@ trainingRouter.post('/plan/adapt', async (req, res) => {
   try {
     const { userId, change } = req.body as {
       userId?: string;
-      change?: { type?: string; workoutId?: string; toDate?: string };
+      change?: {
+        type?: string;
+        workoutId?: string;
+        toDate?: string;
+        workoutIdA?: string;
+        workoutIdB?: string;
+      };
     };
-    if (!userId || !change?.type || !change.workoutId || !change.toDate) {
-      res.status(400).json({ message: 'userId, change.type, change.workoutId, and change.toDate are required' });
+    if (!userId || !change?.type) {
+      res.status(400).json({ message: 'userId and change.type are required' });
       return;
     }
-    if (change.type !== 'move') {
-      res.status(400).json({ message: 'Only move changes are supported in this release' });
+
+    if (change.type === 'move') {
+      if (!change.workoutId || !change.toDate) {
+        res.status(400).json({ message: 'change.workoutId and change.toDate are required for move' });
+        return;
+      }
+      res.json(await applyScheduleChange(userId, { type: 'move', workoutId: change.workoutId, toDate: change.toDate }));
       return;
     }
-    res.json(await applyScheduleChange(userId, { type: 'move', workoutId: change.workoutId, toDate: change.toDate }));
+
+    if (change.type === 'swap') {
+      if (!change.workoutIdA || !change.workoutIdB) {
+        res.status(400).json({ message: 'change.workoutIdA and change.workoutIdB are required for swap' });
+        return;
+      }
+      res.json(
+        await applyScheduleChange(userId, {
+          type: 'swap',
+          workoutIdA: change.workoutIdA,
+          workoutIdB: change.workoutIdB,
+        }),
+      );
+      return;
+    }
+
+    if (change.type === 'skip') {
+      if (!change.workoutId) {
+        res.status(400).json({ message: 'change.workoutId is required for skip' });
+        return;
+      }
+      res.json(await applyScheduleChange(userId, { type: 'skip', workoutId: change.workoutId }));
+      return;
+    }
+
+    res.status(400).json({ message: `Unsupported change type: ${change.type}` });
   } catch (error) {
     res.status(500).json({ message: error instanceof Error ? error.message : 'Plan adaptation failed' });
   }

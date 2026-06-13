@@ -197,7 +197,7 @@ export const api = {
       token,
     }),
   adaptScheduleChange: (
-    body: { userId: string; change: { type: 'move'; workoutId: string; toDate: string } },
+    body: { userId: string; change: import('@/types/planAdaptation').ScheduleChange },
     token?: string,
   ) => apiClient.post<import('@/types/planAdaptation').PlanAdaptationResult>('/api/training/plan/adapt', body, token),
   postSmartProgression: (

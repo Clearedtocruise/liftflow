@@ -106,7 +106,7 @@ function restDayMeals(date: string, macros: MacroTargets, style: NutritionContex
 }
 
 function workoutTypeForRow(workout: PlannedWorkoutRow | null): NutritionContext['workoutType'] {
-  if (!workout || workout.status === 'cancelled' || workout.status === 'skipped') return 'rest';
+  if (!workout || workout.status !== 'planned') return 'rest';
   if (workout.metadata?.sessionKind === 'cardio') return 'cardio';
   const groups = workout.suggested_muscle_groups ?? [];
   return groups.length ? inferWorkoutType(groups) : 'upper';
@@ -128,7 +128,7 @@ export async function syncNutritionForDate(userId: string, date: string): Promis
       .select('id, name, scheduled_date, status, suggested_muscle_groups, metadata')
       .eq('user_id', userId)
       .eq('scheduled_date', date)
-      .neq('status', 'cancelled')
+      .eq('status', 'planned')
       .limit(1)
       .maybeSingle(),
     db.from('meals').select('*').eq('user_id', userId).eq('scheduled_date', date),
@@ -136,7 +136,7 @@ export async function syncNutritionForDate(userId: string, date: string): Promis
 
   const profile = profileRes.data;
   const workout = (workoutRes.data as PlannedWorkoutRow | null) ?? null;
-  const isTrainingDay = !!workout && workout.status !== 'skipped';
+  const isTrainingDay = !!workout && workout.status === 'planned';
   const workoutType = workoutTypeForRow(workout);
   const rankedGoals = resolveRankedGoals(profile?.fitness_goals, profile?.primary_training_goal);
   const dietaryStyle =

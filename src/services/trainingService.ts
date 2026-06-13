@@ -333,10 +333,7 @@ export const trainingService: ITrainingService = {
     }
   },
 
-  async adaptScheduleChange(
-    userId: string,
-    change: { type: 'move'; workoutId: string; toDate: string },
-  ) {
+  async adaptScheduleChange(userId: string, change: import('@/types/planAdaptation').ScheduleChange) {
     try {
       const token = await getAccessToken();
       const result = await api.adaptScheduleChange({ userId, change }, token);
@@ -380,6 +377,6 @@ export type TrainingService = typeof trainingService & {
   rescheduleWorkout(plannedWorkoutId: string, scheduledDate: string): Promise<import('@/types/common').ServiceResult<PlannedWorkout>>;
   adaptScheduleChange(
     userId: string,
-    change: { type: 'move'; workoutId: string; toDate: string },
+    change: import('@/types/planAdaptation').ScheduleChange,
   ): Promise<import('@/types/common').ServiceResult<import('@/types/planAdaptation').PlanAdaptationResult>>;
 };
