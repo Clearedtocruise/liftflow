@@ -18,20 +18,18 @@ import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 import { useEntitlement } from '@/hooks/useEntitlement';
 import { useUnits } from '@/hooks/useUnits';
-import { buildTransformationStory } from '@/lib/transformation/transformationStory';
+import { buildTransformationStory, normalizeBodyCompositionSnapshot } from '@/lib/transformation/transformationStory';
 import { bodyService } from '@/services/bodyService';
 import { productAnalyticsService } from '@/services/productAnalyticsService';
 import type { BodyCompositionRecord, PhotoAngle, ProgressPhoto } from '@/types';
 import { TRANSFORMATION_BF_PRESETS, type TransformationProjection } from '@/types/transformation';
 
 function isValidProjection(projection: TransformationProjection | null): projection is TransformationProjection {
-  if (!projection?.current || !projection?.projected) return false;
-  const { current, projected } = projection;
+  if (!projection) return false;
+  if (!Number.isFinite(projection.targetBodyFatPct)) return false;
   return (
-    Number.isFinite(current.weightKg) &&
-    Number.isFinite(current.bodyFatPct) &&
-    Number.isFinite(projected.weightKg) &&
-    Number.isFinite(projected.bodyFatPct)
+    normalizeBodyCompositionSnapshot(projection.current) != null &&
+    normalizeBodyCompositionSnapshot(projection.projected) != null
   );
 }
 
@@ -164,6 +162,16 @@ export default function ProgressScreen() {
         <ActivityIndicator size="large" color={LiftFlowColors.accent} />
         <AppText variant="caption" color="textSecondary">
           Loading your transformation…
+        </AppText>
+      </View>
+    );
+  }
+
+  if (!user) {
+    return (
+      <View style={styles.loading}>
+        <AppText variant="body" color="textSecondary">
+          Sign in to track your transformation.
         </AppText>
       </View>
     );

@@ -34,6 +34,29 @@ function round1(n: number): number {
   return Math.round(n * 10) / 10;
 }
 
+export function normalizeBodyCompositionSnapshot(
+  snapshot: Partial<BodyCompositionSnapshot> | null | undefined,
+): BodyCompositionSnapshot | null {
+  if (!snapshot?.weightKg || !Number.isFinite(snapshot.weightKg)) return null;
+  if (snapshot.bodyFatPct == null || !Number.isFinite(snapshot.bodyFatPct)) return null;
+
+  const fatMassKg = Number.isFinite(snapshot.fatMassKg)
+    ? snapshot.fatMassKg!
+    : round1(snapshot.weightKg * (snapshot.bodyFatPct / 100));
+  const leanMassKg = Number.isFinite(snapshot.leanMassKg)
+    ? snapshot.leanMassKg!
+    : round1(snapshot.weightKg - fatMassKg);
+
+  if (!Number.isFinite(fatMassKg) || !Number.isFinite(leanMassKg)) return null;
+
+  return {
+    weightKg: round1(snapshot.weightKg),
+    bodyFatPct: round1(snapshot.bodyFatPct),
+    fatMassKg,
+    leanMassKg,
+  };
+}
+
 function addDays(date: Date, days: number): Date {
   const next = new Date(date);
   next.setDate(next.getDate() + days);
@@ -194,8 +217,12 @@ export function buildTransformationStory(
   measurements: BodyCompositionRecord[],
   now = new Date(),
 ): TransformationStory {
-  const current = projection.current;
-  const goal = projection.projected;
+  const current = normalizeBodyCompositionSnapshot(projection.current);
+  const goal = normalizeBodyCompositionSnapshot(projection.projected);
+  if (!current || !goal) {
+    throw new Error('Invalid transformation projection snapshot');
+  }
+
   const start = resolveStartSnapshot(measurements, current);
 
   const startBf = start?.bodyFatPct ?? current.bodyFatPct + 4;

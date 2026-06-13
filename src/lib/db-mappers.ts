@@ -180,7 +180,7 @@ export function mapExercise(row: ExerciseRow): Exercise {
         movementCategory: row.category,
       }),
     equipment: row.equipment,
-    muscleGroups: row.muscle_groups,
+    muscleGroups: row.muscle_groups ?? [],
     secondaryMuscles: row.secondary_muscles ?? undefined,
     tutorialUrl: row.tutorial_url ?? undefined,
     instructions: row.instructions ?? undefined,

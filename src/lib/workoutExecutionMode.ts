@@ -1,15 +1,23 @@
 import {
-    CIRCUIT_MODE_DEFAULTS,
-    INTERVAL_MODE_DEFAULTS,
-    SET_REP_MODE_DEFAULTS,
-    SUPERSET_MODE_DEFAULTS,
+  CIRCUIT_MODE_DEFAULTS,
+  INTERVAL_MODE_DEFAULTS,
+  SET_REP_MODE_DEFAULTS,
+  SUPERSET_MODE_DEFAULTS,
 } from '@/constants/workoutExecutionModes';
 import type {
-    ExerciseExecutionPrescription,
-    ExercisePrescriptionInput,
-    PrescribedWorkoutExercise,
-    WorkoutExecutionMode,
+  ExerciseExecutionPrescription,
+  ExercisePrescriptionInput,
+  PrescribedWorkoutExercise,
+  WorkoutExecutionMode,
 } from '@/types/workoutExecutionMode';
+import { WORKOUT_EXECUTION_MODES } from '@/types/workoutExecutionMode';
+
+export function normalizeExecutionMode(mode: unknown): WorkoutExecutionMode {
+  if (typeof mode === 'string' && WORKOUT_EXECUTION_MODES.includes(mode as WorkoutExecutionMode)) {
+    return mode as WorkoutExecutionMode;
+  }
+  return 'traditional';
+}
 
 function isSetRepMode(mode: WorkoutExecutionMode): mode is keyof typeof SET_REP_MODE_DEFAULTS {
   return mode === 'traditional' || mode === 'hypertrophy' || mode === 'strength';

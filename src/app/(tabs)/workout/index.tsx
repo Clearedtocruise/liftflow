@@ -37,14 +37,19 @@ export default function WorkoutScreen() {
       if (options?.silent) setRefreshingPlan(true);
       else setLoadingPlan(true);
 
-      const { from, to } = getWeekRange();
-      const result = await trainingService.getPlannedWorkouts(user.id, from, to);
-      const days = buildWeekPlan(result.success ? result.data : []);
-      setWeekDays(days);
-      const today = days.find((day) => day.workout && day.date === new Date().toISOString().slice(0, 10));
-      if (today?.workout) setPlannedWorkout(today.workout);
-      setLoadingPlan(false);
-      setRefreshingPlan(false);
+      try {
+        const { from, to } = getWeekRange();
+        const result = await trainingService.getPlannedWorkouts(user.id, from, to);
+        const days = buildWeekPlan(result.success ? result.data : []);
+        setWeekDays(days);
+        const today = days.find((day) => day.workout && day.date === new Date().toISOString().slice(0, 10));
+        if (today?.workout) setPlannedWorkout(today.workout);
+      } catch {
+        setWeekDays(buildWeekPlan([]));
+      } finally {
+        setLoadingPlan(false);
+        setRefreshingPlan(false);
+      }
     },
     [user?.id, setPlannedWorkout],
   );
@@ -58,13 +63,17 @@ export default function WorkoutScreen() {
     let cancelled = false;
 
     void (async () => {
-      await loadWeekPlan();
-      if (cancelled) return;
+      try {
+        await loadWeekPlan();
+        if (cancelled) return;
 
-      const regen = await trainingService.regenerateProgramIfNeeded(user.id);
-      if (cancelled) return;
-      if (regen.success && regen.data.regenerated) {
-        await loadWeekPlan({ silent: true });
+        const regen = await trainingService.regenerateProgramIfNeeded(user.id);
+        if (cancelled) return;
+        if (regen.success && regen.data.regenerated) {
+          await loadWeekPlan({ silent: true });
+        }
+      } catch {
+        if (!cancelled) setLoadingPlan(false);
       }
     })();
 

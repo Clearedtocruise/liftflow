@@ -112,14 +112,18 @@ export function ExerciseCoachCard({
 
       {expanded ? (
         <>
-          <AppText variant="caption" color="textTertiary">
-            Why this exercise
-          </AppText>
-          {prescription.whySelected.map((line) => (
-            <AppText key={line} variant="footnote" color="textSecondary">
-              • {line}
-            </AppText>
-          ))}
+          {prescription.whySelected?.length ? (
+            <>
+              <AppText variant="caption" color="textTertiary">
+                Why this exercise
+              </AppText>
+              {prescription.whySelected.map((line) => (
+                <AppText key={line} variant="footnote" color="textSecondary">
+                  • {line}
+                </AppText>
+              ))}
+            </>
+          ) : null}
           <AppText variant="caption" color="textTertiary">
             Reasoning
           </AppText>

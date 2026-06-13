@@ -1,5 +1,5 @@
 import { enrichWithSupersetGroups } from '@/lib/supersetFlow';
-import { prescribeExerciseExecution } from '@/lib/workoutExecutionMode';
+import { prescribeExerciseExecution, normalizeExecutionMode } from '@/lib/workoutExecutionMode';
 import type { PlannedWorkout, TemplateExercise } from '@/types/training';
 import type { EditableWorkoutExercise } from '@/types/workoutExecution';
 import type { WorkoutExecutionMode } from '@/types/workoutExecutionMode';
@@ -10,7 +10,7 @@ function templateToEditable(
   defaultMode?: WorkoutExecutionMode,
 ): EditableWorkoutExercise {
   const name = exercise.exerciseName ?? exercise.name ?? 'Exercise';
-  const executionMode = exercise.executionMode ?? defaultMode ?? 'traditional';
+  const executionMode = normalizeExecutionMode(exercise.executionMode ?? defaultMode ?? 'traditional');
   const prescription = prescribeExerciseExecution({
     name,
     mode: executionMode,
@@ -40,7 +40,7 @@ function templateToEditable(
 
 export function exercisesFromPlannedWorkout(workout: PlannedWorkout | null): EditableWorkoutExercise[] {
   const raw = workout?.metadata?.exercises ?? [];
-  const defaultMode = workout?.metadata?.executionMode;
+  const defaultMode = normalizeExecutionMode(workout?.metadata?.executionMode);
   return enrichWithSupersetGroups(raw.map((exercise, index) => templateToEditable(exercise, index, defaultMode)));
 }
 

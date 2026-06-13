@@ -3,7 +3,7 @@ import { StyleSheet, View } from 'react-native';
 import { Card } from '@/components/layout/Card';
 import { AppText } from '@/components/ui/AppText';
 import { Spacing } from '@/constants/theme';
-import { formatMassFromKg } from '@/lib/transformation/transformationStory';
+import { formatMassFromKg, normalizeBodyCompositionSnapshot } from '@/lib/transformation/transformationStory';
 import type { BodyCompositionRecord } from '@/types';
 import type { BodyCompositionSnapshot, TransformationProjection } from '@/types/transformation';
 
@@ -13,25 +13,18 @@ type BodyCompositionSummaryProps = {
   formatWeight: (kg: number) => string;
 };
 
-function computeLeanFat(weightKg: number, bodyFatPct: number) {
-  const fatMassKg = Math.round(weightKg * (bodyFatPct / 100) * 100) / 100;
-  const leanMassKg = Math.round((weightKg - fatMassKg) * 100) / 100;
-  return { leanMassKg, fatMassKg };
-}
-
 export function BodyCompositionSummary({
   latestMeasurement,
   projection,
   formatWeight,
 }: BodyCompositionSummaryProps) {
   const snapshot: BodyCompositionSnapshot | null = projection?.current
-    ? projection.current
+    ? normalizeBodyCompositionSnapshot(projection.current)
     : latestMeasurement?.weightKg && latestMeasurement.bodyFatPct
-      ? {
+      ? normalizeBodyCompositionSnapshot({
           weightKg: latestMeasurement.weightKg,
           bodyFatPct: latestMeasurement.bodyFatPct,
-          ...computeLeanFat(latestMeasurement.weightKg, latestMeasurement.bodyFatPct),
-        }
+        })
       : null;
 
   if (!snapshot) {
