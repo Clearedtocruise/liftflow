@@ -49,8 +49,9 @@ export function restDayLabel(dayLabel: (typeof WEEKDAY_LABELS)[number]): string 
 }
 
 export function workoutMuscleGroups(workout: PlannedWorkout): string {
-  if (workout.suggestedMuscleGroups.length > 0) {
-    return workout.suggestedMuscleGroups.join(' · ');
+  const groups = workout.suggestedMuscleGroups ?? [];
+  if (groups.length > 0) {
+    return groups.join(' · ');
   }
   return workout.metadata?.dayLabel ?? 'Full body';
 }

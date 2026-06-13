@@ -22,25 +22,32 @@ export default function WorkoutScreen() {
   const { exercises, setPlannedWorkout } = useWorkoutPlanDraft();
   const { activeSession: session, isLoading: loading, endSession, cancelSession } = useWorkoutSession();
 
-  const [weekDays, setWeekDays] = useState<WeekDayPlan[]>([]);
+  const [weekDays, setWeekDays] = useState<WeekDayPlan[]>(() => buildWeekPlan([]));
   const [loadingPlan, setLoadingPlan] = useState(true);
+  const [refreshingPlan, setRefreshingPlan] = useState(false);
   const [challengeRecords, setChallengeRecords] = useState<WorkoutChallengeRecord[]>([]);
 
-  const loadWeekPlan = useCallback(async () => {
-    if (!user?.id) {
-      setLoadingPlan(false);
-      return;
-    }
+  const loadWeekPlan = useCallback(
+    async (options?: { silent?: boolean }) => {
+      if (!user?.id) {
+        setLoadingPlan(false);
+        return;
+      }
 
-    setLoadingPlan(true);
-    const { from, to } = getWeekRange();
-    const result = await trainingService.getPlannedWorkouts(user.id, from, to);
-    const days = buildWeekPlan(result.success ? result.data : []);
-    setWeekDays(days);
-    const today = days.find((day) => day.workout && day.date === new Date().toISOString().slice(0, 10));
-    if (today?.workout) setPlannedWorkout(today.workout);
-    setLoadingPlan(false);
-  }, [user?.id, setPlannedWorkout]);
+      if (options?.silent) setRefreshingPlan(true);
+      else setLoadingPlan(true);
+
+      const { from, to } = getWeekRange();
+      const result = await trainingService.getPlannedWorkouts(user.id, from, to);
+      const days = buildWeekPlan(result.success ? result.data : []);
+      setWeekDays(days);
+      const today = days.find((day) => day.workout && day.date === new Date().toISOString().slice(0, 10));
+      if (today?.workout) setPlannedWorkout(today.workout);
+      setLoadingPlan(false);
+      setRefreshingPlan(false);
+    },
+    [user?.id, setPlannedWorkout],
+  );
 
   useEffect(() => {
     if (!user?.id) {
@@ -51,13 +58,14 @@ export default function WorkoutScreen() {
     let cancelled = false;
 
     void (async () => {
+      await loadWeekPlan();
+      if (cancelled) return;
+
       const regen = await trainingService.regenerateProgramIfNeeded(user.id);
       if (cancelled) return;
       if (regen.success && regen.data.regenerated) {
-        await loadWeekPlan();
-        return;
+        await loadWeekPlan({ silent: true });
       }
-      await loadWeekPlan();
     })();
 
     return () => {
@@ -150,6 +158,7 @@ export default function WorkoutScreen() {
       <WorkoutWeeklyPlanScreen
         days={weekDays}
         loading={loadingPlan}
+        refreshing={refreshingPlan}
         onSelectDay={handleSelectDay}
         onConditioning={handleConditioning}
         onManualLog={() => router.push('/(tabs)/workout/manual-log')}

@@ -17,12 +17,22 @@ import {
 type WorkoutWeeklyPlanScreenProps = {
   days: WeekDayPlan[];
   loading: boolean;
+  refreshing?: boolean;
   onSelectDay: (day: WeekDayPlan) => void;
   onConditioning: () => void;
   onManualLog: () => void;
 };
 
-export function WorkoutWeeklyPlanScreen({ days, loading, onSelectDay, onConditioning, onManualLog }: WorkoutWeeklyPlanScreenProps) {
+export function WorkoutWeeklyPlanScreen({
+  days,
+  loading,
+  refreshing = false,
+  onSelectDay,
+  onConditioning,
+  onManualLog,
+}: WorkoutWeeklyPlanScreenProps) {
+  const showDays = days.length > 0;
+
   return (
     <View style={styles.container}>
       <AppText variant="headline">Workout</AppText>
@@ -30,12 +40,20 @@ export function WorkoutWeeklyPlanScreen({ days, loading, onSelectDay, onConditio
         Your weekly training plan
       </AppText>
 
-      {loading ? (
+      {loading && days.length === 0 ? (
         <AppText variant="body" color="textSecondary">
           Loading weekly plan…
         </AppText>
-      ) : (
-        days.map((day) => {
+      ) : null}
+
+      {refreshing ? (
+        <AppText variant="caption" color="textTertiary">
+          Updating plan…
+        </AppText>
+      ) : null}
+
+      {showDays
+        ? days.map((day) => {
           const isConditioning =
             day.dayLabel === 'Saturday' ||
             (day.workout ? day.workout.name.toLowerCase().includes('condition') : false);
@@ -92,7 +110,7 @@ export function WorkoutWeeklyPlanScreen({ days, loading, onSelectDay, onConditio
             </Card>
           </Pressable>
         );})
-      )}
+        : null}
 
       <Pressable onPress={onManualLog}>
         <AppText variant="footnote" color="accent" align="center">
