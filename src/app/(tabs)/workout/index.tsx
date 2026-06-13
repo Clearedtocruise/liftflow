@@ -8,6 +8,7 @@ import { WorkoutWeeklyPlanScreen } from '@/components/workout/execution/WorkoutW
 import { LiftFlowColors } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 import { enrichWithSupersetGroups } from '@/lib/supersetFlow';
+import { normalizeExecutionMode } from '@/lib/workoutExecutionMode';
 import { buildWeekPlan, getWeekRange, isConditioningWorkout, type WeekDayPlan } from '@/lib/weekPlan';
 import { serializeChallengeNotes } from '@/lib/workoutChallengeFlow';
 import { productAnalyticsService } from '@/services/productAnalyticsService';
@@ -19,7 +20,7 @@ import type { WorkoutChallengeRecord } from '@/types/workoutChallenge';
 
 export default function WorkoutScreen() {
   const { user } = useAuth();
-  const { exercises, setPlannedWorkout } = useWorkoutPlanDraft();
+  const { exercises, setPlannedWorkout, plannedWorkout } = useWorkoutPlanDraft();
   const { activeSession: session, isLoading: loading, endSession, cancelSession } = useWorkoutSession();
 
   const [weekDays, setWeekDays] = useState<WeekDayPlan[]>(() => buildWeekPlan([]));
@@ -152,10 +153,15 @@ export default function WorkoutScreen() {
             })),
     );
 
+    const executionMode = normalizeExecutionMode(
+      plannedWorkout?.metadata?.executionMode ?? exercises[0]?.executionMode,
+    );
+
     return (
       <ActiveWorkoutScreen
         session={session}
         planExercises={planForSession}
+        executionMode={executionMode}
         challengeRecords={challengeRecords}
         onChallengeRecord={handleChallengeRecord}
         onFinish={handleFinishWorkout}

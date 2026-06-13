@@ -8,15 +8,15 @@ import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { AppText } from '@/components/ui/AppText';
 import { ExerciseCompleteCard } from '@/components/workout/execution/ExerciseCompleteCard';
 import { GuidedWorkoutMetrics, WorkoutProgressBar } from '@/components/workout/execution/GuidedWorkoutMetrics';
-import { RestTimerOverlay } from '@/components/workout/execution/RestTimerOverlay';
+import { WorkoutTimerOverlay } from '@/components/workout/execution/WorkoutTimerOverlay';
 import { SetLoggingControls } from '@/components/workout/execution/SetLoggingControls';
 import { WorkoutChallengeModal } from '@/components/workout/execution/WorkoutChallengeModal';
 import { ExerciseCoachCard } from '@/components/workout/ExerciseCoachCard';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
-import { DEFAULT_REST_SECONDS } from '@/constants/workout';
 import { useAuth } from '@/hooks/useAuth';
 import { useUnits } from '@/hooks/useUnits';
 import { formatWorkoutClockTime, useWorkoutElapsedSeconds } from '@/hooks/useWorkoutElapsedSeconds';
+import { useWorkoutTimerEngine } from '@/hooks/useWorkoutTimerEngine';
 import {
     computeWorkoutSetProgress,
     formatCoachTargetLine,
@@ -35,21 +35,31 @@ import {
 } from '@/lib/supersetFlow';
 import { formatWorkoutWeightForInput } from '@/lib/unitConversion';
 import { pickWorkoutChallenge } from '@/lib/workoutChallengeFlow';
-import { parseTargetReps } from '@/lib/workoutPlan';
+import {
+  executionModeUsesIntervalTimer,
+  executionModeUsesTraditionalRest,
+  formatTimerSeconds,
+  intervalPhaseLabel,
+  resolveTraditionalRestSeconds,
+} from '@/lib/timerEngine';
+import { normalizeExecutionMode } from '@/lib/workoutExecutionMode';
 import { workoutService } from '@/services/workoutService';
 import { useWorkoutSession } from '@/state/workout/WorkoutSessionContext';
 import type { WorkoutSession } from '@/types';
+import type { ExerciseCoachPrescription } from '@/types/exerciseCoach';
 import type {
     WorkoutChallengeRecord,
     WorkoutChallengeTemplate,
     WorkoutChallengeTrigger,
 } from '@/types/workoutChallenge';
+import { parseTargetReps } from '@/lib/workoutPlan';
+import type { WorkoutExecutionMode } from '@/types/workoutExecutionMode';
 import type { EditableWorkoutExercise, ExerciseHistorySet } from '@/types/workoutExecution';
-import type { ExerciseCoachPrescription } from '@/types/exerciseCoach';
 
 type ActiveWorkoutScreenProps = {
   session: WorkoutSession;
   planExercises: EditableWorkoutExercise[];
+  executionMode?: WorkoutExecutionMode;
   challengeRecords: WorkoutChallengeRecord[];
   onChallengeRecord: (record: WorkoutChallengeRecord) => void;
   onFinish: () => void;
@@ -59,11 +69,25 @@ type ActiveWorkoutScreenProps = {
 export function ActiveWorkoutScreen({
   session,
   planExercises,
+  executionMode: executionModeProp = 'traditional',
   challengeRecords,
   onChallengeRecord,
   onFinish,
   onCancel,
 }: ActiveWorkoutScreenProps) {
+  const executionMode = normalizeExecutionMode(executionModeProp);
+  const {
+    intervalTimer,
+    circuitTimer,
+    startIntervalTimer,
+    toggleIntervalTimer,
+    resetIntervalTimer,
+    updateIntervalConfig,
+    skipIntervalPhase,
+    startCircuitTransition,
+    skipCircuitTimer,
+    dismissCircuitTimer,
+  } = useWorkoutTimerEngine(executionMode);
   const { user } = useAuth();
   const units = useUnits();
   const {
@@ -98,7 +122,9 @@ export function ActiveWorkoutScreen({
   const [showComplete, setShowComplete] = useState(false);
   const [exerciseHadPr, setExerciseHadPr] = useState(false);
   const [restPaused, setRestPaused] = useState(false);
-  const [restTargetSeconds, setRestTargetSeconds] = useState(DEFAULT_REST_SECONDS);
+  const [restTargetSeconds, setRestTargetSeconds] = useState(() =>
+    resolveTraditionalRestSeconds(executionMode),
+  );
   const [activeChallenge, setActiveChallenge] = useState<WorkoutChallengeTemplate | null>(null);
   const [challengeTrigger, setChallengeTrigger] = useState<WorkoutChallengeTrigger>('between_sets');
   const pendingAdvanceRef = useRef<number | null>(null);
@@ -112,7 +138,10 @@ export function ActiveWorkoutScreen({
   const repRange = planMeta?.repRange ?? currentExercise?.suggestedReps ?? '8-10';
   const completedSets = currentExercise?.sets ?? [];
   const isPaused = session.status === 'paused';
-  const restActive = restSecondsRemaining !== null && restSecondsRemaining > 0;
+  const restActive =
+    executionModeUsesTraditionalRest(executionMode) &&
+    restSecondsRemaining !== null &&
+    restSecondsRemaining > 0;
   const allSetsDone = completedSets.length >= targetSets;
   const isLastExercise = currentIndex >= sortedExercises.length - 1;
   const nextExercise = sortedExercises[currentIndex + 1];
@@ -193,9 +222,19 @@ export function ActiveWorkoutScreen({
   }, [restSecondsRemaining]);
 
   useEffect(() => {
-    const nextRest = planMeta?.restSeconds ?? DEFAULT_REST_SECONDS;
+    const nextRest = planMeta?.restSeconds ?? resolveTraditionalRestSeconds(executionMode);
     setRestTargetSeconds(nextRest);
-  }, [currentExercise?.id, planMeta?.restSeconds]);
+  }, [currentExercise?.id, planMeta?.restSeconds, executionMode]);
+
+  useEffect(() => {
+    if (circuitTimer?.phase !== 'done') return;
+    dismissCircuitTimer();
+    if (pendingAdvanceRef.current != null) {
+      setCurrentIndex(pendingAdvanceRef.current);
+      pendingAdvanceRef.current = null;
+      setShowComplete(false);
+    }
+  }, [circuitTimer?.phase, dismissCircuitTimer]);
 
   useEffect(() => {
     if (!user || !currentExercise?.exerciseId) return;
@@ -343,6 +382,9 @@ export function ActiveWorkoutScreen({
       completedSets.length + 1,
     );
 
+    const skipRest =
+      !executionModeUsesTraditionalRest(executionMode) || postSetAction.skipRest;
+
     const logged =
       loggingMode === 'cardio'
         ? await logSet({
@@ -353,10 +395,10 @@ export function ActiveWorkoutScreen({
             skipRest: true,
           })
         : loggingMode === 'timed'
-        ? await logSet({ ...base, durationSeconds, reps: 1, skipRest: postSetAction.skipRest })
+        ? await logSet({ ...base, durationSeconds, reps: 1, skipRest })
         : loggingMode === 'bodyweight'
-          ? await logSet({ ...base, reps, skipRest: postSetAction.skipRest })
-          : await logSet({ ...base, weight: weightKg, reps, skipRest: postSetAction.skipRest });
+          ? await logSet({ ...base, reps, skipRest })
+          : await logSet({ ...base, weight: weightKg, reps, skipRest });
     setLogging(false);
 
     if (logged?.isPr) {
@@ -366,11 +408,21 @@ export function ActiveWorkoutScreen({
     await refreshSession();
 
     if (postSetAction.immediateAdvanceIndex != null) {
-      pendingAdvanceRef.current = null;
-      setCurrentIndex(postSetAction.immediateAdvanceIndex);
-      setShowComplete(false);
+      if (executionMode === 'circuit') {
+        startCircuitTransition('transition');
+        pendingAdvanceRef.current = postSetAction.immediateAdvanceIndex;
+      } else {
+        pendingAdvanceRef.current = null;
+        setCurrentIndex(postSetAction.immediateAdvanceIndex);
+        setShowComplete(false);
+      }
     } else if (postSetAction.afterRestAdvanceIndex != null) {
-      pendingAdvanceRef.current = postSetAction.afterRestAdvanceIndex;
+      if (executionMode === 'circuit') {
+        startCircuitTransition('transition');
+        pendingAdvanceRef.current = postSetAction.afterRestAdvanceIndex;
+      } else {
+        pendingAdvanceRef.current = postSetAction.afterRestAdvanceIndex;
+      }
     }
 
     offerBetweenSetsChallenge();
@@ -494,6 +546,30 @@ export function ActiveWorkoutScreen({
                 />
               ) : null}
 
+              {executionModeUsesIntervalTimer(executionMode) && !showComplete ? (
+                <View style={styles.intervalBanner}>
+                  <AppText variant="label" color="accent">
+                    {executionMode === 'tabata' ? 'Tabata timer' : 'HIIT timer'}
+                  </AppText>
+                  {intervalTimer ? (
+                    <AppText variant="footnote" color="textSecondary">
+                      {intervalPhaseLabel(intervalTimer.phase)} · {formatTimerSeconds(intervalTimer.secondsRemaining)}
+                    </AppText>
+                  ) : (
+                    <AppText variant="footnote" color="textSecondary">
+                      Configurable work, rest, and rounds
+                    </AppText>
+                  )}
+                  <PrimaryButton
+                    label={intervalTimer ? 'Open interval timer' : 'Start interval timer'}
+                    variant="secondary"
+                    onPress={() => {
+                      if (!intervalTimer) startIntervalTimer();
+                    }}
+                  />
+                </View>
+              ) : null}
+
               <View style={styles.restPresetRow}>
                 {[60, 90, 120, 150].map((seconds) => (
                   <Pressable key={seconds} onPress={() => setRestTargetSeconds(seconds)}>
@@ -589,24 +665,40 @@ export function ActiveWorkoutScreen({
         </View>
       </ScreenContainer>
 
-      <RestTimerOverlay
-        visible={restActive && !showComplete && !activeChallenge}
-        secondsRemaining={restSecondsRemaining}
-        recommendedSeconds={activeRestPeriod?.recommendedSeconds ?? restTargetSeconds}
-        isPaused={restPaused}
-        onPause={handlePauseRest}
-        onResume={handleResumeRest}
-        onSkip={handleSkipRest}
-        onAdjust={adjustRestTimer}
-        onSetRest={setRestTimer}
-        nextExerciseName={nextExercise?.exercise?.name}
-        nextExerciseDetail={
-          nextPlanMeta
-            ? `${nextPlanMeta.sets} sets · ${nextPlanMeta.repRange ?? '8-10'} reps`
-            : nextExercise?.suggestedReps
-              ? `${nextExercise.suggestedReps} reps`
-              : null
+      <WorkoutTimerOverlay
+        visible={
+          !showComplete &&
+          !activeChallenge &&
+          (restActive ||
+            intervalTimer != null ||
+            (circuitTimer != null && circuitTimer.phase !== 'done'))
         }
+        traditional={restActive && !intervalTimer && !circuitTimer ? {
+                secondsRemaining: restSecondsRemaining,
+                recommendedSeconds: activeRestPeriod?.recommendedSeconds ?? restTargetSeconds,
+                isPaused: restPaused,
+                onPause: handlePauseRest,
+                onResume: handleResumeRest,
+                onSkip: handleSkipRest,
+                onAdjust: adjustRestTimer,
+                onSetRest: setRestTimer,
+                nextExerciseName: nextExercise?.exercise?.name,
+                nextExerciseDetail:
+                  nextPlanMeta
+                    ? `${nextPlanMeta.sets} sets · ${nextPlanMeta.repRange ?? '8-10'} reps`
+                    : nextExercise?.suggestedReps
+                      ? `${nextExercise.suggestedReps} reps`
+                      : null,
+              }
+            : undefined}
+        interval={intervalTimer && !circuitTimer ? intervalTimer : null}
+        onIntervalToggle={toggleIntervalTimer}
+        onIntervalSkip={skipIntervalPhase}
+        onIntervalReset={resetIntervalTimer}
+        onIntervalConfigChange={updateIntervalConfig}
+        circuit={circuitTimer && circuitTimer.phase !== 'done' ? circuitTimer : null}
+        onCircuitSkip={skipCircuitTimer}
+        onCircuitDismiss={dismissCircuitTimer}
       />
 
       <WorkoutChallengeModal
@@ -677,6 +769,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: Spacing.md,
+  },
+  intervalBanner: {
+    gap: Spacing.sm,
+    padding: Spacing.md,
+    borderRadius: Radius.md,
+    backgroundColor: LiftFlowColors.backgroundSecondary,
+    borderWidth: 1,
+    borderColor: LiftFlowColors.border,
   },
   setProgress: {
     gap: Spacing.sm,
