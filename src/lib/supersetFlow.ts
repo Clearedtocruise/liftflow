@@ -1,5 +1,7 @@
+import { CIRCUIT_MODE_DEFAULTS, SUPERSET_MODE_DEFAULTS } from '@/constants/workoutExecutionModes';
 import type { WorkoutExercise } from '@/types/workout';
 import type { EditableWorkoutExercise } from '@/types/workoutExecution';
+import type { WorkoutExecutionMode } from '@/types/workoutExecutionMode';
 
 export type SupersetGroup = {
   id: string;
@@ -12,14 +14,30 @@ export type PostSetSupersetAction = {
   afterRestAdvanceIndex: number | null;
 };
 
-/** Pair accessories (indices 1–2, 3–4, …) when no explicit groups exist. Index 0 stays standalone. */
+export type CircuitTimerAction = {
+  phase: 'transition' | 'round_rest';
+  seconds: number;
+  round: number;
+  advanceIndex: number;
+};
+
+export type PostSetFlowAction = PostSetSupersetAction & {
+  circuitTimer: CircuitTimerAction | null;
+};
+
+export type CircuitStation = {
+  /** First exercise index for this station (entry point). */
+  entryIndex: number;
+  memberIndices: number[];
+};
+
+/** Pair consecutive exercises (0–1, 2–3, …) when no explicit groups exist. */
 export function enrichWithSupersetGroups(exercises: EditableWorkoutExercise[]): EditableWorkoutExercise[] {
   if (exercises.some((e) => e.supersetGroupId)) return exercises;
-  if (exercises.length < 3) return exercises;
+  if (exercises.length < 2) return exercises;
 
   const result = exercises.map((e) => ({ ...e }));
-  for (let i = 1; i < result.length; i += 2) {
-    if (i + 1 >= result.length) break;
+  for (let i = 0; i + 1 < result.length; i += 2) {
     const groupId = `ss-${Math.floor(i / 2) + 1}`;
     result[i] = { ...result[i], supersetGroupId: groupId };
     result[i + 1] = { ...result[i + 1], supersetGroupId: groupId };
@@ -61,6 +79,29 @@ export function getSupersetLabel(group: SupersetGroup | null, index: number): st
   return `${String.fromCharCode(65 + position)}`;
 }
 
+/** A1, A2, B1, … based on superset group id and position within group. */
+export function formatSupersetStationLabel(
+  supersetGroupId: string | undefined,
+  positionInGroup: number,
+): string | null {
+  if (!supersetGroupId || positionInGroup < 0) return null;
+  const groupNum = Number(supersetGroupId.replace('ss-', ''));
+  if (!Number.isFinite(groupNum) || groupNum < 1) return null;
+  const letter = String.fromCharCode(64 + groupNum);
+  return `${letter}${positionInGroup + 1}`;
+}
+
+export function formatExerciseStationLabel(
+  exercise: EditableWorkoutExercise,
+  index: number,
+  planExercises: EditableWorkoutExercise[],
+): string | null {
+  const group = getSupersetGroupForIndex(index, planExercises);
+  if (!group) return null;
+  const position = group.memberIndices.indexOf(index);
+  return formatSupersetStationLabel(exercise.supersetGroupId, position);
+}
+
 export function targetSetsForIndex(index: number, planExercises: EditableWorkoutExercise[]): number {
   return planExercises[index]?.sets ?? 3;
 }
@@ -77,11 +118,53 @@ export function isSupersetGroupComplete(
   });
 }
 
+/** Circuit stations: superset groups are one station; ungrouped exercises are solo stations. */
+export function buildCircuitStations(planExercises: EditableWorkoutExercise[]): CircuitStation[] {
+  const stations: CircuitStation[] = [];
+  const seenGroups = new Set<string>();
+
+  planExercises.forEach((exercise, index) => {
+    if (exercise.supersetGroupId) {
+      if (seenGroups.has(exercise.supersetGroupId)) return;
+      seenGroups.add(exercise.supersetGroupId);
+      const group = getSupersetGroupForIndex(index, planExercises);
+      if (group) {
+        stations.push({ entryIndex: group.memberIndices[0], memberIndices: group.memberIndices });
+        return;
+      }
+    }
+    stations.push({ entryIndex: index, memberIndices: [index] });
+  });
+
+  return stations;
+}
+
+export function circuitStationForIndex(
+  index: number,
+  planExercises: EditableWorkoutExercise[],
+): CircuitStation | null {
+  const stations = buildCircuitStations(planExercises);
+  return stations.find((station) => station.memberIndices.includes(index)) ?? null;
+}
+
+export function nextCircuitStationEntry(
+  currentIndex: number,
+  planExercises: EditableWorkoutExercise[],
+): { entryIndex: number; isLastStation: boolean } | null {
+  const stations = buildCircuitStations(planExercises);
+  const currentStation = circuitStationForIndex(currentIndex, planExercises);
+  if (!currentStation) return null;
+  const stationIndex = stations.findIndex((s) => s.entryIndex === currentStation.entryIndex);
+  if (stationIndex < 0) return null;
+  const next = stations[stationIndex + 1];
+  if (next) return { entryIndex: next.entryIndex, isLastStation: false };
+  return { entryIndex: stations[0].entryIndex, isLastStation: true };
+}
+
 export function resolvePostSetSupersetAction(
   currentIndex: number,
   planExercises: EditableWorkoutExercise[],
   sessionExercises: WorkoutExercise[],
-  /** When resolving before rest starts, pass completed + 1 for the set just logged. */
   setsJustLoggedOverride?: number,
 ): PostSetSupersetAction {
   const group = getSupersetGroupForIndex(currentIndex, planExercises);
@@ -118,6 +201,106 @@ export function resolvePostSetSupersetAction(
   }
 
   return { skipRest: false, immediateAdvanceIndex: null, afterRestAdvanceIndex: null };
+}
+
+export function resolvePostSetFlowAction(
+  currentIndex: number,
+  planExercises: EditableWorkoutExercise[],
+  sessionExercises: WorkoutExercise[],
+  executionMode: WorkoutExecutionMode,
+  circuitRound: number,
+  setsJustLoggedOverride?: number,
+): PostSetFlowAction {
+  const supersetAction = resolvePostSetSupersetAction(
+    currentIndex,
+    planExercises,
+    sessionExercises,
+    setsJustLoggedOverride,
+  );
+
+  if (executionMode !== 'circuit') {
+    return { ...supersetAction, circuitTimer: null };
+  }
+
+  const setsJustLogged =
+    setsJustLoggedOverride ?? sessionExercises[currentIndex]?.sets?.length ?? 0;
+  const group = getSupersetGroupForIndex(currentIndex, planExercises);
+  const config = CIRCUIT_MODE_DEFAULTS;
+
+  if (supersetAction.immediateAdvanceIndex != null) {
+    return {
+      ...supersetAction,
+      skipRest: true,
+      circuitTimer: null,
+    };
+  }
+
+  if (supersetAction.afterRestAdvanceIndex != null) {
+    return {
+      skipRest: true,
+      immediateAdvanceIndex: null,
+      afterRestAdvanceIndex: supersetAction.afterRestAdvanceIndex,
+      circuitTimer: {
+        phase: 'transition',
+        seconds: SUPERSET_MODE_DEFAULTS.restBetweenExercisesSeconds,
+        round: circuitRound,
+        advanceIndex: supersetAction.afterRestAdvanceIndex,
+      },
+    };
+  }
+
+  const station = circuitStationForIndex(currentIndex, planExercises);
+  if (!station) {
+    return { ...supersetAction, circuitTimer: null };
+  }
+
+  const stationComplete = station.memberIndices.every((index) => {
+    const logged = sessionExercises[index]?.sets?.length ?? 0;
+    return logged >= setsJustLogged;
+  });
+
+  if (!stationComplete) {
+    return { ...supersetAction, circuitTimer: null };
+  }
+
+  const target = targetSetsForIndex(currentIndex, planExercises);
+  if (setsJustLogged >= target) {
+    return { ...supersetAction, circuitTimer: null };
+  }
+
+  const nextStation = nextCircuitStationEntry(currentIndex, planExercises);
+  if (!nextStation) {
+    return { ...supersetAction, circuitTimer: null };
+  }
+
+  if (nextStation.isLastStation) {
+    if (circuitRound >= config.rounds) {
+      return { ...supersetAction, circuitTimer: null };
+    }
+    return {
+      skipRest: true,
+      immediateAdvanceIndex: null,
+      afterRestAdvanceIndex: null,
+      circuitTimer: {
+        phase: 'round_rest',
+        seconds: config.restBetweenRoundsSeconds,
+        round: circuitRound,
+        advanceIndex: nextStation.entryIndex,
+      },
+    };
+  }
+
+  return {
+    skipRest: true,
+    immediateAdvanceIndex: null,
+    afterRestAdvanceIndex: null,
+    circuitTimer: {
+      phase: 'transition',
+      seconds: config.restBetweenExercisesSeconds,
+      round: circuitRound,
+      advanceIndex: nextStation.entryIndex,
+    },
+  };
 }
 
 export function nextExerciseIndexAfterGroup(

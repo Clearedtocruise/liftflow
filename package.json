@@ -102,6 +102,8 @@
     "validate:sprint5-active-workout": "node scripts/validate-sprint5-active-workout.mjs",
     "validate:sprint6-smart-logging": "node scripts/validate-sprint6-smart-logging.mjs",
     "validate:sprint7-timer-engine": "node scripts/validate-sprint7-timer-engine.mjs",
+    "validate:sprint8-superset-circuit": "node scripts/validate-sprint8-superset-circuit.mjs",
+    "validate:sprint10-exercise-replacement": "node scripts/validate-sprint10-exercise-replacement.mjs",
     "migrate:019": "node scripts/apply-migration-019.mjs",
     "migrate:015": "node scripts/apply-migration-015.mjs",
     "seed:beta-invites": "node scripts/seed-beta-invites.mjs",

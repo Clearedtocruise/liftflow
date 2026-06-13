@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
 import { Card } from '@/components/layout/Card';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Spacing } from '@/constants/theme';
 import { coachAdjustmentLabel } from '@/lib/coachAdjustmentLabels';
+import { formatExerciseStationLabel } from '@/lib/supersetFlow';
 import { exerciseCoachService } from '@/services/exerciseCoachService';
 import type { ExerciseCoachPrescription } from '@/types/exerciseCoach';
 import type { EditableWorkoutExercise } from '@/types/workoutExecution';
@@ -12,6 +13,7 @@ import type { EditableWorkoutExercise } from '@/types/workoutExecution';
 type WorkoutExerciseDetailListProps = {
   exercises: EditableWorkoutExercise[];
   userId?: string;
+  onReplaceExercise?: (index: number, exercise: EditableWorkoutExercise) => void;
 };
 
 function formatRest(seconds?: number): string {
@@ -20,7 +22,11 @@ function formatRest(seconds?: number): string {
   return `${seconds} sec`;
 }
 
-export function WorkoutExerciseDetailList({ exercises, userId }: WorkoutExerciseDetailListProps) {
+export function WorkoutExerciseDetailList({
+  exercises,
+  userId,
+  onReplaceExercise,
+}: WorkoutExerciseDetailListProps) {
   const [loading, setLoading] = useState(false);
   const [prescriptions, setPrescriptions] = useState<ExerciseCoachPrescription[]>([]);
 
@@ -79,18 +85,20 @@ export function WorkoutExerciseDetailList({ exercises, userId }: WorkoutExercise
 
       {exercises.map((exercise, index) => {
         const prescription = exercise.exerciseId ? prescriptionByExerciseId.get(exercise.exerciseId) : undefined;
+        const stationLabel = formatExerciseStationLabel(exercise, index, exercises);
         return (
           <View key={exercise.id} style={[styles.row, index < exercises.length - 1 && styles.rowBorder]}>
             <AppText variant="caption" color="textTertiary" style={styles.index}>
-              {index + 1}
+              {stationLabel ?? String(index + 1)}
             </AppText>
             <View style={styles.content}>
-              <AppText variant="bodyBold">{exercise.name}</AppText>
+              <AppText variant="bodyBold">
+                {stationLabel ? `${stationLabel} · ${exercise.name}` : exercise.name}
+              </AppText>
               <AppText variant="footnote" color="textSecondary">
                 {prescription
                   ? `${prescription.targets.sets} sets · ${prescription.targets.repRange} reps · Rest ${formatRest(prescription.targets.restSeconds)}`
                   : `${exercise.sets} sets · ${exercise.repRange ?? '8-10'} reps · Rest ${formatRest(exercise.restSeconds ?? 90)}`}
-                {exercise.supersetGroupId ? ` · Superset ${exercise.supersetGroupId.replace('ss-', '')}` : ''}
               </AppText>
               {prescription ? (
                 <>
@@ -101,6 +109,13 @@ export function WorkoutExerciseDetailList({ exercises, userId }: WorkoutExercise
                     {prescription.detailedReason}
                   </AppText>
                 </>
+              ) : null}
+              {onReplaceExercise ? (
+                <Pressable onPress={() => onReplaceExercise(index, exercise)} hitSlop={8}>
+                  <AppText variant="footnote" color="accent">
+                    Replace Exercise
+                  </AppText>
+                </Pressable>
               ) : null}
             </View>
           </View>
@@ -133,7 +148,7 @@ const styles = StyleSheet.create({
     borderBottomColor: LiftFlowColors.border,
   },
   index: {
-    width: 18,
+    width: 24,
     marginTop: 2,
   },
   content: {

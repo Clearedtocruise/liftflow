@@ -26,6 +26,19 @@ import {
     type GeneratedWorkoutExercise
 } from './workoutPlanner.js';
 
+function enrichExercisesWithSupersetGroups<T extends Record<string, unknown>>(
+  exercises: T[],
+): Array<T & { supersetGroupId?: string }> {
+  if (exercises.length < 2) return exercises;
+  const result = exercises.map((exercise) => ({ ...exercise }));
+  for (let i = 0; i + 1 < result.length; i += 2) {
+    const groupId = `ss-${Math.floor(i / 2) + 1}`;
+    result[i] = { ...result[i], supersetGroupId: groupId };
+    result[i + 1] = { ...result[i + 1], supersetGroupId: groupId };
+  }
+  return result;
+}
+
 export type CreateProgramInput = {
   userId: string;
   programType: ProgramType;
@@ -251,6 +264,7 @@ export async function generateTrainingProgram(input: CreateProgramInput) {
           recoveryMods.volumeMultiplier,
         );
         exercises = applySubstitutionsToExercises(exercises, limitations as LimitationContext[]);
+        exercises = enrichExercisesWithSupersetGroups(exercises);
 
         const { data: template, error: templateError } = await db
           .from('workout_templates')
@@ -281,11 +295,13 @@ export async function generateTrainingProgram(input: CreateProgramInput) {
         .single();
 
       const exercises = (templateRow?.exercises ?? []) as GeneratedWorkoutExercise[];
-      const progressed = applyWeeklyProgression(
-        exercises,
-        performance,
-        phaseSpec.intensityMultiplier,
-        recoveryMods.volumeMultiplier,
+      const progressed = enrichExercisesWithSupersetGroups(
+        applyWeeklyProgression(
+          exercises,
+          performance,
+          phaseSpec.intensityMultiplier,
+          recoveryMods.volumeMultiplier,
+        ),
       );
 
       await db.from('planned_workouts').insert({

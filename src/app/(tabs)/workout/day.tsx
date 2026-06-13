@@ -9,6 +9,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useWorkoutLocations } from '@/hooks/useWorkoutLocations';
 import { getWeekRange } from '@/lib/weekPlan';
 import { exercisesFromPlannedWorkout } from '@/lib/workoutPlan';
+import type { ExerciseAlternativeOption } from '@/services/exerciseAdvisoryService';
 import { trainingService } from '@/services/trainingService';
 import { workoutService } from '@/services/workoutService';
 import { useWorkoutPlanDraft } from '@/state/workout/WorkoutPlanDraftContext';
@@ -65,6 +66,33 @@ export default function WorkoutDayScreen() {
     setStarting(false);
   }, [user, workout, locations, selectedId, exercises, startSessionFromPlanned, refreshSession]);
 
+  const handleReplaceExercise = useCallback(
+    async (index: number, option: ExerciseAlternativeOption) => {
+      if (!workout) return;
+      const nextExercises = exercises.map((exercise, exerciseIndex) =>
+        exerciseIndex === index
+          ? {
+              ...exercise,
+              id: `plan-${index}-${option.name.toLowerCase().replace(/\s+/g, '-')}`,
+              name: option.name,
+            }
+          : exercise,
+      );
+      setExercises(nextExercises);
+      const result = await trainingService.updatePlannedWorkoutExercises(
+        workout.id,
+        nextExercises,
+        workout.metadata,
+      );
+      if (result.success) {
+        setWorkout(result.data);
+        setPlannedWorkout(result.data);
+        setExercises(exercisesFromPlannedWorkout(result.data));
+      }
+    },
+    [workout, exercises, setExercises, setPlannedWorkout],
+  );
+
   if (loading || !workout) {
     return (
       <View style={styles.loading}>
@@ -78,10 +106,14 @@ export default function WorkoutDayScreen() {
       workout={workout}
       exercises={exercises}
       userId={user?.id}
+      goal={user?.fitnessGoals?.[0]}
+      programType={user?.metadata?.coachActivation?.programType}
+      availableEquipment={user?.availableEquipment}
       starting={starting}
       onStart={handleStart}
       onEdit={() => router.push('/(tabs)/workout/edit')}
       onBack={() => router.back()}
+      onReplaceExercise={handleReplaceExercise}
     />
   );
 }

@@ -1,5 +1,5 @@
 import { enrichWithSupersetGroups } from '@/lib/supersetFlow';
-import { prescribeExerciseExecution, normalizeExecutionMode } from '@/lib/workoutExecutionMode';
+import { normalizeExecutionMode, prescribeExerciseExecution } from '@/lib/workoutExecutionMode';
 import type { PlannedWorkout, TemplateExercise } from '@/types/training';
 import type { EditableWorkoutExercise } from '@/types/workoutExecution';
 import type { WorkoutExecutionMode } from '@/types/workoutExecutionMode';
@@ -57,4 +57,20 @@ export function parseTargetReps(repRange?: string): number {
   if (!repRange) return 8;
   const match = repRange.match(/\d+/);
   return match ? parseInt(match[0], 10) : 8;
+}
+
+export function editableExercisesToTemplate(
+  exercises: EditableWorkoutExercise[],
+): import('@/types/training').TemplateExercise[] {
+  return exercises.map((exercise) => ({
+    exerciseId: exercise.exerciseId,
+    exerciseName: exercise.name,
+    name: exercise.name,
+    sets: exercise.sets,
+    repRange: exercise.repRange,
+    restSeconds: exercise.restSeconds,
+    weightLbs: exercise.weightLbs,
+    executionMode: exercise.executionMode,
+    supersetGroupId: exercise.supersetGroupId,
+  }));
 }

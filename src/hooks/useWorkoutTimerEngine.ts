@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import {
-  createCircuitTimerState,
-  createIntervalTimerState,
-  tickCircuitTimer,
-  tickIntervalTimer,
-  type CircuitPhase,
-  type CircuitTimerConfig,
-  type CircuitTimerState,
-  type IntervalTimerConfig,
-  type IntervalTimerState,
+    createCircuitTimerState,
+    createIntervalTimerState,
+    tickCircuitTimer,
+    tickIntervalTimer,
+    type CircuitPhase,
+    type CircuitTimerConfig,
+    type CircuitTimerState,
+    type IntervalTimerConfig,
+    type IntervalTimerState,
 } from '@/lib/timerEngine';
 import type { WorkoutExecutionMode } from '@/types/workoutExecutionMode';
 
@@ -79,8 +79,16 @@ export function useWorkoutTimerEngine(executionMode: WorkoutExecutionMode) {
   }, []);
 
   const startCircuitTransition = useCallback(
-    (phase: Exclude<CircuitPhase, 'done'>, round = 1, overrides?: Partial<CircuitTimerConfig>) => {
-      setCircuitTimer(createCircuitTimerState(phase, overrides, round));
+    (
+      phase: Exclude<CircuitPhase, 'done'>,
+      round = 1,
+      overrides?: Partial<CircuitTimerConfig>,
+      secondsOverride?: number,
+    ) => {
+      const state = createCircuitTimerState(phase, overrides, round);
+      setCircuitTimer(
+        secondsOverride != null ? { ...state, secondsRemaining: secondsOverride } : state,
+      );
     },
     [],
   );

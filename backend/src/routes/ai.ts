@@ -23,6 +23,7 @@ import {
     converseWithCoach,
     loadConversationalCoachHistory,
 } from '../lib/conversationalCoachEngine.js';
+import { generateExerciseAlternatives } from '../lib/exerciseReplacementEngine.js';
 import { requireAdmin } from '../lib/supabase.js';
 import { requireProSubscription } from '../middleware/requireProSubscription.js';
 
@@ -233,6 +234,37 @@ aiRouter.post('/advisory/nutrition/meal-alternatives', async (req, res) => {
   } catch (error) {
     captureAiError(error, '/api/ai/advisory/nutrition/meal-alternatives');
     res.status(500).json({ message: error instanceof Error ? error.message : 'Meal alternatives failed' });
+  }
+});
+
+aiRouter.post('/advisory/workout/exercise-alternatives', async (req, res) => {
+  try {
+    const { userId, exerciseName, muscleGroups, goal, programType, availableEquipment } = req.body as {
+      userId?: string;
+      exerciseName?: string;
+      muscleGroups?: string[];
+      goal?: string;
+      programType?: string;
+      availableEquipment?: string[];
+    };
+
+    if (!userId || !exerciseName) {
+      res.status(400).json({ message: 'userId and exerciseName are required' });
+      return;
+    }
+
+    const data = await generateExerciseAlternatives({
+      userId,
+      exerciseName,
+      muscleGroups,
+      goal,
+      programType,
+      availableEquipment,
+    });
+    res.json({ data });
+  } catch (error) {
+    captureAiError(error, '/api/ai/advisory/workout/exercise-alternatives');
+    res.status(500).json({ message: error instanceof Error ? error.message : 'Exercise alternatives failed' });
   }
 });
 

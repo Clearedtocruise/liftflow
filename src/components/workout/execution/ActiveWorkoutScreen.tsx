@@ -8,9 +8,9 @@ import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { AppText } from '@/components/ui/AppText';
 import { ExerciseCompleteCard } from '@/components/workout/execution/ExerciseCompleteCard';
 import { GuidedWorkoutMetrics, WorkoutProgressBar } from '@/components/workout/execution/GuidedWorkoutMetrics';
-import { WorkoutTimerOverlay } from '@/components/workout/execution/WorkoutTimerOverlay';
 import { SetLoggingControls } from '@/components/workout/execution/SetLoggingControls';
 import { WorkoutChallengeModal } from '@/components/workout/execution/WorkoutChallengeModal';
+import { WorkoutTimerOverlay } from '@/components/workout/execution/WorkoutTimerOverlay';
 import { ExerciseCoachCard } from '@/components/workout/ExerciseCoachCard';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
@@ -27,22 +27,23 @@ import {
     getExerciseLoggingMode,
 } from '@/lib/exerciseModality';
 import {
+    formatExerciseStationLabel,
     getSupersetGroupForIndex,
-    getSupersetLabel,
     isSupersetGroupComplete,
     nextExerciseIndexAfterGroup,
-    resolvePostSetSupersetAction,
+    resolvePostSetFlowAction,
 } from '@/lib/supersetFlow';
+import {
+    executionModeUsesIntervalTimer,
+    executionModeUsesTraditionalRest,
+    formatTimerSeconds,
+    intervalPhaseLabel,
+    resolveTraditionalRestSeconds,
+} from '@/lib/timerEngine';
 import { formatWorkoutWeightForInput } from '@/lib/unitConversion';
 import { pickWorkoutChallenge } from '@/lib/workoutChallengeFlow';
-import {
-  executionModeUsesIntervalTimer,
-  executionModeUsesTraditionalRest,
-  formatTimerSeconds,
-  intervalPhaseLabel,
-  resolveTraditionalRestSeconds,
-} from '@/lib/timerEngine';
 import { normalizeExecutionMode } from '@/lib/workoutExecutionMode';
+import { parseTargetReps } from '@/lib/workoutPlan';
 import { workoutService } from '@/services/workoutService';
 import { useWorkoutSession } from '@/state/workout/WorkoutSessionContext';
 import type { WorkoutSession } from '@/types';
@@ -52,9 +53,8 @@ import type {
     WorkoutChallengeTemplate,
     WorkoutChallengeTrigger,
 } from '@/types/workoutChallenge';
-import { parseTargetReps } from '@/lib/workoutPlan';
-import type { WorkoutExecutionMode } from '@/types/workoutExecutionMode';
 import type { EditableWorkoutExercise, ExerciseHistorySet } from '@/types/workoutExecution';
+import type { WorkoutExecutionMode } from '@/types/workoutExecutionMode';
 
 type ActiveWorkoutScreenProps = {
   session: WorkoutSession;
@@ -128,7 +128,9 @@ export function ActiveWorkoutScreen({
   const [activeChallenge, setActiveChallenge] = useState<WorkoutChallengeTemplate | null>(null);
   const [challengeTrigger, setChallengeTrigger] = useState<WorkoutChallengeTrigger>('between_sets');
   const pendingAdvanceRef = useRef<number | null>(null);
+  const pendingRoundIncrementRef = useRef(false);
   const offeredExerciseCompleteRef = useRef<number | null>(null);
+  const [circuitRound, setCircuitRound] = useState(1);
 
   const currentExercise = sortedExercises[currentIndex];
   const planMeta = planExercises[currentIndex] ?? planExercises.find(
@@ -168,7 +170,7 @@ export function ActiveWorkoutScreen({
     );
   }, [coachPrescription, loggingMode, units.preferredWeightUnit, units.weightLabel, repRange]);
   const supersetGroup = getSupersetGroupForIndex(currentIndex, planExercises);
-  const supersetLabel = getSupersetLabel(supersetGroup, currentIndex);
+  const stationLabel = formatExerciseStationLabel(planMeta ?? planExercises[currentIndex], currentIndex, planExercises);
   const inSuperset = Boolean(supersetGroup && supersetGroup.memberIndices.length >= 2);
   const groupComplete =
     inSuperset && supersetGroup
@@ -229,6 +231,10 @@ export function ActiveWorkoutScreen({
   useEffect(() => {
     if (circuitTimer?.phase !== 'done') return;
     dismissCircuitTimer();
+    if (pendingRoundIncrementRef.current) {
+      setCircuitRound((round) => round + 1);
+      pendingRoundIncrementRef.current = false;
+    }
     if (pendingAdvanceRef.current != null) {
       setCurrentIndex(pendingAdvanceRef.current);
       pendingAdvanceRef.current = null;
@@ -375,15 +381,17 @@ export function ActiveWorkoutScreen({
       restSeconds: restTargetSeconds,
     };
 
-    const postSetAction = resolvePostSetSupersetAction(
+    const flowAction = resolvePostSetFlowAction(
       currentIndex,
       planExercises,
       sortedExercises,
+      executionMode,
+      circuitRound,
       completedSets.length + 1,
     );
 
     const skipRest =
-      !executionModeUsesTraditionalRest(executionMode) || postSetAction.skipRest;
+      !executionModeUsesTraditionalRest(executionMode) || flowAction.skipRest;
 
     const logged =
       loggingMode === 'cardio'
@@ -407,22 +415,21 @@ export function ActiveWorkoutScreen({
 
     await refreshSession();
 
-    if (postSetAction.immediateAdvanceIndex != null) {
-      if (executionMode === 'circuit') {
-        startCircuitTransition('transition');
-        pendingAdvanceRef.current = postSetAction.immediateAdvanceIndex;
-      } else {
-        pendingAdvanceRef.current = null;
-        setCurrentIndex(postSetAction.immediateAdvanceIndex);
-        setShowComplete(false);
-      }
-    } else if (postSetAction.afterRestAdvanceIndex != null) {
-      if (executionMode === 'circuit') {
-        startCircuitTransition('transition');
-        pendingAdvanceRef.current = postSetAction.afterRestAdvanceIndex;
-      } else {
-        pendingAdvanceRef.current = postSetAction.afterRestAdvanceIndex;
-      }
+    if (flowAction.circuitTimer && flowAction.circuitTimer.seconds > 0) {
+      pendingAdvanceRef.current = flowAction.circuitTimer.advanceIndex;
+      pendingRoundIncrementRef.current = flowAction.circuitTimer.phase === 'round_rest';
+      startCircuitTransition(
+        flowAction.circuitTimer.phase,
+        flowAction.circuitTimer.round,
+        undefined,
+        flowAction.circuitTimer.seconds,
+      );
+    } else if (flowAction.immediateAdvanceIndex != null) {
+      pendingAdvanceRef.current = null;
+      setCurrentIndex(flowAction.immediateAdvanceIndex);
+      setShowComplete(false);
+    } else if (flowAction.afterRestAdvanceIndex != null) {
+      pendingAdvanceRef.current = flowAction.afterRestAdvanceIndex;
     }
 
     offerBetweenSetsChallenge();
@@ -508,9 +515,15 @@ export function ActiveWorkoutScreen({
                 {(currentExercise.exercise?.name ?? 'Exercise').toUpperCase()}
               </AppText>
 
-              {supersetLabel ? (
+              {executionMode === 'circuit' ? (
                 <AppText variant="caption" color="accent">
-                  Superset {supersetGroup?.id.replace('ss-', '')} · Exercise {supersetLabel}
+                  Circuit · Round {circuitRound}
+                  {stationLabel ? ` · ${stationLabel}` : ''}
+                </AppText>
+              ) : null}
+              {stationLabel ? (
+                <AppText variant="caption" color="accent">
+                  {stationLabel} · {(currentExercise.exercise?.name ?? 'Exercise')}
                 </AppText>
               ) : null}
 

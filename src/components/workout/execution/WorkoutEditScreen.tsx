@@ -7,13 +7,19 @@ import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { AppText } from '@/components/ui/AppText';
 import { ExercisePickerModal } from '@/components/workout/execution/ExercisePickerModal';
+import { ExerciseReplaceSheet } from '@/components/workout/execution/ExerciseReplaceSheet';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
+import type { ExerciseAlternativeOption } from '@/services/exerciseAdvisoryService';
 import type { Exercise } from '@/types';
 import type { EditableWorkoutExercise } from '@/types/workoutExecution';
 
 type WorkoutEditScreenProps = {
   workoutName: string;
   exercises: EditableWorkoutExercise[];
+  userId?: string;
+  goal?: string;
+  programType?: string;
+  availableEquipment?: string[];
   onChange: (exercises: EditableWorkoutExercise[]) => void;
   onDone: () => void;
 };
@@ -22,7 +28,16 @@ function createExerciseId(name: string): string {
   return `custom-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${Date.now()}`;
 }
 
-export function WorkoutEditScreen({ workoutName, exercises, onChange, onDone }: WorkoutEditScreenProps) {
+export function WorkoutEditScreen({
+  workoutName,
+  exercises,
+  userId,
+  goal,
+  programType,
+  availableEquipment,
+  onChange,
+  onDone,
+}: WorkoutEditScreenProps) {
   const [pickerVisible, setPickerVisible] = useState(false);
   const [replaceIndex, setReplaceIndex] = useState<number | null>(null);
 
@@ -62,6 +77,16 @@ export function WorkoutEditScreen({ workoutName, exercises, onChange, onDone }: 
     onChange([...exercises, next]);
   }
 
+  function handleReplaceWithAlternative(option: ExerciseAlternativeOption) {
+    if (replaceIndex == null) return;
+    updateAt(replaceIndex, {
+      ...exercises[replaceIndex],
+      id: createExerciseId(option.name),
+      name: option.name,
+    });
+    setReplaceIndex(null);
+  }
+
   return (
     <ScreenContainer contentContainerStyle={styles.content}>
       <Pressable onPress={() => router.back()} style={styles.back}>
@@ -89,8 +114,8 @@ export function WorkoutEditScreen({ workoutName, exercises, onChange, onDone }: 
             </Pressable>
           </View>
           <View style={styles.actions}>
-            <Pressable onPress={() => { setReplaceIndex(index); setPickerVisible(true); }}>
-              <AppText variant="footnote" color="accent">Replace</AppText>
+            <Pressable onPress={() => setReplaceIndex(index)}>
+              <AppText variant="footnote" color="accent">Replace Exercise</AppText>
             </Pressable>
             <Pressable onPress={() => removeAt(index)}>
               <AppText variant="footnote" color="textSecondary">Remove</AppText>
@@ -116,6 +141,20 @@ export function WorkoutEditScreen({ workoutName, exercises, onChange, onDone }: 
       </AppText>
 
       <PrimaryButton label="Done" onPress={onDone} size="large" />
+
+      <ExerciseReplaceSheet
+        visible={replaceIndex != null}
+        exercise={replaceIndex != null ? exercises[replaceIndex] ?? null : null}
+        userId={userId}
+        goal={goal}
+        programType={programType}
+        availableEquipment={availableEquipment}
+        onClose={() => setReplaceIndex(null)}
+        onReplace={handleReplaceWithAlternative}
+        onManualSearch={() => {
+          setPickerVisible(true);
+        }}
+      />
 
       <ExercisePickerModal
         visible={pickerVisible}

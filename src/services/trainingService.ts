@@ -332,6 +332,32 @@ export const trainingService: ITrainingService = {
       return fromError(e);
     }
   },
+
+  async updatePlannedWorkoutExercises(
+    plannedWorkoutId: string,
+    exercises: import('@/types/workoutExecution').EditableWorkoutExercise[],
+    existingMetadata?: PlannedWorkout['metadata'],
+  ) {
+    try {
+      const { editableExercisesToTemplate } = await import('@/lib/workoutPlan');
+      const metadata = {
+        ...(existingMetadata ?? {}),
+        exercises: editableExercisesToTemplate(exercises),
+      };
+
+      const { data, error } = await supabase
+        .from('planned_workouts')
+        .update({ metadata })
+        .eq('id', plannedWorkoutId)
+        .select('*')
+        .single();
+
+      if (error) return fail(error.message);
+      return ok(mapPlanned(data as PlannedRow));
+    } catch (e) {
+      return fromError(e);
+    }
+  },
 };
 
 export type TrainingService = typeof trainingService & {
