@@ -1,23 +1,47 @@
 import { enrichWithSupersetGroups } from '@/lib/supersetFlow';
+import { prescribeExerciseExecution } from '@/lib/workoutExecutionMode';
 import type { PlannedWorkout, TemplateExercise } from '@/types/training';
 import type { EditableWorkoutExercise } from '@/types/workoutExecution';
+import type { WorkoutExecutionMode } from '@/types/workoutExecutionMode';
 
-function templateToEditable(exercise: TemplateExercise, index: number): EditableWorkoutExercise {
+function templateToEditable(
+  exercise: TemplateExercise,
+  index: number,
+  defaultMode?: WorkoutExecutionMode,
+): EditableWorkoutExercise {
   const name = exercise.exerciseName ?? exercise.name ?? 'Exercise';
-  return {
-    id: `plan-${index}-${name.toLowerCase().replace(/\s+/g, '-')}`,
+  const executionMode = exercise.executionMode ?? defaultMode ?? 'traditional';
+  const prescription = prescribeExerciseExecution({
     name,
-    sets: exercise.sets ?? 3,
+    mode: executionMode,
+    sets: exercise.sets,
     repRange: exercise.repRange ?? exercise.reps,
     restSeconds: exercise.restSeconds,
+  });
+
+  return {
+    id: `plan-${index}-${name.toLowerCase().replace(/\s+/g, '-')}`,
+    exerciseId: exercise.exerciseId,
+    name,
+    sets: prescription.scheme === 'set_rep' ? prescription.sets : exercise.sets ?? 3,
+    repRange:
+      prescription.scheme === 'set_rep' || prescription.scheme === 'circuit' || prescription.scheme === 'superset'
+        ? prescription.repRange
+        : exercise.repRange ?? exercise.reps,
+    restSeconds:
+      prescription.scheme === 'set_rep'
+        ? prescription.restSeconds
+        : exercise.restSeconds,
     weightLbs: exercise.weightLbs,
+    executionMode,
     supersetGroupId: exercise.supersetGroupId,
   };
 }
 
 export function exercisesFromPlannedWorkout(workout: PlannedWorkout | null): EditableWorkoutExercise[] {
   const raw = workout?.metadata?.exercises ?? [];
-  return enrichWithSupersetGroups(raw.map(templateToEditable));
+  const defaultMode = workout?.metadata?.executionMode;
+  return enrichWithSupersetGroups(raw.map((exercise, index) => templateToEditable(exercise, index, defaultMode)));
 }
 
 export function estimateWorkoutDurationMinutes(exercises: EditableWorkoutExercise[]): number {

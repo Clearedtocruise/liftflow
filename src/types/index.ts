@@ -16,6 +16,7 @@ export * from './transformation';
 export * from './user';
 export * from './voice';
 export * from './workout';
+export * from './workoutExecutionMode';
 export * from './workoutLocation';
 export * from './workoutRecommendation';
 

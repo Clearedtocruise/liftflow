@@ -91,6 +91,7 @@
     "validate:branding": "node scripts/validate-branding.mjs",
     "validate:branding:enforce": "node scripts/validate-branding-enforcement.mjs",
     "validate:sprint1-exercise-classification": "node scripts/validate-sprint1-exercise-classification.mjs",
+    "validate:sprint2-workout-execution-modes": "node scripts/validate-sprint2-workout-execution-modes.mjs",
     "validate:sprint5-nutrition": "node scripts/validate-sprint5-nutrition-audit.mjs",
     "validate:sprint6-recovery": "node scripts/validate-sprint6-recovery-audit.mjs",
     "validate:sprint7-adaptation": "node scripts/validate-sprint7-adaptation.mjs",

@@ -42,6 +42,8 @@ export type TemplateExercise = {
   weightLbs?: number;
   restSeconds?: number;
   notes?: string;
+  /** Sprint 2 — workout execution mode for this exercise. */
+  executionMode?: import('./workoutExecutionMode').WorkoutExecutionMode;
   /** Exercises sharing an id are performed as a superset (back-to-back sets). */
   supersetGroupId?: string;
 };
@@ -53,6 +55,8 @@ export type PlannedWorkoutMetadata = {
   dayLabel?: string;
   slotLabel?: string;
   sprintPhase?: string;
+  /** Default Sprint 2 execution mode for exercises in this workout. */
+  executionMode?: import('./workoutExecutionMode').WorkoutExecutionMode;
   exercises?: TemplateExercise[];
   plannedVolume?: number;
   locationId?: string;
