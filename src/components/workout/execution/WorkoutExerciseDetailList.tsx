@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
+import { ExerciseMusclePanel } from '@/components/exercise/ExerciseMusclePanel';
 import { Card } from '@/components/layout/Card';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Spacing } from '@/constants/theme';
@@ -13,6 +14,7 @@ import type { EditableWorkoutExercise } from '@/types/workoutExecution';
 type WorkoutExerciseDetailListProps = {
   exercises: EditableWorkoutExercise[];
   userId?: string;
+  gender?: 'male' | 'female';
   onReplaceExercise?: (index: number, exercise: EditableWorkoutExercise) => void;
 };
 
@@ -25,6 +27,7 @@ function formatRest(seconds?: number): string {
 export function WorkoutExerciseDetailList({
   exercises,
   userId,
+  gender = 'male',
   onReplaceExercise,
 }: WorkoutExerciseDetailListProps) {
   const [loading, setLoading] = useState(false);
@@ -110,6 +113,7 @@ export function WorkoutExerciseDetailList({
                   </AppText>
                 </>
               ) : null}
+              <ExerciseMusclePanel exerciseName={exercise.name} gender={gender} variant="inline" />
               {onReplaceExercise ? (
                 <Pressable onPress={() => onReplaceExercise(index, exercise)} hitSlop={8}>
                   <AppText variant="footnote" color="accent">

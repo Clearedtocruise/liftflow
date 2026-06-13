@@ -7,6 +7,7 @@ import { LiftFlowColors } from '@/constants/theme';
 import { pickDefaultLocation } from '@/constants/trainingProfile';
 import { useAuth } from '@/hooks/useAuth';
 import { useWorkoutLocations } from '@/hooks/useWorkoutLocations';
+import { profileFigureGender } from '@/lib/exerciseMuscleMap';
 import { getWeekRange } from '@/lib/weekPlan';
 import { exercisesFromPlannedWorkout } from '@/lib/workoutPlan';
 import type { ExerciseAlternativeOption } from '@/services/exerciseAdvisoryService';
@@ -116,6 +117,7 @@ export default function WorkoutDayScreen() {
       goal={user?.fitnessGoals?.[0]}
       programType={user?.metadata?.coachActivation?.programType}
       availableEquipment={user?.availableEquipment}
+      gender={profileFigureGender(user?.sex)}
       starting={starting}
       onStart={handleStart}
       onEdit={() => router.push('/(tabs)/workout/edit')}

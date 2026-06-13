@@ -29,6 +29,7 @@ import {
 import { deviceTimeZone, formatScheduledDbTime, localDateString } from '@/lib/localDate';
 import { formatWorkoutTime, scheduleFromProfile, scheduledTimesForDay } from '@/lib/mealSchedule';
 import { logStartup } from '@/lib/startupLogger';
+import { showHomeManageDayMenu } from '@/lib/planDayActions';
 import { getWeekRange } from '@/lib/weekPlan';
 import { estimateWorkoutDurationMinutes, exercisesFromPlannedWorkout } from '@/lib/workoutPlan';
 import { analyticsService } from '@/services/analyticsService';
@@ -42,7 +43,7 @@ import type { RecoveryIntelligenceReport } from '@/types/recoveryIntelligence';
 
 export default function DashboardScreen() {
   const { user, isProfileReady } = useAuth();
-  const { adjustment, revision } = usePlanAdjustment();
+  const { adjustment, revision, setFromAdaptation } = usePlanAdjustment();
   const { isPremium } = useSubscription();
   const units = useUnits();
   const { insight } = useInsightRotator();
@@ -52,12 +53,14 @@ export default function DashboardScreen() {
   const [recoveryScore, setRecoveryScore] = useState<number | null>(null);
   const [recoveryIntel, setRecoveryIntel] = useState<RecoveryIntelligenceReport | null>(null);
   const [program, setProgram] = useState<ProgramDashboard | null>(null);
+  const [weekWorkouts, setWeekWorkouts] = useState<PlannedWorkout[]>([]);
   const [nutritionGoals, setNutritionGoals] = useState<NutritionGoals | null>(null);
   const [todayMeals, setTodayMeals] = useState<Meal[]>([]);
   const [programLoading, setProgramLoading] = useState(true);
   const [summaryLoading, setSummaryLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [startingWorkout, setStartingWorkout] = useState(false);
+  const [adaptingPlan, setAdaptingPlan] = useState(false);
   const homeRenderedRef = useRef(false);
   const appReadyLoggedRef = useRef(false);
 
@@ -90,8 +93,12 @@ export default function DashboardScreen() {
 
     await nutritionService.pruneDuplicateMeals(user.id);
 
-    void trainingService.getDashboard(user.id).then((programResult) => {
+    void Promise.all([
+      trainingService.getDashboard(user.id),
+      trainingService.getPlannedWorkouts(user.id, from, to),
+    ]).then(([programResult, plannedResult]) => {
       if (programResult.success) setProgram(programResult.data);
+      if (plannedResult.success) setWeekWorkouts(plannedResult.data);
       setProgramLoading(false);
       logStartup('WORKOUTS_LOADED');
     });
@@ -152,8 +159,16 @@ export default function DashboardScreen() {
   }, [adjustment?.id, revision, user, load]);
 
   const nextPlanned = program?.nextWorkout;
-  const hasWorkoutToday = nextPlanned?.scheduledDate === today;
-  const todaysWorkout = hasWorkoutToday ? nextPlanned : null;
+  const todaysWorkout = useMemo(() => {
+    const fromWeek = weekWorkouts.find(
+      (w) => w.scheduledDate === today && w.status === 'planned',
+    );
+    if (fromWeek) return fromWeek;
+    if (nextPlanned?.scheduledDate === today && nextPlanned.status === 'planned') return nextPlanned;
+    return null;
+  }, [weekWorkouts, nextPlanned, today]);
+  const hasWorkoutToday = todaysWorkout != null;
+  const showWorkoutSection = !programLoading && (weekWorkouts.length > 0 || nextPlanned != null);
   const scheduleWithWorkout = scheduleFromProfile(user, hasWorkoutToday);
   const hasRecoveryScore = recoveryScore != null;
 
@@ -208,6 +223,20 @@ export default function DashboardScreen() {
 
   const workoutStartTime =
     formatScheduledDbTime(todaysWorkout?.scheduledTime) ?? formatWorkoutTime(scheduleWithWorkout);
+
+  async function handleManageDay() {
+    if (!user) return;
+    showHomeManageDayMenu(
+      {
+        userId: user.id,
+        workouts: weekWorkouts,
+        setFromAdaptation,
+        onComplete: () => load(),
+        onBusyChange: setAdaptingPlan,
+      },
+      today,
+    );
+  }
 
   async function handleStartNextWorkout(planned: PlannedWorkout) {
     if (!user) return;
@@ -307,7 +336,11 @@ export default function DashboardScreen() {
             }
             onLogMeal={() => router.push('/(tabs)/nutrition')}
             onStartWorkout={() => todaysWorkout && handleStartNextWorkout(todaysWorkout)}
+            onManageDay={showWorkoutSection ? handleManageDay : undefined}
+            showWorkoutSection={showWorkoutSection}
+            isRestDay={!todaysWorkout}
             startingWorkout={startingWorkout}
+            adaptingPlan={adaptingPlan}
           />
         )}
       </Animated.View>

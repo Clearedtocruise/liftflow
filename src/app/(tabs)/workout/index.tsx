@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 
@@ -10,6 +10,7 @@ import { LiftFlowColors } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 import { usePlanAdjustment } from '@/contexts/PlanAdjustmentContext';
 import { localDateString } from '@/lib/localDate';
+import { showWeeklyEditDayMenu } from '@/lib/planDayActions';
 import { enrichWithSupersetGroups } from '@/lib/supersetFlow';
 import { normalizeExecutionMode } from '@/lib/workoutExecutionMode';
 import { buildWeekPlan, getWeekRange, isConditioningWorkout, type WeekDayPlan } from '@/lib/weekPlan';
@@ -20,16 +21,18 @@ import { workoutService } from '@/services/workoutService';
 import { useWorkoutPlanDraft } from '@/state/workout/WorkoutPlanDraftContext';
 import { useWorkoutSession } from '@/state/workout/WorkoutSessionContext';
 import type { WorkoutChallengeRecord } from '@/types/workoutChallenge';
+import type { PlannedWorkout } from '@/types/training';
 
 export default function WorkoutScreen() {
   const { user } = useAuth();
-  const { revision } = usePlanAdjustment();
+  const { revision, setFromAdaptation } = usePlanAdjustment();
   const { exercises, setPlannedWorkout, plannedWorkout } = useWorkoutPlanDraft();
   const { activeSession: session, isLoading: loading, endSession, cancelSession } = useWorkoutSession();
 
-  const [weekDays, setWeekDays] = useState<WeekDayPlan[]>(() => buildWeekPlan([]));
+  const [weekDays, setWeekDays] = useState<WeekDayPlan[]>([]);
   const [loadingPlan, setLoadingPlan] = useState(true);
   const [refreshingPlan, setRefreshingPlan] = useState(false);
+  const [adaptingPlan, setAdaptingPlan] = useState(false);
   const [challengeRecords, setChallengeRecords] = useState<WorkoutChallengeRecord[]>([]);
 
   const loadWeekPlan = useCallback(
@@ -50,7 +53,7 @@ export default function WorkoutScreen() {
         const today = days.find((day) => day.workout && day.date === localDateString());
         if (today?.workout) setPlannedWorkout(today.workout);
       } catch {
-        setWeekDays(buildWeekPlan([]));
+        if (!options?.silent) setWeekDays([]);
       } finally {
         setLoadingPlan(false);
         setRefreshingPlan(false);
@@ -97,6 +100,11 @@ export default function WorkoutScreen() {
     if (revision > 0 && user?.id) void loadWeekPlan({ silent: true });
   }, [revision, user?.id, loadWeekPlan]);
 
+  const weekWorkouts = useMemo(
+    () => weekDays.map((day) => day.workout).filter(Boolean) as PlannedWorkout[],
+    [weekDays],
+  );
+
   const handleSelectDay = useCallback(
     (day: WeekDayPlan) => {
       if (day.workout && isConditioningWorkout(day.workout)) {
@@ -114,6 +122,24 @@ export default function WorkoutScreen() {
       });
     },
     [setPlannedWorkout],
+  );
+
+  const handleEditDay = useCallback(
+    (day: WeekDayPlan) => {
+      if (!user?.id) return;
+      showWeeklyEditDayMenu(
+        {
+          userId: user.id,
+          workouts: weekWorkouts,
+          setFromAdaptation,
+          onComplete: () => void loadWeekPlan({ silent: true }),
+          onBusyChange: setAdaptingPlan,
+        },
+        day.date,
+        day.workout ? () => handleSelectDay(day) : undefined,
+      );
+    },
+    [user?.id, weekWorkouts, setFromAdaptation, loadWeekPlan, handleSelectDay],
   );
 
   const handleFinishWorkout = useCallback(async () => {
@@ -190,7 +216,9 @@ export default function WorkoutScreen() {
         days={weekDays}
         loading={loadingPlan}
         refreshing={refreshingPlan}
+        adaptingPlan={adaptingPlan}
         onSelectDay={handleSelectDay}
+        onEditDay={handleEditDay}
         onManualLog={() => router.push('/(tabs)/workout/manual-log')}
       />
     </ScreenContainer>

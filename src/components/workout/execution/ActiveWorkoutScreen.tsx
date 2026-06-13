@@ -2,6 +2,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Pressable, StyleSheet, View } from 'react-native';
 
+import { ExerciseMusclePanel } from '@/components/exercise/ExerciseMusclePanel';
 import { Card } from '@/components/layout/Card';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
@@ -26,6 +27,7 @@ import {
     formatSetLoggedLabel,
     getExerciseLoggingMode,
 } from '@/lib/exerciseModality';
+import { profileFigureGender } from '@/lib/exerciseMuscleMap';
 import {
     formatExerciseStationLabel,
     getSupersetGroupForIndex,
@@ -89,6 +91,7 @@ export function ActiveWorkoutScreen({
     dismissCircuitTimer,
   } = useWorkoutTimerEngine(executionMode);
   const { user } = useAuth();
+  const figureGender = profileFigureGender(user?.sex);
   const units = useUnits();
   const {
     restSecondsRemaining,
@@ -527,6 +530,14 @@ export function ActiveWorkoutScreen({
                 <AppText variant="caption" color="accent">
                   {stationLabel} · {(currentExercise.exercise?.name ?? 'Exercise')}
                 </AppText>
+              ) : null}
+
+              {!showComplete ? (
+                <ExerciseMusclePanel
+                  exerciseName={currentExercise.exercise?.name ?? 'Exercise'}
+                  gender={figureGender}
+                  variant="compact"
+                />
               ) : null}
 
               {!showComplete ? (

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
+import { ExerciseMusclePanel } from '@/components/exercise/ExerciseMusclePanel';
 import { Card } from '@/components/layout/Card';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
@@ -8,6 +9,7 @@ import { AppText } from '@/components/ui/AppText';
 import { ExerciseReplaceSheet } from '@/components/workout/execution/ExerciseReplaceSheet';
 import { WorkoutExerciseDetailList } from '@/components/workout/execution/WorkoutExerciseDetailList';
 import { Spacing } from '@/constants/theme';
+import { aggregateWorkoutMuscles } from '@/lib/exerciseMuscleMap';
 import { workoutMuscleGroups } from '@/lib/weekPlan';
 import { estimateWorkoutDurationMinutes } from '@/lib/workoutPlan';
 import type { ExerciseAlternativeOption } from '@/services/exerciseAdvisoryService';
@@ -21,6 +23,7 @@ type WorkoutDayOverviewScreenProps = {
   goal?: string;
   programType?: string;
   availableEquipment?: string[];
+  gender?: 'male' | 'female';
   starting: boolean;
   onStart: () => void;
   onEdit: () => void;
@@ -35,6 +38,7 @@ export function WorkoutDayOverviewScreen({
   goal,
   programType,
   availableEquipment,
+  gender = 'male',
   starting,
   onStart,
   onEdit,
@@ -42,6 +46,7 @@ export function WorkoutDayOverviewScreen({
   onReplaceExercise,
 }: WorkoutDayOverviewScreenProps) {
   const durationMin = estimateWorkoutDurationMinutes(exercises);
+  const sessionMuscles = aggregateWorkoutMuscles(exercises.map((item) => item.name));
   const [replaceIndex, setReplaceIndex] = useState<number | null>(null);
   const replaceExercise = replaceIndex != null ? exercises[replaceIndex] ?? null : null;
 
@@ -61,12 +66,25 @@ export function WorkoutDayOverviewScreen({
         </AppText>
       </Card>
 
+      <Card style={styles.figureCard}>
+        <AppText variant="label" color="textSecondary">
+          Muscles trained
+        </AppText>
+        <ExerciseMusclePanel
+          exerciseName={workout.name}
+          gender={gender}
+          variant="hero"
+          profile={sessionMuscles}
+        />
+      </Card>
+
       <AppText variant="label" color="textSecondary">
         Exercises
       </AppText>
       <WorkoutExerciseDetailList
         exercises={exercises}
         userId={userId}
+        gender={gender}
         onReplaceExercise={onReplaceExercise ? (_, exercise) => {
           const index = exercises.findIndex((item) => item.id === exercise.id);
           if (index >= 0) setReplaceIndex(index);
@@ -106,6 +124,10 @@ const styles = StyleSheet.create({
   },
   summary: {
     gap: Spacing.sm,
+  },
+  figureCard: {
+    gap: Spacing.sm,
+    alignItems: 'center',
   },
   actions: {
     gap: Spacing.sm,

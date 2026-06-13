@@ -27,7 +27,11 @@ type HomeNextUpCardProps = {
   } | null;
   onLogMeal: () => void;
   onStartWorkout: () => void;
+  onManageDay?: () => void;
+  showWorkoutSection?: boolean;
+  isRestDay?: boolean;
   startingWorkout?: boolean;
+  adaptingPlan?: boolean;
 };
 
 export function HomeNextUpCard({
@@ -39,7 +43,11 @@ export function HomeNextUpCard({
   workout,
   onLogMeal,
   onStartWorkout,
+  onManageDay,
+  showWorkoutSection = false,
+  isRestDay = false,
   startingWorkout,
+  adaptingPlan,
 }: HomeNextUpCardProps) {
   return (
     <View style={styles.outer}>
@@ -83,27 +91,52 @@ export function HomeNextUpCard({
             </View>
           )}
 
-          {workout ? (
+          {showWorkoutSection ? (
             <>
               <View style={styles.divider} />
               <View style={styles.section}>
                 <View style={styles.sectionHeader}>
                   <AppText variant="bodyBold">Today&apos;s workout</AppText>
-                  {workout.startTime ? (
+                  {workout?.startTime ? (
                     <AppText variant="caption" color="accent">
                       {workout.startTime}
                     </AppText>
                   ) : null}
                 </View>
-                <AppText variant="body">{workout.title}</AppText>
-                <AppText variant="footnote" color="textSecondary">
-                  {workout.durationMin ? `${workout.durationMin} min · ` : ''}
-                  {workout.recoveryScore != null
-                    ? `Recovery ${workout.recoveryScore}% · `
-                    : 'Complete check-in for recovery · '}
-                  {workout.trainingLabel}
-                </AppText>
-                <PrimaryButton label="START WORKOUT" onPress={onStartWorkout} loading={startingWorkout} size="large" />
+                {workout && !isRestDay ? (
+                  <>
+                    <AppText variant="body">{workout.title}</AppText>
+                    <AppText variant="footnote" color="textSecondary">
+                      {workout.durationMin ? `${workout.durationMin} min · ` : ''}
+                      {workout.recoveryScore != null
+                        ? `Recovery ${workout.recoveryScore}% · `
+                        : 'Complete check-in for recovery · '}
+                      {workout.trainingLabel}
+                    </AppText>
+                    <PrimaryButton
+                      label="START WORKOUT"
+                      onPress={onStartWorkout}
+                      loading={startingWorkout}
+                      size="large"
+                    />
+                  </>
+                ) : (
+                  <>
+                    <AppText variant="body">Rest Day</AppText>
+                    <AppText variant="footnote" color="textSecondary">
+                      Recovery, mobility, or optional light activity
+                    </AppText>
+                  </>
+                )}
+                {onManageDay ? (
+                  <PrimaryButton
+                    label="Manage Day"
+                    variant="ghost"
+                    onPress={onManageDay}
+                    loading={adaptingPlan}
+                    disabled={adaptingPlan}
+                  />
+                ) : null}
               </View>
             </>
           ) : null}
