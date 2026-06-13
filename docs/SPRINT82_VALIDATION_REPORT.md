@@ -1,6 +1,6 @@
 # Sprint 8.2 — Transformation Engine Validation Report
 
-**Date:** 2026-05-31  
+**Date:** 2026-06-13  
 **Result:** PASS  
 **Score:** 56/56  
 
@@ -54,8 +54,8 @@ Sprint 8.2 delivers the Transformation Engine: lean-mass projection math, persis
 | Photo angle picker | PASS | — |
 | BF preset chips in dashboard | PASS | — |
 | Progress tab FeatureGate | PASS | — |
-| Progress tab TransformationDashboard | PASS | — |
-| Progress tab PhotoTimeline | PASS | — |
+| Progress tab transformation UI | PASS | — |
+| Progress tab photo UI | PASS | — |
 | Voice: transformation_query pattern | PASS | — |
 | Voice: transformation_progress pattern | PASS | — |
 | Voice: transformation_target_bf pattern | PASS | — |

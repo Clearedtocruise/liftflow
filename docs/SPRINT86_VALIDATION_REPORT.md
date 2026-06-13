@@ -1,6 +1,6 @@
 # Sprint 8.6 — TestFlight Release Candidate Validation Report
 
-**Date:** 2026-05-31  
+**Date:** 2026-06-13  
 **Result:** PASS  
 **Checks:** 56/56  
 

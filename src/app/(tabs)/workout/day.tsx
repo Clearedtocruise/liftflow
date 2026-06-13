@@ -77,6 +77,7 @@ export default function WorkoutDayScreen() {
     <WorkoutDayOverviewScreen
       workout={workout}
       exercises={exercises}
+      userId={user?.id}
       starting={starting}
       onStart={handleStart}
       onEdit={() => router.push('/(tabs)/workout/edit')}

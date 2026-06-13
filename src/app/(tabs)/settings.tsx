@@ -438,6 +438,10 @@ export default function SettingsScreen() {
           onPress={() => router.push('/(features)/send-feedback?type=bug')}
         />
         <SettingsRow
+          label="Something confused me"
+          onPress={() => router.push('/(features)/send-feedback?type=confusion')}
+        />
+        <SettingsRow
           label="Request a feature"
           onPress={() => router.push('/(features)/send-feedback?type=feature')}
         />

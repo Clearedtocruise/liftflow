@@ -64,7 +64,7 @@ export type RecoveryTransparency = {
     defaultWhenNoData: number;
   };
   subjectiveInputs: Array<{
-    key: SubjectiveInputKey;
+    key: string;
     label: string;
     weight: number;
     score: number;
@@ -79,7 +79,7 @@ export type RecoveryTransparency = {
     trendDays: number;
   };
   estimatedFromDefaults: boolean;
-  missingInputs: SubjectiveInputKey[];
+  missingInputs: string[];
 };
 
 export type RecoveryIntelligenceInput = {
