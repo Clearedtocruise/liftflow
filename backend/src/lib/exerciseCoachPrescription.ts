@@ -33,7 +33,7 @@ export type ExerciseCoachPrescription = {
     restSeconds: number;
   };
   adjustmentLabel: CoachAdjustmentLabel;
-  adjustmentType: ProgressionAdjustmentType | 'increase_sets';
+  adjustmentType: ProgressionAdjustmentType | CoachAdjustmentLabel;
   reason: string;
   detailedReason: string;
   confidence: number;
@@ -344,7 +344,12 @@ export async function loadExerciseCoachPrescription(
   const [progression, coachCtx, intelligence, profileRes, recoveryRow] = await Promise.all([
     loadSmartProgression(userId, exerciseId, {
       sessionId: plan?.sessionId,
-      currentSessionSets: plan?.currentSessionSets,
+      currentSessionSets: plan?.currentSessionSets?.map((set) => ({
+        weightKg: set.weightKg ?? 0,
+        reps: set.reps ?? 0,
+        setNumber: set.setNumber,
+        isFailure: set.isFailure,
+      })),
     }),
     loadCoachContext(userId),
     loadRecoveryIntelligence(userId).catch(() => null),
