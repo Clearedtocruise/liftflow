@@ -1,27 +1,27 @@
+import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
 
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { ActiveWorkoutScreen } from '@/components/workout/execution/ActiveWorkoutScreen';
 import { WorkoutWeeklyPlanScreen } from '@/components/workout/execution/WorkoutWeeklyPlanScreen';
 import { LiftFlowColors } from '@/constants/theme';
-import { useAuth } from '@/hooks/useAuth';
 import { usePlanAdjustment } from '@/contexts/PlanAdjustmentContext';
+import { useAuth } from '@/hooks/useAuth';
 import { localDateString } from '@/lib/localDate';
 import { showWeeklyEditDayMenu } from '@/lib/planDayActions';
 import { enrichWithSupersetGroups } from '@/lib/supersetFlow';
-import { normalizeExecutionMode } from '@/lib/workoutExecutionMode';
 import { buildWeekPlan, getWeekRange, isConditioningWorkout, type WeekDayPlan } from '@/lib/weekPlan';
 import { serializeChallengeNotes } from '@/lib/workoutChallengeFlow';
+import { normalizeExecutionMode } from '@/lib/workoutExecutionMode';
 import { productAnalyticsService } from '@/services/productAnalyticsService';
 import { trainingService } from '@/services/trainingService';
 import { workoutService } from '@/services/workoutService';
 import { useWorkoutPlanDraft } from '@/state/workout/WorkoutPlanDraftContext';
 import { useWorkoutSession } from '@/state/workout/WorkoutSessionContext';
-import type { WorkoutChallengeRecord } from '@/types/workoutChallenge';
 import type { PlannedWorkout } from '@/types/training';
+import type { WorkoutChallengeRecord } from '@/types/workoutChallenge';
 
 export default function WorkoutScreen() {
   const { user } = useAuth();
@@ -46,8 +46,8 @@ export default function WorkoutScreen() {
       else setLoadingPlan(true);
 
       try {
-        const { from, to } = getWeekRange();
-        const result = await trainingService.getPlannedWorkouts(user.id, from, to);
+        const { from, to } = getWeekRange(new Date(), user?.timezone);
+        const result = await trainingService.getPlannedWorkouts(user.id, from, to, user.timezone);
         const days = buildWeekPlan(result.success ? result.data : []);
         setWeekDays(days);
         const today = days.find((day) => day.workout && day.date === localDateString());
@@ -134,6 +134,7 @@ export default function WorkoutScreen() {
           setFromAdaptation,
           onComplete: () => void loadWeekPlan({ silent: true }),
           onBusyChange: setAdaptingPlan,
+          timeZone: user.timezone,
         },
         day.date,
         day.workout ? () => handleSelectDay(day) : undefined,

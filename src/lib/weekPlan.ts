@@ -31,17 +31,108 @@ export function getWeekRange(
   return { from: dates[0], to: dates[6], dates };
 }
 
-export function buildWeekPlan(plannedWorkouts: PlannedWorkout[], reference = new Date()): WeekDayPlan[] {
-  const { dates } = getWeekRange(reference);
-  const byDate = new Map(plannedWorkouts.map((workout) => [workout.scheduledDate, workout]));
+export type WeeklyPlanEntry = {
+  day: (typeof WEEKDAY_LABELS)[number];
+  date: string;
+  title: string;
+  workoutId: string | null;
+  isRestDay: boolean;
+};
+
+const PLANNED_STATUS_PRIORITY: Record<string, number> = {
+  planned: 3,
+  in_progress: 2,
+  completed: 1,
+  cancelled: 0,
+};
+
+/** One canonical planned workout per calendar day (handles duplicate DB rows). */
+export function dedupePlannedWorkoutsByDate(
+  plannedWorkouts: PlannedWorkout[],
+  reference = new Date(),
+  timeZone?: string | null,
+): PlannedWorkout[] {
+  const { dates } = getWeekRange(reference, timeZone);
+  const weekDates = new Set(dates);
+  const byDate = new Map<string, PlannedWorkout>();
+
+  for (const workout of plannedWorkouts) {
+    if (!weekDates.has(workout.scheduledDate)) continue;
+
+    const existing = byDate.get(workout.scheduledDate);
+    if (!existing) {
+      byDate.set(workout.scheduledDate, workout);
+      continue;
+    }
+
+    const existingRank = PLANNED_STATUS_PRIORITY[existing.status] ?? 0;
+    const nextRank = PLANNED_STATUS_PRIORITY[workout.status] ?? 0;
+    if (nextRank > existingRank) {
+      byDate.set(workout.scheduledDate, workout);
+      continue;
+    }
+    if (nextRank < existingRank) continue;
+
+    const existingExercises = existing.metadata?.exercises?.length ?? 0;
+    const nextExercises = workout.metadata?.exercises?.length ?? 0;
+    if (nextExercises > existingExercises) {
+      byDate.set(workout.scheduledDate, workout);
+    }
+  }
+
+  return dates.map((date) => byDate.get(date)).filter((workout): workout is PlannedWorkout => workout != null);
+}
+
+export function workoutScheduleTitle(workout: PlannedWorkout): string {
+  const slot = workout.metadata?.slotLabel?.trim();
+  if (slot) return slot;
+  const dayLabel = workout.metadata?.dayLabel?.trim();
+  if (dayLabel) return dayLabel;
+  const groups = workout.suggestedMuscleGroups?.filter(Boolean) ?? [];
+  if (groups.length > 0) return groups.join(' · ');
+  const shortName = workout.name.split('—')[0]?.trim();
+  return shortName || workout.name;
+}
+
+export function buildWeeklyPlanEntries(
+  plannedWorkouts: PlannedWorkout[],
+  reference = new Date(),
+  timeZone?: string | null,
+): WeeklyPlanEntry[] {
+  const { dates } = getWeekRange(reference, timeZone);
+  const deduped = dedupePlannedWorkoutsByDate(plannedWorkouts, reference, timeZone);
+  const byDate = new Map(deduped.map((workout) => [workout.scheduledDate, workout]));
+
+  return dates.map((date, index) => {
+    const workout = byDate.get(date);
+    const isRestDay = !workout || workout.status !== 'planned';
+    return {
+      day: WEEKDAY_LABELS[index],
+      date,
+      title: workout && !isRestDay ? workoutScheduleTitle(workout) : 'Rest',
+      workoutId: workout && !isRestDay ? workout.id : null,
+      isRestDay,
+    };
+  });
+}
+
+export function buildWeekPlan(
+  plannedWorkouts: PlannedWorkout[],
+  reference = new Date(),
+  timeZone?: string | null,
+): WeekDayPlan[] {
+  const { dates } = getWeekRange(reference, timeZone);
+  const deduped = dedupePlannedWorkoutsByDate(plannedWorkouts, reference, timeZone);
+  const byDate = new Map(deduped.map((workout) => [workout.scheduledDate, workout]));
 
   return dates.map((date, index) => {
     const workout = byDate.get(date) ?? null;
+    const isPlanned = workout?.status === 'planned';
     return {
       date,
       dayLabel: WEEKDAY_LABELS[index],
-      workout,
-      isRestDay: !workout,
+      workout: isPlanned ? workout : null,
+      isRestDay: !isPlanned,
     };
   });
 }

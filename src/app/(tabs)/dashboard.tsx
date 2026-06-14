@@ -1,9 +1,9 @@
+import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RefreshControl, StyleSheet, View, type ViewStyle } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
-import { useFocusEffect } from '@react-navigation/native';
 
 import { HomeNextUpCard } from '@/components/dashboard/HomeNextUpCard';
 import { HomePlanAdjustedBanner } from '@/components/dashboard/HomePlanAdjustedBanner';
@@ -15,21 +15,21 @@ import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { AppText } from '@/components/ui/AppText';
 import { Brand, LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import { pickDefaultLocation } from '@/constants/trainingProfile';
-import { useAuth } from '@/hooks/useAuth';
 import { usePlanAdjustment } from '@/contexts/PlanAdjustmentContext';
+import { useAuth } from '@/hooks/useAuth';
 import { useInsightRotator } from '@/hooks/useInsightRotator';
 import { useSubscription } from '@/hooks/useSubscription';
 import { useUnits } from '@/hooks/useUnits';
 import { useWorkoutLocations } from '@/hooks/useWorkoutLocations';
+import { deviceTimeZone, formatScheduledDbTime, localDateString } from '@/lib/localDate';
 import {
     aggregateDailyMeals,
     findNextMeal,
     trainingLabelFromRecoveryScore,
 } from '@/lib/mealAggregation';
-import { deviceTimeZone, formatScheduledDbTime, localDateString } from '@/lib/localDate';
 import { formatWorkoutTime, scheduleFromProfile, scheduledTimesForDay } from '@/lib/mealSchedule';
-import { logStartup } from '@/lib/startupLogger';
 import { showHomeManageDayMenu } from '@/lib/planDayActions';
+import { logStartup } from '@/lib/startupLogger';
 import { getWeekRange } from '@/lib/weekPlan';
 import { estimateWorkoutDurationMinutes, exercisesFromPlannedWorkout } from '@/lib/workoutPlan';
 import { analyticsService } from '@/services/analyticsService';
@@ -89,13 +89,13 @@ export default function DashboardScreen() {
     setProgramLoading(true);
     setSummaryLoading(true);
 
-    const { from, to } = getWeekRange();
+    const { from, to } = getWeekRange(new Date(), user?.timezone);
 
-    await nutritionService.pruneDuplicateMeals(user.id);
+    void nutritionService.pruneDuplicateMeals(user.id);
 
     void Promise.all([
       trainingService.getDashboard(user.id),
-      trainingService.getPlannedWorkouts(user.id, from, to),
+      trainingService.getPlannedWorkouts(user.id, from, to, user.timezone),
     ]).then(([programResult, plannedResult]) => {
       if (programResult.success) setProgram(programResult.data);
       if (plannedResult.success) setWeekWorkouts(plannedResult.data);
@@ -233,6 +233,7 @@ export default function DashboardScreen() {
         setFromAdaptation,
         onComplete: () => load(),
         onBusyChange: setAdaptingPlan,
+        timeZone: user.timezone,
       },
       today,
     );

@@ -1,11 +1,16 @@
 import { Alert } from 'react-native';
 
-import { syncGroceriesAfterPlanAdaptation } from '@/lib/planAdaptationClient';
 import { localDateString } from '@/lib/localDate';
-import { getWeekRange, WEEKDAY_LABELS } from '@/lib/weekPlan';
+import { syncGroceriesAfterPlanAdaptation } from '@/lib/planAdaptationClient';
+import { logPlanDayContext, type PlanDayMoveTarget } from '@/lib/planDayDebug';
+import {
+    buildWeeklyPlanEntries,
+    dedupePlannedWorkoutsByDate,
+    type WeeklyPlanEntry,
+} from '@/lib/weekPlan';
 import { trainingService } from '@/services/trainingService';
-import type { PlannedWorkout } from '@/types/training';
 import type { PlanAdaptationResult, ScheduleChange } from '@/types/planAdaptation';
+import type { PlannedWorkout } from '@/types/training';
 
 export type PlanDayActionDeps = {
   userId: string;
@@ -13,6 +18,7 @@ export type PlanDayActionDeps = {
   setFromAdaptation: (result: PlanAdaptationResult) => void;
   onComplete?: () => void;
   onBusyChange?: (busy: boolean) => void;
+  timeZone?: string | null;
 };
 
 function addDays(dateStr: string, delta: number): string {
@@ -21,21 +27,45 @@ function addDays(dateStr: string, delta: number): string {
   return localDateString(d);
 }
 
-function formatDayShort(dateStr: string): string {
-  const { dates } = getWeekRange();
-  const index = dates.indexOf(dateStr);
-  const label = index >= 0 ? WEEKDAY_LABELS[index] : dateStr;
-  return `${label} (${dateStr.slice(5)})`;
+function normalizeWorkouts(deps: PlanDayActionDeps): PlannedWorkout[] {
+  return dedupePlannedWorkoutsByDate(deps.workouts, new Date(), deps.timeZone);
+}
+
+function weeklyPlanFor(deps: PlanDayActionDeps): WeeklyPlanEntry[] {
+  return buildWeeklyPlanEntries(deps.workouts, new Date(), deps.timeZone);
+}
+
+function entryLabel(entry: WeeklyPlanEntry): string {
+  return entry.isRestDay ? `${entry.day} · Rest` : `${entry.day} · ${entry.title}`;
 }
 
 function plannedWorkoutOnDate(workouts: PlannedWorkout[], date: string): PlannedWorkout | undefined {
   return workouts.find((w) => w.scheduledDate === date && w.status === 'planned');
 }
 
-function plannedWorkoutsThisWeek(workouts: PlannedWorkout[]): PlannedWorkout[] {
-  const { dates } = getWeekRange();
-  const week = new Set(dates);
-  return workouts.filter((w) => w.status === 'planned' && week.has(w.scheduledDate));
+function moveTargetsForDate(
+  weeklyPlan: WeeklyPlanEntry[],
+  excludeDate: string,
+): PlanDayMoveTarget[] {
+  return weeklyPlan
+    .filter((entry) => entry.date !== excludeDate)
+    .map((entry) => ({
+      day: entry.day,
+      date: entry.date,
+      title: entry.title,
+      workoutId: entry.workoutId,
+    }));
+}
+
+function logBeforeModal(
+  source: string,
+  activeTrainingDay: string,
+  deps: PlanDayActionDeps,
+  availableMoveTargets: PlanDayMoveTarget[],
+): WeeklyPlanEntry[] {
+  const weeklyPlan = weeklyPlanFor(deps);
+  logPlanDayContext(source, activeTrainingDay, weeklyPlan, availableMoveTargets);
+  return weeklyPlan;
 }
 
 async function executeAdapt(deps: PlanDayActionDeps, change: ScheduleChange) {
@@ -62,91 +92,132 @@ function confirmSkip(deps: PlanDayActionDeps, workout: PlannedWorkout) {
   ]);
 }
 
-function promptPickWorkout(
-  title: string,
-  message: string,
-  workouts: PlannedWorkout[],
-  onPick: (workout: PlannedWorkout) => void,
+function promptMoveWorkoutToDate(
+  deps: PlanDayActionDeps,
+  workout: PlannedWorkout,
+  toDate: string,
 ) {
-  if (workouts.length === 0) {
-    Alert.alert('No workouts', 'No planned workouts available this week.');
-    return;
-  }
-  Alert.alert(title, message, [
-    ...workouts.map((w) => ({
-      text: `${w.name} · ${formatDayShort(w.scheduledDate)}`,
-      onPress: () => onPick(w),
-    })),
-    { text: 'Cancel', style: 'cancel' as const },
-  ]);
+  void executeAdapt(deps, { type: 'move', workoutId: workout.id, toDate });
 }
 
 function promptMoveToDay(deps: PlanDayActionDeps, workout: PlannedWorkout) {
-  const { dates } = getWeekRange();
-  const targets = dates.filter((d) => d !== workout.scheduledDate);
-  if (targets.length === 0) {
+  const availableMoveTargets = moveTargetsForDate(weeklyPlanFor(deps), workout.scheduledDate);
+  logBeforeModal('move-to-day', workout.scheduledDate, deps, availableMoveTargets);
+
+  if (availableMoveTargets.length === 0) {
     Alert.alert('No open days', 'No other days available this week.');
     return;
   }
-  Alert.alert('Move to another day', workout.name, [
-    ...targets.map((date) => ({
-      text: formatDayShort(date),
-      onPress: () => void executeAdapt(deps, { type: 'move', workoutId: workout.id, toDate: date }),
+
+  Alert.alert('Move to another day', `${workout.name}`, [
+    ...availableMoveTargets.map((target) => ({
+      text: target.workoutId
+        ? `${target.day} · ${target.title} (swap)`
+        : `${target.day} · Rest`,
+      onPress: () => promptMoveWorkoutToDate(deps, workout, target.date),
     })),
     { text: 'Cancel', style: 'cancel' as const },
   ]);
 }
 
-function promptSwapWithWorkout(deps: PlanDayActionDeps, source: PlannedWorkout) {
-  const others = plannedWorkoutsThisWeek(deps.workouts).filter((w) => w.id !== source.id);
-  if (others.length === 0) {
+function promptSwapWithWorkout(deps: PlanDayActionDeps, source: PlannedWorkout, weeklyPlan: WeeklyPlanEntry[]) {
+  const normalized = normalizeWorkouts(deps);
+  const targets = weeklyPlan.filter(
+    (entry) => entry.date !== source.scheduledDate && entry.workoutId && entry.workoutId !== source.id,
+  );
+
+  if (targets.length === 0) {
     Alert.alert('No swap target', 'No other planned workouts to swap with.');
     return;
   }
+
   Alert.alert('Swap with', source.name, [
-    ...others.map((w) => ({
-      text: `${w.name} · ${formatDayShort(w.scheduledDate)}`,
-      onPress: () =>
-        void executeAdapt(deps, { type: 'swap', workoutIdA: source.id, workoutIdB: w.id }),
+    ...targets.map((entry) => ({
+      text: entryLabel(entry),
+      onPress: () => {
+        const targetWorkout = normalized.find((w) => w.id === entry.workoutId);
+        if (!targetWorkout) return;
+        void executeAdapt(deps, { type: 'swap', workoutIdA: source.id, workoutIdB: targetWorkout.id });
+      },
     })),
     { text: 'Cancel', style: 'cancel' as const },
   ]);
 }
 
 function promptSwapWithRestDay(deps: PlanDayActionDeps, workout: PlannedWorkout) {
-  const { dates } = getWeekRange();
-  const restDates = dates.filter((d) => d !== workout.scheduledDate && !plannedWorkoutOnDate(deps.workouts, d));
-  if (restDates.length === 0) {
+  const weeklyPlan = weeklyPlanFor(deps);
+  const restTargets = weeklyPlan.filter((entry) => entry.date !== workout.scheduledDate && entry.isRestDay);
+  const availableMoveTargets = restTargets.map((entry) => ({
+    day: entry.day,
+    date: entry.date,
+    title: entry.title,
+    workoutId: entry.workoutId,
+  }));
+  logBeforeModal('swap-with-rest', workout.scheduledDate, deps, availableMoveTargets);
+
+  if (restTargets.length === 0) {
     Alert.alert('No rest day', 'Every other day this week already has a workout.');
     return;
   }
+
   Alert.alert('Swap with rest day', 'Choose a rest day to exchange with', [
-    ...restDates.map((date) => ({
-      text: formatDayShort(date),
-      onPress: () => void executeAdapt(deps, { type: 'move', workoutId: workout.id, toDate: date }),
+    ...restTargets.map((entry) => ({
+      text: entryLabel(entry),
+      onPress: () => promptMoveWorkoutToDate(deps, workout, entry.date),
     })),
     { text: 'Cancel', style: 'cancel' as const },
   ]);
 }
 
 function promptDoToday(deps: PlanDayActionDeps, today: string) {
-  const others = plannedWorkoutsThisWeek(deps.workouts).filter((w) => w.scheduledDate !== today);
-  promptPickWorkout('Do today', 'Move which workout to today?', others, (workout) => {
-    void executeAdapt(deps, { type: 'move', workoutId: workout.id, toDate: today });
-  });
+  const normalized = normalizeWorkouts(deps);
+  const weeklyPlan = weeklyPlanFor(deps);
+  const moveCandidates = weeklyPlan.filter((entry) => entry.date !== today && entry.workoutId);
+  const availableMoveTargets = moveCandidates.map((entry) => ({
+    day: entry.day,
+    date: entry.date,
+    title: entry.title,
+    workoutId: entry.workoutId,
+  }));
+  logBeforeModal('do-today', today, deps, availableMoveTargets);
+
+  if (moveCandidates.length === 0) {
+    Alert.alert('No workouts', 'No planned workouts available to move to today.');
+    return;
+  }
+
+  Alert.alert('Do today', 'Move which workout to today?', [
+    ...moveCandidates.map((entry) => ({
+      text: entryLabel(entry),
+      onPress: () => {
+        const workout = normalized.find((w) => w.id === entry.workoutId);
+        if (!workout) return;
+        promptMoveWorkoutToDate(deps, workout, today);
+      },
+    })),
+    { text: 'Cancel', style: 'cancel' as const },
+  ]);
+}
+
+function formatWeekSchedule(weeklyPlan: WeeklyPlanEntry[]): string {
+  return weeklyPlan.map((entry) => (entry.isRestDay ? `${entry.day}: Rest` : `${entry.day}: ${entry.title}`)).join('\n');
 }
 
 /** Home screen — Manage Day menu for today. */
 export function showHomeManageDayMenu(deps: PlanDayActionDeps, today = localDateString()) {
-  const week = plannedWorkoutsThisWeek(deps.workouts);
-  const todayWorkout = plannedWorkoutOnDate(deps.workouts, today);
+  const normalized = normalizeWorkouts(deps);
+  const weeklyPlan = weeklyPlanFor(deps);
+  const availableMoveTargets = moveTargetsForDate(weeklyPlan, today);
+  logBeforeModal('manage-day', today, deps, availableMoveTargets);
+
+  const todayWorkout = plannedWorkoutOnDate(normalized, today);
   const tomorrow = addDays(today, 1);
-  const otherWorkouts = week.filter((w) => w.scheduledDate !== today);
+  const hasOtherWorkouts = weeklyPlan.some((entry) => entry.date !== today && entry.workoutId);
 
   type AlertOption = { text: string; style?: 'destructive' | 'cancel'; onPress?: () => void };
   const options: AlertOption[] = [];
 
-  if (!todayWorkout && otherWorkouts.length > 0) {
+  if (!todayWorkout && hasOtherWorkouts) {
     options.push({ text: 'Do Today', onPress: () => promptDoToday(deps, today) });
   }
 
@@ -168,7 +239,7 @@ export function showHomeManageDayMenu(deps: PlanDayActionDeps, today = localDate
       style: 'destructive',
       onPress: () => confirmSkip(deps, todayWorkout),
     });
-  } else if (otherWorkouts.length > 0) {
+  } else if (hasOtherWorkouts) {
     options.push({ text: 'Swap With Rest Day', onPress: () => promptDoToday(deps, today) });
   }
 
@@ -179,7 +250,7 @@ export function showHomeManageDayMenu(deps: PlanDayActionDeps, today = localDate
 
   Alert.alert(
     'Manage Day',
-    todayWorkout ? todayWorkout.name : 'Today is a rest day — bring a workout forward or swap days.',
+    `${formatWeekSchedule(weeklyPlan)}\n\n${todayWorkout ? `Today: ${todayWorkout.name}` : 'Today is a rest day.'}`,
     [...options, { text: 'Cancel', style: 'cancel' }],
   );
 }
@@ -190,15 +261,24 @@ export function showWeeklyEditDayMenu(
   date: string,
   onStartWorkout?: () => void,
 ) {
-  const dayWorkout = plannedWorkoutOnDate(deps.workouts, date);
-  const otherWorkouts = plannedWorkoutsThisWeek(deps.workouts).filter((w) => w.scheduledDate !== date);
+  const normalized = normalizeWorkouts(deps);
+  const weeklyPlan = weeklyPlanFor(deps);
+  const dayWorkout = plannedWorkoutOnDate(normalized, date);
+  const moveCandidates = weeklyPlan.filter((entry) => entry.date !== date && entry.workoutId);
+  const availableMoveTargets = moveCandidates.map((entry) => ({
+    day: entry.day,
+    date: entry.date,
+    title: entry.title,
+    workoutId: entry.workoutId,
+  }));
+  logBeforeModal('edit-day', date, deps, availableMoveTargets);
 
   type AlertOption = { text: string; style?: 'destructive' | 'cancel'; onPress?: () => void };
   const options: AlertOption[] = [];
 
   if (dayWorkout) {
     options.push({ text: 'Move', onPress: () => promptMoveToDay(deps, dayWorkout) });
-    options.push({ text: 'Swap', onPress: () => promptSwapWithWorkout(deps, dayWorkout) });
+    options.push({ text: 'Swap', onPress: () => promptSwapWithWorkout(deps, dayWorkout, weeklyPlan) });
     options.push({
       text: 'Make Rest Day',
       style: 'destructive',
@@ -207,23 +287,39 @@ export function showWeeklyEditDayMenu(
     if (onStartWorkout) {
       options.push({ text: 'Start Workout', onPress: onStartWorkout });
     }
-  } else {
-    if (otherWorkouts.length > 0) {
-      options.push({
-        text: 'Move',
-        onPress: () =>
-          promptPickWorkout('Move workout here', formatDayShort(date), otherWorkouts, (workout) => {
-            void executeAdapt(deps, { type: 'move', workoutId: workout.id, toDate: date });
-          }),
-      });
-      options.push({
-        text: 'Swap',
-        onPress: () =>
-          promptPickWorkout('Swap onto this day', formatDayShort(date), otherWorkouts, (workout) => {
-            void executeAdapt(deps, { type: 'move', workoutId: workout.id, toDate: date });
-          }),
-      });
-    }
+  } else if (moveCandidates.length > 0) {
+    options.push({
+      text: 'Move',
+      onPress: () => {
+        Alert.alert('Move workout here', formatWeekSchedule(weeklyPlan), [
+          ...moveCandidates.map((entry) => ({
+            text: entryLabel(entry),
+            onPress: () => {
+              const workout = normalized.find((w) => w.id === entry.workoutId);
+              if (!workout) return;
+              promptMoveWorkoutToDate(deps, workout, date);
+            },
+          })),
+          { text: 'Cancel', style: 'cancel' as const },
+        ]);
+      },
+    });
+    options.push({
+      text: 'Swap',
+      onPress: () => {
+        Alert.alert('Swap onto this day', formatWeekSchedule(weeklyPlan), [
+          ...moveCandidates.map((entry) => ({
+            text: entryLabel(entry),
+            onPress: () => {
+              const workout = normalized.find((w) => w.id === entry.workoutId);
+              if (!workout) return;
+              promptMoveWorkoutToDate(deps, workout, date);
+            },
+          })),
+          { text: 'Cancel', style: 'cancel' as const },
+        ]);
+      },
+    });
     if (onStartWorkout) {
       options.push({ text: 'Start Workout', onPress: onStartWorkout });
     }
@@ -234,5 +330,10 @@ export function showWeeklyEditDayMenu(
     return;
   }
 
-  Alert.alert('Edit Day', formatDayShort(date), [...options, { text: 'Cancel', style: 'cancel' }]);
+  const dayEntry = weeklyPlan.find((entry) => entry.date === date);
+  Alert.alert(
+    'Edit Day',
+    dayEntry ? (dayEntry.isRestDay ? `${dayEntry.day}: Rest` : `${dayEntry.day}: ${dayEntry.title}`) : date,
+    [...options, { text: 'Cancel', style: 'cancel' }],
+  );
 }

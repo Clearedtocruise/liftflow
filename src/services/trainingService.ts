@@ -1,6 +1,7 @@
 import { api, apiClient } from '@/api/client';
 import { WORKOUT_PLAN_RULES_VERSION } from '@/constants/workout';
 import { fail, fromError, ok } from '@/lib/serviceResult';
+import { dedupePlannedWorkoutsByDate } from '@/lib/weekPlan';
 import type { ITrainingService } from '@/services/interfaces';
 import { getAccessToken, supabase } from '@/supabase/client';
 import type {
@@ -190,14 +191,14 @@ export const trainingService: ITrainingService = {
     }
   },
 
-  async getPlannedWorkouts(userId, from, to) {
+  async getPlannedWorkouts(userId, from, to, timeZone?: string | null) {
     try {
       const token = await getAccessToken();
       const remote = await apiClient.get<PlannedRow[]>(
         `/api/training/programs/planned?userId=${userId}&from=${from}&to=${to}`,
         token,
       );
-      return ok((remote ?? []).map(mapPlanned));
+      return ok(dedupePlannedWorkoutsByDate((remote ?? []).map(mapPlanned), new Date(), timeZone));
     } catch {
       const { data, error } = await supabase
         .from('planned_workouts')
@@ -208,7 +209,7 @@ export const trainingService: ITrainingService = {
         .order('scheduled_date', { ascending: true });
 
       if (error) return fail(error.message);
-      return ok((data ?? []).map((row) => mapPlanned(row as PlannedRow)));
+      return ok(dedupePlannedWorkoutsByDate((data ?? []).map((row) => mapPlanned(row as PlannedRow)), new Date(), timeZone));
     }
   },
 

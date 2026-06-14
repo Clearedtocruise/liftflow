@@ -498,7 +498,47 @@ export async function getPlannedWorkoutsInRange(userId: string, from: string, to
     .order('scheduled_date', { ascending: true });
 
   if (error) throw error;
-  return data ?? [];
+  return dedupePlannedRowsByDate(data ?? []);
+}
+
+const PLANNED_ROW_STATUS_RANK: Record<string, number> = {
+  planned: 3,
+  in_progress: 2,
+  completed: 1,
+  cancelled: 0,
+};
+
+/** Keep one row per scheduled_date when duplicate planner rows exist. */
+function dedupePlannedRowsByDate(rows: Record<string, unknown>[]): Record<string, unknown>[] {
+  const byDate = new Map<string, Record<string, unknown>>();
+
+  for (const row of rows) {
+    const date = String(row.scheduled_date ?? '');
+    if (!date) continue;
+    const existing = byDate.get(date);
+    if (!existing) {
+      byDate.set(date, row);
+      continue;
+    }
+
+    const existingRank = PLANNED_ROW_STATUS_RANK[String(existing.status)] ?? 0;
+    const nextRank = PLANNED_ROW_STATUS_RANK[String(row.status)] ?? 0;
+    if (nextRank > existingRank) {
+      byDate.set(date, row);
+      continue;
+    }
+    if (nextRank < existingRank) continue;
+
+    const existingExercises = ((existing.metadata as { exercises?: unknown[] })?.exercises ?? []).length;
+    const nextExercises = ((row.metadata as { exercises?: unknown[] })?.exercises ?? []).length;
+    if (nextExercises > existingExercises) {
+      byDate.set(date, row);
+    }
+  }
+
+  return [...byDate.values()].sort((a, b) =>
+    String(a.scheduled_date).localeCompare(String(b.scheduled_date)),
+  );
 }
 
 function plannedWorkoutExerciseCount(workout: Record<string, unknown>): number {
