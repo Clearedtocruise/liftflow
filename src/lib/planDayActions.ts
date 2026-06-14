@@ -1,5 +1,6 @@
 import { Alert } from 'react-native';
 
+import { resolveActiveTrainingDay } from '@/lib/activeTrainingDay';
 import { localDateString } from '@/lib/localDate';
 import { syncGroceriesAfterPlanAdaptation } from '@/lib/planAdaptationClient';
 import { logPlanDayContext, type PlanDayMoveTarget } from '@/lib/planDayDebug';
@@ -64,7 +65,11 @@ function logBeforeModal(
   availableMoveTargets: PlanDayMoveTarget[],
 ): WeeklyPlanEntry[] {
   const weeklyPlan = weeklyPlanFor(deps);
-  logPlanDayContext(source, activeTrainingDay, weeklyPlan, availableMoveTargets);
+  const resolved = resolveActiveTrainingDay(deps.workouts, {
+    date: activeTrainingDay,
+    timeZone: deps.timeZone,
+  });
+  logPlanDayContext(source, activeTrainingDay, weeklyPlan, availableMoveTargets, resolved);
   return weeklyPlan;
 }
 

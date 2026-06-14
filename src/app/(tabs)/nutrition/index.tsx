@@ -1,7 +1,7 @@
+import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
 
 import { api } from '@/api/client';
 import { Card } from '@/components/layout/Card';
@@ -13,18 +13,20 @@ import { NutritionProgressHeader } from '@/components/nutrition/NutritionProgres
 import { NutritionSectionTabs, type NutritionSection } from '@/components/nutrition/NutritionSectionTabs';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Spacing } from '@/constants/theme';
-import { useAuth } from '@/hooks/useAuth';
 import { usePlanAdjustment } from '@/contexts/PlanAdjustmentContext';
+import { useAuth } from '@/hooks/useAuth';
+import { useLocalDayRollover } from '@/hooks/useLocalDayRollover';
+import { resolveActiveTrainingDay } from '@/lib/activeTrainingDay';
 import { aggregateWeeklyGroceries, groupGroceriesByCategory } from '@/lib/groceryAggregation';
 import { localDateString } from '@/lib/localDate';
 import { aggregateDailyMeals, aggregateWeeklyMeals, dedupeMealsByType } from '@/lib/mealAggregation';
 import {
-  enrichMealMeta,
-  serializeMealMeta,
+    enrichMealMeta,
+    serializeMealMeta,
 } from '@/lib/mealIngredients';
 import {
-  buildSmartReplacementUpdate,
-  selectMealsForScope,
+    buildSmartReplacementUpdate,
+    selectMealsForScope,
 } from '@/lib/mealReplacement';
 import { formatScheduleSubtitle, scheduleFromProfile, scheduledTimesForDay } from '@/lib/mealSchedule';
 import { WEEKDAY_LABELS, getWeekRange } from '@/lib/weekPlan';
@@ -57,7 +59,7 @@ export default function NutritionScreen() {
 
   const load = useCallback(async () => {
     if (!user) return;
-    const { from, to } = getWeekRange();
+    const { from, to } = getWeekRange(new Date(), user.timezone);
     await nutritionService.pruneDuplicateMeals(user.id, { from, to });
 
     const token = await getAccessToken();
@@ -65,11 +67,11 @@ export default function NutritionScreen() {
       ? api.getRecoveryToday(user.id, token).catch(() => null)
       : Promise.resolve(null);
 
-    const [goalsRes, summaryRes, weekRes, dashRes, recoveryToday, groceryRes] = await Promise.all([
+    const [goalsRes, summaryRes, weekRes, plannedRes, recoveryToday, groceryRes] = await Promise.all([
       nutritionService.getGoals(user.id),
       nutritionService.getDailySummary(user.id, today),
       nutritionService.getMealsForWeek(user.id, from, to),
-      trainingService.getDashboard(user.id),
+      trainingService.getPlannedWorkouts(user.id, from, to, user.timezone),
       recoveryPromise,
       nutritionService.getGroceryLists(user.id),
     ]);
@@ -78,9 +80,10 @@ export default function NutritionScreen() {
     if (summaryRes.success) setSummary(summaryRes.data);
     if (weekRes.success) setWeekMeals(weekRes.data);
     if (groceryRes.success && groceryRes.data?.[0]) setGroceryList(groceryRes.data[0]);
-    if (dashRes.success) {
-      setHasWorkoutToday(dashRes.data.nextWorkout?.scheduledDate === today);
-    }
+
+    const planned = plannedRes.success ? plannedRes.data : [];
+    const activeDay = resolveActiveTrainingDay(planned, { date: today, timeZone: user.timezone });
+    setHasWorkoutToday(!activeDay.isScheduledRestDay);
 
     const sleepHours = recoveryToday?.sleepHours;
     setRecoverySleepHours(typeof sleepHours === 'number' ? sleepHours : undefined);
@@ -96,6 +99,10 @@ export default function NutritionScreen() {
       if (user) void load();
     }, [user, load]),
   );
+
+  useLocalDayRollover(user?.timezone, () => {
+    void load();
+  });
 
   useEffect(() => {
     if (revision > 0 && user) void load();
@@ -116,13 +123,13 @@ export default function NutritionScreen() {
   );
 
   const weekDays = useMemo(() => {
-    const { dates } = getWeekRange();
+    const { dates } = getWeekRange(new Date(), user?.timezone);
     return dates.map((date, index) => ({
       date,
       label: WEEKDAY_LABELS[index],
       meals: dedupeMealsByType(weekMeals.filter((meal) => meal.scheduledDate === date)),
     }));
-  }, [weekMeals]);
+  }, [weekMeals, user?.timezone]);
 
   const weekAggregation = useMemo(() => aggregateWeeklyMeals(weekMeals), [weekMeals]);
 

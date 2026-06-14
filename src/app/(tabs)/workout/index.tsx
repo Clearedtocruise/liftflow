@@ -9,6 +9,11 @@ import { WorkoutWeeklyPlanScreen } from '@/components/workout/execution/WorkoutW
 import { LiftFlowColors } from '@/constants/theme';
 import { usePlanAdjustment } from '@/contexts/PlanAdjustmentContext';
 import { useAuth } from '@/hooks/useAuth';
+import { useLocalDayRollover } from '@/hooks/useLocalDayRollover';
+import {
+    resolveActiveTrainingDay,
+    validateWorkoutAssignmentConsistency,
+} from '@/lib/activeTrainingDay';
 import { localDateString } from '@/lib/localDate';
 import { showWeeklyEditDayMenu } from '@/lib/planDayActions';
 import { enrichWithSupersetGroups } from '@/lib/supersetFlow';
@@ -48,9 +53,10 @@ export default function WorkoutScreen() {
       try {
         const { from, to } = getWeekRange(new Date(), user?.timezone);
         const result = await trainingService.getPlannedWorkouts(user.id, from, to, user.timezone);
-        const days = buildWeekPlan(result.success ? result.data : []);
+        const days = buildWeekPlan(result.success ? result.data : [], new Date(), user?.timezone);
         setWeekDays(days);
-        const today = days.find((day) => day.workout && day.date === localDateString());
+        const todayKey = localDateString(new Date(), user?.timezone);
+        const today = days.find((day) => day.date === todayKey);
         if (today?.workout) setPlannedWorkout(today.workout);
       } catch {
         if (!options?.silent) setWeekDays([]);
@@ -59,8 +65,12 @@ export default function WorkoutScreen() {
         setRefreshingPlan(false);
       }
     },
-    [user?.id, setPlannedWorkout],
+    [user?.id, user?.timezone, setPlannedWorkout],
   );
+
+  useLocalDayRollover(user?.timezone, () => {
+    void loadWeekPlan({ silent: true });
+  });
 
   useEffect(() => {
     if (!user?.id) {
@@ -104,6 +114,22 @@ export default function WorkoutScreen() {
     () => weekDays.map((day) => day.workout).filter(Boolean) as PlannedWorkout[],
     [weekDays],
   );
+
+  useEffect(() => {
+    if (!__DEV__ || !user?.id) return;
+    const todayKey = localDateString(new Date(), user.timezone);
+    const homeDay = resolveActiveTrainingDay(weekWorkouts, { date: todayKey, timeZone: user.timezone });
+    const plannerDay = weekDays.find((day) => day.date === todayKey);
+    const mismatches = validateWorkoutAssignmentConsistency({
+      workoutTab: homeDay,
+      planner: plannerDay?.workout
+        ? resolveActiveTrainingDay(weekWorkouts, { date: todayKey, timeZone: user.timezone })
+        : homeDay,
+    });
+    if (mismatches.length > 0) {
+      console.warn('[activeTrainingDay] workout tab mismatch', mismatches);
+    }
+  }, [user?.id, user?.timezone, weekDays, weekWorkouts]);
 
   const handleSelectDay = useCallback(
     (day: WeekDayPlan) => {
@@ -218,6 +244,7 @@ export default function WorkoutScreen() {
         loading={loadingPlan}
         refreshing={refreshingPlan}
         adaptingPlan={adaptingPlan}
+        timeZone={user?.timezone}
         onSelectDay={handleSelectDay}
         onEditDay={handleEditDay}
         onManualLog={() => router.push('/(tabs)/workout/manual-log')}

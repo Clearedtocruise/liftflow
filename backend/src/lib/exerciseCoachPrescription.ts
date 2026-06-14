@@ -1,8 +1,8 @@
 import { loadCoachContext } from './coachContext.js';
 import { loadRecoveryIntelligence } from './loadRecoveryIntelligence.js';
 import { loadSmartProgression } from './loadSmartProgression.js';
-import { requireAdmin } from './supabase.js';
 import type { ProgressionAdjustmentType } from './smartProgressionEngine.js';
+import { requireAdmin } from './supabase.js';
 
 export type CoachAdjustmentLabel =
   | 'increase_weight'
@@ -103,6 +103,7 @@ export function buildWhySelected(input: {
   equipment?: string[];
   readinessScore: number;
   muscleFresh?: boolean;
+  trainingRecommendation?: string;
 }): string[] {
   const lines: string[] = [];
   if (input.notes) lines.push(input.notes);
@@ -110,7 +111,11 @@ export function buildWhySelected(input: {
   if (input.sprintPhase) {
     lines.push(`Program phase: ${input.sprintPhase.replace(/_/g, ' ')}.`);
   }
-  if (input.readinessScore >= 80) {
+  if (input.trainingRecommendation === 'train_light') {
+    lines.push('Recovery suggests training light — keep effort moderate and leave reps in reserve.');
+  } else if (input.trainingRecommendation === 'recovery_session') {
+    lines.push('Included at reduced intensity while recovery is still rebuilding.');
+  } else if (input.readinessScore >= 80) {
     lines.push('Muscle readiness is high — good day to push this movement.');
   } else if (input.readinessScore < 55) {
     lines.push('Included with manageable volume while readiness is still rebuilding.');
@@ -154,6 +159,7 @@ export async function loadExerciseCoachPrescription(
 
   const readinessScore = intelligence?.factors.muscleReadinessScore ?? coachCtx.recovery.score ?? 72;
   const recoveryScore = intelligence?.recoveryScore ?? coachCtx.recovery.score ?? 72;
+  const trainingRecommendation = intelligence?.trainingRecommendation ?? 'train';
   const recoveryVolumeMultiplier =
     (recoveryRow.data?.metadata as { volumeMultiplier?: number } | null)?.volumeMultiplier ?? 1;
   const sprintPhase = coachCtx.program?.sprintPhase;
@@ -169,6 +175,9 @@ export async function loadExerciseCoachPrescription(
     recoveryVolumeMultiplier,
   );
 
+  const effectiveTrainingRec =
+    trainingRecommendation === 'rest_day' ? 'train_light' : trainingRecommendation;
+
   const adherence = nutritionAdherencePct(
     coachCtx.nutrition.caloriesToday ?? 0,
     coachCtx.nutrition.caloriesTarget ?? 0,
@@ -183,6 +192,7 @@ export async function loadExerciseCoachPrescription(
     sprintPhase,
     equipment: (profileRes.data?.available_equipment as string[] | undefined) ?? [],
     readinessScore,
+    trainingRecommendation: effectiveTrainingRec,
   });
 
   let detailedReason = progression.detailedReason;

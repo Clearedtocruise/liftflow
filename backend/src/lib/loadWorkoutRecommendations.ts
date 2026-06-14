@@ -1,34 +1,36 @@
 import { loadRecoveryIntelligence } from './loadRecoveryIntelligence.js';
+import { localDateString, weekStartDateString } from './localDate.js';
 import { addDays } from './programTypes.js';
-import { resolveRankedGoals } from './trainingGoals.js';
 import { requireAdmin } from './supabase.js';
+import { resolveRankedGoals } from './trainingGoals.js';
 import { buildAdaptiveWorkoutPlan, type GeneratedWorkoutPlan } from './workoutPlanner.js';
 import {
-  computeWorkoutRecommendations,
-  inferDaysPerWeek,
-  inferSplitFromProfile,
-  type RecommendationEngineInput,
-  type WorkoutRecommendationReport,
+    coerceTrainingRecommendationForSchedule,
+    computeWorkoutRecommendations,
+    inferDaysPerWeek,
+    inferSplitFromProfile,
+    type RecommendationEngineInput,
+    type WorkoutRecommendationReport,
 } from './workoutRecommendationEngine.js';
 
 export async function loadWorkoutRecommendations(userId: string): Promise<WorkoutRecommendationReport> {
   const db = requireAdmin();
-  const today = new Date().toISOString().slice(0, 10);
-  const weekStart = new Date(today + 'T12:00:00');
-  const day = weekStart.getDay();
-  weekStart.setDate(weekStart.getDate() - day + (day === 0 ? -6 : 1));
-  const weekStartStr = weekStart.toISOString().slice(0, 10);
+
+  const profileRes = await db
+    .from('profiles')
+    .select('fitness_goals, primary_training_goal, metadata, timezone')
+    .eq('id', userId)
+    .maybeSingle();
+
+  const profileTimeZone = (profileRes.data?.timezone as string | null | undefined) ?? null;
+  const today = localDateString(new Date(), profileTimeZone);
+  const weekStartStr = weekStartDateString(today);
 
   const sevenDaysAgo = new Date();
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-  const [intelligence, profileRes, sessionsRes, plannedRes] = await Promise.all([
+  const [intelligence, sessionsRes, plannedRes] = await Promise.all([
     loadRecoveryIntelligence(userId),
-    db
-      .from('profiles')
-      .select('fitness_goals, primary_training_goal, metadata')
-      .eq('id', userId)
-      .maybeSingle(),
     db
       .from('workout_sessions')
       .select('started_at, workout_exercises(exercises(muscle_groups), workout_sets(weight, reps))')
@@ -84,12 +86,18 @@ export async function loadWorkoutRecommendations(userId: string): Promise<Workou
     .filter((p) => p.status === 'planned' && p.scheduled_date >= today)
     .sort((a, b) => a.scheduled_date.localeCompare(b.scheduled_date))[0];
 
+  const hasScheduledWorkoutToday = nextPlanned?.scheduled_date === today;
+  const trainingRecommendation = coerceTrainingRecommendationForSchedule(
+    intelligence.trainingRecommendation,
+    hasScheduledWorkoutToday,
+  );
+
   const engineInput: RecommendationEngineInput = {
     userId,
     today,
     recoveryScore: intelligence.recoveryScore,
     recoveryStatus: intelligence.recoveryStatus,
-    trainingRecommendation: intelligence.trainingRecommendation,
+    trainingRecommendation,
     suggestedMuscleGroups: intelligence.suggestedMuscleGroups,
     avoidMuscleGroups: intelligence.avoidMuscleGroups,
     muscleRecovery: intelligence.muscleRecovery.map((m) => ({
@@ -132,7 +140,7 @@ export async function loadWorkoutRecommendations(userId: string): Promise<Workou
     workoutsByDate.set(date, plan);
   }
 
-  if (intelligence.trainingRecommendation !== 'rest_day') {
+  if (intelligence.trainingRecommendation !== 'rest_day' || hasScheduledWorkoutToday) {
     await attachWorkout(preview.today, today);
     await attachWorkout(preview.tomorrow, addDays(today, 1));
   }

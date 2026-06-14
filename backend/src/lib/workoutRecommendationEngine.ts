@@ -1,12 +1,12 @@
+import { inferProgramFrequency } from './programSelection.js';
 import {
-  addDays,
-  buildWeeklySchedule,
-  dayLabel,
-  type DaySlot,
-  type ProgramFrequency,
-  type ProgramType,
+    addDays,
+    buildWeeklySchedule,
+    dayLabel,
+    type DaySlot,
+    type ProgramFrequency,
+    type ProgramType,
 } from './programTypes.js';
-import { inferProgramFrequency, inferProgramType } from './programSelection.js';
 import type { GeneratedWorkoutPlan } from './workoutPlanner.js';
 
 export type WorkoutSplitStyle =
@@ -148,6 +148,16 @@ export function resolveGoalFocus(fitnessGoals: string[]): GoalFocus {
   return 'general';
 }
 
+/** Scheduled workout wins — recovery adjusts intensity, not assignment. */
+export function coerceTrainingRecommendationForSchedule(
+  recommendation: string,
+  hasScheduledWorkout: boolean,
+): string {
+  if (!hasScheduledWorkout) return recommendation;
+  if (recommendation === 'rest_day' || recommendation === 'recovery_session') return 'train_light';
+  return recommendation;
+}
+
 function dayOfWeekIndex(dateStr: string): number {
   const d = new Date(dateStr + 'T12:00:00');
   const day = d.getDay();
@@ -277,8 +287,12 @@ function buildDailyRec(
   workout?: GeneratedWorkoutPlan,
 ): DailyWorkoutRecommendation {
   const idx = dayOfWeekIndex(dateStr);
+  const hasScheduledWorkout = input.activeProgramSlot?.date === dateStr;
 
-  if (slot.isRest || input.trainingRecommendation === 'rest_day') {
+  if (
+    slot.isRest ||
+    (input.trainingRecommendation === 'rest_day' && !hasScheduledWorkout)
+  ) {
     return {
       date: dateStr,
       dayLabel: dayLabel(idx),
@@ -292,7 +306,11 @@ function buildDailyRec(
     };
   }
 
-  if (input.trainingRecommendation === 'recovery_session' && dateStr === input.today) {
+  if (
+    input.trainingRecommendation === 'recovery_session' &&
+    dateStr === input.today &&
+    !hasScheduledWorkout
+  ) {
     return {
       date: dateStr,
       dayLabel: dayLabel(idx),

@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 
 import {
-  buildWhySelected,
-  mapAdjustmentLabel,
-  resolveTargetSets,
+    buildWhySelected,
+    mapAdjustmentLabel,
+    resolveTargetSets,
 } from './exerciseCoachPrescription.js';
 
 function run() {
@@ -20,17 +20,30 @@ function run() {
   assert.equal(boostSets.sets, 4);
   assert.equal(boostSets.setsDelta, 1);
 
-  const why = buildWhySelected({
+  const pushWhy = buildWhySelected({
     exerciseName: 'Bench Press',
     goalFocus: 'hypertrophy',
     readinessScore: 88,
     sprintPhase: 'intensification',
     equipment: ['barbell', 'bench'],
+    trainingRecommendation: 'train',
   });
+  assert.ok(pushWhy.some((line) => line.includes('readiness is high')));
+
+  const lightWhy = buildWhySelected({
+    exerciseName: 'Bench Press',
+    goalFocus: 'hypertrophy',
+    readinessScore: 88,
+    trainingRecommendation: 'train_light',
+  });
+  assert.ok(lightWhy.some((line) => line.includes('training light')));
+  assert.ok(!lightWhy.some((line) => line.includes('readiness is high')));
+
+  const why = pushWhy;
   assert.ok(why.length >= 2);
   assert.ok(why.some((line) => line.includes('hypertrophy')));
 
-  console.log('exerciseCoachPrescription.test.ts — 4/4 PASS');
+  console.log('exerciseCoachPrescription.test.ts — 6/6 PASS');
 }
 
 run();

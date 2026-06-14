@@ -5,14 +5,14 @@ import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import {
-  isConditioningWorkout,
-  isToday,
-  restDayLabel,
-  workoutDurationMinutes,
-  workoutExerciseCount,
-  workoutMuscleGroups,
-  workoutTotalSets,
-  type WeekDayPlan,
+    isConditioningWorkout,
+    isToday,
+    restDayLabel,
+    workoutDurationMinutes,
+    workoutExerciseCount,
+    workoutMuscleGroups,
+    workoutTotalSets,
+    type WeekDayPlan,
 } from '@/lib/weekPlan';
 
 type WorkoutWeeklyPlanScreenProps = {
@@ -20,6 +20,7 @@ type WorkoutWeeklyPlanScreenProps = {
   loading: boolean;
   refreshing?: boolean;
   adaptingPlan?: boolean;
+  timeZone?: string | null;
   onSelectDay: (day: WeekDayPlan) => void;
   onEditDay: (day: WeekDayPlan) => void;
   onManualLog: () => void;
@@ -30,6 +31,7 @@ export function WorkoutWeeklyPlanScreen({
   loading,
   refreshing = false,
   adaptingPlan = false,
+  timeZone,
   onSelectDay,
   onEditDay,
   onManualLog,
@@ -70,13 +72,13 @@ export function WorkoutWeeklyPlanScreen({
             return (
               <Card
                 key={day.date}
-                style={[styles.dayCard, styles.dayCardActive, isToday(day.date) && styles.dayCardToday]}>
+                style={[styles.dayCard, styles.dayCardActive, isToday(day.date, timeZone) && styles.dayCardToday]}>
                 <Pressable onPress={() => onSelectDay(day)} style={styles.dayPressable}>
                   <View style={styles.dayHeader}>
                     <View style={styles.dayHeaderText}>
-                      <AppText variant="label" color={isToday(day.date) ? 'accent' : 'textSecondary'}>
+                      <AppText variant="label" color={isToday(day.date, timeZone) ? 'accent' : 'textSecondary'}>
                         {day.dayLabel}
-                        {isToday(day.date) ? ' · Today' : ''}
+                        {isToday(day.date, timeZone) ? ' · Today' : ''}
                       </AppText>
                       <AppText variant="bodyBold">
                         {hasWorkout ? day.workout!.name : restDayLabel(day.dayLabel)}

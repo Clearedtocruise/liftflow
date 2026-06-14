@@ -70,6 +70,30 @@ function workoutDay(index: number, label: string): DaySlot {
   };
 }
 
+const UPPER_FOCUS_PATTERN =
+  /push|upper|chest|bench|shoulder|arm|full body|full_body|press day|press/i;
+
+function isUpperFocusLabel(label: string): boolean {
+  if (label.toLowerCase() === 'rest') return false;
+  return UPPER_FOCUS_PATTERN.test(label);
+}
+
+/** Prevent back-to-back chest/upper-focused sessions in auto-generated schedules. */
+export function enforceUpperFocusSpacing(labels: readonly string[]): string[] {
+  const result = [...labels];
+  for (let i = 0; i < result.length - 1; i += 1) {
+    if (
+      result[i] !== 'Rest' &&
+      result[i + 1] !== 'Rest' &&
+      isUpperFocusLabel(result[i]) &&
+      isUpperFocusLabel(result[i + 1])
+    ) {
+      result[i + 1] = 'Rest';
+    }
+  }
+  return result;
+}
+
 export function buildWeeklySchedule(
   programType: ProgramType,
   frequency: ProgramFrequency,
@@ -81,7 +105,8 @@ export function buildWeeklySchedule(
     );
   }
 
-  const pattern = getWeeklyLiftingPatternForFrequency(programType, frequency);
+  const rawPattern = getWeeklyLiftingPatternForFrequency(programType, frequency);
+  const pattern = enforceUpperFocusSpacing(rawPattern);
 
   return pattern.map((label, index) =>
     label === 'Rest' ? restDay(index) : workoutDay(index, label),

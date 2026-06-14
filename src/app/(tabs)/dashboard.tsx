@@ -18,19 +18,24 @@ import { pickDefaultLocation } from '@/constants/trainingProfile';
 import { usePlanAdjustment } from '@/contexts/PlanAdjustmentContext';
 import { useAuth } from '@/hooks/useAuth';
 import { useInsightRotator } from '@/hooks/useInsightRotator';
+import { useLocalDayRollover } from '@/hooks/useLocalDayRollover';
 import { useSubscription } from '@/hooks/useSubscription';
 import { useUnits } from '@/hooks/useUnits';
 import { useWorkoutLocations } from '@/hooks/useWorkoutLocations';
+import {
+    resolveActiveTrainingDay,
+    resolveCoachTrainingGuidance,
+    validateWorkoutAssignmentConsistency,
+} from '@/lib/activeTrainingDay';
 import { deviceTimeZone, formatScheduledDbTime, localDateString } from '@/lib/localDate';
 import {
     aggregateDailyMeals,
     findNextMeal,
-    trainingLabelFromRecoveryScore,
 } from '@/lib/mealAggregation';
 import { formatWorkoutTime, scheduleFromProfile, scheduledTimesForDay } from '@/lib/mealSchedule';
 import { showHomeManageDayMenu } from '@/lib/planDayActions';
 import { logStartup } from '@/lib/startupLogger';
-import { getWeekRange } from '@/lib/weekPlan';
+import { buildWeekPlan, dedupePlannedWorkoutsByDate, getWeekRange } from '@/lib/weekPlan';
 import { estimateWorkoutDurationMinutes, exercisesFromPlannedWorkout } from '@/lib/workoutPlan';
 import { analyticsService } from '@/services/analyticsService';
 import { nutritionService } from '@/services/nutritionService';
@@ -98,7 +103,9 @@ export default function DashboardScreen() {
       trainingService.getPlannedWorkouts(user.id, from, to, user.timezone),
     ]).then(([programResult, plannedResult]) => {
       if (programResult.success) setProgram(programResult.data);
-      if (plannedResult.success) setWeekWorkouts(plannedResult.data);
+      if (plannedResult.success) {
+        setWeekWorkouts(dedupePlannedWorkoutsByDate(plannedResult.data, new Date(), user.timezone));
+      }
       setProgramLoading(false);
       logStartup('WORKOUTS_LOADED');
     });
@@ -154,27 +161,51 @@ export default function DashboardScreen() {
     }, [user, load]),
   );
 
+  useLocalDayRollover(user?.timezone, () => {
+    load();
+  });
+
   useEffect(() => {
     if (adjustment && user) load();
   }, [adjustment?.id, revision, user, load]);
 
-  const nextPlanned = program?.nextWorkout;
-  const todaysWorkout = useMemo(() => {
-    const fromWeek = weekWorkouts.find(
-      (w) => w.scheduledDate === today && w.status === 'planned',
-    );
-    if (fromWeek) return fromWeek;
-    if (nextPlanned?.scheduledDate === today && nextPlanned.status === 'planned') return nextPlanned;
-    return null;
-  }, [weekWorkouts, nextPlanned, today]);
+  const activeTrainingDay = useMemo(
+    () =>
+      resolveActiveTrainingDay(weekWorkouts, {
+        date: today,
+        timeZone: user?.timezone,
+      }),
+    [weekWorkouts, today, user?.timezone],
+  );
+
+  const coachGuidance = useMemo(
+    () => resolveCoachTrainingGuidance(recoveryIntel, recoveryScore, activeTrainingDay),
+    [recoveryIntel, recoveryScore, activeTrainingDay],
+  );
+
+  const todaysWorkout = activeTrainingDay.workout;
   const hasWorkoutToday = todaysWorkout != null;
+  const nextPlanned = program?.nextWorkout;
   const showWorkoutSection = !programLoading && (weekWorkouts.length > 0 || nextPlanned != null);
   const scheduleWithWorkout = scheduleFromProfile(user, hasWorkoutToday);
   const hasRecoveryScore = recoveryScore != null;
 
-  const trainingLabel =
-    recoveryIntel?.trainingRecommendationLabel ??
-    (hasRecoveryScore ? trainingLabelFromRecoveryScore(recoveryScore) : 'Check in');
+  const trainingLabel = coachGuidance.trainingLabel;
+
+  useEffect(() => {
+    if (!__DEV__ || !user?.id) return;
+    const weekPlan = buildWeekPlan(weekWorkouts, new Date(), user.timezone);
+    const plannerDay = weekPlan.find((day) => day.date === today) ?? null;
+    const mismatches = validateWorkoutAssignmentConsistency({
+      home: activeTrainingDay,
+      planner: plannerDay
+        ? resolveActiveTrainingDay(weekWorkouts, { date: plannerDay.date, timeZone: user.timezone })
+        : null,
+    });
+    if (mismatches.length > 0) {
+      console.warn('[activeTrainingDay] assignment mismatch', mismatches);
+    }
+  }, [activeTrainingDay, today, user?.id, user?.timezone, weekWorkouts]);
 
   const mealAggregation = useMemo(() => aggregateDailyMeals(todayMeals), [todayMeals]);
   const todayTimes = useMemo(
@@ -196,24 +227,12 @@ export default function DashboardScreen() {
   const caloriesRemaining = Math.max(0, calorieTarget - mealAggregation.caloriesConsumed);
   const proteinRemaining = Math.max(0, proteinTarget - mealAggregation.proteinG);
 
-  const coachHeadline = recoveryIntel?.trainingRecommendationLabel
-    ? `${trainingLabel} recommended today`
-    : hasRecoveryScore
-      ? recoveryScore! >= 75
-        ? 'You are cleared to train.'
-        : recoveryScore! >= 55
-          ? 'Keep training lighter today.'
-          : 'Prioritize recovery before intensity.'
-      : 'Log a recovery check-in to personalize coaching.';
+  const coachHeadline = coachGuidance.coachHeadline;
 
   const coachMessage =
-    recoveryIntel?.rationale ??
-    user?.metadata?.coachActivation?.coachMessage ??
-    (hasRecoveryScore
-      ? recoveryScore! >= 80
-        ? 'Recovery is high. Increase training volume slightly if warm-ups feel strong.'
-        : 'Prioritize quality over volume. Match nutrition to your remaining macros.'
-      : 'Complete today\'s recovery check-in for an accurate score and training guidance.');
+    coachGuidance.coachMessage ||
+    user?.metadata?.coachActivation?.coachMessage ||
+    'Complete today\'s recovery check-in for an accurate score and training guidance.';
 
   const workoutDurationMin = todaysWorkout
     ? estimateWorkoutDurationMinutes(exercisesFromPlannedWorkout(todaysWorkout)) ||
