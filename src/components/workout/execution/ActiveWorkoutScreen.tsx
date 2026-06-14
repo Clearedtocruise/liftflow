@@ -29,6 +29,7 @@ import {
 } from '@/lib/exerciseModality';
 import { profileFigureGender } from '@/lib/exerciseMuscleMap';
 import {
+    executionModeUsesSupersetRotation,
     formatExerciseStationLabel,
     getSupersetGroupForIndex,
     isSupersetGroupComplete,
@@ -46,6 +47,7 @@ import { formatWorkoutWeightForInput } from '@/lib/unitConversion';
 import { pickWorkoutChallenge } from '@/lib/workoutChallengeFlow';
 import { normalizeExecutionMode } from '@/lib/workoutExecutionMode';
 import { parseTargetReps } from '@/lib/workoutPlan';
+import { logWorkoutProgressionDecision } from '@/lib/workoutProgressionDebug';
 import { workoutService } from '@/services/workoutService';
 import { useWorkoutSession } from '@/state/workout/WorkoutSessionContext';
 import type { WorkoutSession } from '@/types';
@@ -177,8 +179,9 @@ export function ActiveWorkoutScreen({
     ? formatExerciseStationLabel(planMeta, currentIndex, planExercises)
     : null;
   const inSuperset = Boolean(supersetGroup && supersetGroup.memberIndices.length >= 2);
+  const usesSupersetRotation = executionModeUsesSupersetRotation(executionMode);
   const groupComplete =
-    inSuperset && supersetGroup
+    usesSupersetRotation && inSuperset && supersetGroup
       ? isSupersetGroupComplete(supersetGroup, sortedExercises, planExercises)
       : allSetsDone;
   const currentSessionSets = useMemo(
@@ -386,14 +389,31 @@ export function ActiveWorkoutScreen({
       restSeconds: restTargetSeconds,
     };
 
+    const completedAfterLog = completedSets.length + 1;
     const flowAction = resolvePostSetFlowAction(
       currentIndex,
       planExercises,
       sortedExercises,
       executionMode,
       circuitRound,
-      completedSets.length + 1,
+      completedAfterLog,
     );
+
+    const exerciseAdvance = completedAfterLog >= targetSets;
+    logWorkoutProgressionDecision({
+      exerciseId: currentExercise.exerciseId ?? currentExercise.id,
+      exerciseName: currentExercise.exercise?.name ?? 'Exercise',
+      programmedSets: targetSets,
+      completedSets: completedAfterLog,
+      advance: exerciseAdvance,
+      advanceTrigger: flowAction.immediateAdvanceIndex != null
+        ? `immediate_index_${flowAction.immediateAdvanceIndex}`
+        : flowAction.afterRestAdvanceIndex != null
+          ? `after_rest_index_${flowAction.afterRestAdvanceIndex}`
+          : exerciseAdvance
+            ? 'exercise_sets_complete'
+            : 'stay_on_exercise',
+    });
 
     const skipRest =
       !executionModeUsesTraditionalRest(executionMode) || flowAction.skipRest;
@@ -441,7 +461,7 @@ export function ActiveWorkoutScreen({
   }
 
   function handleNextExercise() {
-    if (supersetGroup && supersetGroup.memberIndices.length >= 2) {
+    if (usesSupersetRotation && supersetGroup && supersetGroup.memberIndices.length >= 2) {
       const next = nextExerciseIndexAfterGroup(supersetGroup, sortedExercises.length);
       if (next != null) {
         setCurrentIndex(next);
@@ -677,7 +697,11 @@ export function ActiveWorkoutScreen({
             volumeKg={exerciseVolume}
             hasPr={exerciseHadPr}
             onNext={handleNextExercise}
-            isLastExercise={inSuperset ? nextExerciseIndexAfterGroup(supersetGroup!, sortedExercises.length) === null : isLastExercise}
+            isLastExercise={
+              usesSupersetRotation && inSuperset
+                ? nextExerciseIndexAfterGroup(supersetGroup!, sortedExercises.length) === null
+                : isLastExercise
+            }
           />
         ) : null}
 

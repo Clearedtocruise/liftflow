@@ -204,6 +204,10 @@ export function resolvePostSetSupersetAction(
   return { skipRest: false, immediateAdvanceIndex: null, afterRestAdvanceIndex: null };
 }
 
+export function executionModeUsesSupersetRotation(mode: WorkoutExecutionMode): boolean {
+  return mode === 'superset' || mode === 'circuit';
+}
+
 export function resolvePostSetFlowAction(
   currentIndex: number,
   planExercises: EditableWorkoutExercise[],
@@ -212,12 +216,14 @@ export function resolvePostSetFlowAction(
   circuitRound: number,
   setsJustLoggedOverride?: number,
 ): PostSetFlowAction {
-  const supersetAction = resolvePostSetSupersetAction(
-    currentIndex,
-    planExercises,
-    sessionExercises,
-    setsJustLoggedOverride,
-  );
+  const supersetAction = executionModeUsesSupersetRotation(executionMode)
+    ? resolvePostSetSupersetAction(
+        currentIndex,
+        planExercises,
+        sessionExercises,
+        setsJustLoggedOverride,
+      )
+    : { skipRest: false, immediateAdvanceIndex: null, afterRestAdvanceIndex: null };
 
   if (executionMode !== 'circuit') {
     return { ...supersetAction, circuitTimer: null };
