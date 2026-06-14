@@ -67,9 +67,12 @@ export function WorkoutDayOverviewScreen({
       </Card>
 
       <Card style={styles.figureCard}>
-        <AppText variant="label" color="textSecondary">
-          Muscles trained
-        </AppText>
+        <View style={styles.figureHeader}>
+          <AppText variant="bodyBold">Today&apos;s Workout Muscles</AppText>
+          <AppText variant="footnote" color="textSecondary">
+            These are all primary and secondary muscle groups targeted during today&apos;s workout.
+          </AppText>
+        </View>
         <ExerciseMusclePanel
           exerciseName={workout.name}
           gender={gender}
@@ -78,9 +81,12 @@ export function WorkoutDayOverviewScreen({
         />
       </Card>
 
-      <AppText variant="label" color="textSecondary">
-        Exercises
-      </AppText>
+      <View style={styles.exercisesHeader}>
+        <AppText variant="bodyBold">Exercises</AppText>
+        <AppText variant="footnote" color="textSecondary">
+          Each exercise shows the muscles it targets.
+        </AppText>
+      </View>
       <WorkoutExerciseDetailList
         exercises={exercises}
         userId={userId}
@@ -126,8 +132,14 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   figureCard: {
-    gap: Spacing.sm,
-    alignItems: 'center',
+    gap: Spacing.md,
+    alignItems: 'stretch',
+  },
+  figureHeader: {
+    gap: Spacing.xs,
+  },
+  exercisesHeader: {
+    gap: Spacing.xs,
   },
   actions: {
     gap: Spacing.sm,

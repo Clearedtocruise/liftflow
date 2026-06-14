@@ -1,7 +1,15 @@
 import type { ExtendedBodyPart, Slug } from 'react-native-body-highlighter';
 
 import { catalogExerciseBySlug, SYSTEM_EXERCISE_CATALOG } from '@/constants/exerciseDatabase';
-import { defaultBodySide, MUSCLE_SLUGS, type MuscleId } from '@/constants/muscles';
+import {
+    defaultBodySide,
+    filterMusclesForSide,
+    MUSCLE_SLUGS,
+    type MuscleId,
+} from '@/constants/muscles';
+
+export const MUSCLE_HIGHLIGHT_PRIMARY = '#FF4D5A';
+export const MUSCLE_HIGHLIGHT_SECONDARY = '#0E90FF';
 
 export type ExerciseMuscleProfile = {
   primary: MuscleId[];
@@ -178,11 +186,14 @@ export function resolveExerciseMuscles(
 export function buildBodyHighlightData(
   primary: MuscleId[],
   secondary: MuscleId[],
+  side?: 'front' | 'back',
 ): ExtendedBodyPart[] {
+  const scopedPrimary = side ? filterMusclesForSide(primary, side) : primary;
+  const scopedSecondary = side ? filterMusclesForSide(secondary, side) : secondary;
   const data: ExtendedBodyPart[] = [];
   const seen = new Set<string>();
 
-  for (const muscleId of primary) {
+  for (const muscleId of scopedPrimary) {
     for (const slug of muscleSlugsForId(muscleId)) {
       const key = `${slug}:2`;
       if (seen.has(key)) continue;
@@ -191,7 +202,7 @@ export function buildBodyHighlightData(
     }
   }
 
-  for (const muscleId of secondary) {
+  for (const muscleId of scopedSecondary) {
     for (const slug of muscleSlugsForId(muscleId)) {
       const key = `${slug}:1`;
       if (seen.has(`${slug}:2`) || seen.has(key)) continue;
@@ -201,6 +212,18 @@ export function buildBodyHighlightData(
   }
 
   return data;
+}
+
+export function filterProfileForSide(
+  profile: ExerciseMuscleProfile,
+  side: 'front' | 'back',
+): ExerciseMuscleProfile {
+  return {
+    primary: filterMusclesForSide(profile.primary, side),
+    secondary: filterMusclesForSide(profile.secondary, side).filter(
+      (muscle) => !profile.primary.includes(muscle),
+    ),
+  };
 }
 
 function muscleSlugsForId(muscleId: MuscleId): Slug[] {
@@ -233,7 +256,7 @@ export function aggregateWorkoutMuscles(exerciseNames: string[]): ExerciseMuscle
 
   const primary = [...primaryCounts.entries()]
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 4)
+    .slice(0, 2)
     .map(([muscle]) => muscle);
 
   const primarySet = new Set(primary);
@@ -241,7 +264,7 @@ export function aggregateWorkoutMuscles(exerciseNames: string[]): ExerciseMuscle
     .sort((a, b) => b[1] - a[1])
     .map(([muscle]) => muscle)
     .filter((muscle) => !primarySet.has(muscle))
-    .slice(0, 4);
+    .slice(0, 2);
 
   if (primary.length === 0 && secondary.length === 0) {
     return { primary: ['full-body'], secondary: [] };

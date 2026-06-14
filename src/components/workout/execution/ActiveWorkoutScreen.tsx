@@ -533,11 +533,16 @@ export function ActiveWorkoutScreen({
               ) : null}
 
               {!showComplete ? (
-                <ExerciseMusclePanel
-                  exerciseName={currentExercise.exercise?.name ?? 'Exercise'}
-                  gender={figureGender}
-                  variant="compact"
-                />
+                <>
+                  <AppText variant="caption" color="textTertiary">
+                    Exercise muscles
+                  </AppText>
+                  <ExerciseMusclePanel
+                    exerciseName={currentExercise.exercise?.name ?? 'Exercise'}
+                    gender={figureGender}
+                    variant="compact"
+                  />
+                </>
               ) : null}
 
               {!showComplete ? (

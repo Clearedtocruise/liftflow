@@ -118,3 +118,54 @@ export function defaultBodySide(primary: MuscleId[], secondary: MuscleId[]): 'fr
   }
   return back > front ? 'back' : 'front';
 }
+
+/** Slugs that render on the front body view in react-native-body-highlighter. */
+const FRONT_SLUGS = new Set<Slug>([
+  'chest',
+  'abs',
+  'obliques',
+  'biceps',
+  'forearm',
+  'deltoids',
+  'quadriceps',
+  'adductors',
+  'neck',
+  'triceps',
+  'hands',
+  'feet',
+  'ankles',
+  'head',
+  'knees',
+  'tibialis',
+]);
+
+/** Slugs that render on the back body view. */
+const BACK_SLUGS = new Set<Slug>([
+  'upper-back',
+  'trapezius',
+  'lower-back',
+  'triceps',
+  'hamstring',
+  'gluteal',
+  'calves',
+  'deltoids',
+  'forearm',
+  'neck',
+  'hands',
+  'feet',
+  'ankles',
+  'head',
+  'knees',
+  'tibialis',
+]);
+
+export function muscleVisibleOnSide(muscleId: MuscleId, side: 'front' | 'back'): boolean {
+  if (muscleId === 'full-body') return true;
+  const slugs = MUSCLE_SLUGS[muscleId] ?? [];
+  const visible = side === 'front' ? FRONT_SLUGS : BACK_SLUGS;
+  return slugs.some((slug) => visible.has(slug));
+}
+
+export function filterMusclesForSide(muscles: MuscleId[], side: 'front' | 'back'): MuscleId[] {
+  return muscles.filter((muscle) => muscleVisibleOnSide(muscle, side));
+}

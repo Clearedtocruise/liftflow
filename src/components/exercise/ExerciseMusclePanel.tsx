@@ -2,11 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { MuscleMapFigure } from '@/components/exercise/anatomy/MuscleMapFigure';
+import { MuscleProfileLabels } from '@/components/exercise/anatomy/MuscleProfileLabels';
 import { AppText } from '@/components/ui/AppText';
-import { muscleLabel } from '@/constants/muscles';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import {
     buildBodyHighlightData,
+    filterProfileForSide,
     resolveBodySide,
     resolveExerciseMuscles,
     type ExerciseMuscleProfile,
@@ -16,6 +17,7 @@ type ExerciseMusclePanelProps = {
   exerciseName: string;
   muscleGroups?: string[];
   gender?: 'male' | 'female';
+  /** hero = whole workout overview, exercise = per-exercise card, compact = active session */
   variant?: 'hero' | 'compact' | 'inline';
   profile?: ExerciseMuscleProfile;
 };
@@ -31,10 +33,6 @@ export function ExerciseMusclePanel({
     () => profileOverride ?? resolveExerciseMuscles(exerciseName, muscleGroups),
     [exerciseName, muscleGroups, profileOverride],
   );
-  const bodyData = useMemo(
-    () => buildBodyHighlightData(profile.primary, profile.secondary),
-    [profile.primary, profile.secondary],
-  );
   const preferredSide = useMemo(() => resolveBodySide(profile), [profile]);
   const [side, setSide] = useState<'front' | 'back'>(preferredSide);
 
@@ -42,31 +40,78 @@ export function ExerciseMusclePanel({
     setSide(preferredSide);
   }, [preferredSide, exerciseName]);
 
+  const sideProfile = useMemo(() => filterProfileForSide(profile, side), [profile, side]);
+  const bodyData = useMemo(
+    () => buildBodyHighlightData(profile.primary, profile.secondary, side),
+    [profile.primary, profile.secondary, side],
+  );
+
+  if (profile.primary.length === 0 && profile.secondary.length === 0) return null;
+
+  if (variant === 'inline' || variant === 'compact') {
+    return (
+      <ExerciseMuscleRow
+        profile={profile}
+        sideProfile={filterProfileForSide(profile, preferredSide)}
+        bodyData={buildBodyHighlightData(profile.primary, profile.secondary, preferredSide)}
+        side={preferredSide}
+        gender={gender}
+        size={variant === 'compact' ? 'active' : 'exercise'}
+      />
+    );
+  }
+
   if (bodyData.length === 0) return null;
 
-  const compact = variant === 'compact' || variant === 'inline';
-  const scale = variant === 'inline' ? 0.75 : compact ? 0.85 : 1.05;
-  const height = variant === 'inline' ? 120 : compact ? 150 : 210;
-
   return (
-    <View style={[styles.panel, compact && styles.panelCompact, variant === 'inline' && styles.panelInline]}>
-      {variant === 'hero' ? (
-        <View style={styles.toggleRow}>
-          <SideChip label="Front" active={side === 'front'} onPress={() => setSide('front')} />
-          <SideChip label="Back" active={side === 'back'} onPress={() => setSide('back')} />
-        </View>
-      ) : null}
-
-      <View style={variant === 'inline' ? styles.inlineRow : undefined}>
-        <MuscleMapFigure data={bodyData} side={side} gender={gender} scale={scale} height={height} />
-        {variant === 'inline' ? (
-          <View style={styles.inlineLegend}>
-            <LegendList profile={profile} compact />
-          </View>
-        ) : null}
+    <View style={styles.workoutPanel}>
+      <View style={styles.toggleRow}>
+        <SideChip label="Front" active={side === 'front'} onPress={() => setSide('front')} />
+        <SideChip label="Back" active={side === 'back'} onPress={() => setSide('back')} />
       </View>
 
-      {variant !== 'inline' ? <LegendList profile={profile} compact={compact} /> : null}
+      <MuscleMapFigure
+        data={bodyData}
+        side={side}
+        gender={gender}
+        size="workout"
+        framed
+      />
+
+      <MuscleProfileLabels profile={sideProfile} layout="grouped" />
+    </View>
+  );
+}
+
+function ExerciseMuscleRow({
+  profile,
+  sideProfile,
+  bodyData,
+  side,
+  gender,
+  size,
+}: {
+  profile: ExerciseMuscleProfile;
+  sideProfile: ExerciseMuscleProfile;
+  bodyData: ReturnType<typeof buildBodyHighlightData>;
+  side: 'front' | 'back';
+  gender: 'male' | 'female';
+  size: 'active' | 'exercise';
+}) {
+  if (bodyData.length === 0) {
+    return (
+      <View style={styles.exerciseRow}>
+        <MuscleProfileLabels profile={profile} layout="inline" />
+      </View>
+    );
+  }
+
+  return (
+    <View style={[styles.exerciseRow, size === 'active' && styles.exerciseRowActive]}>
+      <View style={styles.thumbnail}>
+        <MuscleMapFigure data={bodyData} side={side} gender={gender} size={size} />
+      </View>
+      <MuscleProfileLabels profile={sideProfile} layout="inline" />
     </View>
   );
 }
@@ -81,7 +126,7 @@ function SideChip({
   onPress: () => void;
 }) {
   return (
-    <Pressable onPress={onPress} style={[styles.chip, active && styles.chipActive]}>
+    <Pressable onPress={onPress} style={[styles.sideChip, active && styles.sideChipActive]}>
       <AppText variant="caption" color={active ? 'accent' : 'textSecondary'}>
         {label}
       </AppText>
@@ -89,84 +134,42 @@ function SideChip({
   );
 }
 
-function LegendList({ profile, compact }: { profile: ExerciseMuscleProfile; compact?: boolean }) {
-  if (profile.primary.length === 0 && profile.secondary.length === 0) return null;
-
-  return (
-    <View style={[styles.legend, compact && styles.legendCompact]}>
-      {profile.primary.map((muscle) => (
-        <LegendDot key={`p-${muscle}`} color="#FF3B30" label={muscleLabel(muscle)} />
-      ))}
-      {profile.secondary.map((muscle) => (
-        <LegendDot key={`s-${muscle}`} color="#2E7DF6" label={muscleLabel(muscle)} />
-      ))}
-    </View>
-  );
-}
-
-function LegendDot({ color, label }: { color: string; label: string }) {
-  return (
-    <View style={styles.legendItem}>
-      <View style={[styles.dot, { backgroundColor: color }]} />
-      <AppText variant="caption" color="textSecondary">
-        {label}
-      </AppText>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
-  panel: {
-    gap: Spacing.sm,
-    alignItems: 'center',
-  },
-  panelCompact: {
-    gap: Spacing.xs,
-  },
-  panelInline: {
+  workoutPanel: {
     width: '100%',
-  },
-  inlineRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
     gap: Spacing.md,
-  },
-  inlineLegend: {
-    flex: 1,
-    justifyContent: 'center',
+    alignItems: 'center',
   },
   toggleRow: {
     flexDirection: 'row',
     gap: Spacing.sm,
   },
-  chip: {
+  sideChip: {
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.xs,
     borderRadius: Radius.full,
     borderWidth: 1,
     borderColor: LiftFlowColors.border,
   },
-  chipActive: {
+  sideChipActive: {
     borderColor: LiftFlowColors.accent,
-    backgroundColor: 'rgba(31, 107, 255, 0.12)',
+    backgroundColor: LiftFlowColors.accentGlow,
   },
-  legend: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: Spacing.sm,
-  },
-  legendCompact: {
-    gap: Spacing.xs,
-  },
-  legendItem: {
+  exerciseRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.xs,
+    gap: Spacing.md,
+    marginTop: Spacing.sm,
+    paddingTop: Spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: LiftFlowColors.borderSubtle,
   },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: Radius.full,
+  exerciseRowActive: {
+    marginTop: 0,
+    paddingTop: 0,
+    borderTopWidth: 0,
+  },
+  thumbnail: {
+    flexShrink: 0,
   },
 });
