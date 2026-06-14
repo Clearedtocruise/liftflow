@@ -1,13 +1,22 @@
 import { loadCoachContext } from './coachContext.js';
+import { classifyExercise, type ExerciseType } from './exerciseClassification.js';
 import { loadRecoveryIntelligence } from './loadRecoveryIntelligence.js';
 import { loadSmartProgression } from './loadSmartProgression.js';
 import type { ProgressionAdjustmentType } from './smartProgressionEngine.js';
+import { resolveGoalFocus } from './smartProgressionEngine.js';
 import { requireAdmin } from './supabase.js';
+import {
+    computeTimedProgression,
+    isTimedRepRange,
+    parseTargetDurationSeconds,
+    type TimedSetRecord,
+} from './timedProgressionEngine.js';
 
 export type CoachAdjustmentLabel =
   | 'increase_weight'
   | 'increase_reps'
   | 'increase_sets'
+  | 'increase_duration'
   | 'maintain'
   | 'deload';
 
@@ -20,6 +29,7 @@ export type ExerciseCoachPrescription = {
     reps: number;
     repRange: string;
     weightKg: number;
+    durationSeconds?: number;
     restSeconds: number;
   };
   adjustmentLabel: CoachAdjustmentLabel;
@@ -46,7 +56,14 @@ export type ExercisePrescriptionPlanInput = {
   plannedRestSeconds?: number;
   notes?: string;
   sessionId?: string;
-  currentSessionSets?: Array<{ weightKg: number; reps: number; setNumber?: number; isFailure?: boolean }>;
+  loggingMode?: 'weighted' | 'bodyweight' | 'timed' | 'cardio';
+  currentSessionSets?: Array<{
+    weightKg?: number;
+    reps?: number;
+    durationSeconds?: number;
+    setNumber?: number;
+    isFailure?: boolean;
+  }>;
 };
 
 export function mapAdjustmentLabel(
@@ -133,11 +150,194 @@ function nutritionAdherencePct(caloriesToday: number, caloriesTarget: number, pr
   return Math.round((calPct + proPct) / 2);
 }
 
+async function loadExerciseType(
+  exerciseId: string,
+  plannedReps?: string,
+  exerciseName?: string,
+): Promise<ExerciseType> {
+  const db = requireAdmin();
+  const { data } = await db
+    .from('exercises')
+    .select('name, slug, exercise_type, equipment, category')
+    .eq('id', exerciseId)
+    .maybeSingle();
+
+  if (isTimedRepRange(plannedReps)) return 'timed';
+
+  if (!data) {
+    return classifyExercise({ name: exerciseName ?? 'Exercise' });
+  }
+
+  return classifyExercise({
+    slug: data.slug,
+    name: data.name ?? exerciseName ?? 'Exercise',
+    equipment: data.equipment,
+    movementCategory: data.category,
+    exerciseType: data.exercise_type as ExerciseType | null,
+  });
+}
+
+type TimedSetRow = {
+  duration_seconds: number | null;
+  set_number: number | null;
+  logged_at: string;
+  workout_exercises: {
+    exercise_id: string;
+    workout_sessions: { id: string; started_at: string; status: string };
+  };
+};
+
+async function loadTimedSessionHistory(
+  userId: string,
+  exerciseId: string,
+  sessionId?: string,
+): Promise<TimedSetRecord[][]> {
+  const db = requireAdmin();
+  const { data } = await db
+    .from('workout_sets')
+    .select(
+      'duration_seconds, set_number, logged_at, workout_exercises!inner(exercise_id, workout_sessions!inner(id, started_at, status, user_id))',
+    )
+    .eq('workout_exercises.exercise_id', exerciseId)
+    .eq('workout_exercises.workout_sessions.user_id', userId)
+    .eq('workout_exercises.workout_sessions.status', 'completed')
+    .not('duration_seconds', 'is', null)
+    .order('logged_at', { ascending: false })
+    .limit(200);
+
+  const bySession = new Map<string, TimedSetRecord[]>();
+  for (const row of (data ?? []) as unknown as TimedSetRow[]) {
+    const session = row.workout_exercises.workout_sessions;
+    if (sessionId && session.id === sessionId) continue;
+    const durationSeconds = row.duration_seconds ?? 0;
+    if (durationSeconds <= 0) continue;
+
+    const set: TimedSetRecord = {
+      durationSeconds,
+      setNumber: row.set_number ?? undefined,
+    };
+    const existing = bySession.get(session.id);
+    if (!existing) bySession.set(session.id, [set]);
+    else existing.push(set);
+  }
+
+  return [...bySession.values()]
+    .map((sets) => sets.sort((a, b) => (a.setNumber ?? 0) - (b.setNumber ?? 0)))
+    .slice(0, 8);
+}
+
+async function loadTimedExerciseCoachPrescription(
+  userId: string,
+  exerciseId: string,
+  plan?: Omit<ExercisePrescriptionPlanInput, 'exerciseId'>,
+): Promise<ExerciseCoachPrescription> {
+  const db = requireAdmin();
+  const today = new Date().toISOString().slice(0, 10);
+
+  const [coachCtx, intelligence, profileRes, recoveryRow, priorSessions] = await Promise.all([
+    loadCoachContext(userId),
+    loadRecoveryIntelligence(userId).catch(() => null),
+    db.from('profiles').select('available_equipment, fitness_goals').eq('id', userId).maybeSingle(),
+    db
+      .from('recovery_assessments')
+      .select('metadata')
+      .eq('user_id', userId)
+      .eq('check_in_date', today)
+      .maybeSingle(),
+    loadTimedSessionHistory(userId, exerciseId, plan?.sessionId),
+  ]);
+
+  const readinessScore = intelligence?.factors.muscleReadinessScore ?? coachCtx.recovery.score ?? 72;
+  const recoveryScore = intelligence?.recoveryScore ?? coachCtx.recovery.score ?? 72;
+  const trainingRecommendation = intelligence?.trainingRecommendation ?? 'train';
+  const sprintPhase = coachCtx.program?.sprintPhase;
+  const plannedSets = plan?.plannedSets ?? 3;
+  const repRange = plan?.plannedReps ?? '30 sec';
+  const plannedRest = plan?.plannedRestSeconds ?? 90;
+  const targetDurationSeconds = parseTargetDurationSeconds(repRange);
+
+  const currentSessionSets: TimedSetRecord[] = (plan?.currentSessionSets ?? [])
+    .map((set) => ({
+      durationSeconds: set.durationSeconds ?? 0,
+      setNumber: set.setNumber,
+    }))
+    .filter((set) => set.durationSeconds > 0);
+
+  const timed = computeTimedProgression({
+    targetDurationSeconds,
+    priorSessionSets: priorSessions,
+    currentSessionSets,
+  });
+
+  const effectiveTrainingRec =
+    trainingRecommendation === 'rest_day' ? 'train_light' : trainingRecommendation;
+
+  const adherence = nutritionAdherencePct(
+    coachCtx.nutrition.caloriesToday ?? 0,
+    coachCtx.nutrition.caloriesTarget ?? 0,
+    coachCtx.nutrition.proteinToday ?? 0,
+    coachCtx.nutrition.proteinTarget ?? 0,
+  );
+
+  const goalFocus = resolveGoalFocus(profileRes.data?.fitness_goals as string[] | undefined);
+
+  const whySelected = buildWhySelected({
+    exerciseName: plan?.exerciseName ?? 'Timed hold',
+    notes: plan?.notes,
+    goalFocus,
+    sprintPhase,
+    equipment: (profileRes.data?.available_equipment as string[] | undefined) ?? [],
+    readinessScore,
+    trainingRecommendation: effectiveTrainingRec,
+  });
+
+  let detailedReason = timed.detailedReason;
+  if (adherence < 60) {
+    detailedReason = `${detailedReason} Nutrition adherence is ${adherence}% — prioritize protein and sleep to support this session.`;
+  }
+
+  return {
+    exerciseId,
+    exerciseName: plan?.exerciseName ?? 'Timed hold',
+    whySelected,
+    targets: {
+      sets: plannedSets,
+      reps: 0,
+      repRange,
+      weightKg: 0,
+      durationSeconds: timed.recommendedDurationSeconds,
+      restSeconds: plannedRest,
+    },
+    adjustmentLabel: timed.adjustmentLabel,
+    adjustmentType: timed.adjustmentLabel,
+    reason: timed.reason,
+    detailedReason,
+    confidence: timed.confidence,
+    contextUsed: {
+      goalFocus,
+      recoveryScore,
+      readinessScore,
+      programPhase: sprintPhase,
+      nutritionAdherencePct: adherence,
+      equipmentAware: Boolean(profileRes.data?.available_equipment?.length),
+      sessionsUsed: timed.basedOnSessions,
+    },
+  };
+}
+
 export async function loadExerciseCoachPrescription(
   userId: string,
   exerciseId: string,
   plan?: Omit<ExercisePrescriptionPlanInput, 'exerciseId'>,
 ): Promise<ExerciseCoachPrescription> {
+  const exerciseType = await loadExerciseType(exerciseId, plan?.plannedReps, plan?.exerciseName);
+  const isTimed =
+    plan?.loggingMode === 'timed' || exerciseType === 'timed' || isTimedRepRange(plan?.plannedReps);
+
+  if (isTimed) {
+    return loadTimedExerciseCoachPrescription(userId, exerciseId, plan);
+  }
+
   const db = requireAdmin();
   const today = new Date().toISOString().slice(0, 10);
 

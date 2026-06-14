@@ -184,15 +184,25 @@ export function ActiveWorkoutScreen({
     usesSupersetRotation && inSuperset && supersetGroup
       ? isSupersetGroupComplete(supersetGroup, sortedExercises, planExercises)
       : allSetsDone;
-  const currentSessionSets = useMemo(
-    () =>
-      completedSets.map((set, index) => ({
-        weightKg: set.weight ?? 0,
+  const currentSessionSets = useMemo(() => {
+    if (loggingMode === 'timed') {
+      return completedSets.map((set, index) => ({
+        durationSeconds: set.durationSeconds ?? 0,
+        setNumber: index + 1,
+      }));
+    }
+    if (loggingMode === 'bodyweight') {
+      return completedSets.map((set, index) => ({
         reps: set.reps ?? 0,
         setNumber: index + 1,
-      })),
-    [completedSets],
-  );
+      }));
+    }
+    return completedSets.map((set, index) => ({
+      weightKg: set.weight ?? 0,
+      reps: set.reps ?? 0,
+      setNumber: index + 1,
+    }));
+  }, [completedSets, loggingMode]);
   const coachPlan = useMemo(
     () =>
       planMeta
@@ -201,9 +211,10 @@ export function ActiveWorkoutScreen({
             plannedReps: planMeta.repRange,
             plannedRestSeconds: planMeta.restSeconds,
             exerciseName: currentExercise?.exercise?.name,
+            loggingMode,
           }
         : undefined,
-    [planMeta, currentExercise?.exercise?.name],
+    [planMeta, currentExercise?.exercise?.name, loggingMode],
   );
 
   const handleApplyCoachTarget = useCallback(
@@ -384,80 +395,83 @@ export function ActiveWorkoutScreen({
     if (!currentExercise || isPaused || groupComplete) return;
 
     setLogging(true);
-    const base = {
-      workoutExerciseId: currentExercise.id,
-      restSeconds: restTargetSeconds,
-    };
+    try {
+      const base = {
+        workoutExerciseId: currentExercise.id,
+        restSeconds: restTargetSeconds,
+      };
 
-    const completedAfterLog = completedSets.length + 1;
-    const flowAction = resolvePostSetFlowAction(
-      currentIndex,
-      planExercises,
-      sortedExercises,
-      executionMode,
-      circuitRound,
-      completedAfterLog,
-    );
-
-    const exerciseAdvance = completedAfterLog >= targetSets;
-    logWorkoutProgressionDecision({
-      exerciseId: currentExercise.exerciseId ?? currentExercise.id,
-      exerciseName: currentExercise.exercise?.name ?? 'Exercise',
-      programmedSets: targetSets,
-      completedSets: completedAfterLog,
-      advance: exerciseAdvance,
-      advanceTrigger: flowAction.immediateAdvanceIndex != null
-        ? `immediate_index_${flowAction.immediateAdvanceIndex}`
-        : flowAction.afterRestAdvanceIndex != null
-          ? `after_rest_index_${flowAction.afterRestAdvanceIndex}`
-          : exerciseAdvance
-            ? 'exercise_sets_complete'
-            : 'stay_on_exercise',
-    });
-
-    const skipRest =
-      !executionModeUsesTraditionalRest(executionMode) || flowAction.skipRest;
-
-    const logged =
-      loggingMode === 'cardio'
-        ? await logSet({
-            ...base,
-            durationSeconds,
-            distanceMeters: Math.round(distanceKm * 1000),
-            reps: 1,
-            skipRest: true,
-          })
-        : loggingMode === 'timed'
-        ? await logSet({ ...base, durationSeconds, reps: 1, skipRest })
-        : loggingMode === 'bodyweight'
-          ? await logSet({ ...base, reps, skipRest })
-          : await logSet({ ...base, weight: weightKg, reps, skipRest });
-    setLogging(false);
-
-    if (logged?.isPr) {
-      setExerciseHadPr(true);
-    }
-
-    await refreshSession();
-
-    if (flowAction.circuitTimer && flowAction.circuitTimer.seconds > 0) {
-      pendingAdvanceRef.current = flowAction.circuitTimer.advanceIndex;
-      pendingRoundIncrementRef.current = flowAction.circuitTimer.phase === 'round_rest';
-      startCircuitTransition(
-        flowAction.circuitTimer.phase,
-        flowAction.circuitTimer.round,
-        undefined,
-        flowAction.circuitTimer.seconds,
+      const completedAfterLog = completedSets.length + 1;
+      const flowAction = resolvePostSetFlowAction(
+        currentIndex,
+        planExercises,
+        sortedExercises,
+        executionMode,
+        circuitRound,
+        completedAfterLog,
       );
-    } else if (flowAction.immediateAdvanceIndex != null) {
-      pendingAdvanceRef.current = null;
-      setCurrentIndex(flowAction.immediateAdvanceIndex);
-      setShowComplete(false);
-    } else if (flowAction.afterRestAdvanceIndex != null) {
-      pendingAdvanceRef.current = flowAction.afterRestAdvanceIndex;
-    }
 
-    offerBetweenSetsChallenge();
+      const exerciseAdvance = completedAfterLog >= targetSets;
+      logWorkoutProgressionDecision({
+        exerciseId: currentExercise.exerciseId ?? currentExercise.id,
+        exerciseName: currentExercise.exercise?.name ?? 'Exercise',
+        programmedSets: targetSets,
+        completedSets: completedAfterLog,
+        advance: exerciseAdvance,
+        advanceTrigger: flowAction.immediateAdvanceIndex != null
+          ? `immediate_index_${flowAction.immediateAdvanceIndex}`
+          : flowAction.afterRestAdvanceIndex != null
+            ? `after_rest_index_${flowAction.afterRestAdvanceIndex}`
+            : exerciseAdvance
+              ? 'exercise_sets_complete'
+              : 'stay_on_exercise',
+      });
+
+      const skipRest =
+        !executionModeUsesTraditionalRest(executionMode) || flowAction.skipRest;
+
+      const logged =
+        loggingMode === 'cardio'
+          ? await logSet({
+              ...base,
+              durationSeconds,
+              distanceMeters: Math.round(distanceKm * 1000),
+              reps: 1,
+              skipRest: true,
+            })
+          : loggingMode === 'timed'
+          ? await logSet({ ...base, durationSeconds, reps: 1, skipRest })
+          : loggingMode === 'bodyweight'
+            ? await logSet({ ...base, reps, skipRest })
+            : await logSet({ ...base, weight: weightKg, reps, skipRest });
+
+      if (logged?.isPr) {
+        setExerciseHadPr(true);
+      }
+
+      await refreshSession();
+
+      if (flowAction.circuitTimer && flowAction.circuitTimer.seconds > 0) {
+        pendingAdvanceRef.current = flowAction.circuitTimer.advanceIndex;
+        pendingRoundIncrementRef.current = flowAction.circuitTimer.phase === 'round_rest';
+        startCircuitTransition(
+          flowAction.circuitTimer.phase,
+          flowAction.circuitTimer.round,
+          undefined,
+          flowAction.circuitTimer.seconds,
+        );
+      } else if (flowAction.immediateAdvanceIndex != null) {
+        pendingAdvanceRef.current = null;
+        setCurrentIndex(flowAction.immediateAdvanceIndex);
+        setShowComplete(false);
+      } else if (flowAction.afterRestAdvanceIndex != null) {
+        pendingAdvanceRef.current = flowAction.afterRestAdvanceIndex;
+      }
+
+      offerBetweenSetsChallenge();
+    } finally {
+      setLogging(false);
+    }
   }
 
   function handleNextExercise() {

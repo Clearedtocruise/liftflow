@@ -1,9 +1,9 @@
 import type { ExerciseLoggingMode } from '@/lib/exerciseModality';
 import { defaultTimedDurationSeconds, formatCardioDuration } from '@/lib/exerciseModality';
-import type { DistanceUnit } from '@/types/common';
 import { formatDistance } from '@/lib/unitConversion';
-import type { ExerciseCoachPrescription } from '@/types/exerciseCoach';
 import type { WorkoutSession } from '@/types';
+import type { DistanceUnit } from '@/types/common';
+import type { ExerciseCoachPrescription } from '@/types/exerciseCoach';
 import type { EditableWorkoutExercise } from '@/types/workoutExecution';
 
 export type WorkoutSetProgress = {
@@ -113,7 +113,8 @@ export function formatCoachTargetLine(
     return 'Log time and distance';
   }
   if (mode === 'timed') {
-    return `${targets.sets} sets × ${defaultTimedDurationSeconds(targets.repRange || plannedReps)}s hold`;
+    const seconds = targets.durationSeconds ?? defaultTimedDurationSeconds(targets.repRange || plannedReps);
+    return `${targets.sets} sets × ${seconds}s hold`;
   }
   if (mode === 'bodyweight') {
     return `${targets.sets} sets × ${targets.reps} reps`;

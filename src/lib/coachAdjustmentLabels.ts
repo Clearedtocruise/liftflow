@@ -4,6 +4,7 @@ const LABELS: Record<CoachAdjustmentLabel, string> = {
   increase_weight: 'Increase weight',
   increase_reps: 'Increase reps',
   increase_sets: 'Increase sets',
+  increase_duration: 'Increase hold time',
   maintain: 'Maintain',
   deload: 'Deload',
 };
@@ -17,6 +18,7 @@ export function coachAdjustmentColor(label: CoachAdjustmentLabel): 'success' | '
     case 'increase_weight':
     case 'increase_reps':
     case 'increase_sets':
+    case 'increase_duration':
       return 'success';
     case 'maintain':
       return 'accent';

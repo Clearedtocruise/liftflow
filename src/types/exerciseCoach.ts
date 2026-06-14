@@ -2,6 +2,7 @@ export type CoachAdjustmentLabel =
   | 'increase_weight'
   | 'increase_reps'
   | 'increase_sets'
+  | 'increase_duration'
   | 'maintain'
   | 'deload';
 
@@ -14,6 +15,7 @@ export type ExerciseCoachPrescription = {
     reps: number;
     repRange: string;
     weightKg: number;
+    durationSeconds?: number;
     restSeconds: number;
   };
   adjustmentLabel: CoachAdjustmentLabel;
@@ -40,5 +42,12 @@ export type ExercisePrescriptionPlanInput = {
   plannedRestSeconds?: number;
   notes?: string;
   sessionId?: string;
-  currentSessionSets?: Array<{ weightKg: number; reps: number; setNumber?: number; isFailure?: boolean }>;
+  loggingMode?: 'weighted' | 'bodyweight' | 'timed' | 'cardio';
+  currentSessionSets?: Array<{
+    weightKg?: number;
+    reps?: number;
+    durationSeconds?: number;
+    setNumber?: number;
+    isFailure?: boolean;
+  }>;
 };

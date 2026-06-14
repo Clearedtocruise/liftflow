@@ -1,8 +1,8 @@
 import { classifyExercise } from '@/lib/exerciseClassification';
-import type { ExerciseType } from '@/types/exerciseClassification';
+import { formatDistance } from '@/lib/unitConversion';
 import type { Exercise } from '@/types';
 import type { DistanceUnit } from '@/types/common';
-import { formatDistance } from '@/lib/unitConversion';
+import type { ExerciseType } from '@/types/exerciseClassification';
 
 export type ExerciseLoggingMode = 'weighted' | 'bodyweight' | 'timed' | 'cardio';
 
@@ -60,16 +60,24 @@ export function getExerciseLoggingMode(
   repRange?: string | null,
   name?: string | null,
 ): ExerciseLoggingMode {
-  if (exercise?.exerciseType) {
-    return exerciseTypeToLoggingMode(exercise.exerciseType);
+  const label = name ?? exercise?.name;
+  const range = repRange ?? exercise?.instructions;
+
+  if (isTimedExercise(exercise, range, label)) {
+    return 'timed';
   }
 
-  const label = name ?? exercise?.name;
+  if (exercise?.exerciseType) {
+    const fromType = exerciseTypeToLoggingMode(exercise.exerciseType);
+    if (fromType !== 'weighted') return fromType;
+  }
+
   const classified = classifyExercise({
     slug: exercise?.slug,
-    name: label,
+    name: label ?? 'Exercise',
     equipment: exercise?.equipment,
     movementCategory: exercise?.category,
+    exerciseType: exercise?.exerciseType,
   });
   return exerciseTypeToLoggingMode(classified);
 }

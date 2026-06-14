@@ -4,22 +4,21 @@ import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 import { Card } from '@/components/layout/Card';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
-import type { ExerciseLoggingMode } from '@/lib/exerciseModality';
-import { coachAdjustmentColor, coachAdjustmentLabel } from '@/lib/coachAdjustmentLabels';
-import { formatCoachTargetLine } from '@/lib/activeWorkoutMetrics';
-import { kgToDisplayWeight } from '@/lib/smartProgressionEngine';
-import { defaultTimedDurationSeconds } from '@/lib/exerciseModality';
-import { exerciseCoachService } from '@/services/exerciseCoachService';
 import { useUnits } from '@/hooks/useUnits';
+import { formatCoachTargetLine } from '@/lib/activeWorkoutMetrics';
+import { coachAdjustmentColor, coachAdjustmentLabel } from '@/lib/coachAdjustmentLabels';
+import type { ExerciseLoggingMode } from '@/lib/exerciseModality';
+import { defaultTimedDurationSeconds } from '@/lib/exerciseModality';
+import { kgToDisplayWeight } from '@/lib/smartProgressionEngine';
+import { exerciseCoachService } from '@/services/exerciseCoachService';
 import type { ExerciseCoachPrescription, ExercisePrescriptionPlanInput } from '@/types/exerciseCoach';
-import type { ProgressionSetRecord } from '@/types/progression';
 
 type ExerciseCoachCardProps = {
   userId: string;
   exerciseId: string;
   plan?: Omit<ExercisePrescriptionPlanInput, 'exerciseId'>;
   sessionId?: string;
-  currentSessionSets?: ProgressionSetRecord[];
+  currentSessionSets?: ExercisePrescriptionPlanInput['currentSessionSets'];
   loggingMode?: ExerciseLoggingMode;
   variant?: 'default' | 'inline' | 'compact';
   setNumber?: number;
@@ -60,6 +59,7 @@ export function ExerciseCoachCard({
       .getPrescription(userId, exerciseId, {
         ...plan,
         sessionId,
+        loggingMode,
         currentSessionSets,
       })
       .then((result) => {
@@ -74,7 +74,7 @@ export function ExerciseCoachCard({
     return () => {
       cancelled = true;
     };
-  }, [userId, exerciseId, plan, sessionId, currentSessionSets, onPrescription]);
+  }, [userId, exerciseId, plan, sessionId, loggingMode, currentSessionSets, onPrescription]);
 
   if (loading) {
     return (
@@ -90,6 +90,10 @@ export function ExerciseCoachCard({
   if (!prescription) return null;
 
   const { targets } = prescription;
+  const displayLabel =
+    loggingMode === 'timed' && prescription.adjustmentLabel === 'deload'
+      ? 'maintain'
+      : prescription.adjustmentLabel;
   const targetLine = formatCoachTargetLine(
     targets,
     loggingMode,
@@ -98,7 +102,7 @@ export function ExerciseCoachCard({
     plan?.plannedReps,
   );
 
-  const adjColor = coachAdjustmentColor(prescription.adjustmentLabel);
+  const adjColor = coachAdjustmentColor(displayLabel);
   const content = (
     <>
       {showPerformanceSummary ? (
@@ -108,7 +112,7 @@ export function ExerciseCoachCard({
               {titleLabel}{setNumber ? ` · Set ${setNumber}` : ''}
             </AppText>
             <AppText variant="caption" color={adjColor}>
-              {coachAdjustmentLabel(prescription.adjustmentLabel)}
+              {coachAdjustmentLabel(displayLabel)}
             </AppText>
           </View>
 
@@ -117,7 +121,7 @@ export function ExerciseCoachCard({
       ) : (
         <View style={styles.headerRow}>
           <AppText variant="caption" color={adjColor}>
-            {coachAdjustmentLabel(prescription.adjustmentLabel)}
+            {coachAdjustmentLabel(displayLabel)}
           </AppText>
         </View>
       )}
@@ -169,11 +173,11 @@ export function ExerciseCoachCard({
           style={({ pressed }) => [styles.applyButton, pressed && styles.applyButtonPressed]}
           onPress={() =>
             onApplyTarget({
-              weightKg: targets.weightKg,
-              reps: targets.reps,
+              weightKg: loggingMode === 'timed' ? 0 : targets.weightKg,
+              reps: loggingMode === 'timed' ? 1 : targets.reps,
               durationSeconds:
                 loggingMode === 'timed'
-                  ? defaultTimedDurationSeconds(targets.repRange || plan?.plannedReps)
+                  ? targets.durationSeconds ?? defaultTimedDurationSeconds(targets.repRange || plan?.plannedReps)
                   : undefined,
             })
           }>
@@ -193,7 +197,7 @@ export function ExerciseCoachCard({
     return (
       <View style={styles.compact}>
         <AppText variant="caption" color={adjColor}>
-          {coachAdjustmentLabel(prescription.adjustmentLabel)}
+          {coachAdjustmentLabel(displayLabel)}
         </AppText>
         <AppText variant="footnote" color="textSecondary">
           {targetLine} · {prescription.reason}

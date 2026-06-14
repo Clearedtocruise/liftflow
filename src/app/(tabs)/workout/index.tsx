@@ -214,7 +214,7 @@ export default function WorkoutScreen() {
             .map((exercise) => ({
               id: exercise.id,
               name: exercise.exercise?.name ?? 'Exercise',
-              sets: Math.max(exercise.sets.length + 1, 3),
+              sets: 3,
               repRange: exercise.suggestedReps ?? '8-10',
               restSeconds: 90,
             })),
