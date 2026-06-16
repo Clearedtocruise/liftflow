@@ -107,6 +107,13 @@ export interface IWorkoutService {
   /** Rest timers */
   startRestTimer(sessionId: string, setId: string, recommendedSeconds: number): Promise<ServiceResult<RestPeriod>>;
   endRestTimer(restPeriodId: string, actualSeconds: number, wasSkipped?: boolean): Promise<ServiceResult<RestPeriod>>;
+  /** Recent performance for exercise history UI */
+  getRecentSetsForExercise(
+    userId: string,
+    exerciseId: string,
+    limit?: number,
+    mode?: import('@/lib/exerciseModality').ExerciseLoggingMode,
+  ): Promise<ServiceResult<import('@/types/workoutExecution').ExerciseHistorySet[]>>;
   /** Density tracking */
   calculateDensity(sessionId: string): Promise<ServiceResult<WorkoutDensityMetrics>>;
 }

@@ -168,6 +168,37 @@ export function weightStepDisplay(unit: WeightUnit): number {
   return unit === 'kg' ? 2.5 : 5;
 }
 
+/** User-facing weight value in their preferred unit (whole lb or decimal kg). */
+export function displayWeightFromKg(kg: number, unit: WeightUnit): number {
+  if (kg == null || Number.isNaN(kg)) return 0;
+  if (unit === 'kg') {
+    const v = Math.round(kg * 10) / 10;
+    return v % 1 === 0 ? Math.round(v) : v;
+  }
+  return Math.round(kg * LB_PER_KG);
+}
+
+export function kgFromDisplayWeight(display: number, unit: WeightUnit): number {
+  if (unit === 'kg') return display;
+  return display / LB_PER_KG;
+}
+
+/** Step by exact display increments — +5 lb always adds 5 lb, not ~2.3 lb converted from kg. */
+export function adjustWeightKg(currentKg: number, unit: WeightUnit, deltaSteps: number): number {
+  const display = displayWeightFromKg(currentKg, unit);
+  const step = weightStepDisplay(unit);
+  const nextDisplay = Math.max(0, display + deltaSteps * step);
+  const snapped = Math.round(nextDisplay / step) * step;
+  return kgFromDisplayWeight(snapped, unit);
+}
+
+export function roundWeightToDisplayStep(kg: number, unit: WeightUnit): number {
+  const display = displayWeightFromKg(kg, unit);
+  const step = weightStepDisplay(unit);
+  const snapped = Math.round(display / step) * step;
+  return kgFromDisplayWeight(Math.max(0, snapped), unit);
+}
+
 /** Convert voice-parsed weight to kg using explicit units in transcript or user preference. */
 export function normalizeVoiceWeightToKg(
   weight: number | undefined,

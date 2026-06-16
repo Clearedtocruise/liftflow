@@ -1,5 +1,6 @@
 import type { MovementCategory } from '@/types/common';
 import type { ExerciseType } from '@/types/exerciseClassification';
+import type { LoadingMethod } from '@/types/exerciseLoading';
 
 export type CatalogExercise = {
   slug: string;
@@ -8,6 +9,7 @@ export type CatalogExercise = {
   equipment: string;
   muscleGroups: string[];
   exerciseType: ExerciseType;
+  loadingMethods?: LoadingMethod[];
   metadata?: {
     requires?: string[];
     movement_family?: string;
@@ -48,14 +50,22 @@ export const SYSTEM_EXERCISE_CATALOG: CatalogExercise[] = [
   { slug: 'hack-squat', name: 'Hack Squat', movementCategory: 'squat', equipment: 'machine', muscleGroups: ['quads', 'glutes'], exerciseType: 'strength', metadata: { requires: ['machines'], movement_family: 'squat_pattern' } },
 
   // Bodyweight — no external load
-  { slug: 'pull-up', name: 'Pull Up', movementCategory: 'pull', equipment: 'bodyweight', muscleGroups: ['back', 'biceps'], exerciseType: 'bodyweight', metadata: { requires: ['pull_up_bar'], movement_family: 'vertical_pull' } },
-  { slug: 'push-up', name: 'Push-Up', movementCategory: 'push', equipment: 'bodyweight', muscleGroups: ['chest', 'triceps', 'shoulders'], exerciseType: 'bodyweight', metadata: { requires: ['bodyweight'], movement_family: 'horizontal_press' } },
+  { slug: 'pull-up', name: 'Pull Up', movementCategory: 'pull', equipment: 'bodyweight', muscleGroups: ['back', 'biceps'], exerciseType: 'strength', loadingMethods: ['bodyweight', 'bodyweight_plus_weight'], metadata: { requires: ['pull_up_bar'], movement_family: 'vertical_pull' } },
+  { slug: 'chin-up', name: 'Chin Up', movementCategory: 'pull', equipment: 'bodyweight', muscleGroups: ['back', 'biceps'], exerciseType: 'strength', loadingMethods: ['bodyweight', 'bodyweight_plus_weight'], metadata: { requires: ['pull_up_bar'], movement_family: 'vertical_pull' } },
+  { slug: 'dip', name: 'Dip', movementCategory: 'push', equipment: 'bodyweight', muscleGroups: ['chest', 'triceps'], exerciseType: 'strength', loadingMethods: ['bodyweight', 'bodyweight_plus_weight'], metadata: { requires: ['bodyweight'], movement_family: 'triceps' } },
+  { slug: 'push-up', name: 'Push-Up', movementCategory: 'push', equipment: 'bodyweight', muscleGroups: ['chest', 'triceps', 'shoulders'], exerciseType: 'bodyweight', loadingMethods: ['bodyweight', 'bodyweight_plus_weight'], metadata: { requires: ['bodyweight'], movement_family: 'horizontal_press' } },
   { slug: 'bodyweight-squat', name: 'Bodyweight Squat', movementCategory: 'squat', equipment: 'bodyweight', muscleGroups: ['quads', 'glutes'], exerciseType: 'bodyweight', metadata: { requires: ['bodyweight'], movement_family: 'squat_pattern' } },
-  { slug: 'walking-lunge', name: 'Walking Lunge', movementCategory: 'squat', equipment: 'bodyweight', muscleGroups: ['quads', 'glutes'], exerciseType: 'bodyweight', metadata: { requires: ['bodyweight'], movement_family: 'lunge_pattern' } },
+  { slug: 'walking-lunge', name: 'Walking Lunge', movementCategory: 'squat', equipment: 'bodyweight', muscleGroups: ['quads', 'glutes'], exerciseType: 'strength', loadingMethods: ['bodyweight', 'external_load'], metadata: { requires: ['bodyweight'], movement_family: 'lunge_pattern' } },
+  { slug: 'reverse-lunge', name: 'Reverse Lunge', movementCategory: 'squat', equipment: 'bodyweight', muscleGroups: ['quads', 'glutes'], exerciseType: 'strength', loadingMethods: ['bodyweight', 'external_load'], metadata: { requires: ['bodyweight'], movement_family: 'lunge_pattern' } },
+  { slug: 'bulgarian-split-squat', name: 'Bulgarian Split Squat', movementCategory: 'squat', equipment: 'dumbbell', muscleGroups: ['quads', 'glutes'], exerciseType: 'strength', loadingMethods: ['bodyweight', 'external_load'], metadata: { requires: ['dumbbells', 'bench'], movement_family: 'lunge_pattern' } },
+  { slug: 'step-up', name: 'Step Up', movementCategory: 'squat', equipment: 'dumbbell', muscleGroups: ['quads', 'glutes'], exerciseType: 'strength', loadingMethods: ['bodyweight', 'external_load'], metadata: { requires: ['dumbbells', 'bench'], movement_family: 'lunge_pattern' } },
+  { slug: 'hip-thrust', name: 'Barbell Hip Thrust', movementCategory: 'hinge', equipment: 'barbell', muscleGroups: ['glutes', 'hamstrings'], exerciseType: 'strength', loadingMethods: ['external_load'], metadata: { requires: ['barbell', 'bench'], movement_family: 'hinge_pattern' } },
+  { slug: 'single-leg-rdl', name: 'Single Leg RDL', movementCategory: 'hinge', equipment: 'dumbbell', muscleGroups: ['hamstrings', 'glutes'], exerciseType: 'strength', loadingMethods: ['external_load'], metadata: { requires: ['dumbbells'], movement_family: 'hinge_pattern' } },
+  { slug: 'standing-calf-raise', name: 'Standing Calf Raise', movementCategory: 'other', equipment: 'machine', muscleGroups: ['calves'], exerciseType: 'strength', loadingMethods: ['external_load'], metadata: { requires: ['machines'], movement_family: 'calves' } },
 
   // Timed — duration-based holds
-  { slug: 'plank', name: 'Plank', movementCategory: 'core', equipment: 'bodyweight', muscleGroups: ['core'], exerciseType: 'timed', metadata: { requires: ['bodyweight'], movement_family: 'core' } },
-  { slug: 'side-plank', name: 'Side Plank', movementCategory: 'core', equipment: 'bodyweight', muscleGroups: ['core', 'obliques'], exerciseType: 'timed', metadata: { requires: ['bodyweight'], movement_family: 'core' } },
+  { slug: 'plank', name: 'Plank', movementCategory: 'core', equipment: 'bodyweight', muscleGroups: ['core'], exerciseType: 'timed', loadingMethods: ['timed_hold'], metadata: { requires: ['bodyweight'], movement_family: 'core' } },
+  { slug: 'side-plank', name: 'Side Plank', movementCategory: 'core', equipment: 'bodyweight', muscleGroups: ['core', 'obliques'], exerciseType: 'timed', loadingMethods: ['timed_hold'], metadata: { requires: ['bodyweight'], movement_family: 'core' } },
 
   // Cardio — continuous or interval conditioning
   { slug: 'running', name: 'Running', movementCategory: 'cardio', equipment: 'none', muscleGroups: ['legs', 'cardiovascular'], exerciseType: 'cardio' },

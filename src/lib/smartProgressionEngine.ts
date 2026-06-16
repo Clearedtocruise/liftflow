@@ -1,5 +1,11 @@
 import type { TrainingGoalId } from '@/constants/trainingGoals';
 import type { WeightUnit } from '@/constants/units';
+import {
+  adjustWeightKg,
+  displayWeightFromKg,
+  roundWeightToDisplayStep,
+  weightStepDisplay,
+} from '@/lib/unitConversion';
 
 import type {
   ProgressionAdjustmentType,
@@ -49,16 +55,11 @@ export function weightStepKg(unit: WeightUnit = 'lb'): number {
 }
 
 export function roundWeightToStep(kg: number, unit: WeightUnit = 'lb'): number {
-  const step = weightStepKg(unit);
-  return Math.round(kg / step) * step;
+  return roundWeightToDisplayStep(kg, unit);
 }
 
 export function kgToDisplayWeight(kg: number, unit: WeightUnit): number {
-  if (unit === 'kg') {
-    const v = Math.round(kg * 10) / 10;
-    return v % 1 === 0 ? Math.round(v) : v;
-  }
-  return Math.round(kg * LB_PER_KG);
+  return displayWeightFromKg(kg, unit);
 }
 
 export function formatSetLine(weightKg: number, reps: number, unit: WeightUnit, label?: string): string {
@@ -82,17 +83,19 @@ function deriveWorkingWeight(
 
 function increaseWeight(kg: number, goalFocus: ProgressionGoalFocus, unit: WeightUnit): number {
   if (kg <= 0) return 0;
+  const display = displayWeightFromKg(kg, unit);
+  const step = weightStepDisplay(unit);
   const pct = goalFocus === 'strength' ? 0.03 : goalFocus === 'hypertrophy' ? 0.025 : 0.02;
-  const step = weightStepKg(unit);
-  const delta = Math.max(step, Math.round(kg * pct / step) * step);
-  return roundWeightToStep(kg + delta, unit);
+  const steps = Math.max(1, Math.round((display * pct) / step));
+  return adjustWeightKg(kg, unit, steps);
 }
 
 function decreaseWeight(kg: number, unit: WeightUnit, pct = 0.05): number {
   if (kg <= 0) return 0;
-  const step = weightStepKg(unit);
-  const delta = Math.max(step, Math.round(kg * pct / step) * step);
-  return Math.max(step, roundWeightToStep(kg - delta, unit));
+  const display = displayWeightFromKg(kg, unit);
+  const step = weightStepDisplay(unit);
+  const steps = Math.max(1, Math.round((display * pct) / step));
+  return adjustWeightKg(kg, unit, -steps);
 }
 
 function countConsecutiveMissedSessions(sessions: ProgressionSessionHistory[], targetReps: number): number {

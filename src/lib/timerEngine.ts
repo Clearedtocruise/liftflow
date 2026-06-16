@@ -132,6 +132,28 @@ export function circuitPhaseLabel(phase: CircuitPhase): string {
   return 'Complete';
 }
 
+export function skipIntervalRound(state: IntervalTimerState): IntervalTimerState {
+  if (state.phase === 'done') return state;
+  const { config } = state;
+
+  if (state.round >= config.rounds) {
+    return {
+      ...state,
+      phase: 'done',
+      running: false,
+      secondsRemaining: 0,
+    };
+  }
+
+  return {
+    ...state,
+    phase: 'work',
+    round: state.round + 1,
+    secondsRemaining: config.workSeconds,
+    running: true,
+  };
+}
+
 /** Advance interval timer after a second elapses (returns null when unchanged). */
 export function tickIntervalTimer(state: IntervalTimerState): IntervalTimerState {
   if (!state.running || state.phase === 'done') return state;

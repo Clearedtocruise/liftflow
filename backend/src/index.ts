@@ -29,6 +29,7 @@ import { trainingRouter } from './routes/training.js';
 import { userRouter } from './routes/user.js';
 import { voiceRouter } from './routes/voice.js';
 import { watchRouter } from './routes/watch.js';
+import { weeklyRouter } from './routes/weekly.js';
 import { workoutsRouter } from './routes/workouts.js';
 
 const app = express();
@@ -54,6 +55,7 @@ app.use('/api/watch', watchRouter);
 app.use('/api/ai', aiRouter);
 app.use('/api/workouts', workoutsRouter);
 app.use('/api/training', trainingRouter);
+app.use('/api/weekly', weeklyRouter);
 app.use('/api/nutrition', nutritionRouter);
 app.use('/api/body', bodyRouter);
 app.use('/api/analytics', analyticsRouter);

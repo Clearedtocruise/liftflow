@@ -28,6 +28,7 @@ type HomeNextUpCardProps = {
   onLogMeal: () => void;
   onStartWorkout: () => void;
   onManageDay?: () => void;
+  onLogActivity?: () => void;
   showWorkoutSection?: boolean;
   isRestDay?: boolean;
   startingWorkout?: boolean;
@@ -44,6 +45,7 @@ export function HomeNextUpCard({
   onLogMeal,
   onStartWorkout,
   onManageDay,
+  onLogActivity,
   showWorkoutSection = false,
   isRestDay = false,
   startingWorkout,
@@ -136,6 +138,9 @@ export function HomeNextUpCard({
                     loading={adaptingPlan}
                     disabled={adaptingPlan}
                   />
+                ) : null}
+                {onLogActivity ? (
+                  <PrimaryButton label="+ Activity" variant="secondary" onPress={onLogActivity} />
                 ) : null}
               </View>
             </>

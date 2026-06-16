@@ -4,7 +4,7 @@ import type { Exercise } from '@/types';
 import type { DistanceUnit } from '@/types/common';
 import type { ExerciseType } from '@/types/exerciseClassification';
 
-export type ExerciseLoggingMode = 'weighted' | 'bodyweight' | 'timed' | 'cardio';
+export type ExerciseLoggingMode = 'weighted' | 'bodyweight' | 'timed' | 'cardio' | 'any';
 
 const TIMED_NAME_PATTERN =
   /\b(plank|wall\s*sit|dead\s*hang|hollow\s*hold|l[\s-]?sit|side\s*plank|superman\s*hold|iso\s*hold|static\s*hold|stretch|carry)\b/i;

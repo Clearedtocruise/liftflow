@@ -1,10 +1,10 @@
-import {
-  computeRecoveryIntelligence,
-  countConsecutiveTrainingDays,
-  type RecoveryIntelligenceReport,
-  type SessionMuscleLoad,
-} from './recoveryIntelligenceEngine.js';
 import { loadHealthContext } from './loadHealthContext.js';
+import {
+    computeRecoveryIntelligence,
+    countConsecutiveTrainingDays,
+    type RecoveryIntelligenceReport,
+    type SessionMuscleLoad,
+} from './recoveryIntelligenceEngine.js';
 import { requireAdmin } from './supabase.js';
 
 type SessionRow = {
@@ -62,7 +62,7 @@ export async function loadRecoveryIntelligence(userId: string): Promise<Recovery
   fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
   const today = now.toISOString().slice(0, 10);
 
-  const [checkInRes, trendRes, sessionsRes, healthContext] = await Promise.all([
+  const [checkInRes, trendRes, sessionsRes, cardioRes, healthContext] = await Promise.all([
     db
       .from('recovery_assessments')
       .select(
@@ -92,11 +92,36 @@ export async function loadRecoveryIntelligence(userId: string): Promise<Recovery
       .eq('status', 'completed')
       .gte('started_at', sevenDaysAgo.toISOString())
       .order('started_at', { ascending: false }),
+    db
+      .from('cardio_sessions')
+      .select('id, started_at, duration_seconds, metadata, cardio_type')
+      .eq('user_id', userId)
+      .gte('started_at', sevenDaysAgo.toISOString())
+      .order('started_at', { ascending: false }),
     loadHealthContext(userId),
   ]);
 
   const sessions7d = ((sessionsRes.data ?? []) as SessionRow[]).map(mapSessionToLoad);
-  const sessions3d = sessions7d.filter((s) => new Date(s.startedAt) >= threeDaysAgo);
+  const cardioLoads: SessionMuscleLoad[] = (cardioRes.data ?? []).map(
+    (row: { id: string; started_at: string; duration_seconds: number | null; metadata?: Record<string, unknown> | null }) => {
+      const duration = row.duration_seconds ?? 0;
+      const intensity = row.metadata?.intensity === 'high' ? 1.4 : row.metadata?.intensity === 'low' ? 0.7 : 1;
+      const syntheticVolume = Math.round(duration * 8 * intensity);
+      return {
+        sessionId: row.id,
+        startedAt: row.started_at,
+        durationSeconds: duration,
+        totalVolume: syntheticVolume,
+        muscleGroups: ['legs'],
+        setsByMuscle: { legs: 1 },
+        volumeByMuscle: { legs: syntheticVolume },
+      };
+    },
+  );
+  const allSessions7d = [...sessions7d, ...cardioLoads].sort(
+    (a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime(),
+  );
+  const sessions3d = allSessions7d.filter((s) => new Date(s.startedAt) >= threeDaysAgo);
   const consecutiveTrainingDays = countConsecutiveTrainingDays(
     (sessionsRes.data ?? []).map((s: { started_at: string }) => s.started_at),
   );
@@ -124,7 +149,7 @@ export async function loadRecoveryIntelligence(userId: string): Promise<Recovery
         }
       : undefined,
     inputSources: sleepSource ? { sleepHours: sleepSource } : undefined,
-    sessions7d,
+    sessions7d: allSessions7d,
     sessions3d,
     consecutiveTrainingDays,
     trendScores,

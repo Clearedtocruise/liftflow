@@ -126,8 +126,10 @@ export function ExerciseCoachCard({
         </View>
       )}
       <AppText variant="footnote" color="textSecondary">
-        Rest {formatRest(targets.restSeconds)} · Recovery {prescription.contextUsed.recoveryScore} · Readiness{' '}
-        {prescription.contextUsed.readinessScore}
+        Rest {formatRest(targets.restSeconds)} · Recovery {prescription.contextUsed.recoveryScore}
+        {prescription.contextUsed.trainingLabel
+          ? ` · ${prescription.contextUsed.trainingLabel}`
+          : null}
       </AppText>
       <AppText variant="footnote" color="textSecondary">
         {prescription.reason}

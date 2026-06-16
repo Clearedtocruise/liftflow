@@ -3,6 +3,7 @@ import {
     applySubstitutionsToExercises,
     type LimitationContext,
 } from './exerciseSubstitution.js';
+import { patternExclusionGroupId } from './movementPatternExclusion.js';
 import { requireAdmin } from './supabase.js';
 import { blendWorkoutPreset, resolveRankedGoals, toPlannerGoal } from './trainingGoals.js';
 
@@ -67,10 +68,12 @@ const MUSCLE_TO_FAMILIES: Record<string, string[]> = {
   arms: ['biceps', 'triceps'],
   core: ['core'],
   quads: ['squat_pattern', 'lunge_pattern'],
-  glutes: ['hinge_pattern', 'squat_pattern', 'lunge_pattern'],
+  glutes: ['hinge_pattern', 'lunge_pattern'],
   hamstrings: ['hinge_pattern', 'hamstrings'],
+  calves: ['calves'],
   biceps: ['biceps'],
   triceps: ['triceps'],
+  unilateral: ['lunge_pattern'],
 };
 
 const GOAL_PRESETS: Record<
@@ -401,36 +404,49 @@ export function selectRotatedExercises(
 
   const selected: ExerciseRecord[] = [];
   const usedSlugs = new Set<string>();
+  const usedPatternGroups = new Set<string>();
+
+  function canPick(exercise: ExerciseRecord): boolean {
+    if (usedSlugs.has(exercise.slug)) return false;
+    const patternGroup = patternExclusionGroupId(exercise.slug);
+    if (patternGroup && usedPatternGroups.has(patternGroup)) return false;
+    return true;
+  }
+
+  function registerPick(exercise: ExerciseRecord): void {
+    selected.push(exercise);
+    usedSlugs.add(exercise.slug);
+    const patternGroup = patternExclusionGroupId(exercise.slug);
+    if (patternGroup) usedPatternGroups.add(patternGroup);
+  }
 
   for (const family of familiesNeeded) {
     const candidates = pool
-      .filter((e) => e.metadata?.movement_family === family && !usedSlugs.has(e.slug))
+      .filter((e) => e.metadata?.movement_family === family && canPick(e))
       .map((e) => ({ exercise: e, score: scoreExercise(e, family, recentSlugs, lastWeekSlugs) }))
       .sort((a, b) => b.score - a.score);
 
     const pick = candidates[0]?.exercise;
     if (pick) {
-      selected.push(pick);
-      usedSlugs.add(pick.slug);
+      registerPick(pick);
     }
     if (selected.length >= count) break;
   }
 
-  // Second and third picks from the same movement families (e.g. incline + flat press).
+  // Fill remaining slots without repeating movement pattern families.
   let stagnantRounds = 0;
   while (selected.length < count && stagnantRounds < 3) {
     let addedThisRound = 0;
     for (const family of familiesNeeded) {
       if (selected.length >= count) break;
       const candidates = pool
-        .filter((e) => e.metadata?.movement_family === family && !usedSlugs.has(e.slug))
+        .filter((e) => e.metadata?.movement_family === family && canPick(e))
         .map((e) => ({ exercise: e, score: scoreExercise(e, family, recentSlugs, lastWeekSlugs) }))
         .sort((a, b) => b.score - a.score);
 
       const pick = candidates[0]?.exercise;
       if (pick) {
-        selected.push(pick);
-        usedSlugs.add(pick.slug);
+        registerPick(pick);
         addedThisRound += 1;
       }
     }
@@ -441,7 +457,7 @@ export function selectRotatedExercises(
   if (selected.length < count) {
     const targetSet = new Set(targetMuscles.map((m) => m.toLowerCase()));
     const muscleMatched = pool
-      .filter((e) => !usedSlugs.has(e.slug))
+      .filter((e) => canPick(e))
       .filter((e) => (e.muscle_groups ?? []).some((mg) => targetSet.has(mg.toLowerCase())))
       .map((e) => ({
         exercise: e,
@@ -451,20 +467,18 @@ export function selectRotatedExercises(
 
     for (const { exercise } of muscleMatched) {
       if (selected.length >= count) break;
-      selected.push(exercise);
-      usedSlugs.add(exercise.slug);
+      registerPick(exercise);
     }
   }
 
   if (selected.length < count) {
     const fillers = pool
-      .filter((e) => !usedSlugs.has(e.slug))
+      .filter((e) => canPick(e))
       .map((e) => ({ exercise: e, score: scoreExercise(e, e.metadata?.movement_family ?? '', recentSlugs, lastWeekSlugs) }))
       .sort((a, b) => b.score - a.score);
     for (const { exercise } of fillers) {
       if (selected.length >= count) break;
-      selected.push(exercise);
-      usedSlugs.add(exercise.slug);
+      registerPick(exercise);
     }
   }
 
@@ -486,7 +500,9 @@ export function normalizeTargetMuscleGroups(muscles: string[]): string[] {
   const primary = normalized[0];
   if (primary === 'chest') return ['chest', 'shoulders', 'triceps'];
   if (primary === 'back') return ['back', 'biceps'];
-  if (primary === 'legs' || primary === 'quads') return ['legs', 'glutes', 'hamstrings'];
+  if (primary === 'legs' || primary === 'quads' || primary === 'lower') {
+    return ['quads', 'hamstrings', 'glutes', 'calves', 'core', 'unilateral'];
+  }
   if (primary === 'shoulders') return ['shoulders', 'triceps'];
   if (primary === 'arms') return ['biceps', 'triceps'];
   if (primary === 'core') return ['core', 'legs'];

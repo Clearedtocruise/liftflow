@@ -871,6 +871,13 @@ export const workoutService: IWorkoutService = {
           };
         })
         .filter((set) => {
+          if (mode === 'any') {
+            return (
+              (set.reps != null && set.reps > 0) ||
+              (set.durationSeconds != null && set.durationSeconds > 0) ||
+              (set.weightKg != null && set.weightKg > 0)
+            );
+          }
           if (mode === 'cardio') {
             return set.durationSeconds != null && set.durationSeconds > 0;
           }

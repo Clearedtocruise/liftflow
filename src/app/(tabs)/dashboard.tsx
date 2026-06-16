@@ -2,17 +2,19 @@ import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { RefreshControl, StyleSheet, View, type ViewStyle } from 'react-native';
+import { Alert, RefreshControl, StyleSheet, View, type ViewStyle } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { HomeNextUpCard } from '@/components/dashboard/HomeNextUpCard';
 import { HomePlanAdjustedBanner } from '@/components/dashboard/HomePlanAdjustedBanner';
 import { RingGauge } from '@/components/dashboard/RingGauge';
+import { WeeklyReviewCard } from '@/components/dashboard/WeeklyReviewCard';
 import { InsightCard } from '@/components/insights/InsightCard';
 import { Card } from '@/components/layout/Card';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { AppText } from '@/components/ui/AppText';
+import { HOME_ACTIVITY_OPTIONS } from '@/constants/activityOptions';
 import { Brand, LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import { pickDefaultLocation } from '@/constants/trainingProfile';
 import { usePlanAdjustment } from '@/contexts/PlanAdjustmentContext';
@@ -21,6 +23,7 @@ import { useInsightRotator } from '@/hooks/useInsightRotator';
 import { useLocalDayRollover } from '@/hooks/useLocalDayRollover';
 import { useSubscription } from '@/hooks/useSubscription';
 import { useUnits } from '@/hooks/useUnits';
+import { closingWeekStart, useWeeklyReviewWindow } from '@/hooks/useWeeklyReviewPrompt';
 import { useWorkoutLocations } from '@/hooks/useWorkoutLocations';
 import {
     resolveActiveTrainingDay,
@@ -42,6 +45,7 @@ import { nutritionService } from '@/services/nutritionService';
 import { recoveryService } from '@/services/recoveryService';
 import { trainingService } from '@/services/trainingService';
 import { userService } from '@/services/userService';
+import { weeklyCloseoutService } from '@/services/weeklyCloseoutService';
 import { useWorkoutSession } from '@/state/workout/WorkoutSessionContext';
 import type { DashboardSummary, Meal, NutritionGoals, PlannedWorkout, ProgramDashboard } from '@/types';
 import type { RecoveryIntelligenceReport } from '@/types/recoveryIntelligence';
@@ -66,10 +70,14 @@ export default function DashboardScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [startingWorkout, setStartingWorkout] = useState(false);
   const [adaptingPlan, setAdaptingPlan] = useState(false);
+  const [acceptingWeeklyPlan, setAcceptingWeeklyPlan] = useState(false);
+  const [weeklyCloseoutId, setWeeklyCloseoutId] = useState<string | null>(null);
   const homeRenderedRef = useRef(false);
   const appReadyLoggedRef = useRef(false);
 
   const today = useMemo(() => localDateString(new Date(), user?.timezone), [user?.timezone]);
+  const showWeeklyReview = useWeeklyReviewWindow(user?.timezone);
+  const closingWeek = useMemo(() => closingWeekStart(new Date(), user?.timezone), [user?.timezone]);
 
   useEffect(() => {
     if (!user?.id || user.timezone) return;
@@ -168,6 +176,39 @@ export default function DashboardScreen() {
   useEffect(() => {
     if (adjustment && user) load();
   }, [adjustment?.id, revision, user, load]);
+
+  useEffect(() => {
+    if (!user || !showWeeklyReview) return;
+    void weeklyCloseoutService.prepare(user.id).then((result) => {
+      if (result.success) setWeeklyCloseoutId(result.data.id);
+    });
+  }, [user, showWeeklyReview]);
+
+  function handleLogActivity() {
+    Alert.alert(
+      'Log Activity',
+      'Choose activity type',
+      HOME_ACTIVITY_OPTIONS.map((option) => ({
+        text: option.label,
+        onPress: () => router.push(option.route as never),
+      })).concat([{ text: 'Cancel', style: 'cancel' }]),
+    );
+  }
+
+  async function handleAcceptWeeklyPlan() {
+    if (!user || !weeklyCloseoutId) {
+      router.push('/(features)/next-week-plan');
+      return;
+    }
+    setAcceptingWeeklyPlan(true);
+    const result = await weeklyCloseoutService.accept(user.id, weeklyCloseoutId);
+    setAcceptingWeeklyPlan(false);
+    if (result.success) {
+      Alert.alert('Plan accepted', 'Next week is active. Completed week archived.');
+    } else {
+      Alert.alert('Error', result.error);
+    }
+  }
 
   const activeTrainingDay = useMemo(
     () =>
@@ -357,6 +398,7 @@ export default function DashboardScreen() {
             onLogMeal={() => router.push('/(tabs)/nutrition')}
             onStartWorkout={() => todaysWorkout && handleStartNextWorkout(todaysWorkout)}
             onManageDay={showWorkoutSection ? handleManageDay : undefined}
+            onLogActivity={handleLogActivity}
             showWorkoutSection={showWorkoutSection}
             isRestDay={!todaysWorkout}
             startingWorkout={startingWorkout}
@@ -364,6 +406,19 @@ export default function DashboardScreen() {
           />
         )}
       </Animated.View>
+
+      {showWeeklyReview ? (
+        <Animated.View entering={FadeInDown.delay(120).duration(400)}>
+          <WeeklyReviewCard
+            weekLabel={`Week of ${closingWeek}`}
+            onViewSummary={() => router.push('/(features)/weekly-summary')}
+            onReviewNextWeek={() => router.push('/(features)/next-week-plan')}
+            onAdjust={() => router.push('/(tabs)/workout')}
+            onAccept={handleAcceptWeeklyPlan}
+            accepting={acceptingWeeklyPlan}
+          />
+        </Animated.View>
+      ) : null}
 
       {!nextPlanned && !programLoading && user?.onboardingCompleted ? (
         <Animated.View entering={FadeInDown.delay(150).duration(400)}>

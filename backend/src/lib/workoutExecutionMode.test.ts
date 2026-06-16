@@ -9,7 +9,7 @@ assert.equal(formatExercisePrescriptionSummary(traditional), '3 x 10');
 
 const tabata = prescribeExerciseExecution({ ...benchPress, mode: 'tabata' });
 assert.equal(tabata.scheme, 'interval');
-assert.equal(formatExercisePrescriptionSummary(tabata), '20 sec work · 10 sec rest · 10 rounds');
+assert.equal(formatExercisePrescriptionSummary(tabata), '20 sec work · 20 sec rest · 10 rounds');
 
 const hiit = prescribeExerciseExecution({ ...benchPress, mode: 'hiit' });
 assert.equal(hiit.scheme, 'interval');

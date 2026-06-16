@@ -38,7 +38,10 @@ const modes = read('src/constants/workoutExecutionModes.ts');
 const cardio = read('src/constants/cardioActivities.ts');
 
 record('Traditional default 90s', engine.includes('DEFAULT_REST_SECONDS') || modes.includes('restSeconds: 90'));
-record('Tabata defaults 20/10/10', modes.includes('workSeconds: 20') && modes.includes('rounds: 10'));
+record('Tabata defaults 20/20/10', modes.includes('workSeconds: 20') && modes.includes('restSeconds: 20') && modes.includes('rounds: 10'));
+record('Interval skip round', engine.includes('skipIntervalRound') && overlay.includes('Skip round'));
+record('Interval phase cues', fs.existsSync(path.join(root, 'src/lib/intervalTimerFeedback.ts')));
+record('Tabata auto-start in active workout', active.includes('startIntervalTimer(undefined, executionMode === \'tabata\')'));
 record('Interval tick machine', engine.includes('tickIntervalTimer'));
 record('Circuit transition timer', engine.includes('tickCircuitTimer') && engine.includes('circuit_transition'));
 record('Unified timer hook', hook.includes('useWorkoutTimerEngine'));

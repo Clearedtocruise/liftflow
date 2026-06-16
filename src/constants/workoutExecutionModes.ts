@@ -69,7 +69,7 @@ export const INTERVAL_MODE_DEFAULTS: Record<
   { workSeconds: number; restSeconds: number; rounds: number }
 > = {
   hiit: { workSeconds: 45, restSeconds: 15, rounds: 8 },
-  tabata: { workSeconds: 20, restSeconds: 10, rounds: 10 },
+  tabata: { workSeconds: 20, restSeconds: 20, rounds: 10 },
 };
 
 export const CIRCUIT_MODE_DEFAULTS = {

@@ -8,6 +8,7 @@ import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { AppText } from '@/components/ui/AppText';
 import { ExerciseCompleteCard } from '@/components/workout/execution/ExerciseCompleteCard';
+import { ExercisePickerModal } from '@/components/workout/execution/ExercisePickerModal';
 import { GuidedWorkoutMetrics, WorkoutProgressBar } from '@/components/workout/execution/GuidedWorkoutMetrics';
 import { SetLoggingControls } from '@/components/workout/execution/SetLoggingControls';
 import { WorkoutChallengeModal } from '@/components/workout/execution/WorkoutChallengeModal';
@@ -22,6 +23,11 @@ import {
     computeWorkoutSetProgress,
     formatCoachTargetLine,
 } from '@/lib/activeWorkoutMetrics';
+import {
+    inferLoadingMethodFromHistory,
+    loadingMethodOptions,
+    loadingMethodToLoggingMode,
+} from '@/lib/exerciseLoadingMethod';
 import {
     defaultTimedDurationSeconds,
     formatSetLoggedLabel,
@@ -50,8 +56,9 @@ import { parseTargetReps } from '@/lib/workoutPlan';
 import { logWorkoutProgressionDecision } from '@/lib/workoutProgressionDebug';
 import { workoutService } from '@/services/workoutService';
 import { useWorkoutSession } from '@/state/workout/WorkoutSessionContext';
-import type { WorkoutSession } from '@/types';
+import type { Exercise, WorkoutSession } from '@/types';
 import type { ExerciseCoachPrescription } from '@/types/exerciseCoach';
+import type { LoadingMethod } from '@/types/exerciseLoading';
 import type {
     WorkoutChallengeRecord,
     WorkoutChallengeTemplate,
@@ -88,6 +95,7 @@ export function ActiveWorkoutScreen({
     resetIntervalTimer,
     updateIntervalConfig,
     skipIntervalPhase,
+    skipIntervalRound,
     startCircuitTransition,
     skipCircuitTimer,
     dismissCircuitTimer,
@@ -107,6 +115,8 @@ export function ActiveWorkoutScreen({
     setRestTimer,
     skipRestTimer,
     refreshSession,
+    deleteSet,
+    addExerciseByName,
   } = useWorkoutSession();
 
   const elapsedSeconds = useWorkoutElapsedSeconds(session.startedAt, session.status);
@@ -132,16 +142,22 @@ export function ActiveWorkoutScreen({
   );
   const [activeChallenge, setActiveChallenge] = useState<WorkoutChallengeTemplate | null>(null);
   const [challengeTrigger, setChallengeTrigger] = useState<WorkoutChallengeTrigger>('between_sets');
+  const [challengeTargetExerciseName, setChallengeTargetExerciseName] = useState<string | null>(null);
+  const [loadingMethod, setLoadingMethod] = useState<LoadingMethod>('external_load');
   const pendingAdvanceRef = useRef<number | null>(null);
+  const pendingAdvanceAfterChallengeRef = useRef<(() => void) | null>(null);
   const pendingRoundIncrementRef = useRef(false);
   const offeredExerciseCompleteRef = useRef<number | null>(null);
   const [circuitRound, setCircuitRound] = useState(1);
+  const [bonusSets, setBonusSets] = useState(0);
+  const [exercisePickerVisible, setExercisePickerVisible] = useState(false);
 
   const currentExercise = sortedExercises[currentIndex];
   const planMeta = planExercises[currentIndex] ?? planExercises.find(
     (item) => item.name.toLowerCase() === currentExercise?.exercise?.name?.toLowerCase(),
   );
   const targetSets = planMeta?.sets ?? 3;
+  const effectiveTargetSets = targetSets + bonusSets;
   const repRange = planMeta?.repRange ?? currentExercise?.suggestedReps ?? '8-10';
   const completedSets = currentExercise?.sets ?? [];
   const isPaused = session.status === 'paused';
@@ -149,15 +165,18 @@ export function ActiveWorkoutScreen({
     executionModeUsesTraditionalRest(executionMode) &&
     restSecondsRemaining !== null &&
     restSecondsRemaining > 0;
-  const allSetsDone = completedSets.length >= targetSets;
+  const programmedSetsComplete = completedSets.length >= targetSets;
+  const allSetsDone = completedSets.length >= effectiveTargetSets;
   const isLastExercise = currentIndex >= sortedExercises.length - 1;
   const nextExercise = sortedExercises[currentIndex + 1];
   const nextPlanMeta = planExercises[currentIndex + 1];
-  const loggingMode = getExerciseLoggingMode(
-    currentExercise?.exercise,
-    repRange,
-    currentExercise?.exercise?.name,
+  const loadingOptions = useMemo(
+    () => loadingMethodOptions(currentExercise?.exercise, currentExercise?.exercise?.slug),
+    [currentExercise?.exercise, currentExercise?.exercise?.slug],
   );
+  const loggingMode = loadingMethodToLoggingMode(loadingMethod);
+  const coachLoggingMode =
+    loggingMode === 'any' ? undefined : (loggingMode as Exclude<typeof loggingMode, 'any'>);
   const nextSetNumber = Math.min(completedSets.length + 1, targetSets);
   const remainingSets = Math.max(targetSets - completedSets.length, 0);
   const workoutProgress = useMemo(
@@ -211,10 +230,10 @@ export function ActiveWorkoutScreen({
             plannedReps: planMeta.repRange,
             plannedRestSeconds: planMeta.restSeconds,
             exerciseName: currentExercise?.exercise?.name,
-            loggingMode,
+            loggingMode: coachLoggingMode,
           }
         : undefined,
-    [planMeta, currentExercise?.exercise?.name, loggingMode],
+    [planMeta, currentExercise?.exercise?.name, coachLoggingMode],
   );
 
   const handleApplyCoachTarget = useCallback(
@@ -269,15 +288,29 @@ export function ActiveWorkoutScreen({
       repRange,
       currentExercise.exercise?.name,
     );
+    const historyMode =
+      loadingMethodOptions(currentExercise.exercise, currentExercise.exercise?.slug).length > 1
+        ? ('any' as const)
+        : mode;
     setDurationSeconds(defaultTimedDurationSeconds(repRange));
     setCoachPrescription(null);
 
     let cancelled = false;
-    void workoutService.getRecentSetsForExercise(user.id, currentExercise.exerciseId, 5, mode).then((result) => {
+    void workoutService
+      .getRecentSetsForExercise(user.id, currentExercise.exerciseId, 5, historyMode)
+      .then((result: Awaited<ReturnType<typeof workoutService.getRecentSetsForExercise>>) => {
       if (cancelled || !result.success) return;
       setHistorySets(result.data);
 
       const last = result.data[0];
+      const inferredMethod = inferLoadingMethodFromHistory(
+        currentExercise.exercise,
+        currentExercise.exercise?.slug,
+        last?.weightKg,
+        last?.durationSeconds,
+      );
+      setLoadingMethod(inferredMethod);
+
       if (mode === 'timed') {
         setReps(1);
         if (last?.durationSeconds) {
@@ -319,25 +352,56 @@ export function ActiveWorkoutScreen({
   }, [currentExercise?.id, currentExercise?.exerciseId, currentExercise?.exercise, currentExercise?.suggestedWeight, repRange, user]);
 
   useEffect(() => {
-    if (groupComplete && completedSets.length > 0) {
+    if (!executionModeUsesIntervalTimer(executionMode) || showComplete) return;
+    startIntervalTimer(undefined, executionMode === 'tabata');
+  }, [currentExercise?.id, executionMode, showComplete, startIntervalTimer]);
+
+  useEffect(() => {
+    setBonusSets(0);
+  }, [currentExercise?.id]);
+
+  useEffect(() => {
+    if (groupComplete && completedSets.length > 0 && allSetsDone) {
       setShowComplete(true);
       setExerciseHadPr(completedSets.some((set) => set.isPr));
     } else {
       setShowComplete(false);
     }
-  }, [groupComplete, completedSets]);
+  }, [groupComplete, completedSets, allSetsDone]);
 
-  useEffect(() => {
-    if (!showComplete || activeChallenge) return;
-    if (offeredExerciseCompleteRef.current === currentIndex) return;
+  function handleAddSet() {
+    setBonusSets((count) => count + 1);
+    setShowComplete(false);
+  }
 
-    const template = pickWorkoutChallenge(challengeRecords, 'between_exercises');
-    if (!template) return;
+  async function handleDeleteSet(setId: string) {
+    Alert.alert('Delete set', 'Remove this logged set?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          await deleteSet(setId);
+          await refreshSession();
+          setShowComplete(false);
+        },
+      },
+    ]);
+  }
 
-    offeredExerciseCompleteRef.current = currentIndex;
-    setChallengeTrigger('between_exercises');
-    setActiveChallenge(template);
-  }, [showComplete, activeChallenge, challengeRecords, currentIndex]);
+  async function handleAddExercise(exercise: Exercise) {
+    const workoutExerciseId = await addExerciseByName(exercise.name);
+    if (!workoutExerciseId) return;
+    await refreshSession();
+    const refreshed = await workoutService.getSession(session.id);
+    if (refreshed.success) {
+      const nextIndex = refreshed.data.exercises.findIndex((item) => item.id === workoutExerciseId);
+      if (nextIndex >= 0) {
+        setCurrentIndex(nextIndex);
+        setShowComplete(false);
+      }
+    }
+  }
 
   const offerBetweenSetsChallenge = useCallback(() => {
     if (activeChallenge || groupComplete) return;
@@ -356,10 +420,14 @@ export function ActiveWorkoutScreen({
       prompt: activeChallenge.prompt,
       status: 'skipped',
       trigger: challengeTrigger,
-      exerciseName: currentExercise?.exercise?.name,
+      exerciseName: challengeTargetExerciseName ?? currentExercise?.exercise?.name,
     });
     setActiveChallenge(null);
-  }, [activeChallenge, challengeTrigger, currentExercise?.exercise?.name, onChallengeRecord]);
+    setChallengeTargetExerciseName(null);
+    const advance = pendingAdvanceAfterChallengeRef.current;
+    pendingAdvanceAfterChallengeRef.current = null;
+    advance?.();
+  }, [activeChallenge, challengeTrigger, challengeTargetExerciseName, currentExercise?.exercise?.name, onChallengeRecord]);
 
   const handleChallengeComplete = useCallback(
     (loggedValue?: string) => {
@@ -371,12 +439,16 @@ export function ActiveWorkoutScreen({
         prompt: activeChallenge.prompt,
         status: 'completed',
         trigger: challengeTrigger,
-        exerciseName: currentExercise?.exercise?.name,
+        exerciseName: challengeTargetExerciseName ?? currentExercise?.exercise?.name,
         loggedValue,
       });
       setActiveChallenge(null);
+      setChallengeTargetExerciseName(null);
+      const advance = pendingAdvanceAfterChallengeRef.current;
+      pendingAdvanceAfterChallengeRef.current = null;
+      advance?.();
     },
-    [activeChallenge, challengeTrigger, currentExercise?.exercise?.name, onChallengeRecord],
+    [activeChallenge, challengeTrigger, challengeTargetExerciseName, currentExercise?.exercise?.name, onChallengeRecord],
   );
 
   useEffect(() => {
@@ -392,7 +464,7 @@ export function ActiveWorkoutScreen({
   }, 0);
 
   async function handleLogSet() {
-    if (!currentExercise || isPaused || groupComplete) return;
+    if (!currentExercise || isPaused) return;
 
     setLogging(true);
     try {
@@ -474,7 +546,7 @@ export function ActiveWorkoutScreen({
     }
   }
 
-  function handleNextExercise() {
+  function performExerciseAdvance() {
     if (usesSupersetRotation && supersetGroup && supersetGroup.memberIndices.length >= 2) {
       const next = nextExerciseIndexAfterGroup(supersetGroup, sortedExercises.length);
       if (next != null) {
@@ -489,6 +561,19 @@ export function ActiveWorkoutScreen({
     }
     setCurrentIndex((index) => index + 1);
     setShowComplete(false);
+  }
+
+  function handleNextExercise() {
+    const nextName = nextExercise?.exercise?.name;
+    const template = pickWorkoutChallenge(challengeRecords, 'between_exercises');
+    if (template && nextName && !activeChallenge) {
+      pendingAdvanceAfterChallengeRef.current = performExerciseAdvance;
+      setChallengeTargetExerciseName(nextName);
+      setChallengeTrigger('between_exercises');
+      setActiveChallenge(template);
+      return;
+    }
+    performExerciseAdvance();
   }
 
   function handlePauseRest() {
@@ -611,6 +696,31 @@ export function ActiveWorkoutScreen({
                 />
               ) : null}
 
+              {loadingOptions.length > 1 && !showComplete ? (
+                <View style={styles.loadingMethodRow}>
+                  <AppText variant="caption" color="textTertiary">
+                    Loading method
+                  </AppText>
+                  <View style={styles.loadingMethodChoices}>
+                    {loadingOptions.map((option) => (
+                      <Pressable
+                        key={option.method}
+                        onPress={() => setLoadingMethod(option.method)}
+                        style={[
+                          styles.loadingMethodChip,
+                          loadingMethod === option.method && styles.loadingMethodChipActive,
+                        ]}>
+                        <AppText
+                          variant="caption"
+                          color={loadingMethod === option.method ? 'accent' : 'textSecondary'}>
+                          {option.label}
+                        </AppText>
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
+              ) : null}
+
               {executionModeUsesIntervalTimer(executionMode) && !showComplete ? (
                 <View style={styles.intervalBanner}>
                   <AppText variant="label" color="accent">
@@ -628,13 +738,12 @@ export function ActiveWorkoutScreen({
                   <PrimaryButton
                     label={intervalTimer ? 'Open interval timer' : 'Start interval timer'}
                     variant="secondary"
-                    onPress={() => {
-                      if (!intervalTimer) startIntervalTimer();
-                    }}
+                    onPress={() => startIntervalTimer(undefined, true)}
                   />
                 </View>
               ) : null}
 
+              {executionModeUsesTraditionalRest(executionMode) ? (
               <View style={styles.restPresetRow}>
                 {[60, 90, 120, 150].map((seconds) => (
                   <Pressable key={seconds} onPress={() => setRestTargetSeconds(seconds)}>
@@ -644,6 +753,7 @@ export function ActiveWorkoutScreen({
                   </Pressable>
                 ))}
               </View>
+              ) : null}
 
               {!showComplete ? (
                 <>
@@ -660,12 +770,29 @@ export function ActiveWorkoutScreen({
                     disabled={isPaused || logging}
                   />
                   <PrimaryButton
-                    label={groupComplete ? 'All sets logged' : `Log Set ${nextSetNumber}`}
+                    label={allSetsDone && programmedSetsComplete ? 'All sets logged' : `Log Set ${nextSetNumber}`}
                     size="large"
                     loading={logging}
-                    disabled={isPaused || groupComplete}
+                    disabled={isPaused}
                     onPress={handleLogSet}
                   />
+                  <View style={styles.extraActions}>
+                    <PrimaryButton label="+ Add Set" variant="secondary" onPress={handleAddSet} disabled={isPaused} />
+                    <PrimaryButton
+                      label="+ Add Exercise"
+                      variant="secondary"
+                      onPress={() => setExercisePickerVisible(true)}
+                      disabled={isPaused}
+                    />
+                    {completedSets.length > 0 ? (
+                      <PrimaryButton
+                        label="Delete Last Set"
+                        variant="ghost"
+                        onPress={() => handleDeleteSet(completedSets[completedSets.length - 1]!.id)}
+                        disabled={isPaused}
+                      />
+                    ) : null}
+                  </View>
                 </>
               ) : null}
             </View>
@@ -673,11 +800,14 @@ export function ActiveWorkoutScreen({
         </View>
 
         <Card style={styles.setProgress}>
-          {Array.from({ length: targetSets }).map((_, index) => {
+          {Array.from({ length: Math.max(effectiveTargetSets, completedSets.length) }).map((_, index) => {
             const set = completedSets[index];
             const pending = !set;
             return (
-              <View key={`set-${index + 1}`} style={styles.setRow}>
+              <Pressable
+                key={`set-${index + 1}`}
+                style={styles.setRow}
+                onLongPress={set ? () => handleDeleteSet(set.id) : undefined}>
                 <AppText variant="bodyBold" color={pending ? 'textTertiary' : 'textPrimary'}>
                   Set {index + 1} {pending ? 'Pending' : '✓'}
                 </AppText>
@@ -692,7 +822,7 @@ export function ActiveWorkoutScreen({
                     )}
                   </AppText>
                 ) : null}
-              </View>
+              </Pressable>
             );
           })}
         </Card>
@@ -763,6 +893,7 @@ export function ActiveWorkoutScreen({
         interval={intervalTimer && !circuitTimer ? intervalTimer : null}
         onIntervalToggle={toggleIntervalTimer}
         onIntervalSkip={skipIntervalPhase}
+        onIntervalSkipRound={skipIntervalRound}
         onIntervalReset={resetIntervalTimer}
         onIntervalConfigChange={updateIntervalConfig}
         circuit={circuitTimer && circuitTimer.phase !== 'done' ? circuitTimer : null}
@@ -773,10 +904,17 @@ export function ActiveWorkoutScreen({
       <WorkoutChallengeModal
         visible={activeChallenge != null}
         challenge={activeChallenge}
-        exerciseName={currentExercise?.exercise?.name}
+        exerciseName={challengeTargetExerciseName ?? currentExercise?.exercise?.name}
         trigger={challengeTrigger}
         onSkip={handleChallengeSkip}
         onComplete={handleChallengeComplete}
+      />
+
+      <ExercisePickerModal
+        visible={exercisePickerVisible}
+        onClose={() => setExercisePickerVisible(false)}
+        onSelect={handleAddExercise}
+        title="Add Exercise"
       />
     </View>
   );
@@ -847,6 +985,26 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: LiftFlowColors.border,
   },
+  loadingMethodRow: {
+    gap: Spacing.sm,
+  },
+  loadingMethodChoices: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.sm,
+  },
+  loadingMethodChip: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.full,
+    borderWidth: 1,
+    borderColor: LiftFlowColors.border,
+    backgroundColor: LiftFlowColors.backgroundSecondary,
+  },
+  loadingMethodChipActive: {
+    borderColor: LiftFlowColors.accent,
+    backgroundColor: 'rgba(31, 107, 255, 0.12)',
+  },
   setProgress: {
     gap: Spacing.sm,
   },
@@ -857,6 +1015,9 @@ const styles = StyleSheet.create({
     borderBottomColor: LiftFlowColors.border,
   },
   footerActions: {
+    gap: Spacing.sm,
+  },
+  extraActions: {
     gap: Spacing.sm,
   },
 });

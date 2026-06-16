@@ -2,8 +2,8 @@ import { StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
+import { formatPlanTargetPerformance, formatPreviousPerformanceLine } from '@/lib/activeWorkoutMetrics';
 import type { ExerciseLoggingMode } from '@/lib/exerciseModality';
-import { formatPreviousPerformanceLine, formatPlanTargetPerformance } from '@/lib/activeWorkoutMetrics';
 import type { DistanceUnit } from '@/types/common';
 
 type GuidedWorkoutMetricsProps = {

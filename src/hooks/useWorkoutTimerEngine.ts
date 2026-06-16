@@ -1,13 +1,16 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { cueIntervalPhase } from '@/lib/intervalTimerFeedback';
 import {
     createCircuitTimerState,
     createIntervalTimerState,
+    skipIntervalRound as advanceIntervalRound,
     tickCircuitTimer,
     tickIntervalTimer,
     type CircuitPhase,
     type CircuitTimerConfig,
     type CircuitTimerState,
+    type IntervalPhase,
     type IntervalTimerConfig,
     type IntervalTimerState,
 } from '@/lib/timerEngine';
@@ -16,6 +19,7 @@ import type { WorkoutExecutionMode } from '@/types/workoutExecutionMode';
 export function useWorkoutTimerEngine(executionMode: WorkoutExecutionMode) {
   const [intervalTimer, setIntervalTimer] = useState<IntervalTimerState | null>(null);
   const [circuitTimer, setCircuitTimer] = useState<CircuitTimerState | null>(null);
+  const lastIntervalPhaseRef = useRef<IntervalPhase | null>(null);
 
   useEffect(() => {
     if (!intervalTimer?.running || intervalTimer.phase === 'done') return;
@@ -33,10 +37,24 @@ export function useWorkoutTimerEngine(executionMode: WorkoutExecutionMode) {
     return () => clearInterval(handle);
   }, [circuitTimer?.running, circuitTimer?.phase]);
 
+  useEffect(() => {
+    if (!intervalTimer) {
+      lastIntervalPhaseRef.current = null;
+      return;
+    }
+    if (lastIntervalPhaseRef.current === intervalTimer.phase) return;
+    if (lastIntervalPhaseRef.current != null) {
+      cueIntervalPhase(intervalTimer.phase);
+    }
+    lastIntervalPhaseRef.current = intervalTimer.phase;
+  }, [intervalTimer?.phase, intervalTimer]);
+
   const startIntervalTimer = useCallback(
-    (overrides?: Partial<IntervalTimerConfig>) => {
+    (overrides?: Partial<IntervalTimerConfig>, autoStart = false) => {
       if (executionMode !== 'hiit' && executionMode !== 'tabata') return;
-      setIntervalTimer(createIntervalTimerState(executionMode, overrides));
+      const state = createIntervalTimerState(executionMode, overrides);
+      setIntervalTimer({ ...state, running: autoStart });
+      lastIntervalPhaseRef.current = null;
     },
     [executionMode],
   );
@@ -46,6 +64,7 @@ export function useWorkoutTimerEngine(executionMode: WorkoutExecutionMode) {
       if (!current || current.phase === 'done') {
         if (executionMode !== 'hiit' && executionMode !== 'tabata') return current;
         const next = createIntervalTimerState(executionMode);
+        lastIntervalPhaseRef.current = null;
         return { ...next, running: true };
       }
       return { ...current, running: !current.running };
@@ -55,6 +74,7 @@ export function useWorkoutTimerEngine(executionMode: WorkoutExecutionMode) {
   const resetIntervalTimer = useCallback(() => {
     if (executionMode !== 'hiit' && executionMode !== 'tabata') return;
     setIntervalTimer(createIntervalTimerState(executionMode));
+    lastIntervalPhaseRef.current = null;
   }, [executionMode]);
 
   const updateIntervalConfig = useCallback((patch: Partial<IntervalTimerConfig>) => {
@@ -75,6 +95,13 @@ export function useWorkoutTimerEngine(executionMode: WorkoutExecutionMode) {
     setIntervalTimer((current) => {
       if (!current || current.phase === 'done') return current;
       return tickIntervalTimer({ ...current, secondsRemaining: 1, running: true });
+    });
+  }, []);
+
+  const skipIntervalRound = useCallback(() => {
+    setIntervalTimer((current) => {
+      if (!current || current.phase === 'done') return current;
+      return advanceIntervalRound(current);
     });
   }, []);
 
@@ -118,6 +145,7 @@ export function useWorkoutTimerEngine(executionMode: WorkoutExecutionMode) {
     resetIntervalTimer,
     updateIntervalConfig,
     skipIntervalPhase,
+    skipIntervalRound,
     startCircuitTransition,
     skipCircuitTimer,
     dismissCircuitTimer,

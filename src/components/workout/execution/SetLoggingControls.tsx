@@ -5,7 +5,7 @@ import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Radius, Spacing, TouchTarget } from '@/constants/theme';
 import { useUnits } from '@/hooks/useUnits';
 import type { ExerciseLoggingMode } from '@/lib/exerciseModality';
-import { formatWorkoutWeightForInput, parseDistanceToKm, parseWeightToKg, weightStepDisplay, weightStepKg } from '@/lib/unitConversion';
+import { formatWorkoutWeightForInput, parseDistanceToKm, parseWeightToKg, weightStepDisplay, adjustWeightKg } from '@/lib/unitConversion';
 
 type SetLoggingControlsProps = {
   mode: ExerciseLoggingMode;
@@ -75,7 +75,6 @@ export function SetLoggingControls({
   disabled,
 }: SetLoggingControlsProps) {
   const units = useUnits();
-  const weightStepKgValue = weightStepKg(units.preferredWeightUnit);
   const weightStepLabel = String(weightStepDisplay(units.preferredWeightUnit));
   const distanceUnitLabel = units.preferredDistanceUnit === 'km' ? 'km' : 'mi';
   const distanceStep = units.preferredDistanceUnit === 'km' ? 0.1 : 0.1;
@@ -184,8 +183,8 @@ export function SetLoggingControls({
         label={`WEIGHT (${units.weightLabel})`}
         value={weightText}
         onChangeText={handleWeightText}
-        onDecrease={() => onChangeWeight(Math.max(0, weightKg - weightStepKgValue))}
-        onIncrease={() => onChangeWeight(weightKg + weightStepKgValue)}
+        onDecrease={() => onChangeWeight(adjustWeightKg(weightKg, units.preferredWeightUnit, -1))}
+        onIncrease={() => onChangeWeight(adjustWeightKg(weightKg, units.preferredWeightUnit, 1))}
         stepLabel={weightStepLabel}
         disabled={disabled}
       />

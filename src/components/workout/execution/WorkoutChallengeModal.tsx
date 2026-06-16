@@ -82,7 +82,7 @@ export function WorkoutChallengeModal({
 
           {exerciseName ? (
             <AppText variant="footnote" color="textTertiary">
-              {trigger === 'between_exercises' ? 'After' : 'During'} {exerciseName}
+              {trigger === 'between_exercises' ? 'Before' : 'During'} {exerciseName}
             </AppText>
           ) : null}
 

@@ -16,13 +16,17 @@ function run() {
   assert.equal(deloadSets.sets, 3);
   assert.ok(deloadSets.setsDelta < 0);
 
-  const boostSets = resolveTargetSets(3, 90, 85, 'accumulation', 1);
+  const boostSets = resolveTargetSets(3, 90, 85, 'accumulation', 1, 'train');
   assert.equal(boostSets.sets, 4);
   assert.equal(boostSets.setsDelta, 1);
+
+  const noBoostWhenLight = resolveTargetSets(3, 90, 85, 'accumulation', 1, 'train_light');
+  assert.equal(noBoostWhenLight.sets, 3);
 
   const pushWhy = buildWhySelected({
     exerciseName: 'Bench Press',
     goalFocus: 'hypertrophy',
+    recoveryScore: 82,
     readinessScore: 88,
     sprintPhase: 'intensification',
     equipment: ['barbell', 'bench'],
@@ -33,6 +37,7 @@ function run() {
   const lightWhy = buildWhySelected({
     exerciseName: 'Bench Press',
     goalFocus: 'hypertrophy',
+    recoveryScore: 62,
     readinessScore: 88,
     trainingRecommendation: 'train_light',
   });

@@ -27,6 +27,8 @@ export type ExerciseCoachPrescription = {
     goalFocus: string;
     recoveryScore: number;
     readinessScore: number;
+    trainingRecommendation?: 'train' | 'train_light' | 'recovery_session' | 'rest_day';
+    trainingLabel?: string;
     programPhase?: string;
     nutritionAdherencePct?: number;
     equipmentAware: boolean;

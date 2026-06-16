@@ -16,7 +16,7 @@ import { buildWorkoutSessionName, pickDefaultLocation } from '@/constants/traini
 import { useAuth } from '@/hooks/useAuth';
 import { useUnits } from '@/hooks/useUnits';
 import { useWorkoutLocations } from '@/hooks/useWorkoutLocations';
-import { formatWorkoutWeightForInput, weightStepKg } from '@/lib/unitConversion';
+import { formatWorkoutWeightForInput, adjustWeightKg } from '@/lib/unitConversion';
 import { useWorkoutSession } from '@/state/workout/WorkoutSessionContext';
 import type { WorkoutSet } from '@/types';
 
@@ -88,14 +88,13 @@ export default function ManualLogScreen() {
 
     const weight = lastLoggedSet.weight ?? 0;
     const reps = lastLoggedSet.reps ?? 0;
-    const step = weightStepKg(units.preferredWeightUnit);
 
     switch (id) {
       case 'weight-up':
-        await updateSet(lastLoggedSet.id, { weight: weight + step });
+        await updateSet(lastLoggedSet.id, { weight: adjustWeightKg(weight, units.preferredWeightUnit, 1) });
         break;
       case 'weight-down':
-        await updateSet(lastLoggedSet.id, { weight: Math.max(0, weight - step) });
+        await updateSet(lastLoggedSet.id, { weight: adjustWeightKg(weight, units.preferredWeightUnit, -1) });
         break;
       case 'reps-up':
         await updateSet(lastLoggedSet.id, { reps: reps + 1 });

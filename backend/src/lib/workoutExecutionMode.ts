@@ -47,7 +47,7 @@ const SET_REP_DEFAULTS = {
 
 const INTERVAL_DEFAULTS = {
   hiit: { workSeconds: 45, restSeconds: 15, rounds: 8 },
-  tabata: { workSeconds: 20, restSeconds: 10, rounds: 10 },
+  tabata: { workSeconds: 20, restSeconds: 20, rounds: 10 },
 } as const;
 
 export function prescribeExerciseExecution(input: ExercisePrescriptionInput): ExerciseExecutionPrescription {

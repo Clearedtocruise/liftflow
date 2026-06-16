@@ -29,6 +29,7 @@ type WorkoutTimerOverlayProps = {
   interval?: IntervalTimerState | null;
   onIntervalToggle?: () => void;
   onIntervalSkip?: () => void;
+  onIntervalSkipRound?: () => void;
   onIntervalReset?: () => void;
   onIntervalConfigChange?: (patch: Partial<IntervalTimerState['config']>) => void;
   circuit?: CircuitTimerState | null;
@@ -71,6 +72,7 @@ export function WorkoutTimerOverlay({
   interval,
   onIntervalToggle,
   onIntervalSkip,
+  onIntervalSkipRound,
   onIntervalReset,
   onIntervalConfigChange,
   circuit,
@@ -136,7 +138,7 @@ export function WorkoutTimerOverlay({
             </>
           ) : null}
 
-          {activeMode === 'interval' && interval && onIntervalToggle && onIntervalSkip && onIntervalReset && onIntervalConfigChange ? (
+          {activeMode === 'interval' && interval && onIntervalToggle && onIntervalSkip && onIntervalSkipRound && onIntervalReset && onIntervalConfigChange ? (
             <>
               <AppText variant="label" color="accent" align="center">
                 {interval.config.rounds > 0 ? `${intervalPhaseLabel(interval.phase)} · Round ${interval.round}/${interval.config.rounds}` : intervalPhaseLabel(interval.phase)}
@@ -175,6 +177,9 @@ export function WorkoutTimerOverlay({
                 />
                 <Pressable style={styles.controlButtonWide} onPress={onIntervalSkip}>
                   <AppText variant="bodyBold">Skip phase</AppText>
+                </Pressable>
+                <Pressable style={styles.controlButtonWide} onPress={onIntervalSkipRound}>
+                  <AppText variant="bodyBold">Skip round</AppText>
                 </Pressable>
               </View>
               <PrimaryButton label="Reset" onPress={onIntervalReset} variant="secondary" />

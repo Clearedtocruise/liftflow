@@ -2,9 +2,14 @@ import { loadCoachContext } from './coachContext.js';
 import { classifyExercise, type ExerciseType } from './exerciseClassification.js';
 import { loadRecoveryIntelligence } from './loadRecoveryIntelligence.js';
 import { loadSmartProgression } from './loadSmartProgression.js';
+import {
+  trainingRecommendationLabel,
+  type TrainingDayRecommendation,
+} from './recoveryIntelligenceEngine.js';
 import type { ProgressionAdjustmentType } from './smartProgressionEngine.js';
 import { resolveGoalFocus } from './smartProgressionEngine.js';
 import { requireAdmin } from './supabase.js';
+import { coerceTrainingRecommendationForSchedule } from './workoutRecommendationEngine.js';
 import {
     computeTimedProgression,
     isTimedRepRange,
@@ -41,6 +46,8 @@ export type ExerciseCoachPrescription = {
     goalFocus: string;
     recoveryScore: number;
     readinessScore: number;
+    trainingRecommendation: TrainingDayRecommendation;
+    trainingLabel: string;
     programPhase?: string;
     nutritionAdherencePct?: number;
     equipmentAware: boolean;
@@ -83,6 +90,7 @@ export function resolveTargetSets(
   readinessScore: number,
   sprintPhase?: string,
   recoveryVolumeMultiplier = 1,
+  trainingRecommendation: TrainingDayRecommendation = 'train',
 ): { sets: number; setsDelta: number; setsReason?: string } {
   let sets = plannedSets;
   let setsDelta = 0;
@@ -102,7 +110,12 @@ export function resolveTargetSets(
     return { sets, setsDelta, setsReason };
   }
 
-  if (recoveryScore >= 85 && readinessScore >= 80 && plannedSets < 5) {
+  if (
+    trainingRecommendation === 'train' &&
+    recoveryScore >= 85 &&
+    readinessScore >= 80 &&
+    plannedSets < 5
+  ) {
     sets = plannedSets + 1;
     setsDelta = 1;
     setsReason = 'High recovery and readiness — one extra quality set.';
@@ -118,6 +131,7 @@ export function buildWhySelected(input: {
   goalFocus: string;
   sprintPhase?: string;
   equipment?: string[];
+  recoveryScore: number;
   readinessScore: number;
   muscleFresh?: boolean;
   trainingRecommendation?: string;
@@ -132,9 +146,11 @@ export function buildWhySelected(input: {
     lines.push('Recovery suggests training light — keep effort moderate and leave reps in reserve.');
   } else if (input.trainingRecommendation === 'recovery_session') {
     lines.push('Included at reduced intensity while recovery is still rebuilding.');
-  } else if (input.readinessScore >= 80) {
+  } else if (input.trainingRecommendation === 'rest_day') {
+    lines.push('Recovery is low — keep this session easy and prioritize quality over load.');
+  } else if (input.recoveryScore >= 75 && input.readinessScore >= 80) {
     lines.push('Muscle readiness is high — good day to push this movement.');
-  } else if (input.readinessScore < 55) {
+  } else if (input.readinessScore < 55 || input.recoveryScore < 55) {
     lines.push('Included with manageable volume while readiness is still rebuilding.');
   }
   if (input.equipment?.length) {
@@ -148,6 +164,33 @@ function nutritionAdherencePct(caloriesToday: number, caloriesTarget: number, pr
   const calPct = caloriesTarget > 0 ? Math.min(100, (caloriesToday / caloriesTarget) * 100) : 100;
   const proPct = proteinTarget > 0 ? Math.min(100, (proteinToday / proteinTarget) * 100) : 100;
   return Math.round((calPct + proPct) / 2);
+}
+
+function scoreFallbackTrainingRecommendation(score: number): TrainingDayRecommendation {
+  if (score >= 75) return 'train';
+  if (score >= 55) return 'train_light';
+  if (score >= 40) return 'recovery_session';
+  return 'rest_day';
+}
+
+/** Same guidance as home dashboard — scheduled workout adjusts intensity, not assignment. */
+function resolveActiveWorkoutTrainingGuidance(
+  intelligence: Awaited<ReturnType<typeof loadRecoveryIntelligence>> | null,
+  recoveryScore: number,
+): { recommendation: TrainingDayRecommendation; label: string } {
+  const raw =
+    intelligence?.trainingRecommendation ?? scoreFallbackTrainingRecommendation(recoveryScore);
+  const recommendation = coerceTrainingRecommendationForSchedule(
+    raw,
+    true,
+  ) as TrainingDayRecommendation;
+  return {
+    recommendation,
+    label:
+      intelligence?.trainingRecommendationLabel && recommendation === raw
+        ? intelligence.trainingRecommendationLabel
+        : trainingRecommendationLabel(recommendation),
+  };
 }
 
 async function loadExerciseType(
@@ -249,7 +292,8 @@ async function loadTimedExerciseCoachPrescription(
 
   const readinessScore = intelligence?.factors.muscleReadinessScore ?? coachCtx.recovery.score ?? 72;
   const recoveryScore = intelligence?.recoveryScore ?? coachCtx.recovery.score ?? 72;
-  const trainingRecommendation = intelligence?.trainingRecommendation ?? 'train';
+  const { recommendation: effectiveTrainingRec, label: trainingLabel } =
+    resolveActiveWorkoutTrainingGuidance(intelligence, recoveryScore);
   const sprintPhase = coachCtx.program?.sprintPhase;
   const plannedSets = plan?.plannedSets ?? 3;
   const repRange = plan?.plannedReps ?? '30 sec';
@@ -269,9 +313,6 @@ async function loadTimedExerciseCoachPrescription(
     currentSessionSets,
   });
 
-  const effectiveTrainingRec =
-    trainingRecommendation === 'rest_day' ? 'train_light' : trainingRecommendation;
-
   const adherence = nutritionAdherencePct(
     coachCtx.nutrition.caloriesToday ?? 0,
     coachCtx.nutrition.caloriesTarget ?? 0,
@@ -287,6 +328,7 @@ async function loadTimedExerciseCoachPrescription(
     goalFocus,
     sprintPhase,
     equipment: (profileRes.data?.available_equipment as string[] | undefined) ?? [],
+    recoveryScore,
     readinessScore,
     trainingRecommendation: effectiveTrainingRec,
   });
@@ -317,6 +359,8 @@ async function loadTimedExerciseCoachPrescription(
       goalFocus,
       recoveryScore,
       readinessScore,
+      trainingRecommendation: effectiveTrainingRec,
+      trainingLabel,
       programPhase: sprintPhase,
       nutritionAdherencePct: adherence,
       equipmentAware: Boolean(profileRes.data?.available_equipment?.length),
@@ -364,7 +408,8 @@ export async function loadExerciseCoachPrescription(
 
   const readinessScore = intelligence?.factors.muscleReadinessScore ?? coachCtx.recovery.score ?? 72;
   const recoveryScore = intelligence?.recoveryScore ?? coachCtx.recovery.score ?? 72;
-  const trainingRecommendation = intelligence?.trainingRecommendation ?? 'train';
+  const { recommendation: effectiveTrainingRec, label: trainingLabel } =
+    resolveActiveWorkoutTrainingGuidance(intelligence, recoveryScore);
   const recoveryVolumeMultiplier =
     (recoveryRow.data?.metadata as { volumeMultiplier?: number } | null)?.volumeMultiplier ?? 1;
   const sprintPhase = coachCtx.program?.sprintPhase;
@@ -378,10 +423,8 @@ export async function loadExerciseCoachPrescription(
     readinessScore,
     sprintPhase,
     recoveryVolumeMultiplier,
+    effectiveTrainingRec,
   );
-
-  const effectiveTrainingRec =
-    trainingRecommendation === 'rest_day' ? 'train_light' : trainingRecommendation;
 
   const adherence = nutritionAdherencePct(
     coachCtx.nutrition.caloriesToday ?? 0,
@@ -396,6 +439,7 @@ export async function loadExerciseCoachPrescription(
     goalFocus: progression.goalFocus,
     sprintPhase,
     equipment: (profileRes.data?.available_equipment as string[] | undefined) ?? [],
+    recoveryScore,
     readinessScore,
     trainingRecommendation: effectiveTrainingRec,
   });
@@ -430,6 +474,8 @@ export async function loadExerciseCoachPrescription(
       goalFocus: progression.goalFocus,
       recoveryScore,
       readinessScore,
+      trainingRecommendation: effectiveTrainingRec,
+      trainingLabel,
       programPhase: sprintPhase,
       nutritionAdherencePct: adherence,
       equipmentAware: Boolean(profileRes.data?.available_equipment?.length),
