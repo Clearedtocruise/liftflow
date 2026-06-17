@@ -8,6 +8,7 @@ import { ActiveWorkoutScreen } from '@/components/workout/execution/ActiveWorkou
 import { WorkoutWeeklyPlanScreen } from '@/components/workout/execution/WorkoutWeeklyPlanScreen';
 import { LiftFlowColors } from '@/constants/theme';
 import { usePlanAdjustment } from '@/contexts/PlanAdjustmentContext';
+import { useAppResume } from '@/hooks/useAppResume';
 import { useAuth } from '@/hooks/useAuth';
 import { useLocalDayRollover } from '@/hooks/useLocalDayRollover';
 import { useTabataModePreference } from '@/hooks/useTabataModePreference';
@@ -35,7 +36,7 @@ export default function WorkoutScreen() {
   const { revision, setFromAdaptation } = usePlanAdjustment();
   const { exercises, setPlannedWorkout, plannedWorkout } = useWorkoutPlanDraft();
   const { tabataModeEnabled } = useTabataModePreference();
-  const { activeSession: session, isLoading: loading, endSession, cancelSession } = useWorkoutSession();
+  const { activeSession: session, isLoading: loading, endSession, cancelSession, refreshSession } = useWorkoutSession();
 
   const [weekDays, setWeekDays] = useState<WeekDayPlan[]>([]);
   const [loadingPlan, setLoadingPlan] = useState(true);
@@ -88,11 +89,11 @@ export default function WorkoutScreen() {
         await loadWeekPlan();
         if (cancelled) return;
 
-        const regen = await trainingService.regenerateProgramIfNeeded(user.id);
-        if (cancelled) return;
-        if (regen.success && regen.data.regenerated) {
-          await loadWeekPlan({ silent: true });
-        }
+        void trainingService.regenerateProgramIfNeeded(user.id).then((regen) => {
+          if (!cancelled && regen.success && regen.data.regenerated) {
+            void loadWeekPlan({ silent: true });
+          }
+        });
       } catch {
         if (!cancelled) setLoadingPlan(false);
       }
@@ -106,8 +107,14 @@ export default function WorkoutScreen() {
   useFocusEffect(
     useCallback(() => {
       if (user?.id) void loadWeekPlan({ silent: true });
-    }, [user?.id, loadWeekPlan]),
+      if (session) void refreshSession();
+    }, [user?.id, loadWeekPlan, session, refreshSession]),
   );
+
+  useAppResume(() => {
+    if (user?.id) void loadWeekPlan({ silent: true });
+    if (session) void refreshSession();
+  });
 
   useEffect(() => {
     if (revision > 0 && user?.id) void loadWeekPlan({ silent: true });

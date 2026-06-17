@@ -19,6 +19,7 @@ import { HOME_ACTIVITY_OPTIONS } from '@/constants/activityOptions';
 import { Brand, LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import { pickDefaultLocation } from '@/constants/trainingProfile';
 import { usePlanAdjustment } from '@/contexts/PlanAdjustmentContext';
+import { useAppResume } from '@/hooks/useAppResume';
 import { useAuth } from '@/hooks/useAuth';
 import { useInsightRotator } from '@/hooks/useInsightRotator';
 import { useLocalCalendarDay } from '@/hooks/useLocalCalendarDay';
@@ -174,6 +175,10 @@ export default function DashboardScreen() {
       if (user) load();
     }, [user, load]),
   );
+
+  useAppResume(() => {
+    if (user) void load();
+  });
 
   useEffect(() => {
     if (adjustment && user) load();

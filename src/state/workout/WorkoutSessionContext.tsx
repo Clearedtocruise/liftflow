@@ -8,7 +8,7 @@ import {
     useState,
     type ReactNode,
 } from 'react';
-import { Vibration } from 'react-native';
+import { AppState, Vibration } from 'react-native';
 
 import { DEFAULT_REST_SECONDS } from '@/constants/workout';
 import { isStaleWorkoutSession } from '@/lib/staleWorkoutSession';
@@ -96,6 +96,23 @@ export function WorkoutSessionProvider({
   useEffect(() => {
     hydrate();
   }, [hydrate]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') return;
+
+      if (restEndAtRef.current != null) {
+        const remaining = Math.max(0, Math.ceil((restEndAtRef.current - Date.now()) / 1000));
+        setRestSecondsRemaining(remaining);
+      }
+
+      if (activeSession?.id) {
+        void refreshSession();
+      }
+    });
+
+    return () => subscription.remove();
+  }, [activeSession?.id, refreshSession]);
 
   useEffect(() => {
     if (restSecondsRemaining === null || restSecondsRemaining > 0) return;

@@ -99,10 +99,8 @@ export function WorkoutTimerOverlay({
   onCircuitSkip,
   onCircuitDismiss,
 }: WorkoutTimerOverlayProps) {
-  if (!visible) return null;
-
   const activeMode = circuit ? 'circuit' : interval ? 'interval' : traditional ? 'traditional' : null;
-  if (!activeMode) return null;
+  const showModal = visible && activeMode != null;
 
   const intervalMin = intervalSecondBounds?.min ?? 5;
   const intervalMax = intervalSecondBounds?.max ?? 300;
@@ -111,8 +109,19 @@ export function WorkoutTimerOverlay({
   const clampIntervalSeconds = (value: number) =>
     Math.min(intervalMax, Math.max(intervalMin, value));
 
+  function handleRequestClose() {
+    if (activeMode === 'traditional') traditional?.onSkip();
+    else if (activeMode === 'interval') onIntervalDismiss?.();
+    else onCircuitDismiss?.();
+  }
+
   return (
-    <Modal visible transparent animationType="fade">
+    <Modal
+      visible={showModal}
+      transparent
+      animationType="fade"
+      onRequestClose={handleRequestClose}
+    >
       <View style={styles.backdrop}>
         <View style={styles.card}>
           {position ? <WorkoutUpNextCard position={position} compact /> : null}

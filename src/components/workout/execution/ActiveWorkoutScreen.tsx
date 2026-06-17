@@ -16,6 +16,7 @@ import { WorkoutTimerOverlay } from '@/components/workout/execution/WorkoutTimer
 import { WorkoutUpNextCard } from '@/components/workout/execution/WorkoutUpNextCard';
 import { ExerciseCoachCard } from '@/components/workout/ExerciseCoachCard';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
+import { useAppResume } from '@/hooks/useAppResume';
 import { useAuth } from '@/hooks/useAuth';
 import { useUnits } from '@/hooks/useUnits';
 import { formatWorkoutClockTime, useWorkoutElapsedSeconds } from '@/hooks/useWorkoutElapsedSeconds';
@@ -140,6 +141,10 @@ export function ActiveWorkoutScreen({
   } = useWorkoutSession();
 
   const elapsedSeconds = useWorkoutElapsedSeconds(session.startedAt, session.status);
+
+  useAppResume(() => {
+    void refreshSession();
+  });
 
   const sortedExercises = useMemo(
     () => [...session.exercises].sort((a, b) => a.sortOrder - b.sortOrder),
@@ -353,6 +358,36 @@ export function ActiveWorkoutScreen({
       setRestPaused(false);
     }
   }, [restSecondsRemaining]);
+
+  useEffect(() => {
+    if (!restActive) setRestOverlayOpen(false);
+  }, [restActive]);
+
+  useEffect(() => {
+    if (!intervalTimer) setIntervalOverlayOpen(false);
+  }, [intervalTimer]);
+
+  useEffect(() => {
+    if (!circuitTimer || circuitTimer.phase === 'done') setCircuitOverlayOpen(false);
+  }, [circuitTimer]);
+
+  useEffect(() => {
+    setIntervalOverlayOpen(false);
+    setRestOverlayOpen(false);
+    setCircuitOverlayOpen(false);
+    setIsTabataPrepActive(false);
+    tabataBetweenExercisePendingRef.current = false;
+    tabataExercisePrepPendingRef.current = false;
+    tabataSkipPrepAfterTransitionRef.current = false;
+    setPendingAdvanceIndex(null);
+
+    if (!executionModeUsesIntervalTimer(executionMode)) {
+      dismissIntervalTimer();
+    }
+    if (executionMode !== 'tabata' && executionMode !== 'circuit') {
+      dismissCircuitTimer();
+    }
+  }, [executionMode, dismissIntervalTimer, dismissCircuitTimer]);
 
   useEffect(() => {
     const nextRest = planMeta?.restSeconds ?? resolveTraditionalRestSeconds(executionMode);
@@ -826,6 +861,7 @@ export function ActiveWorkoutScreen({
   }
 
   async function handleSkipRest() {
+    setRestOverlayOpen(false);
     await skipRestTimer();
     setRestPaused(false);
   }

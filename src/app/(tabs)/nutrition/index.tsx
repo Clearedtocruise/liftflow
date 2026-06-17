@@ -15,6 +15,7 @@ import { QuickMealLogSheet } from '@/components/nutrition/QuickMealLogSheet';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Spacing } from '@/constants/theme';
 import { usePlanAdjustment } from '@/contexts/PlanAdjustmentContext';
+import { useAppResume } from '@/hooks/useAppResume';
 import { useAuth } from '@/hooks/useAuth';
 import { useLocalCalendarDay } from '@/hooks/useLocalCalendarDay';
 import { resolveActiveTrainingDay } from '@/lib/activeTrainingDay';
@@ -109,6 +110,10 @@ export default function NutritionScreen() {
       if (user) void load();
     }, [user, load]),
   );
+
+  useAppResume(() => {
+    if (user) void load();
+  });
 
   useEffect(() => {
     if (revision > 0 && user) void load();

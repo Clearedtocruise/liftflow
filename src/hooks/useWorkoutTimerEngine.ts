@@ -2,17 +2,17 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { cueIntervalPhase } from '@/lib/intervalTimerFeedback';
 import {
-  createCircuitTimerState,
-  createIntervalTimerState,
-  skipIntervalRound as advanceIntervalRound,
-  tickCircuitTimer,
-  tickIntervalTimer,
-  type CircuitPhase,
-  type CircuitTimerConfig,
-  type CircuitTimerState,
-  type IntervalPhase,
-  type IntervalTimerConfig,
-  type IntervalTimerState,
+    skipIntervalRound as advanceIntervalRound,
+    createCircuitTimerState,
+    createIntervalTimerState,
+    tickCircuitTimer,
+    tickIntervalTimer,
+    type CircuitPhase,
+    type CircuitTimerConfig,
+    type CircuitTimerState,
+    type IntervalPhase,
+    type IntervalTimerConfig,
+    type IntervalTimerState,
 } from '@/lib/timerEngine';
 import type { WorkoutExecutionMode } from '@/types/workoutExecutionMode';
 
@@ -100,6 +100,15 @@ export function useWorkoutTimerEngine(executionMode: WorkoutExecutionMode) {
 
     return () => clearInterval(handle);
   }, [circuitTimer?.running, circuitTimer?.phase, readCircuitRemaining]);
+
+  useEffect(() => {
+    if (executionMode === 'hiit' || executionMode === 'tabata') return;
+    intervalDeadlineRef.current = null;
+    circuitDeadlineRef.current = null;
+    setIntervalTimer(null);
+    setCircuitTimer(null);
+    lastIntervalPhaseRef.current = null;
+  }, [executionMode]);
 
   useEffect(() => {
     if (!intervalTimer) {
