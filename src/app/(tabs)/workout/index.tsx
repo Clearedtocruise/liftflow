@@ -31,7 +31,7 @@ import type { WorkoutChallengeRecord } from '@/types/workoutChallenge';
 export default function WorkoutScreen() {
   const { user } = useAuth();
   const { revision, setFromAdaptation } = usePlanAdjustment();
-  const { exercises, setPlannedWorkout, plannedWorkout } = useWorkoutPlanDraft();
+  const { exercises, setPlannedWorkout, plannedWorkout, tabataModeEnabled } = useWorkoutPlanDraft();
   const { activeSession: session, isLoading: loading, endSession, cancelSession } = useWorkoutSession();
 
   const [weekDays, setWeekDays] = useState<WeekDayPlan[]>([]);
@@ -221,7 +221,7 @@ export default function WorkoutScreen() {
     );
 
     const executionMode = normalizeExecutionMode(
-      plannedWorkout?.metadata?.executionMode ?? exercises[0]?.executionMode,
+      tabataModeEnabled ? 'tabata' : (plannedWorkout?.metadata?.executionMode ?? exercises[0]?.executionMode),
     );
 
     return (

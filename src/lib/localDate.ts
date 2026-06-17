@@ -81,7 +81,33 @@ export function parseScheduledTimeToMinutes(timeLabel: string): number | null {
   return hour * 60 + minute;
 }
 
-export function formatScheduledDbTime(time?: string | null): string | null {
+export function normalizeCalendarDate(value?: string | null): string | undefined {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  return trimmed.length >= 10 ? trimmed.slice(0, 10) : trimmed;
+}
+
+export function isSameCalendarDate(a?: string | null, b?: string | null): boolean {
+  const left = normalizeCalendarDate(a);
+  const right = normalizeCalendarDate(b);
+  return left != null && right != null && left === right;
+}
+
+/** Add days to YYYY-MM-DD using UTC noon to avoid DST edge cases. */
+export function addCalendarDays(dateStr: string, delta: number): string {
+  const d = new Date(`${dateStr}T12:00:00.000Z`);
+  d.setUTCDate(d.getUTCDate() + delta);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Monday-start week containing the given YYYY-MM-DD. */
+export function weekStartFromDateString(dateStr: string): string {
+  const d = new Date(`${dateStr}T12:00:00.000Z`);
+  const dow = d.getUTCDay();
+  const mondayOffset = dow === 0 ? -6 : 1 - dow;
+  d.setUTCDate(d.getUTCDate() + mondayOffset);
+  return d.toISOString().slice(0, 10);
+}
   if (!time?.trim()) return null;
   const raw = time.trim();
   const match = raw.match(/^(\d{1,2}):(\d{2})/);

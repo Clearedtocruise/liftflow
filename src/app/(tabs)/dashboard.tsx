@@ -7,6 +7,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { HomeNextUpCard } from '@/components/dashboard/HomeNextUpCard';
 import { HomePlanAdjustedBanner } from '@/components/dashboard/HomePlanAdjustedBanner';
+import { ManageDayModal } from '@/components/dashboard/ManageDayModal';
 import { RingGauge } from '@/components/dashboard/RingGauge';
 import { WeeklyReviewCard } from '@/components/dashboard/WeeklyReviewCard';
 import { InsightCard } from '@/components/insights/InsightCard';
@@ -34,18 +35,21 @@ import { deviceTimeZone, formatScheduledDbTime, localDateString } from '@/lib/lo
 import {
     aggregateDailyMeals,
     findNextMeal,
+    mealsForCalendarDay,
 } from '@/lib/mealAggregation';
 import { formatWorkoutTime, scheduleFromProfile, scheduledTimesForDay } from '@/lib/mealSchedule';
-import { showHomeManageDayMenu } from '@/lib/planDayActions';
+import { buildHomeManageDayMenu } from '@/lib/planDayActions';
 import { logStartup } from '@/lib/startupLogger';
 import { buildWeekPlan, dedupePlannedWorkoutsByDate, getWeekRange } from '@/lib/weekPlan';
-import { estimateWorkoutDurationMinutes, exercisesFromPlannedWorkout } from '@/lib/workoutPlan';
+import { estimateWorkoutDurationMinutes, exercisesFromPlannedWorkout, remapExercisesForExecutionMode } from '@/lib/workoutPlan';
 import { analyticsService } from '@/services/analyticsService';
 import { nutritionService } from '@/services/nutritionService';
 import { recoveryService } from '@/services/recoveryService';
 import { trainingService } from '@/services/trainingService';
 import { userService } from '@/services/userService';
 import { weeklyCloseoutService } from '@/services/weeklyCloseoutService';
+import { workoutService } from '@/services/workoutService';
+import { useWorkoutPlanDraft } from '@/state/workout/WorkoutPlanDraftContext';
 import { useWorkoutSession } from '@/state/workout/WorkoutSessionContext';
 import type { DashboardSummary, Meal, NutritionGoals, PlannedWorkout, ProgramDashboard } from '@/types';
 import type { RecoveryIntelligenceReport } from '@/types/recoveryIntelligence';
@@ -56,7 +60,8 @@ export default function DashboardScreen() {
   const { isPremium } = useSubscription();
   const units = useUnits();
   const { insight } = useInsightRotator();
-  const { startSessionFromPlanned } = useWorkoutSession();
+  const { startSessionFromPlanned, refreshSession } = useWorkoutSession();
+  const { exercises, setPlannedWorkout, tabataModeEnabled, setTabataModeEnabled } = useWorkoutPlanDraft();
   const { locations, selectedId } = useWorkoutLocations(user?.id);
   const [data, setData] = useState<DashboardSummary | null>(null);
   const [recoveryScore, setRecoveryScore] = useState<number | null>(null);
@@ -72,6 +77,7 @@ export default function DashboardScreen() {
   const [adaptingPlan, setAdaptingPlan] = useState(false);
   const [acceptingWeeklyPlan, setAcceptingWeeklyPlan] = useState(false);
   const [weeklyCloseoutId, setWeeklyCloseoutId] = useState<string | null>(null);
+  const [manageDayOpen, setManageDayOpen] = useState(false);
   const homeRenderedRef = useRef(false);
   const appReadyLoggedRef = useRef(false);
 
@@ -127,7 +133,7 @@ export default function DashboardScreen() {
       if (dashResult.success) setData(dashResult.data);
       if (goalsResult.success) setNutritionGoals(goalsResult.data);
       if (mealsResult.success) {
-        setTodayMeals(mealsResult.data.filter((meal) => meal.scheduledDate === today));
+        setTodayMeals(mealsForCalendarDay(mealsResult.data, today));
       }
 
       if (isPremium) {
@@ -284,9 +290,9 @@ export default function DashboardScreen() {
   const workoutStartTime =
     formatScheduledDbTime(todaysWorkout?.scheduledTime) ?? formatWorkoutTime(scheduleWithWorkout);
 
-  async function handleManageDay() {
-    if (!user) return;
-    showHomeManageDayMenu(
+  const manageDayMenu = useMemo(() => {
+    if (!user) return null;
+    return buildHomeManageDayMenu(
       {
         userId: user.id,
         workouts: weekWorkouts,
@@ -297,11 +303,24 @@ export default function DashboardScreen() {
       },
       today,
     );
+  }, [user, weekWorkouts, setFromAdaptation, today, load]);
+
+  function handleManageDay() {
+    if (!manageDayMenu) {
+      Alert.alert('Manage Day', 'No planned workouts this week to adjust.');
+      return;
+    }
+    setManageDayOpen(true);
   }
 
   async function handleStartNextWorkout(planned: PlannedWorkout) {
     if (!user) return;
     const location = pickDefaultLocation(locations, selectedId);
+    setPlannedWorkout(planned);
+    const baseExercises = exercisesFromPlannedWorkout(planned);
+    const planExercises = tabataModeEnabled
+      ? remapExercisesForExecutionMode(baseExercises, 'tabata')
+      : baseExercises;
     setStartingWorkout(true);
     const started = await startSessionFromPlanned(planned.id, {
       name: planned.name,
@@ -309,6 +328,10 @@ export default function DashboardScreen() {
       trainingLocation: location?.locationType ?? user.trainingLocation,
       workoutLocationId: location?.id,
     });
+    if (started && planExercises.length > 0) {
+      await workoutService.applySessionExercisePlan(started.id, user.id, planExercises);
+      await refreshSession();
+    }
     setStartingWorkout(false);
     if (started) router.push('/(tabs)/workout');
   }
@@ -396,9 +419,17 @@ export default function DashboardScreen() {
                 : null
             }
             onLogMeal={() => router.push('/(tabs)/nutrition')}
+            onQuickLogMeal={() => router.push('/(tabs)/nutrition?log=1')}
+            onViewWorkout={() => {
+              if (!todaysWorkout) return;
+              setPlannedWorkout(todaysWorkout);
+              router.push({ pathname: '/(tabs)/workout/day', params: { id: todaysWorkout.id } });
+            }}
             onStartWorkout={() => todaysWorkout && handleStartNextWorkout(todaysWorkout)}
             onManageDay={showWorkoutSection ? handleManageDay : undefined}
             onLogActivity={handleLogActivity}
+            tabataModeEnabled={tabataModeEnabled}
+            onTabataModeChange={setTabataModeEnabled}
             showWorkoutSection={showWorkoutSection}
             isRestDay={!todaysWorkout}
             startingWorkout={startingWorkout}
@@ -503,6 +534,17 @@ export default function DashboardScreen() {
           </AppText>
           <InsightCard insight={insight} />
         </Animated.View>
+      ) : null}
+
+      {manageDayMenu ? (
+        <ManageDayModal
+          visible={manageDayOpen}
+          weeklyPlan={manageDayMenu.weeklyPlan}
+          todayDate={manageDayMenu.todayDate}
+          todayLabel={manageDayMenu.todayLabel}
+          actions={manageDayMenu.actions}
+          onClose={() => setManageDayOpen(false)}
+        />
       ) : null}
     </ScreenContainer>
   );

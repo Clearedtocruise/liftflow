@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 
-import { exercisesFromPlannedWorkout } from '@/lib/workoutPlan';
+import { exercisesFromPlannedWorkout, remapExercisesForExecutionMode } from '@/lib/workoutPlan';
 import type { PlannedWorkout } from '@/types/training';
 import type { EditableWorkoutExercise } from '@/types/workoutExecution';
 
@@ -12,8 +12,10 @@ type ReplaceExerciseInput = {
 type WorkoutPlanDraftContextValue = {
   plannedWorkout: PlannedWorkout | null;
   exercises: EditableWorkoutExercise[];
+  tabataModeEnabled: boolean;
   setPlannedWorkout: (workout: PlannedWorkout | null) => void;
   setExercises: (exercises: EditableWorkoutExercise[]) => void;
+  setTabataModeEnabled: (enabled: boolean) => void;
   replaceExerciseAt: (index: number, replacement: ReplaceExerciseInput) => void;
   resetDraft: () => void;
 };
@@ -22,20 +24,47 @@ const WorkoutPlanDraftContext = createContext<WorkoutPlanDraftContextValue | nul
 
 export function WorkoutPlanDraftProvider({ children }: { children: ReactNode }) {
   const [plannedWorkout, setPlannedWorkoutState] = useState<PlannedWorkout | null>(null);
-  const [exercises, setExercises] = useState<EditableWorkoutExercise[]>([]);
+  const [exercises, setExercisesState] = useState<EditableWorkoutExercise[]>([]);
+  const [tabataModeEnabled, setTabataModeEnabledState] = useState(false);
 
-  const setPlannedWorkout = useCallback((workout: PlannedWorkout | null) => {
-    setPlannedWorkoutState(workout);
-    setExercises(exercisesFromPlannedWorkout(workout));
+  const applyTabataToExercises = useCallback((items: EditableWorkoutExercise[], tabata: boolean) => {
+    return tabata ? remapExercisesForExecutionMode(items, 'tabata') : items;
   }, []);
+
+  const setPlannedWorkout = useCallback(
+    (workout: PlannedWorkout | null) => {
+      setPlannedWorkoutState(workout);
+      const base = exercisesFromPlannedWorkout(workout);
+      setExercisesState(applyTabataToExercises(base, tabataModeEnabled));
+    },
+    [applyTabataToExercises, tabataModeEnabled],
+  );
+
+  const setExercises = useCallback((next: EditableWorkoutExercise[]) => {
+    setExercisesState(next);
+  }, []);
+
+  const setTabataModeEnabled = useCallback(
+    (enabled: boolean) => {
+      setTabataModeEnabledState(enabled);
+      setExercisesState((current) => {
+        if (current.length === 0) return current;
+        if (enabled) return remapExercisesForExecutionMode(current, 'tabata');
+        if (plannedWorkout) return exercisesFromPlannedWorkout(plannedWorkout);
+        return remapExercisesForExecutionMode(current, 'traditional');
+      });
+    },
+    [plannedWorkout],
+  );
 
   const resetDraft = useCallback(() => {
     setPlannedWorkoutState(null);
-    setExercises([]);
+    setExercisesState([]);
+    setTabataModeEnabledState(false);
   }, []);
 
   const replaceExerciseAt = useCallback((index: number, replacement: ReplaceExerciseInput) => {
-    setExercises((current) => {
+    setExercisesState((current) => {
       if (index < 0 || index >= current.length) return current;
       const previous = current[index];
       const nextExercise: EditableWorkoutExercise = {
@@ -54,12 +83,14 @@ export function WorkoutPlanDraftProvider({ children }: { children: ReactNode }) 
     () => ({
       plannedWorkout,
       exercises,
+      tabataModeEnabled,
       setPlannedWorkout,
       setExercises,
+      setTabataModeEnabled,
       replaceExerciseAt,
       resetDraft,
     }),
-    [plannedWorkout, exercises, setPlannedWorkout, replaceExerciseAt, resetDraft],
+    [plannedWorkout, exercises, tabataModeEnabled, setPlannedWorkout, setTabataModeEnabled, replaceExerciseAt, resetDraft],
   );
 
   return <WorkoutPlanDraftContext.Provider value={value}>{children}</WorkoutPlanDraftContext.Provider>;

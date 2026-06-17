@@ -4,6 +4,26 @@ import type { PlannedWorkout, TemplateExercise } from '@/types/training';
 import type { EditableWorkoutExercise } from '@/types/workoutExecution';
 import type { WorkoutExecutionMode } from '@/types/workoutExecutionMode';
 
+function setsFromPrescription(
+  prescription: ReturnType<typeof prescribeExerciseExecution>,
+  fallback: number,
+): number {
+  if (prescription.scheme === 'set_rep' || prescription.scheme === 'superset') return prescription.sets;
+  if (prescription.scheme === 'interval') return prescription.rounds;
+  if (prescription.scheme === 'circuit') return prescription.rounds;
+  return fallback;
+}
+
+function restFromPrescription(
+  prescription: ReturnType<typeof prescribeExerciseExecution>,
+  fallback?: number,
+): number | undefined {
+  if (prescription.scheme === 'set_rep') return prescription.restSeconds;
+  if (prescription.scheme === 'interval') return prescription.restSeconds;
+  if (prescription.scheme === 'superset') return prescription.restBetweenRoundSetsSeconds;
+  return fallback;
+}
+
 function templateToEditable(
   exercise: TemplateExercise,
   index: number,
@@ -23,19 +43,43 @@ function templateToEditable(
     id: `plan-${index}-${name.toLowerCase().replace(/\s+/g, '-')}`,
     exerciseId: exercise.exerciseId,
     name,
-    sets: prescription.scheme === 'set_rep' ? prescription.sets : exercise.sets ?? 3,
+    sets: setsFromPrescription(prescription, exercise.sets ?? 3),
     repRange:
       prescription.scheme === 'set_rep' || prescription.scheme === 'circuit' || prescription.scheme === 'superset'
         ? prescription.repRange
         : exercise.repRange ?? exercise.reps,
-    restSeconds:
-      prescription.scheme === 'set_rep'
-        ? prescription.restSeconds
-        : exercise.restSeconds,
+    restSeconds: restFromPrescription(prescription, exercise.restSeconds),
     weightLbs: exercise.weightLbs,
     executionMode,
     supersetGroupId: exercise.supersetGroupId,
   };
+}
+
+/** Re-apply an execution mode to editable plan exercises (e.g. Tabata toggle). */
+export function remapExercisesForExecutionMode(
+  exercises: EditableWorkoutExercise[],
+  mode: WorkoutExecutionMode,
+): EditableWorkoutExercise[] {
+  return exercises.map((exercise, index) => {
+    const prescription = prescribeExerciseExecution({
+      name: exercise.name,
+      mode,
+      sets: exercise.sets,
+      repRange: exercise.repRange,
+      restSeconds: exercise.restSeconds,
+    });
+    return {
+      ...exercise,
+      id: exercise.id || `plan-${index}-${exercise.name.toLowerCase().replace(/\s+/g, '-')}`,
+      executionMode: mode,
+      sets: setsFromPrescription(prescription, exercise.sets),
+      repRange:
+        prescription.scheme === 'set_rep' || prescription.scheme === 'circuit' || prescription.scheme === 'superset'
+          ? prescription.repRange
+          : exercise.repRange,
+      restSeconds: restFromPrescription(prescription, exercise.restSeconds),
+    };
+  });
 }
 
 export function exercisesFromPlannedWorkout(workout: PlannedWorkout | null): EditableWorkoutExercise[] {

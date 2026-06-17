@@ -1,16 +1,25 @@
-import { router } from 'expo-router';
-import { useState } from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { CardioActivityPicker } from '@/components/cardio/CardioActivityPicker';
 import { CardioSessionPanel } from '@/components/cardio/CardioSessionPanel';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { AppText } from '@/components/ui/AppText';
-import { CARDIO_ACTIVITIES, type CardioActivity } from '@/constants/cardioActivities';
+import { CARDIO_ACTIVITIES, cardioActivityById, type CardioActivity } from '@/constants/cardioActivities';
 import { Spacing } from '@/constants/theme';
 
 export default function CardioTrackingScreen() {
-  const [selected, setSelected] = useState<CardioActivity>(CARDIO_ACTIVITIES[0]);
+  const { activity: activityParam } = useLocalSearchParams<{ activity?: string }>();
+  const initialActivity = useMemo(
+    () => cardioActivityById(typeof activityParam === 'string' ? activityParam : '') ?? CARDIO_ACTIVITIES[0],
+    [activityParam],
+  );
+  const [selected, setSelected] = useState<CardioActivity>(initialActivity);
+
+  useEffect(() => {
+    setSelected(initialActivity);
+  }, [initialActivity]);
 
   return (
     <ScreenContainer contentContainerStyle={styles.content}>

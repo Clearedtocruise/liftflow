@@ -151,6 +151,8 @@ export function ActiveWorkoutScreen({
   const [circuitRound, setCircuitRound] = useState(1);
   const [bonusSets, setBonusSets] = useState(0);
   const [exercisePickerVisible, setExercisePickerVisible] = useState(false);
+  const lastIntervalWorkRoundRef = useRef(0);
+  const autoLoggingIntervalRef = useRef(false);
 
   const currentExercise = sortedExercises[currentIndex];
   const planMeta = planExercises[currentIndex] ?? planExercises.find(
@@ -355,6 +357,73 @@ export function ActiveWorkoutScreen({
     if (!executionModeUsesIntervalTimer(executionMode) || showComplete) return;
     startIntervalTimer(undefined, executionMode === 'tabata');
   }, [currentExercise?.id, executionMode, showComplete, startIntervalTimer]);
+
+  useEffect(() => {
+    lastIntervalWorkRoundRef.current = 0;
+  }, [currentExercise?.id]);
+
+  useEffect(() => {
+    if (!executionModeUsesIntervalTimer(executionMode) || !intervalTimer || !currentExercise) return;
+
+    if (intervalTimer.phase === 'done') {
+      if (completedSets.length >= targetSets) {
+        setShowComplete(true);
+        setExerciseHadPr(completedSets.some((set) => set.isPr));
+      }
+      return;
+    }
+
+    if (intervalTimer.phase !== 'rest') return;
+    const round = intervalTimer.round;
+    if (round <= lastIntervalWorkRoundRef.current) return;
+    if (completedSets.length >= targetSets || autoLoggingIntervalRef.current || isPaused) return;
+
+    lastIntervalWorkRoundRef.current = round;
+    autoLoggingIntervalRef.current = true;
+    const workSeconds = intervalTimer.config.workSeconds;
+
+    void (async () => {
+      try {
+        const base = {
+          workoutExerciseId: currentExercise.id,
+          restSeconds: intervalTimer.config.restSeconds,
+          skipRest: true,
+        };
+        if (loggingMode === 'cardio') {
+          await logSet({
+            ...base,
+            durationSeconds: workSeconds,
+            distanceMeters: Math.round(distanceKm * 1000),
+            reps: 1,
+          });
+        } else if (loggingMode === 'timed' || loggingMode === 'bodyweight') {
+          await logSet({
+            ...base,
+            ...(loggingMode === 'timed' ? { durationSeconds: workSeconds } : {}),
+            reps: loggingMode === 'bodyweight' ? Math.max(reps, 1) : 1,
+          });
+        } else {
+          await logSet({ ...base, weight: weightKg, reps: Math.max(reps, 1) });
+        }
+        await refreshSession();
+      } finally {
+        autoLoggingIntervalRef.current = false;
+      }
+    })();
+  }, [
+    completedSets,
+    currentExercise,
+    distanceKm,
+    executionMode,
+    intervalTimer,
+    isPaused,
+    logSet,
+    loggingMode,
+    refreshSession,
+    reps,
+    targetSets,
+    weightKg,
+  ]);
 
   useEffect(() => {
     setBonusSets(0);
@@ -724,21 +793,23 @@ export function ActiveWorkoutScreen({
               {executionModeUsesIntervalTimer(executionMode) && !showComplete ? (
                 <View style={styles.intervalBanner}>
                   <AppText variant="label" color="accent">
-                    {executionMode === 'tabata' ? 'Tabata timer' : 'HIIT timer'}
+                    {executionMode === 'tabata' ? 'Tabata · 20s work / 20s rest' : 'HIIT timer'}
                   </AppText>
                   {intervalTimer ? (
                     <AppText variant="footnote" color="textSecondary">
-                      {intervalPhaseLabel(intervalTimer.phase)} · {formatTimerSeconds(intervalTimer.secondsRemaining)}
+                      {intervalPhaseLabel(intervalTimer.phase)} · Round {intervalTimer.round}/{intervalTimer.config.rounds} ·{' '}
+                      {formatTimerSeconds(intervalTimer.secondsRemaining)}
+                      {executionMode === 'tabata' ? ' · sets auto-log each work interval' : ''}
                     </AppText>
                   ) : (
                     <AppText variant="footnote" color="textSecondary">
-                      Configurable work, rest, and rounds
+                      Timer starts automatically for each exercise
                     </AppText>
                   )}
                   <PrimaryButton
-                    label={intervalTimer ? 'Open interval timer' : 'Start interval timer'}
+                    label={intervalTimer?.running ? 'Pause timer' : 'Resume timer'}
                     variant="secondary"
-                    onPress={() => startIntervalTimer(undefined, true)}
+                    onPress={toggleIntervalTimer}
                   />
                 </View>
               ) : null}
@@ -770,7 +841,13 @@ export function ActiveWorkoutScreen({
                     disabled={isPaused || logging}
                   />
                   <PrimaryButton
-                    label={allSetsDone && programmedSetsComplete ? 'All sets logged' : `Log Set ${nextSetNumber}`}
+                    label={
+                      executionModeUsesIntervalTimer(executionMode)
+                        ? `Manual log · Set ${nextSetNumber}/${targetSets}`
+                        : allSetsDone && programmedSetsComplete
+                          ? 'All sets logged'
+                          : `Log Set ${nextSetNumber}`
+                    }
                     size="large"
                     loading={logging}
                     disabled={isPaused}

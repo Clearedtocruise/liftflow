@@ -20,7 +20,7 @@ import type { PlannedWorkout } from '@/types/training';
 export default function WorkoutDayScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
-  const { exercises, setPlannedWorkout, setExercises } = useWorkoutPlanDraft();
+  const { exercises, setPlannedWorkout, setExercises, tabataModeEnabled, setTabataModeEnabled } = useWorkoutPlanDraft();
   const { startSessionFromPlanned, refreshSession } = useWorkoutSession();
   const { locations, selectedId } = useWorkoutLocations(user?.id);
 
@@ -119,6 +119,8 @@ export default function WorkoutDayScreen() {
       availableEquipment={user?.availableEquipment}
       gender={profileFigureGender(user?.sex)}
       starting={starting}
+      tabataModeEnabled={tabataModeEnabled}
+      onTabataModeChange={setTabataModeEnabled}
       onStart={handleStart}
       onEdit={() => router.push('/(tabs)/workout/edit')}
       onBack={() => router.back()}

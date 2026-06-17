@@ -1,5 +1,5 @@
 import { useFocusEffect } from '@react-navigation/native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from 'react-native';
 
@@ -11,6 +11,7 @@ import { MealPlanCard } from '@/components/nutrition/MealPlanCard';
 import { MealReplaceSheet, type SmartReplacementPayload } from '@/components/nutrition/MealReplaceSheet';
 import { NutritionProgressHeader } from '@/components/nutrition/NutritionProgressHeader';
 import { NutritionSectionTabs, type NutritionSection } from '@/components/nutrition/NutritionSectionTabs';
+import { QuickMealLogSheet } from '@/components/nutrition/QuickMealLogSheet';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Spacing } from '@/constants/theme';
 import { usePlanAdjustment } from '@/contexts/PlanAdjustmentContext';
@@ -19,7 +20,7 @@ import { useLocalDayRollover } from '@/hooks/useLocalDayRollover';
 import { resolveActiveTrainingDay } from '@/lib/activeTrainingDay';
 import { aggregateWeeklyGroceries, groupGroceriesByCategory } from '@/lib/groceryAggregation';
 import { localDateString } from '@/lib/localDate';
-import { aggregateDailyMeals, aggregateWeeklyMeals, dedupeMealsByType } from '@/lib/mealAggregation';
+import { aggregateDailyMeals, aggregateWeeklyMeals, mealsForCalendarDay } from '@/lib/mealAggregation';
 import {
     enrichMealMeta,
     serializeMealMeta,
@@ -35,9 +36,11 @@ import { nutritionService } from '@/services/nutritionService';
 import { trainingService } from '@/services/trainingService';
 import { getAccessToken } from '@/supabase/client';
 import type { DailyNutritionSummary, GroceryList, Meal, NutritionGoals } from '@/types';
+import type { MealType } from '@/types/common';
 
 export default function NutritionScreen() {
   const { user } = useAuth();
+  const { log } = useLocalSearchParams<{ log?: string }>();
   const { revision } = usePlanAdjustment();
   const [section, setSection] = useState<NutritionSection>('today');
   const [goals, setGoals] = useState<NutritionGoals | null>(null);
@@ -50,10 +53,12 @@ export default function NutritionScreen() {
   const [replaceMode, setReplaceMode] = useState<'meal' | 'ingredient'>('meal');
   const [replaceIngredientName, setReplaceIngredientName] = useState<string | null>(null);
   const [detailMeal, setDetailMeal] = useState<Meal | null>(null);
+  const [quickLogOpen, setQuickLogOpen] = useState(false);
   const [hasWorkoutToday, setHasWorkoutToday] = useState(false);
   const [recoverySleepHours, setRecoverySleepHours] = useState<number | undefined>();
 
-  const today = useMemo(() => localDateString(new Date(), user?.timezone), [user?.timezone]);
+  const weekRange = useMemo(() => getWeekRange(new Date(), user?.timezone), [user?.timezone]);
+  const today = useMemo(() => localDateString(new Date(), user?.timezone), [user?.timezone, weekRange.from]);
   const schedule = scheduleFromProfile(user, hasWorkoutToday, recoverySleepHours);
   const dietaryRestrictions = user?.metadata?.coachProfile?.dietaryRestrictions ?? [];
 
@@ -79,7 +84,12 @@ export default function NutritionScreen() {
     if (goalsRes.success) setGoals(goalsRes.data);
     if (summaryRes.success) setSummary(summaryRes.data);
     if (weekRes.success) setWeekMeals(weekRes.data);
-    if (groceryRes.success && groceryRes.data?.[0]) setGroceryList(groceryRes.data[0]);
+    if (weekRes.success && weekRes.data.length > 0) {
+      const synced = await nutritionService.syncGroceryListFromMeals(user.id, from, to);
+      if (synced.success && synced.data) setGroceryList(synced.data);
+    } else if (groceryRes.success && groceryRes.data?.[0]) {
+      setGroceryList(groceryRes.data[0]);
+    }
 
     const planned = plannedRes.success ? plannedRes.data : [];
     const activeDay = resolveActiveTrainingDay(planned, { date: today, timeZone: user.timezone });
@@ -108,41 +118,29 @@ export default function NutritionScreen() {
     if (revision > 0 && user) void load();
   }, [revision, user, load]);
 
-  const todayMeals = useMemo(
-    () => dedupeMealsByType(weekMeals.filter((meal) => meal.scheduledDate === today)),
-    [weekMeals, today],
-  );
+  const todayMeals = useMemo(() => mealsForCalendarDay(weekMeals, today), [weekMeals, today]);
   const todayTimes = useMemo(
     () => scheduledTimesForDay(todayMeals.map((meal) => meal.mealType), schedule, hasWorkoutToday),
     [todayMeals, schedule, hasWorkoutToday],
   );
 
   const mealAggregation = useMemo(
-    () => aggregateDailyMeals(weekMeals.filter((m) => m.scheduledDate === today)),
+    () => aggregateDailyMeals(mealsForCalendarDay(weekMeals, today)),
     [weekMeals, today],
   );
 
   const weekDays = useMemo(() => {
-    const { dates } = getWeekRange(new Date(), user?.timezone);
-    return dates.map((date, index) => ({
+    return weekRange.dates.map((date, index) => ({
       date,
       label: WEEKDAY_LABELS[index],
-      meals: dedupeMealsByType(weekMeals.filter((meal) => meal.scheduledDate === date)),
+      isToday: date === today,
+      meals: mealsForCalendarDay(weekMeals, date),
     }));
-  }, [weekMeals, user?.timezone]);
+  }, [weekMeals, weekRange.dates, today]);
 
   const weekAggregation = useMemo(() => aggregateWeeklyMeals(weekMeals), [weekMeals]);
 
-  const shoppingItems = useMemo(() => {
-    if (groceryList?.items?.length) {
-      return groceryList.items.map((item) => ({
-        name: item.name,
-        quantity: `${item.quantity} ${item.unit}`.trim(),
-        category: item.category ?? 'Pantry',
-      }));
-    }
-    return aggregateWeeklyGroceries(weekMeals);
-  }, [groceryList, weekMeals]);
+  const shoppingItems = useMemo(() => aggregateWeeklyGroceries(weekMeals), [weekMeals]);
 
   const groupedShopping = useMemo(() => groupGroceriesByCategory(shoppingItems), [shoppingItems]);
 
@@ -152,6 +150,36 @@ export default function NutritionScreen() {
     const grocerySync = await nutritionService.syncGroceryListFromMeals(user.id, from, to);
     if (grocerySync.success && grocerySync.data) {
       setGroceryList(grocerySync.data);
+    }
+  }
+
+  useEffect(() => {
+    if (log === '1') setQuickLogOpen(true);
+  }, [log]);
+
+  useEffect(() => {
+    if (section !== 'week') return;
+    setExpandedDay((current) => current ?? today);
+  }, [section, today]);
+
+  async function handleQuickLogMeal(payload: {
+    name: string;
+    mealType: MealType;
+    calories?: number;
+    proteinG?: number;
+  }) {
+    if (!user) return;
+    const meta = enrichMealMeta(payload.name, undefined);
+    meta.status = 'completed';
+    const result = await nutritionService.logFood(user.id, {
+      ...payload,
+      date: today,
+      instructions: serializeMealMeta(meta),
+    });
+    if (result.success) {
+      await load();
+    } else {
+      Alert.alert('Could not log meal', result.error);
     }
   }
 
@@ -276,15 +304,23 @@ export default function NutritionScreen() {
             caloriesConsumed={mealAggregation.caloriesConsumed}
             proteinG={mealAggregation.proteinG}
           />
-          <AppText variant="label" color="accent">
-            Today&apos;s Plan
-          </AppText>
+          <View style={styles.todayHeader}>
+            <AppText variant="label" color="accent">
+              Today&apos;s Plan
+            </AppText>
+            <Pressable onPress={() => setQuickLogOpen(true)} hitSlop={8}>
+              <AppText variant="caption" color="accent">
+                + Log meal
+              </AppText>
+            </Pressable>
+          </View>
           {todayMeals.length === 0 ? (
             <Card style={styles.empty}>
               <AppText variant="body" color="textSecondary">
-                No meals scheduled for today.
+                No meals scheduled for today. Log what you ate or generate a coached plan.
               </AppText>
-              <PrimaryButton label="Generate Weekly Meal Plan" onPress={ensureMealPlan} />
+              <PrimaryButton label="Log a Meal" onPress={() => setQuickLogOpen(true)} />
+              <PrimaryButton label="Generate Weekly Meal Plan" variant="secondary" onPress={ensureMealPlan} />
             </Card>
           ) : (
             todayMeals.map((meal, index) => (
@@ -329,7 +365,10 @@ export default function NutritionScreen() {
               {weekDays.map((day) => (
               <Card key={day.date} style={styles.dayCard}>
                 <Pressable onPress={() => setExpandedDay(expandedDay === day.date ? null : day.date)} style={styles.dayHeader}>
-                  <AppText variant="bodyBold">{day.label}</AppText>
+                  <AppText variant="bodyBold">
+                    {day.label}
+                    {day.isToday ? ' · Today' : ''}
+                  </AppText>
                   <AppText variant="caption" color="textSecondary">
                     {day.meals.length} meals
                   </AppText>
@@ -364,7 +403,15 @@ export default function NutritionScreen() {
 
       {section === 'shopping' ? (
         <>
-          <PrimaryButton label="Generate Shopping List" variant="secondary" onPress={handleGenerateShoppingList} />
+          <Card style={styles.weekSummary}>
+            <AppText variant="label" color="accent">
+              Weekly shopping
+            </AppText>
+            <AppText variant="body" color="textSecondary">
+              {weekRange.from} – {weekRange.to} · {weekMeals.length} planned meals · {shoppingItems.length} items
+            </AppText>
+          </Card>
+          <PrimaryButton label="Refresh Shopping List" variant="secondary" onPress={handleGenerateShoppingList} />
           {shoppingItems.length === 0 ? (
             <Card style={styles.shoppingCard}>
               <AppText variant="body" color="textSecondary">
@@ -436,6 +483,12 @@ export default function NutritionScreen() {
           }}
         />
       ) : null}
+
+      <QuickMealLogSheet
+        visible={quickLogOpen}
+        onClose={() => setQuickLogOpen(false)}
+        onSubmit={handleQuickLogMeal}
+      />
     </ScreenContainer>
   );
 }
@@ -453,6 +506,11 @@ const styles = StyleSheet.create({
   },
   empty: {
     gap: Spacing.md,
+  },
+  todayHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   dayCard: {
     gap: Spacing.sm,

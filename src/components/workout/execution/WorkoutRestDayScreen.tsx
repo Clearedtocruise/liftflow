@@ -11,9 +11,10 @@ type WorkoutRestDayScreenProps = {
   day: Pick<WeekDayPlan, 'date' | 'dayLabel'>;
   onBack: () => void;
   onLogCardio: () => void;
+  onStartTabata?: () => void;
 };
 
-export function WorkoutRestDayScreen({ day, onBack, onLogCardio }: WorkoutRestDayScreenProps) {
+export function WorkoutRestDayScreen({ day, onBack, onLogCardio, onStartTabata }: WorkoutRestDayScreenProps) {
   const today = isToday(day.date);
 
   return (
@@ -36,7 +37,10 @@ export function WorkoutRestDayScreen({ day, onBack, onLogCardio }: WorkoutRestDa
       </Card>
 
       <View style={styles.actions}>
-        <PrimaryButton label="Log Cardio" variant="secondary" onPress={onLogCardio} />
+        {onStartTabata ? (
+          <PrimaryButton label="Start Tabata" onPress={onStartTabata} />
+        ) : null}
+        <PrimaryButton label="HIIT & Cardio" variant="secondary" onPress={onLogCardio} />
       </View>
     </ScreenContainer>
   );

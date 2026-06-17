@@ -6,7 +6,7 @@ import { Card } from '@/components/layout/Card';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { AppText } from '@/components/ui/AppText';
-import { ExerciseReplaceSheet } from '@/components/workout/execution/ExerciseReplaceSheet';
+import { WorkoutTabataToggle } from '@/components/workout/WorkoutTabataToggle';
 import { WorkoutExerciseDetailList } from '@/components/workout/execution/WorkoutExerciseDetailList';
 import { Spacing } from '@/constants/theme';
 import { aggregateWorkoutMuscles } from '@/lib/exerciseMuscleMap';
@@ -25,6 +25,8 @@ type WorkoutDayOverviewScreenProps = {
   availableEquipment?: string[];
   gender?: 'male' | 'female';
   starting: boolean;
+  tabataModeEnabled?: boolean;
+  onTabataModeChange?: (enabled: boolean) => void;
   onStart: () => void;
   onEdit: () => void;
   onBack: () => void;
@@ -40,6 +42,8 @@ export function WorkoutDayOverviewScreen({
   availableEquipment,
   gender = 'male',
   starting,
+  tabataModeEnabled = false,
+  onTabataModeChange,
   onStart,
   onEdit,
   onBack,
@@ -98,7 +102,19 @@ export function WorkoutDayOverviewScreen({
       />
 
       <View style={styles.actions}>
-        <PrimaryButton label={starting ? 'Starting…' : 'Start Workout'} size="large" loading={starting} onPress={onStart} />
+        {onTabataModeChange ? (
+          <WorkoutTabataToggle
+            enabled={tabataModeEnabled}
+            onChange={onTabataModeChange}
+            disabled={starting}
+          />
+        ) : null}
+        <PrimaryButton
+          label={starting ? 'Starting…' : tabataModeEnabled ? 'Start Tabata Workout' : 'Start Workout'}
+          size="large"
+          loading={starting}
+          onPress={onStart}
+        />
         <PrimaryButton label="Edit Workout" variant="secondary" onPress={onEdit} />
       </View>
 

@@ -1,10 +1,10 @@
 import { api } from '@/api/client';
 import { mapGroceryList, mapMeal, mapMealPlan, mapNutritionGoals } from '@/lib/db-mappers';
 import { aggregateWeeklyGroceries } from '@/lib/groceryAggregation';
+import { localDateString } from '@/lib/localDate';
 import { aggregateDailyMeals } from '@/lib/mealAggregation';
 import { isReplaceablePlannedMeal, pickMealsToKeep, weekEndDate } from '@/lib/mealCleanup';
 import { enrichMealMeta, serializeMealMeta } from '@/lib/mealIngredients';
-import { localDateString } from '@/lib/localDate';
 import { fail, fromError, ok } from '@/lib/serviceResult';
 import { getWeekRange } from '@/lib/weekPlan';
 import type { INutritionService } from '@/services/interfaces';
@@ -321,6 +321,10 @@ export const nutritionService: INutritionService = {
 
   async generateGroceryList(userId, mealPlanId?: string) {
     try {
+      const { from, to } = getWeekRange();
+      const mealsResult = await this.getMealsForWeek(userId, from, to);
+      if (!mealsResult.success) return fail(mealsResult.error);
+
       let planId = mealPlanId;
       if (!planId) {
         const { data: latest } = await supabase
@@ -333,11 +337,7 @@ export const nutritionService: INutritionService = {
         planId = latest?.id;
       }
 
-      const { data: mealsData } = planId
-        ? await supabase.from('meals').select('*').eq('meal_plan_id', planId)
-        : await supabase.from('meals').select('*').eq('user_id', userId).gte('scheduled_date', weekStartDate());
-
-      const meals = (mealsData ?? []).map(mapMeal);
+      const meals = mealsResult.data;
       const aggregated = aggregateWeeklyGroceries(meals);
 
       const { data: list, error } = await supabase

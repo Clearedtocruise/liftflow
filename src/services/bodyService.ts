@@ -1,5 +1,6 @@
 import { API_BASE_URL } from '@/constants/api';
 import { mapBodyRecord, mapProgressPhoto } from '@/lib/db-mappers';
+import { prepareProgressPhotoForUpload } from '@/lib/prepareProgressPhoto';
 import { fail, fromError, ok } from '@/lib/serviceResult';
 import type { IBodyService } from '@/services/interfaces';
 import { getAccessToken, supabase } from '@/supabase/client';
@@ -8,14 +9,14 @@ import type { PhotoAngle, PhysiqueProjection } from '@/types';
 const BUCKET = 'progress-photos';
 
 async function uploadPhotoFile(userId: string, uri: string): Promise<string> {
-  const ext = uri.split('.').pop()?.toLowerCase() ?? 'jpg';
-  const path = `${userId}/${Date.now()}.${ext}`;
+  const prepared = await prepareProgressPhotoForUpload(uri);
+  const path = `${userId}/${Date.now()}.${prepared.ext}`;
 
-  const response = await fetch(uri);
+  const response = await fetch(prepared.uri);
   const blob = await response.blob();
 
   const { error } = await supabase.storage.from(BUCKET).upload(path, blob, {
-    contentType: blob.type || `image/${ext === 'png' ? 'png' : 'jpeg'}`,
+    contentType: prepared.mimeType,
     upsert: false,
   });
 

@@ -14,6 +14,7 @@ export default function WorkoutRestDayRoute() {
       day={{ date: date ?? new Date().toISOString().slice(0, 10), dayLabel }}
       onBack={() => router.back()}
       onLogCardio={() => router.push('/(features)/cardio-tracking')}
+      onStartTabata={() => router.push('/(features)/cardio-tracking?activity=tabata')}
     />
   );
 }

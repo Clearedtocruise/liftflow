@@ -38,11 +38,13 @@ export const MANUAL_CARDIO_OPTIONS = [
 
 export type ActivityLogKind = 'workout' | 'cardio' | 'sport' | 'conditioning' | 'mobility' | 'recovery' | 'walk';
 
-export const HOME_ACTIVITY_OPTIONS: Array<{ id: ActivityLogKind; label: string; route: string }> = [
+export const HOME_ACTIVITY_OPTIONS: Array<{ id: ActivityLogKind | 'tabata' | 'hiit'; label: string; route: string }> = [
+  { id: 'tabata', label: 'Tabata', route: '/(features)/cardio-tracking?activity=tabata' },
+  { id: 'hiit', label: 'HIIT Intervals', route: '/(features)/cardio-tracking?activity=hiit-40-20' },
   { id: 'workout', label: 'Workout', route: '/(tabs)/workout/manual-log' },
-  { id: 'cardio', label: 'Cardio', route: '/(features)/log-activity?kind=cardio' },
+  { id: 'cardio', label: 'Cardio (log)', route: '/(features)/log-activity?kind=cardio' },
   { id: 'sport', label: 'Sport', route: '/(features)/log-activity?kind=sport' },
-  { id: 'conditioning', label: 'Conditioning', route: '/(features)/cardio-tracking' },
+  { id: 'conditioning', label: 'HIIT & Cardio', route: '/(features)/cardio-tracking' },
   { id: 'mobility', label: 'Mobility', route: '/(features)/log-activity?kind=mobility' },
   { id: 'recovery', label: 'Recovery', route: '/(features)/recovery-check-in' },
   { id: 'walk', label: 'Walk', route: '/(features)/log-activity?kind=walk' },
