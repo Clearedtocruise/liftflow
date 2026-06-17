@@ -1,6 +1,5 @@
+import { isSameCalendarDate, localMinutesSinceMidnight, parseScheduledTimeToMinutes } from '@/lib/localDate';
 import { pickMealsToKeep } from '@/lib/mealCleanup';
-import { enrichMealMeta } from '@/lib/mealIngredients';
-import { localMinutesSinceMidnight, parseScheduledTimeToMinutes } from '@/lib/localDate';
 import type { MealType } from '@/types/common';
 import type { Meal } from '@/types/nutrition';
 
@@ -43,6 +42,11 @@ export function isConsumedMeal(meal: Meal): boolean {
 
 function isScheduledMeal(meal: Meal): boolean {
   return mealStatus(meal) !== 'skipped';
+}
+
+/** Meals scheduled on a calendar day (YYYY-MM-DD), deduped by meal type. */
+export function mealsForCalendarDay(meals: Meal[], date: string): Meal[] {
+  return dedupeMealsByType(meals.filter((meal) => isSameCalendarDate(meal.scheduledDate, date)));
 }
 
 /** Keep the newest row per meal type to avoid duplicate weekly plan inserts. */
@@ -95,7 +99,9 @@ export function aggregateWeeklyMeals(meals: Meal[]): WeeklyMealAggregation {
   const byDate: WeeklyMealAggregation['byDate'] = {};
 
   for (const date of dates) {
-    byDate[date] = dailyTotalsWithoutMeals(aggregateDailyMeals(meals.filter((meal) => meal.scheduledDate === date)));
+    byDate[date] = dailyTotalsWithoutMeals(
+      aggregateDailyMeals(meals.filter((meal) => isSameCalendarDate(meal.scheduledDate, date))),
+    );
   }
 
   const weekTotals = Object.values(byDate).reduce<Omit<DailyMealAggregation, 'dedupedMeals'>>(

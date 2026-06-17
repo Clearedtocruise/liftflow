@@ -1,4 +1,4 @@
-import { localDateString } from '@/lib/localDate';
+import { addCalendarDays, localDateString, weekStartFromDateString } from '@/lib/localDate';
 import { estimateWorkoutDurationMinutes, exercisesFromPlannedWorkout } from '@/lib/workoutPlan';
 import type { PlannedWorkout } from '@/types/training';
 
@@ -15,20 +15,10 @@ export function getWeekRange(
   reference = new Date(),
   timeZone?: string | null,
 ): { from: string; to: string; dates: string[] } {
-  const start = new Date(reference);
-  const day = start.getDay();
-  const diff = start.getDate() - day + (day === 0 ? -6 : 1);
-  start.setHours(0, 0, 0, 0);
-  start.setDate(diff);
-
-  const dates: string[] = [];
-  for (let i = 0; i < 7; i += 1) {
-    const d = new Date(start);
-    d.setDate(start.getDate() + i);
-    dates.push(localDateString(d, timeZone));
-  }
-
-  return { from: dates[0], to: dates[6], dates };
+  const anchor = localDateString(reference, timeZone);
+  const from = weekStartFromDateString(anchor);
+  const dates = Array.from({ length: 7 }, (_, index) => addCalendarDays(from, index));
+  return { from, to: dates[6]!, dates };
 }
 
 export type WeeklyPlanEntry = {

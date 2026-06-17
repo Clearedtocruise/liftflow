@@ -34,6 +34,7 @@ import { deviceTimeZone, formatScheduledDbTime, localDateString } from '@/lib/lo
 import {
     aggregateDailyMeals,
     findNextMeal,
+    mealsForCalendarDay,
 } from '@/lib/mealAggregation';
 import { formatWorkoutTime, scheduleFromProfile, scheduledTimesForDay } from '@/lib/mealSchedule';
 import { showHomeManageDayMenu } from '@/lib/planDayActions';
@@ -127,7 +128,7 @@ export default function DashboardScreen() {
       if (dashResult.success) setData(dashResult.data);
       if (goalsResult.success) setNutritionGoals(goalsResult.data);
       if (mealsResult.success) {
-        setTodayMeals(mealsResult.data.filter((meal) => meal.scheduledDate === today));
+        setTodayMeals(mealsForCalendarDay(mealsResult.data, today));
       }
 
       if (isPremium) {

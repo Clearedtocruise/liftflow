@@ -19,7 +19,7 @@ import { useLocalDayRollover } from '@/hooks/useLocalDayRollover';
 import { resolveActiveTrainingDay } from '@/lib/activeTrainingDay';
 import { aggregateWeeklyGroceries, groupGroceriesByCategory } from '@/lib/groceryAggregation';
 import { localDateString } from '@/lib/localDate';
-import { aggregateDailyMeals, aggregateWeeklyMeals, dedupeMealsByType } from '@/lib/mealAggregation';
+import { aggregateDailyMeals, aggregateWeeklyMeals, mealsForCalendarDay } from '@/lib/mealAggregation';
 import {
     enrichMealMeta,
     serializeMealMeta,
@@ -53,7 +53,8 @@ export default function NutritionScreen() {
   const [hasWorkoutToday, setHasWorkoutToday] = useState(false);
   const [recoverySleepHours, setRecoverySleepHours] = useState<number | undefined>();
 
-  const today = useMemo(() => localDateString(new Date(), user?.timezone), [user?.timezone]);
+  const weekRange = useMemo(() => getWeekRange(new Date(), user?.timezone), [user?.timezone]);
+  const today = useMemo(() => localDateString(new Date(), user?.timezone), [user?.timezone, weekRange.from]);
   const schedule = scheduleFromProfile(user, hasWorkoutToday, recoverySleepHours);
   const dietaryRestrictions = user?.metadata?.coachProfile?.dietaryRestrictions ?? [];
 
@@ -79,7 +80,12 @@ export default function NutritionScreen() {
     if (goalsRes.success) setGoals(goalsRes.data);
     if (summaryRes.success) setSummary(summaryRes.data);
     if (weekRes.success) setWeekMeals(weekRes.data);
-    if (groceryRes.success && groceryRes.data?.[0]) setGroceryList(groceryRes.data[0]);
+    if (weekRes.success && weekRes.data.length > 0) {
+      const synced = await nutritionService.syncGroceryListFromMeals(user.id, from, to);
+      if (synced.success && synced.data) setGroceryList(synced.data);
+    } else if (groceryRes.success && groceryRes.data?.[0]) {
+      setGroceryList(groceryRes.data[0]);
+    }
 
     const planned = plannedRes.success ? plannedRes.data : [];
     const activeDay = resolveActiveTrainingDay(planned, { date: today, timeZone: user.timezone });
@@ -108,41 +114,29 @@ export default function NutritionScreen() {
     if (revision > 0 && user) void load();
   }, [revision, user, load]);
 
-  const todayMeals = useMemo(
-    () => dedupeMealsByType(weekMeals.filter((meal) => meal.scheduledDate === today)),
-    [weekMeals, today],
-  );
+  const todayMeals = useMemo(() => mealsForCalendarDay(weekMeals, today), [weekMeals, today]);
   const todayTimes = useMemo(
     () => scheduledTimesForDay(todayMeals.map((meal) => meal.mealType), schedule, hasWorkoutToday),
     [todayMeals, schedule, hasWorkoutToday],
   );
 
   const mealAggregation = useMemo(
-    () => aggregateDailyMeals(weekMeals.filter((m) => m.scheduledDate === today)),
+    () => aggregateDailyMeals(mealsForCalendarDay(weekMeals, today)),
     [weekMeals, today],
   );
 
   const weekDays = useMemo(() => {
-    const { dates } = getWeekRange(new Date(), user?.timezone);
-    return dates.map((date, index) => ({
+    return weekRange.dates.map((date, index) => ({
       date,
       label: WEEKDAY_LABELS[index],
-      meals: dedupeMealsByType(weekMeals.filter((meal) => meal.scheduledDate === date)),
+      isToday: date === today,
+      meals: mealsForCalendarDay(weekMeals, date),
     }));
-  }, [weekMeals, user?.timezone]);
+  }, [weekMeals, weekRange.dates, today]);
 
   const weekAggregation = useMemo(() => aggregateWeeklyMeals(weekMeals), [weekMeals]);
 
-  const shoppingItems = useMemo(() => {
-    if (groceryList?.items?.length) {
-      return groceryList.items.map((item) => ({
-        name: item.name,
-        quantity: `${item.quantity} ${item.unit}`.trim(),
-        category: item.category ?? 'Pantry',
-      }));
-    }
-    return aggregateWeeklyGroceries(weekMeals);
-  }, [groceryList, weekMeals]);
+  const shoppingItems = useMemo(() => aggregateWeeklyGroceries(weekMeals), [weekMeals]);
 
   const groupedShopping = useMemo(() => groupGroceriesByCategory(shoppingItems), [shoppingItems]);
 
@@ -364,7 +358,15 @@ export default function NutritionScreen() {
 
       {section === 'shopping' ? (
         <>
-          <PrimaryButton label="Generate Shopping List" variant="secondary" onPress={handleGenerateShoppingList} />
+          <Card style={styles.weekSummary}>
+            <AppText variant="label" color="accent">
+              Weekly shopping
+            </AppText>
+            <AppText variant="body" color="textSecondary">
+              {weekRange.from} – {weekRange.to} · {weekMeals.length} planned meals · {shoppingItems.length} items
+            </AppText>
+          </Card>
+          <PrimaryButton label="Refresh Shopping List" variant="secondary" onPress={handleGenerateShoppingList} />
           {shoppingItems.length === 0 ? (
             <Card style={styles.shoppingCard}>
               <AppText variant="body" color="textSecondary">

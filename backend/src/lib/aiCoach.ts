@@ -1,5 +1,6 @@
 import { answerSmartCoachQuestion, loadCoachContext } from './coachContext.js';
 import { loadRecoveryIntelligence } from './loadRecoveryIntelligence.js';
+import { addCalendarDays, localDateString, weekStartFromDateString } from './localDate.js';
 import { getOpenAI, hasOpenAI } from './openai.js';
 import { requireAdmin } from './supabase.js';
 import {
@@ -223,7 +224,6 @@ export async function coachResponse(context: string, message: string, userId: st
 }
 
 export function generateWeeklyMealPlan(proteinG = 180, calories = 2400) {
-  const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   const templates = [
     { type: 'pre_workout', name: 'Pre-workout banana and oats', calories: 280, proteinG: 12, carbsG: 48, fatG: 5 },
     { type: 'post_workout', name: 'Protein shake with banana', calories: 300, proteinG: 30, carbsG: 30, fatG: 5 },
@@ -233,15 +233,10 @@ export function generateWeeklyMealPlan(proteinG = 180, calories = 2400) {
     { type: 'dinner', name: 'Salmon with roasted vegetables', calories: 700, proteinG: 45, carbsG: 35, fatG: 28 },
   ];
 
-  const start = new Date();
-  const day = start.getDay();
-  const diff = start.getDate() - day + (day === 0 ? -6 : 1);
-  start.setDate(diff);
+  const weekStart = weekStartFromDateString(localDateString());
 
-  const meals = days.flatMap((_, dayIndex) => {
-    const date = new Date(start);
-    date.setDate(start.getDate() + dayIndex);
-    const dateStr = date.toISOString().slice(0, 10);
+  const meals = Array.from({ length: 7 }, (_, dayIndex) => {
+    const dateStr = addCalendarDays(weekStart, dayIndex);
     return templates.map((t) => ({
       mealType: t.type,
       name: t.name,
@@ -251,11 +246,11 @@ export function generateWeeklyMealPlan(proteinG = 180, calories = 2400) {
       carbsG: t.carbsG,
       fatG: t.fatG,
     }));
-  });
+  }).flat();
 
   return {
     name: 'Weekly Meal Plan',
-    weekStartDate: start.toISOString().slice(0, 10),
+    weekStartDate: weekStart,
     aiGenerated: true,
     aiRationale: `Balanced plan targeting ~${calories} kcal and ${proteinG}g protein daily.`,
     meals,
