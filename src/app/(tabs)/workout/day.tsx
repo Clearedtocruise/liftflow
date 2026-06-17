@@ -8,8 +8,8 @@ import { pickDefaultLocation } from '@/constants/trainingProfile';
 import { useAuth } from '@/hooks/useAuth';
 import { useWorkoutLocations } from '@/hooks/useWorkoutLocations';
 import { profileFigureGender } from '@/lib/exerciseMuscleMap';
-import { getWeekRange } from '@/lib/weekPlan';
-import { exercisesFromPlannedWorkout } from '@/lib/workoutPlan';
+import { getWeekRange, isConditioningWorkout } from '@/lib/weekPlan';
+import { exercisesForSessionStart, exercisesFromPlannedWorkout } from '@/lib/workoutPlan';
 import type { ExerciseAlternativeOption } from '@/services/exerciseAdvisoryService';
 import { trainingService } from '@/services/trainingService';
 import { workoutService } from '@/services/workoutService';
@@ -20,6 +20,7 @@ import type { PlannedWorkout } from '@/types/training';
 export default function WorkoutDayScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
+  const { tabataModeEnabled } = useTabataModePreference();
   const { exercises, setPlannedWorkout, setExercises } = useWorkoutPlanDraft();
   const { startSessionFromPlanned, refreshSession } = useWorkoutSession();
   const { locations, selectedId } = useWorkoutLocations(user?.id);
@@ -60,12 +61,17 @@ export default function WorkoutDayScreen() {
       workoutLocationId: location?.id,
     });
     if (started) {
-      await workoutService.applySessionExercisePlan(started.id, user.id, exercises);
+      const sessionExercises = exercisesForSessionStart(
+        workout,
+        tabataModeEnabled && !isConditioningWorkout(workout),
+      );
+      setExercises(sessionExercises);
+      await workoutService.applySessionExercisePlan(started.id, user.id, sessionExercises);
       await refreshSession();
       router.replace('/(tabs)/workout');
     }
     setStarting(false);
-  }, [user, workout, locations, selectedId, exercises, startSessionFromPlanned, refreshSession]);
+  }, [user, workout, locations, selectedId, tabataModeEnabled, setExercises, startSessionFromPlanned, refreshSession]);
 
   const handleReplaceExercise = useCallback(
     async (index: number, option: ExerciseAlternativeOption) => {

@@ -21,6 +21,7 @@ import { summarizeUnitPreferences } from '@/constants/units';
 import { useAuth } from '@/hooks/useAuth';
 import { useSubscription } from '@/hooks/useSubscription';
 import { useUnits } from '@/hooks/useUnits';
+import { isTabataModeEnabled, TABATA_MODE_PREF_KEY, tabataModeSummary } from '@/lib/trainingPreferences';
 import { resolveUnitPreferences } from '@/lib/unitConversion';
 import { coachingPrefsPatch } from '@/lib/voice/voicePreferences';
 import { deviceLocationService } from '@/services/deviceLocationService';
@@ -41,6 +42,7 @@ export default function SettingsScreen() {
   const [exporting, setExporting] = useState(false);
   const [locationDetection, setLocationDetection] = useState(true);
   const [locationPermission, setLocationPermission] = useState<string>('—');
+  const [tabataMode, setTabataMode] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -54,6 +56,7 @@ export default function SettingsScreen() {
         if (mode === 'tap_toggle' || mode === 'continuous' || mode === 'push_to_talk') {
           setVoiceInputMode(mode);
         }
+        setTabataMode(isTabataModeEnabled(result.data));
       }
     });
     deviceLocationService.getPermissionStatus().then((status) => {
@@ -214,6 +217,29 @@ export default function SettingsScreen() {
           }}
         />
         <SettingsRow label="Wake phrase" value="Coming soon" />
+      </Card>
+
+      <View style={styles.sectionGap}>
+        <SectionHeader title="Workout style" subtitle="Applies timed intervals when you start a strength workout" />
+      </View>
+      <Card style={styles.group}>
+        <SettingsRow
+          label="Tabata mode"
+          value={tabataMode ? `On · ${tabataModeSummary()}` : 'Off'}
+          icon={
+            <AppSymbol name="timer" fallback="⏱" size={20} tintColor={LiftFlowColors.textSecondary} />
+          }
+          onPress={async () => {
+            if (!user) return;
+            const next = !tabataMode;
+            setTabataMode(next);
+            const prefs = await userService.getPreferences(user.id);
+            const coaching = prefs.success ? prefs.data.coachingPreferences ?? {} : {};
+            await userService.updatePreferences(user.id, {
+              coachingPreferences: { ...coaching, [TABATA_MODE_PREF_KEY]: next },
+            });
+          }}
+        />
       </Card>
 
       <View style={styles.sectionGap}>

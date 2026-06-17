@@ -10,6 +10,7 @@ import { LiftFlowColors } from '@/constants/theme';
 import { usePlanAdjustment } from '@/contexts/PlanAdjustmentContext';
 import { useAuth } from '@/hooks/useAuth';
 import { useLocalDayRollover } from '@/hooks/useLocalDayRollover';
+import { useTabataModePreference } from '@/hooks/useTabataModePreference';
 import {
     resolveActiveTrainingDay,
     validateWorkoutAssignmentConsistency,
@@ -20,6 +21,7 @@ import { enrichWithSupersetGroups } from '@/lib/supersetFlow';
 import { buildWeekPlan, getWeekRange, isConditioningWorkout, type WeekDayPlan } from '@/lib/weekPlan';
 import { serializeChallengeNotes } from '@/lib/workoutChallengeFlow';
 import { normalizeExecutionMode } from '@/lib/workoutExecutionMode';
+import { exercisesForSessionStart } from '@/lib/workoutPlan';
 import { productAnalyticsService } from '@/services/productAnalyticsService';
 import { trainingService } from '@/services/trainingService';
 import { workoutService } from '@/services/workoutService';
@@ -32,6 +34,7 @@ export default function WorkoutScreen() {
   const { user } = useAuth();
   const { revision, setFromAdaptation } = usePlanAdjustment();
   const { exercises, setPlannedWorkout, plannedWorkout } = useWorkoutPlanDraft();
+  const { tabataModeEnabled } = useTabataModePreference();
   const { activeSession: session, isLoading: loading, endSession, cancelSession } = useWorkoutSession();
 
   const [weekDays, setWeekDays] = useState<WeekDayPlan[]>([]);
@@ -206,22 +209,33 @@ export default function WorkoutScreen() {
   }
 
   if (session) {
-    const planForSession = enrichWithSupersetGroups(
-      exercises.length > 0
+    const sessionTabata =
+      tabataModeEnabled && plannedWorkout != null && !isConditioningWorkout(plannedWorkout);
+
+    const draftExercises =
+      exercises.length > 0 && (!sessionTabata || exercises[0]?.executionMode === 'tabata')
         ? exercises
+        : exercisesForSessionStart(plannedWorkout, sessionTabata);
+
+    const planForSession = enrichWithSupersetGroups(
+      draftExercises.length > 0
+        ? draftExercises
         : [...session.exercises]
             .sort((a, b) => a.sortOrder - b.sortOrder)
             .map((exercise) => ({
               id: exercise.id,
               name: exercise.exercise?.name ?? 'Exercise',
-              sets: 3,
+              sets: sessionTabata ? 10 : 3,
               repRange: exercise.suggestedReps ?? '8-10',
-              restSeconds: 90,
+              restSeconds: sessionTabata ? 20 : 90,
+              executionMode: sessionTabata ? ('tabata' as const) : undefined,
             })),
     );
 
     const executionMode = normalizeExecutionMode(
-      plannedWorkout?.metadata?.executionMode ?? exercises[0]?.executionMode,
+      draftExercises[0]?.executionMode ??
+        plannedWorkout?.metadata?.executionMode ??
+        (sessionTabata ? 'tabata' : undefined),
     );
 
     return (

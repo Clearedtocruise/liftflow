@@ -23,6 +23,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useInsightRotator } from '@/hooks/useInsightRotator';
 import { useLocalDayRollover } from '@/hooks/useLocalDayRollover';
 import { useSubscription } from '@/hooks/useSubscription';
+import { useTabataModePreference } from '@/hooks/useTabataModePreference';
 import { useUnits } from '@/hooks/useUnits';
 import { closingWeekStart, useWeeklyReviewWindow } from '@/hooks/useWeeklyReviewPrompt';
 import { useWorkoutLocations } from '@/hooks/useWorkoutLocations';
@@ -40,14 +41,15 @@ import {
 import { formatWorkoutTime, scheduleFromProfile, scheduledTimesForDay } from '@/lib/mealSchedule';
 import { buildHomeManageDayMenu } from '@/lib/planDayActions';
 import { logStartup } from '@/lib/startupLogger';
-import { buildWeekPlan, dedupePlannedWorkoutsByDate, getWeekRange } from '@/lib/weekPlan';
-import { estimateWorkoutDurationMinutes, exercisesFromPlannedWorkout } from '@/lib/workoutPlan';
+import { buildWeekPlan, dedupePlannedWorkoutsByDate, getWeekRange, isConditioningWorkout } from '@/lib/weekPlan';
+import { estimateWorkoutDurationMinutes, exercisesForSessionStart, exercisesFromPlannedWorkout } from '@/lib/workoutPlan';
 import { analyticsService } from '@/services/analyticsService';
 import { nutritionService } from '@/services/nutritionService';
 import { recoveryService } from '@/services/recoveryService';
 import { trainingService } from '@/services/trainingService';
 import { userService } from '@/services/userService';
 import { weeklyCloseoutService } from '@/services/weeklyCloseoutService';
+import { workoutService } from '@/services/workoutService';
 import { useWorkoutSession } from '@/state/workout/WorkoutSessionContext';
 import type { DashboardSummary, Meal, NutritionGoals, PlannedWorkout, ProgramDashboard } from '@/types';
 import type { RecoveryIntelligenceReport } from '@/types/recoveryIntelligence';
@@ -58,7 +60,8 @@ export default function DashboardScreen() {
   const { isPremium } = useSubscription();
   const units = useUnits();
   const { insight } = useInsightRotator();
-  const { startSessionFromPlanned } = useWorkoutSession();
+  const { startSessionFromPlanned, refreshSession } = useWorkoutSession();
+  const { tabataModeEnabled } = useTabataModePreference();
   const { locations, selectedId } = useWorkoutLocations(user?.id);
   const [data, setData] = useState<DashboardSummary | null>(null);
   const [recoveryScore, setRecoveryScore] = useState<number | null>(null);
@@ -320,8 +323,18 @@ export default function DashboardScreen() {
       trainingLocation: location?.locationType ?? user.trainingLocation,
       workoutLocationId: location?.id,
     });
+    if (started) {
+      const sessionExercises = exercisesForSessionStart(
+        planned,
+        tabataModeEnabled && !isConditioningWorkout(planned),
+      );
+      if (sessionExercises.length > 0) {
+        await workoutService.applySessionExercisePlan(started.id, user.id, sessionExercises);
+        await refreshSession();
+      }
+      router.push('/(tabs)/workout');
+    }
     setStartingWorkout(false);
-    if (started) router.push('/(tabs)/workout');
   }
 
   return (
@@ -415,6 +428,7 @@ export default function DashboardScreen() {
             onStartWorkout={() => todaysWorkout && handleStartNextWorkout(todaysWorkout)}
             onManageDay={showWorkoutSection ? handleManageDay : undefined}
             onLogActivity={handleLogActivity}
+            tabataModeEnabled={tabataModeEnabled}
             showWorkoutSection={showWorkoutSection}
             isRestDay={!todaysWorkout}
             startingWorkout={startingWorkout}

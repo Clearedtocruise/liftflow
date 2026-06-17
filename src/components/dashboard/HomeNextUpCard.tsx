@@ -31,6 +31,7 @@ type HomeNextUpCardProps = {
   onViewWorkout?: () => void;
   onManageDay?: () => void;
   onLogActivity?: () => void;
+  tabataModeEnabled?: boolean;
   showWorkoutSection?: boolean;
   isRestDay?: boolean;
   startingWorkout?: boolean;
@@ -50,6 +51,7 @@ export function HomeNextUpCard({
   onViewWorkout,
   onManageDay,
   onLogActivity,
+  tabataModeEnabled = false,
   showWorkoutSection = false,
   isRestDay = false,
   startingWorkout,
@@ -141,7 +143,7 @@ export function HomeNextUpCard({
                       {workout.trainingLabel}
                     </AppText>
                     <PrimaryButton
-                      label="START WORKOUT"
+                      label={tabataModeEnabled ? 'START TABATA WORKOUT' : 'START WORKOUT'}
                       onPress={onStartWorkout}
                       loading={startingWorkout}
                       size="large"
