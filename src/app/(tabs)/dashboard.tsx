@@ -7,6 +7,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { HomeNextUpCard } from '@/components/dashboard/HomeNextUpCard';
 import { HomePlanAdjustedBanner } from '@/components/dashboard/HomePlanAdjustedBanner';
+import { ManageDayModal } from '@/components/dashboard/ManageDayModal';
 import { RingGauge } from '@/components/dashboard/RingGauge';
 import { WeeklyReviewCard } from '@/components/dashboard/WeeklyReviewCard';
 import { InsightCard } from '@/components/insights/InsightCard';
@@ -37,7 +38,7 @@ import {
     mealsForCalendarDay,
 } from '@/lib/mealAggregation';
 import { formatWorkoutTime, scheduleFromProfile, scheduledTimesForDay } from '@/lib/mealSchedule';
-import { showHomeManageDayMenu } from '@/lib/planDayActions';
+import { buildHomeManageDayMenu } from '@/lib/planDayActions';
 import { logStartup } from '@/lib/startupLogger';
 import { buildWeekPlan, dedupePlannedWorkoutsByDate, getWeekRange } from '@/lib/weekPlan';
 import { estimateWorkoutDurationMinutes, exercisesFromPlannedWorkout } from '@/lib/workoutPlan';
@@ -73,6 +74,7 @@ export default function DashboardScreen() {
   const [adaptingPlan, setAdaptingPlan] = useState(false);
   const [acceptingWeeklyPlan, setAcceptingWeeklyPlan] = useState(false);
   const [weeklyCloseoutId, setWeeklyCloseoutId] = useState<string | null>(null);
+  const [manageDayOpen, setManageDayOpen] = useState(false);
   const homeRenderedRef = useRef(false);
   const appReadyLoggedRef = useRef(false);
 
@@ -285,9 +287,9 @@ export default function DashboardScreen() {
   const workoutStartTime =
     formatScheduledDbTime(todaysWorkout?.scheduledTime) ?? formatWorkoutTime(scheduleWithWorkout);
 
-  async function handleManageDay() {
-    if (!user) return;
-    showHomeManageDayMenu(
+  const manageDayMenu = useMemo(() => {
+    if (!user) return null;
+    return buildHomeManageDayMenu(
       {
         userId: user.id,
         workouts: weekWorkouts,
@@ -298,6 +300,14 @@ export default function DashboardScreen() {
       },
       today,
     );
+  }, [user, weekWorkouts, setFromAdaptation, today, load]);
+
+  function handleManageDay() {
+    if (!manageDayMenu) {
+      Alert.alert('Manage Day', 'No planned workouts this week to adjust.');
+      return;
+    }
+    setManageDayOpen(true);
   }
 
   async function handleStartNextWorkout(planned: PlannedWorkout) {
@@ -397,6 +407,11 @@ export default function DashboardScreen() {
                 : null
             }
             onLogMeal={() => router.push('/(tabs)/nutrition')}
+            onQuickLogMeal={() => router.push('/(tabs)/nutrition?log=1')}
+            onViewWorkout={() => {
+              if (!todaysWorkout) return;
+              router.push({ pathname: '/(tabs)/workout/day', params: { id: todaysWorkout.id } });
+            }}
             onStartWorkout={() => todaysWorkout && handleStartNextWorkout(todaysWorkout)}
             onManageDay={showWorkoutSection ? handleManageDay : undefined}
             onLogActivity={handleLogActivity}
@@ -504,6 +519,17 @@ export default function DashboardScreen() {
           </AppText>
           <InsightCard insight={insight} />
         </Animated.View>
+      ) : null}
+
+      {manageDayMenu ? (
+        <ManageDayModal
+          visible={manageDayOpen}
+          weeklyPlan={manageDayMenu.weeklyPlan}
+          todayDate={manageDayMenu.todayDate}
+          todayLabel={manageDayMenu.todayLabel}
+          actions={manageDayMenu.actions}
+          onClose={() => setManageDayOpen(false)}
+        />
       ) : null}
     </ScreenContainer>
   );

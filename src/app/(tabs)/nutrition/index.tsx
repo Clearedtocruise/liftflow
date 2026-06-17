@@ -1,5 +1,5 @@
 import { useFocusEffect } from '@react-navigation/native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from 'react-native';
 
@@ -11,6 +11,7 @@ import { MealPlanCard } from '@/components/nutrition/MealPlanCard';
 import { MealReplaceSheet, type SmartReplacementPayload } from '@/components/nutrition/MealReplaceSheet';
 import { NutritionProgressHeader } from '@/components/nutrition/NutritionProgressHeader';
 import { NutritionSectionTabs, type NutritionSection } from '@/components/nutrition/NutritionSectionTabs';
+import { QuickMealLogSheet } from '@/components/nutrition/QuickMealLogSheet';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Spacing } from '@/constants/theme';
 import { usePlanAdjustment } from '@/contexts/PlanAdjustmentContext';
@@ -35,9 +36,11 @@ import { nutritionService } from '@/services/nutritionService';
 import { trainingService } from '@/services/trainingService';
 import { getAccessToken } from '@/supabase/client';
 import type { DailyNutritionSummary, GroceryList, Meal, NutritionGoals } from '@/types';
+import type { MealType } from '@/types/common';
 
 export default function NutritionScreen() {
   const { user } = useAuth();
+  const { log } = useLocalSearchParams<{ log?: string }>();
   const { revision } = usePlanAdjustment();
   const [section, setSection] = useState<NutritionSection>('today');
   const [goals, setGoals] = useState<NutritionGoals | null>(null);
@@ -50,6 +53,7 @@ export default function NutritionScreen() {
   const [replaceMode, setReplaceMode] = useState<'meal' | 'ingredient'>('meal');
   const [replaceIngredientName, setReplaceIngredientName] = useState<string | null>(null);
   const [detailMeal, setDetailMeal] = useState<Meal | null>(null);
+  const [quickLogOpen, setQuickLogOpen] = useState(false);
   const [hasWorkoutToday, setHasWorkoutToday] = useState(false);
   const [recoverySleepHours, setRecoverySleepHours] = useState<number | undefined>();
 
@@ -140,6 +144,36 @@ export default function NutritionScreen() {
   const shoppingItems = useMemo(() => aggregateWeeklyGroceries(weekMeals), [weekMeals]);
 
   const groupedShopping = useMemo(() => groupGroceriesByCategory(shoppingItems), [shoppingItems]);
+
+  useEffect(() => {
+    if (log === '1') setQuickLogOpen(true);
+  }, [log]);
+
+  useEffect(() => {
+    if (section !== 'week') return;
+    setExpandedDay((current) => current ?? today);
+  }, [section, today]);
+
+  async function handleQuickLogMeal(payload: {
+    name: string;
+    mealType: MealType;
+    calories?: number;
+    proteinG?: number;
+  }) {
+    if (!user) return;
+    const meta = enrichMealMeta(payload.name, undefined);
+    meta.status = 'completed';
+    const result = await nutritionService.logFood(user.id, {
+      ...payload,
+      date: today,
+      instructions: serializeMealMeta(meta),
+    });
+    if (result.success) {
+      await load();
+    } else {
+      Alert.alert('Could not log meal', result.error);
+    }
+  }
 
   async function syncGroceriesAfterReplace() {
     if (!user) return;
@@ -273,15 +307,23 @@ export default function NutritionScreen() {
             caloriesConsumed={mealAggregation.caloriesConsumed}
             proteinG={mealAggregation.proteinG}
           />
-          <AppText variant="label" color="accent">
-            Today&apos;s Plan
-          </AppText>
+          <View style={styles.todayHeader}>
+            <AppText variant="label" color="accent">
+              Today&apos;s Plan
+            </AppText>
+            <Pressable onPress={() => setQuickLogOpen(true)} hitSlop={8}>
+              <AppText variant="caption" color="accent">
+                + Log meal
+              </AppText>
+            </Pressable>
+          </View>
           {todayMeals.length === 0 ? (
             <Card style={styles.empty}>
               <AppText variant="body" color="textSecondary">
-                No meals scheduled for today.
+                No meals scheduled for today. Log what you ate or generate a coached plan.
               </AppText>
-              <PrimaryButton label="Generate Weekly Meal Plan" onPress={ensureMealPlan} />
+              <PrimaryButton label="Log a Meal" onPress={() => setQuickLogOpen(true)} />
+              <PrimaryButton label="Generate Weekly Meal Plan" variant="secondary" onPress={ensureMealPlan} />
             </Card>
           ) : (
             todayMeals.map((meal, index) => (
@@ -326,7 +368,10 @@ export default function NutritionScreen() {
               {weekDays.map((day) => (
               <Card key={day.date} style={styles.dayCard}>
                 <Pressable onPress={() => setExpandedDay(expandedDay === day.date ? null : day.date)} style={styles.dayHeader}>
-                  <AppText variant="bodyBold">{day.label}</AppText>
+                  <AppText variant="bodyBold">
+                    {day.label}
+                    {day.isToday ? ' · Today' : ''}
+                  </AppText>
                   <AppText variant="caption" color="textSecondary">
                     {day.meals.length} meals
                   </AppText>
@@ -441,6 +486,12 @@ export default function NutritionScreen() {
           }}
         />
       ) : null}
+
+      <QuickMealLogSheet
+        visible={quickLogOpen}
+        onClose={() => setQuickLogOpen(false)}
+        onSubmit={handleQuickLogMeal}
+      />
     </ScreenContainer>
   );
 }
@@ -458,6 +509,11 @@ const styles = StyleSheet.create({
   },
   empty: {
     gap: Spacing.md,
+  },
+  todayHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   dayCard: {
     gap: Spacing.sm,
