@@ -1,3 +1,4 @@
+import { addCalendarDays } from '@/lib/localDate';
 import { enrichMealMeta } from '@/lib/mealIngredients';
 import type { Meal } from '@/types/nutrition';
 
@@ -68,7 +69,5 @@ export function isReplaceablePlannedMeal(meal: Meal): boolean {
 }
 
 export function weekEndDate(weekStart: string): string {
-  const end = new Date(`${weekStart}T12:00:00`);
-  end.setDate(end.getDate() + 6);
-  return end.toISOString().slice(0, 10);
+  return addCalendarDays(weekStart, 6);
 }

@@ -3,6 +3,7 @@ import { Router } from 'express';
 import { generateWeeklyMealPlan } from '../lib/aiCoach.js';
 import { loadCoachContext } from '../lib/coachContext.js';
 import { loadNutritionIntelligence } from '../lib/loadNutritionIntelligence.js';
+import { syncNutritionForDates } from '../lib/nutritionDaySync.js';
 import { requireAdmin } from '../lib/supabase.js';
 import { resolveRankedGoals, toNutritionGoal } from '../lib/trainingGoals.js';
 import {
@@ -99,6 +100,21 @@ nutritionRouter.post('/adaptive-targets', async (req, res) => {
     res.json({ ...targets, workoutType, recoveryScore: ctx.recovery.score });
   } catch (error) {
     res.status(500).json({ message: error instanceof Error ? error.message : 'Adaptive targets failed' });
+  }
+});
+
+nutritionRouter.post('/sync-dates', async (req, res) => {
+  try {
+    const { userId, dates } = req.body as { userId?: string; dates?: string[] };
+    if (!userId || !Array.isArray(dates) || dates.length === 0) {
+      res.status(400).json({ message: 'userId and dates[] are required' });
+      return;
+    }
+
+    const results = await syncNutritionForDates(userId, dates);
+    res.json({ synced: results.length, results });
+  } catch (error) {
+    res.status(500).json({ message: error instanceof Error ? error.message : 'Nutrition sync failed' });
   }
 });
 

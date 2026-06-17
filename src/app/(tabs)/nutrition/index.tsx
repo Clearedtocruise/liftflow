@@ -62,6 +62,7 @@ export default function NutritionScreen() {
     if (!user) return;
     const { from, to } = getWeekRange(new Date(), user.timezone);
     await nutritionService.pruneDuplicateMeals(user.id, { from, to });
+    await nutritionService.ensureWeekMealCoverage(user.id, user.timezone);
 
     const token = await getAccessToken();
     const recoveryPromise = token
@@ -151,7 +152,9 @@ export default function NutritionScreen() {
 
   async function ensureMealPlan() {
     if (!user) return;
-    if (weekMeals.length > 0) return;
+    const { dates } = getWeekRange(new Date(), user.timezone);
+    const hasFullWeek = dates.every((date) => mealsForCalendarDay(weekMeals, date).length > 0);
+    if (hasFullWeek) return;
     setLoading(true);
     const result = await nutritionService.generateWeeklyMealPlan(user.id);
     setLoading(false);

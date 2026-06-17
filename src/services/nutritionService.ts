@@ -2,7 +2,7 @@ import { api } from '@/api/client';
 import { mapGroceryList, mapMeal, mapMealPlan, mapNutritionGoals } from '@/lib/db-mappers';
 import { aggregateWeeklyGroceries } from '@/lib/groceryAggregation';
 import { localDateString } from '@/lib/localDate';
-import { aggregateDailyMeals } from '@/lib/mealAggregation';
+import { aggregateDailyMeals, mealsForCalendarDay } from '@/lib/mealAggregation';
 import { isReplaceablePlannedMeal, pickMealsToKeep, weekEndDate } from '@/lib/mealCleanup';
 import { enrichMealMeta, serializeMealMeta } from '@/lib/mealIngredients';
 import { fail, fromError, ok } from '@/lib/serviceResult';
@@ -85,6 +85,27 @@ export const nutritionService: INutritionService = {
 
       if (error) return fail(error.message);
       return ok(mapMeal(data));
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
+  async ensureWeekMealCoverage(userId: string, timeZone?: string | null) {
+    try {
+      const { from, to, dates } = getWeekRange(new Date(), timeZone);
+      const mealsResult = await this.getMealsForWeek(userId, from, to);
+      if (!mealsResult.success) return fail(mealsResult.error);
+
+      const missingDates = dates.filter(
+        (date) => mealsForCalendarDay(mealsResult.data, date).length === 0,
+      );
+      if (missingDates.length === 0) return ok(0);
+
+      const token = await getAccessToken();
+      if (!token) return fail('Authentication required to sync meals');
+
+      await api.syncNutritionDates({ userId, dates: missingDates }, token);
+      return ok(missingDates.length);
     } catch (e) {
       return fromError(e);
     }
@@ -321,7 +342,7 @@ export const nutritionService: INutritionService = {
 
   async generateGroceryList(userId, mealPlanId?: string) {
     try {
-      const { from, to } = getWeekRange();
+      const { from, to } = getWeekRange(new Date(), undefined);
       const mealsResult = await this.getMealsForWeek(userId, from, to);
       if (!mealsResult.success) return fail(mealsResult.error);
 

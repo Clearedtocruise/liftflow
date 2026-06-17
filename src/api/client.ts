@@ -156,6 +156,8 @@ export const api = {
     body: { userId: string; date?: string; dietaryStyle?: string },
     token?: string,
   ) => apiClient.post<import('@/types/coaching').DailyMealPlan>('/api/nutrition/daily-plan', body, token),
+  syncNutritionDates: (body: { userId: string; dates: string[] }, token?: string) =>
+    apiClient.post<{ synced: number }>('/api/nutrition/sync-dates', body, token),
 
   generateProgram: (body: import('@/types').CreateProgramPayload & { userId: string }, token?: string) =>
     apiClient.post<{ program: Record<string, unknown>; plannedCount: number }>(
