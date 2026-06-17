@@ -212,10 +212,13 @@ export default function WorkoutScreen() {
     const sessionTabata =
       tabataModeEnabled && plannedWorkout != null && !isConditioningWorkout(plannedWorkout);
 
-    const draftExercises =
-      exercises.length > 0 && (!sessionTabata || exercises[0]?.executionMode === 'tabata')
-        ? exercises
-        : exercisesForSessionStart(plannedWorkout, sessionTabata);
+    const draftMatchesMode =
+      exercises.length > 0 &&
+      (sessionTabata ? exercises[0]?.executionMode === 'tabata' : exercises[0]?.executionMode !== 'tabata');
+
+    const draftExercises = draftMatchesMode
+      ? exercises
+      : exercisesForSessionStart(plannedWorkout, sessionTabata);
 
     const planForSession = enrichWithSupersetGroups(
       draftExercises.length > 0

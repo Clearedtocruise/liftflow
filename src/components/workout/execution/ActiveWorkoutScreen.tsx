@@ -49,6 +49,7 @@ import {
     intervalPhaseLabel,
     resolveTraditionalRestSeconds,
 } from '@/lib/timerEngine';
+import { TABATA_INTERVAL_BOUNDS, clampTabataIntervalSeconds } from '@/lib/trainingPreferences';
 import { formatWorkoutWeightForInput } from '@/lib/unitConversion';
 import { pickWorkoutChallenge } from '@/lib/workoutChallengeFlow';
 import { normalizeExecutionMode } from '@/lib/workoutExecutionMode';
@@ -100,6 +101,19 @@ export function ActiveWorkoutScreen({
     skipCircuitTimer,
     dismissCircuitTimer,
   } = useWorkoutTimerEngine(executionMode);
+
+  const handleIntervalConfigChange = useCallback(
+    (patch: Partial<{ workSeconds: number; restSeconds: number; rounds: number }>) => {
+      const next = { ...patch };
+      if (executionMode === 'tabata') {
+        if (next.workSeconds != null) next.workSeconds = clampTabataIntervalSeconds(next.workSeconds);
+        if (next.restSeconds != null) next.restSeconds = clampTabataIntervalSeconds(next.restSeconds);
+      }
+      updateIntervalConfig(next);
+    },
+    [executionMode, updateIntervalConfig],
+  );
+
   const { user } = useAuth();
   const figureGender = profileFigureGender(user?.sex);
   const units = useUnits();
@@ -732,7 +746,9 @@ export function ActiveWorkoutScreen({
                     </AppText>
                   ) : (
                     <AppText variant="footnote" color="textSecondary">
-                      Configurable work, rest, and rounds
+                      {executionMode === 'tabata'
+                        ? 'Work & rest 20s default · adjust 10–45s each in timer · 10 rounds'
+                        : 'Configurable work, rest, and rounds'}
                     </AppText>
                   )}
                   <PrimaryButton
@@ -895,7 +911,16 @@ export function ActiveWorkoutScreen({
         onIntervalSkip={skipIntervalPhase}
         onIntervalSkipRound={skipIntervalRound}
         onIntervalReset={resetIntervalTimer}
-        onIntervalConfigChange={updateIntervalConfig}
+        onIntervalConfigChange={handleIntervalConfigChange}
+        intervalSecondBounds={
+          executionMode === 'tabata'
+            ? {
+                min: TABATA_INTERVAL_BOUNDS.minSeconds,
+                max: TABATA_INTERVAL_BOUNDS.maxSeconds,
+                step: TABATA_INTERVAL_BOUNDS.stepSeconds,
+              }
+            : undefined
+        }
         circuit={circuitTimer && circuitTimer.phase !== 'done' ? circuitTimer : null}
         onCircuitSkip={skipCircuitTimer}
         onCircuitDismiss={dismissCircuitTimer}

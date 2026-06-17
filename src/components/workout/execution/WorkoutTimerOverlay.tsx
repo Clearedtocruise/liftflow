@@ -32,6 +32,7 @@ type WorkoutTimerOverlayProps = {
   onIntervalSkipRound?: () => void;
   onIntervalReset?: () => void;
   onIntervalConfigChange?: (patch: Partial<IntervalTimerState['config']>) => void;
+  intervalSecondBounds?: { min: number; max: number; step: number };
   circuit?: CircuitTimerState | null;
   onCircuitSkip?: () => void;
   onCircuitDismiss?: () => void;
@@ -75,6 +76,7 @@ export function WorkoutTimerOverlay({
   onIntervalSkipRound,
   onIntervalReset,
   onIntervalConfigChange,
+  intervalSecondBounds,
   circuit,
   onCircuitSkip,
   onCircuitDismiss,
@@ -83,6 +85,13 @@ export function WorkoutTimerOverlay({
 
   const activeMode = circuit ? 'circuit' : interval ? 'interval' : traditional ? 'traditional' : null;
   if (!activeMode) return null;
+
+  const intervalMin = intervalSecondBounds?.min ?? 5;
+  const intervalMax = intervalSecondBounds?.max ?? 300;
+  const intervalStep = intervalSecondBounds?.step ?? 5;
+
+  const clampIntervalSeconds = (value: number) =>
+    Math.min(intervalMax, Math.max(intervalMin, value));
 
   return (
     <Modal visible transparent animationType="fade">
@@ -151,17 +160,29 @@ export function WorkoutTimerOverlay({
                   label="Work (sec)"
                   value={interval.config.workSeconds}
                   onDecrease={() =>
-                    onIntervalConfigChange({ workSeconds: Math.max(5, interval.config.workSeconds - 5) })
+                    onIntervalConfigChange({
+                      workSeconds: clampIntervalSeconds(interval.config.workSeconds - intervalStep),
+                    })
                   }
-                  onIncrease={() => onIntervalConfigChange({ workSeconds: interval.config.workSeconds + 5 })}
+                  onIncrease={() =>
+                    onIntervalConfigChange({
+                      workSeconds: clampIntervalSeconds(interval.config.workSeconds + intervalStep),
+                    })
+                  }
                 />
                 <ConfigStepper
                   label="Rest (sec)"
                   value={interval.config.restSeconds}
                   onDecrease={() =>
-                    onIntervalConfigChange({ restSeconds: Math.max(5, interval.config.restSeconds - 5) })
+                    onIntervalConfigChange({
+                      restSeconds: clampIntervalSeconds(interval.config.restSeconds - intervalStep),
+                    })
                   }
-                  onIncrease={() => onIntervalConfigChange({ restSeconds: interval.config.restSeconds + 5 })}
+                  onIncrease={() =>
+                    onIntervalConfigChange({
+                      restSeconds: clampIntervalSeconds(interval.config.restSeconds + intervalStep),
+                    })
+                  }
                 />
                 <ConfigStepper
                   label="Rounds"

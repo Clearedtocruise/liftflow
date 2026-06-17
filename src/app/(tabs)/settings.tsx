@@ -220,7 +220,10 @@ export default function SettingsScreen() {
       </Card>
 
       <View style={styles.sectionGap}>
-        <SectionHeader title="Workout style" subtitle="Applies timed intervals when you start a strength workout" />
+        <SectionHeader
+          title="Workout style"
+          subtitle="Tabata only when enabled — work and rest timers adjustable 10–45s in workout"
+        />
       </View>
       <Card style={styles.group}>
         <SettingsRow

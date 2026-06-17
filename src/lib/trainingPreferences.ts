@@ -3,6 +3,19 @@ import type { UserPreferences } from '@/types';
 
 export const TABATA_MODE_PREF_KEY = 'tabataModeEnabled';
 
+/** In-workout Tabata timer: work and rest can be adjusted within this range (seconds). */
+export const TABATA_INTERVAL_BOUNDS = {
+  minSeconds: 10,
+  maxSeconds: 45,
+  stepSeconds: 5,
+} as const;
+
+export function clampTabataIntervalSeconds(seconds: number): number {
+  const { minSeconds, maxSeconds, stepSeconds } = TABATA_INTERVAL_BOUNDS;
+  const stepped = Math.round(seconds / stepSeconds) * stepSeconds;
+  return Math.min(maxSeconds, Math.max(minSeconds, stepped));
+}
+
 export function isTabataModeEnabled(preferences?: UserPreferences | null): boolean {
   return preferences?.coachingPreferences?.[TABATA_MODE_PREF_KEY] === true;
 }
