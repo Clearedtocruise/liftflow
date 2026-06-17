@@ -4,15 +4,15 @@ import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { AppText } from '@/components/ui/AppText';
 import { WorkoutUpNextCard } from '@/components/workout/execution/WorkoutUpNextCard';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
-import type { WorkoutPositionLabels } from '@/lib/workoutUpNext';
 import {
-  circuitPhaseLabel,
-  formatTimerSeconds,
-  intervalPhaseLabel,
-  TRADITIONAL_REST_PRESETS,
-  type CircuitTimerState,
-  type IntervalTimerState,
+    circuitPhaseLabel,
+    formatTimerSeconds,
+    intervalPhaseLabel,
+    TRADITIONAL_REST_PRESETS,
+    type CircuitTimerState,
+    type IntervalTimerState,
 } from '@/lib/timerEngine';
+import type { WorkoutPositionLabels } from '@/lib/workoutUpNext';
 
 type WorkoutTimerOverlayProps = {
   visible: boolean;
@@ -42,6 +42,7 @@ type WorkoutTimerOverlayProps = {
   betweenExerciseRestSeconds?: number;
   onBetweenExerciseRestChange?: (seconds: number) => void;
   betweenExerciseRestBounds?: { min: number; max: number; step: number };
+  circuitTimerMode?: 'prep' | 'between_exercises';
   circuit?: CircuitTimerState | null;
   onCircuitSkip?: () => void;
   onCircuitDismiss?: () => void;
@@ -93,6 +94,7 @@ export function WorkoutTimerOverlay({
   betweenExerciseRestSeconds,
   onBetweenExerciseRestChange,
   betweenExerciseRestBounds,
+  circuitTimerMode,
   circuit,
   onCircuitSkip,
   onCircuitDismiss,
@@ -243,7 +245,11 @@ export function WorkoutTimerOverlay({
           {activeMode === 'circuit' && circuit && onCircuitSkip && onCircuitDismiss ? (
             <>
               <AppText variant="label" color="accent" align="center">
-                {betweenExerciseRestSeconds != null ? 'Rest between exercises' : `Circuit · ${circuitPhaseLabel(circuit.phase)}`}
+                {circuitTimerMode === 'prep'
+                  ? 'Get ready'
+                  : betweenExerciseRestSeconds != null
+                    ? 'Rest between exercises'
+                    : `Circuit · ${circuitPhaseLabel(circuit.phase)}`}
               </AppText>
               {intervalNextExerciseName && !position ? (
                 <>
@@ -260,7 +266,8 @@ export function WorkoutTimerOverlay({
               </AppText>
               {betweenExerciseRestSeconds != null &&
               onBetweenExerciseRestChange &&
-              betweenExerciseRestBounds ? (
+              betweenExerciseRestBounds &&
+              circuitTimerMode !== 'prep' ? (
                 <ConfigStepper
                   label="Between exercises (sec)"
                   value={betweenExerciseRestSeconds}

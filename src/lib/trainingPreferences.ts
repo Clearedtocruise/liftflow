@@ -16,8 +16,11 @@ export function clampTabataIntervalSeconds(seconds: number): number {
   return Math.min(maxSeconds, Math.max(minSeconds, stepped));
 }
 
+/** Get-ready countdown before the first work interval (seconds). */
+export const TABATA_PREP_SECONDS_DEFAULT = 60;
+
 /** Default rest between exercises in Tabata mode (seconds). */
-export const TABATA_BETWEEN_EXERCISE_REST_DEFAULT = 120;
+export const TABATA_BETWEEN_EXERCISE_REST_DEFAULT = 60;
 
 export const TABATA_BETWEEN_EXERCISE_REST_BOUNDS = {
   minSeconds: 30,

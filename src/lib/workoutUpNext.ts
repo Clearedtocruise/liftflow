@@ -50,3 +50,14 @@ export function resolveBetweenExerciseUpNext(
     upNextLabel: `${nextExerciseName} · Set 1 of ${nextTargetSets}`,
   };
 }
+
+export function resolveTabataPrepUpNext(
+  exerciseName: string,
+  targetSets: number,
+): WorkoutPositionLabels {
+  return {
+    exerciseName,
+    currentSetLabel: 'Get ready',
+    upNextLabel: `Set 1 of ${targetSets}`,
+  };
+}

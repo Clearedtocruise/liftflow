@@ -16,10 +16,9 @@ import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Spacing } from '@/constants/theme';
 import { usePlanAdjustment } from '@/contexts/PlanAdjustmentContext';
 import { useAuth } from '@/hooks/useAuth';
-import { useLocalDayRollover } from '@/hooks/useLocalDayRollover';
+import { useLocalCalendarDay } from '@/hooks/useLocalCalendarDay';
 import { resolveActiveTrainingDay } from '@/lib/activeTrainingDay';
 import { aggregateWeeklyGroceries, groupGroceriesByCategory } from '@/lib/groceryAggregation';
-import { localDateString } from '@/lib/localDate';
 import { aggregateDailyMeals, aggregateWeeklyMeals, mealsForCalendarDay } from '@/lib/mealAggregation';
 import {
     enrichMealMeta,
@@ -58,7 +57,7 @@ export default function NutritionScreen() {
   const [recoverySleepHours, setRecoverySleepHours] = useState<number | undefined>();
 
   const weekRange = useMemo(() => getWeekRange(new Date(), user?.timezone), [user?.timezone]);
-  const today = useMemo(() => localDateString(new Date(), user?.timezone), [user?.timezone, weekRange.from]);
+  const today = useLocalCalendarDay(user?.timezone);
   const schedule = scheduleFromProfile(user, hasWorkoutToday, recoverySleepHours);
   const dietaryRestrictions = user?.metadata?.coachProfile?.dietaryRestrictions ?? [];
 
@@ -110,10 +109,6 @@ export default function NutritionScreen() {
       if (user) void load();
     }, [user, load]),
   );
-
-  useLocalDayRollover(user?.timezone, () => {
-    void load();
-  });
 
   useEffect(() => {
     if (revision > 0 && user) void load();

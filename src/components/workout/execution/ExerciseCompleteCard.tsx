@@ -11,9 +11,16 @@ type ExerciseCompleteCardProps = {
   hasPr: boolean;
   onNext: () => void;
   isLastExercise: boolean;
+  autoAdvancing?: boolean;
 };
 
-export function ExerciseCompleteCard({ volumeKg, hasPr, onNext, isLastExercise }: ExerciseCompleteCardProps) {
+export function ExerciseCompleteCard({
+  volumeKg,
+  hasPr,
+  onNext,
+  isLastExercise,
+  autoAdvancing = false,
+}: ExerciseCompleteCardProps) {
   const units = useUnits();
 
   return (
@@ -34,7 +41,16 @@ export function ExerciseCompleteCard({ volumeKg, hasPr, onNext, isLastExercise }
           </AppText>
         </View>
       ) : null}
-      <PrimaryButton label={isLastExercise ? 'Finish Workout' : 'Next Exercise'} onPress={onNext} size="large" />
+      {autoAdvancing ? (
+        <AppText variant="footnote" color="textSecondary">
+          {isLastExercise ? 'Finishing workout…' : 'Next exercise starting…'}
+        </AppText>
+      ) : null}
+      <PrimaryButton
+        label={isLastExercise ? 'Finish Workout' : 'Next Exercise'}
+        onPress={onNext}
+        size="large"
+      />
     </Card>
   );
 }

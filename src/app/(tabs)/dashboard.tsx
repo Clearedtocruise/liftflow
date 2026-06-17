@@ -21,7 +21,7 @@ import { pickDefaultLocation } from '@/constants/trainingProfile';
 import { usePlanAdjustment } from '@/contexts/PlanAdjustmentContext';
 import { useAuth } from '@/hooks/useAuth';
 import { useInsightRotator } from '@/hooks/useInsightRotator';
-import { useLocalDayRollover } from '@/hooks/useLocalDayRollover';
+import { useLocalCalendarDay } from '@/hooks/useLocalCalendarDay';
 import { useSubscription } from '@/hooks/useSubscription';
 import { useTabataModePreference } from '@/hooks/useTabataModePreference';
 import { useUnits } from '@/hooks/useUnits';
@@ -32,7 +32,7 @@ import {
     resolveCoachTrainingGuidance,
     validateWorkoutAssignmentConsistency,
 } from '@/lib/activeTrainingDay';
-import { deviceTimeZone, formatScheduledDbTime, localDateString } from '@/lib/localDate';
+import { deviceTimeZone, formatScheduledDbTime } from '@/lib/localDate';
 import {
     aggregateDailyMeals,
     findNextMeal,
@@ -81,7 +81,7 @@ export default function DashboardScreen() {
   const homeRenderedRef = useRef(false);
   const appReadyLoggedRef = useRef(false);
 
-  const today = useMemo(() => localDateString(new Date(), user?.timezone), [user?.timezone]);
+  const today = useLocalCalendarDay(user?.timezone);
   const showWeeklyReview = useWeeklyReviewWindow(user?.timezone);
   const closingWeek = useMemo(() => closingWeekStart(new Date(), user?.timezone), [user?.timezone]);
 
@@ -174,10 +174,6 @@ export default function DashboardScreen() {
       if (user) load();
     }, [user, load]),
   );
-
-  useLocalDayRollover(user?.timezone, () => {
-    load();
-  });
 
   useEffect(() => {
     if (adjustment && user) load();

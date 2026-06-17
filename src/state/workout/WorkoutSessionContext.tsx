@@ -11,6 +11,7 @@ import {
 import { Vibration } from 'react-native';
 
 import { DEFAULT_REST_SECONDS } from '@/constants/workout';
+import { isStaleWorkoutSession } from '@/lib/staleWorkoutSession';
 import { peakMusicService } from '@/services/peakMusicService';
 import { workoutService } from '@/services/workoutService';
 import type { CreateSetPayload, RestPeriod, StartSessionPayload, UpdateSetPayload, WorkoutSession, WorkoutSet } from '@/types';
@@ -83,7 +84,12 @@ export function WorkoutSessionProvider({
     }
     setIsLoading(true);
     const result = await workoutService.getActiveSession(userId);
-    if (result.success) setActiveSession(result.data);
+    if (result.success && result.data && isStaleWorkoutSession(result.data.startedAt)) {
+      await workoutService.cancelSession(result.data.id);
+      setActiveSession(null);
+    } else if (result.success) {
+      setActiveSession(result.data);
+    }
     setIsLoading(false);
   }, [userId]);
 

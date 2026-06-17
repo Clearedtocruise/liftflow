@@ -18,21 +18,26 @@ import { Brand, LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import { summarizeGoals } from '@/constants/trainingGoals';
 import { getPrimaryGymLabel, summarizeEquipment } from '@/constants/trainingProfile';
 import { summarizeUnitPreferences } from '@/constants/units';
+import { usePlanAdjustment } from '@/contexts/PlanAdjustmentContext';
 import { useAuth } from '@/hooks/useAuth';
 import { useSubscription } from '@/hooks/useSubscription';
 import { useUnits } from '@/hooks/useUnits';
 import { isTabataModeEnabled, TABATA_MODE_PREF_KEY, tabataModeSummary } from '@/lib/trainingPreferences';
 import { resolveUnitPreferences } from '@/lib/unitConversion';
 import { coachingPrefsPatch } from '@/lib/voice/voicePreferences';
+import { dataResetService } from '@/services/dataResetService';
 import { deviceLocationService } from '@/services/deviceLocationService';
 import { exportService } from '@/services/exportService';
 import { feedbackService } from '@/services/feedbackService';
 import { userService } from '@/services/userService';
+import { useWorkoutSession } from '@/state/workout/WorkoutSessionContext';
 import type { ConfirmationMode } from '@/types/common';
 import type { VoiceInputMode } from '@/types/voice';
 
 export default function SettingsScreen() {
   const { user, signOut, refreshProfile, deleteAccount } = useAuth();
+  const { bumpRevision } = usePlanAdjustment();
+  const { hydrate: hydrateWorkoutSession } = useWorkoutSession();
   const units = useUnits();
   const { isPremium, isFounder, isBetaTester } = useSubscription();
   const [confirmationMode, setConfirmationMode] = useState<ConfirmationMode>('smart');
@@ -40,6 +45,7 @@ export default function SettingsScreen() {
   const [voiceFeedback, setVoiceFeedback] = useState(true);
   const [voiceInputMode, setVoiceInputMode] = useState<VoiceInputMode>('push_to_talk');
   const [exporting, setExporting] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const [locationDetection, setLocationDetection] = useState(true);
   const [locationPermission, setLocationPermission] = useState<string>('—');
   const [tabataMode, setTabataMode] = useState(false);
@@ -122,6 +128,45 @@ export default function SettingsScreen() {
             } catch (error) {
               Alert.alert('Error', error instanceof Error ? error.message : 'Could not delete account');
             }
+          },
+        },
+      ],
+    );
+  }
+
+  function handleResetAppData() {
+    if (!user) return;
+    Alert.alert(
+      'Reset app data',
+      'Cancels any in-progress workout, clears local cache, and refreshes this week\'s nutrition dates. Your account, workout history, and meal plans are kept.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reset',
+          style: 'destructive',
+          onPress: async () => {
+            setResetting(true);
+            const result = await dataResetService.resetAppData(user.id, user.timezone);
+            await hydrateWorkoutSession();
+            bumpRevision();
+            setResetting(false);
+            if (!result.success) {
+              Alert.alert('Reset failed', result.error);
+              return;
+            }
+            const { cancelledSessions, resetPlannedWorkouts, clearedCacheKeys, nutritionDaysSynced } = result.data;
+            Alert.alert(
+              'App data reset',
+              [
+                cancelledSessions > 0 ? `${cancelledSessions} in-progress workout(s) cancelled` : null,
+                resetPlannedWorkouts > 0 ? `${resetPlannedWorkouts} stuck plan day(s) restored` : null,
+                clearedCacheKeys > 0 ? `${clearedCacheKeys} local cache item(s) cleared` : null,
+                nutritionDaysSynced > 0 ? `${nutritionDaysSynced} nutrition day(s) synced` : null,
+                'You\'re good to go — reopen Home or Nutrition if meals look stale.',
+              ]
+                .filter(Boolean)
+                .join('\n'),
+            );
           },
         },
       ],
@@ -490,6 +535,16 @@ export default function SettingsScreen() {
       <View style={styles.sectionGap}>
         <SectionHeader title="Account" />
       </View>
+      <Card style={styles.group}>
+        <SettingsRow
+          label="Reset app data"
+          value={resetting ? 'Resetting…' : 'Workouts & cache'}
+          icon={
+            <AppSymbol name="arrow.counterclockwise" fallback="↺" size={20} tintColor={LiftFlowColors.textSecondary} />
+          }
+          onPress={resetting ? undefined : handleResetAppData}
+        />
+      </Card>
       <PrimaryButton label="Log Out" onPress={handleSignOut} variant="secondary" />
       <PrimaryButton label="Delete Account" onPress={handleDeleteAccount} variant="secondary" />
 
