@@ -1,3 +1,4 @@
+import { useFocusEffect } from '@react-navigation/native';
 import Constants from 'expo-constants';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
@@ -22,10 +23,11 @@ import { usePlanAdjustment } from '@/contexts/PlanAdjustmentContext';
 import { useAuth } from '@/hooks/useAuth';
 import { useSubscription } from '@/hooks/useSubscription';
 import { useUnits } from '@/hooks/useUnits';
+import { loadRolloverValidationState, type RolloverValidationState } from '@/lib/rolloverDebug';
 import { isTabataModeEnabled, TABATA_MODE_PREF_KEY, tabataModeSummary } from '@/lib/trainingPreferences';
 import { resolveUnitPreferences } from '@/lib/unitConversion';
 import { coachingPrefsPatch } from '@/lib/voice/voicePreferences';
-import { dataResetService } from '@/services/dataResetService';
+import { dataResetService, formatResetConfirmation, type DataResetType } from '@/services/dataResetService';
 import { deviceLocationService } from '@/services/deviceLocationService';
 import { exportService } from '@/services/exportService';
 import { feedbackService } from '@/services/feedbackService';
@@ -36,7 +38,7 @@ import type { VoiceInputMode } from '@/types/voice';
 
 export default function SettingsScreen() {
   const { user, signOut, refreshProfile, deleteAccount } = useAuth();
-  const { bumpRevision } = usePlanAdjustment();
+  const { bumpRevision, dismiss } = usePlanAdjustment();
   const { hydrate: hydrateWorkoutSession } = useWorkoutSession();
   const units = useUnits();
   const { isPremium, isFounder, isBetaTester } = useSubscription();
@@ -49,6 +51,22 @@ export default function SettingsScreen() {
   const [locationDetection, setLocationDetection] = useState(true);
   const [locationPermission, setLocationPermission] = useState<string>('—');
   const [tabataMode, setTabataMode] = useState(false);
+  const [validationState, setValidationState] = useState<RolloverValidationState | null>(null);
+
+  const refreshValidationState = useCallback(async () => {
+    if (!user) {
+      setValidationState(null);
+      return;
+    }
+    const state = await loadRolloverValidationState(user.id, user.timezone);
+    setValidationState(state);
+  }, [user]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void refreshValidationState();
+    }, [refreshValidationState]),
+  );
 
   useEffect(() => {
     if (!user) return;
@@ -134,42 +152,67 @@ export default function SettingsScreen() {
     );
   }
 
-  function handleResetAppData() {
+  function confirmReset(type: DataResetType, label: string, detail: string) {
     if (!user) return;
     Alert.alert(
-      'Reset app data',
-      'Cancels any in-progress workout, clears local cache, and refreshes this week\'s nutrition dates. Your account, workout history, and meal plans are kept.',
+      label,
+      `${detail}\n\nYour account, login, and subscription are kept.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Reset',
           style: 'destructive',
-          onPress: async () => {
-            setResetting(true);
-            const result = await dataResetService.resetAppData(user.id, user.timezone);
-            await hydrateWorkoutSession();
-            bumpRevision();
-            setResetting(false);
-            if (!result.success) {
-              Alert.alert('Reset failed', result.error);
-              return;
-            }
-            const { cancelledSessions, resetPlannedWorkouts, clearedCacheKeys, nutritionDaysSynced } = result.data;
-            Alert.alert(
-              'App data reset',
-              [
-                cancelledSessions > 0 ? `${cancelledSessions} in-progress workout(s) cancelled` : null,
-                resetPlannedWorkouts > 0 ? `${resetPlannedWorkouts} stuck plan day(s) restored` : null,
-                clearedCacheKeys > 0 ? `${clearedCacheKeys} local cache item(s) cleared` : null,
-                nutritionDaysSynced > 0 ? `${nutritionDaysSynced} nutrition day(s) synced` : null,
-                'You\'re good to go — reopen Home or Nutrition if meals look stale.',
-              ]
-                .filter(Boolean)
-                .join('\n'),
-            );
-          },
+          onPress: () => void runReset(type),
         },
       ],
+    );
+  }
+
+  async function runReset(type: DataResetType) {
+    if (!user) return;
+    setResetting(true);
+    const result = await dataResetService.resetData(user.id, type, user.timezone);
+    await hydrateWorkoutSession();
+    dismiss();
+    bumpRevision();
+    setResetting(false);
+    await refreshValidationState();
+    if (!result.success) {
+      Alert.alert('Reset failed', result.error);
+      return;
+    }
+    Alert.alert('Reset complete', formatResetConfirmation(result.data));
+  }
+
+  function handleResetWorkoutData() {
+    confirmReset(
+      'workout',
+      'Reset Workout Data',
+      'Deletes workout sessions, logged sets, weekly workout plans, moved/swapped days, and recovery history from workouts.',
+    );
+  }
+
+  function handleResetNutritionData() {
+    confirmReset(
+      'nutrition',
+      'Reset Nutrition Data',
+      'Deletes nutrition logs, completed meals, meal replacements, weekly meal plans, and shopping lists.',
+    );
+  }
+
+  function handleResetWorkoutAndNutritionData() {
+    confirmReset(
+      'both',
+      'Reset Workout + Nutrition Data',
+      'Deletes all workout and nutrition test data listed above.',
+    );
+  }
+
+  function handleFullTestReset() {
+    confirmReset(
+      'full',
+      'Full Test Reset',
+      'Deletes all generated plans and logs, clears equipment profile, and keeps your login, profile basics, and access.',
     );
   }
 
@@ -533,16 +576,47 @@ export default function SettingsScreen() {
       </Card>
 
       <View style={styles.sectionGap}>
+        <SectionHeader title="Validation" subtitle="Current app state for testing" />
+      </View>
+      <Card style={styles.group}>
+        <ValidationDebugPanel state={validationState} onRefresh={refreshValidationState} />
+      </Card>
+
+      <View style={styles.sectionGap}>
         <SectionHeader title="Account" />
       </View>
       <Card style={styles.group}>
         <SettingsRow
-          label="Reset app data"
-          value={resetting ? 'Resetting…' : 'Workouts & cache'}
+          label="Reset Workout Data"
+          value={resetting ? 'Resetting…' : undefined}
           icon={
             <AppSymbol name="arrow.counterclockwise" fallback="↺" size={20} tintColor={LiftFlowColors.textSecondary} />
           }
-          onPress={resetting ? undefined : handleResetAppData}
+          onPress={resetting ? undefined : handleResetWorkoutData}
+        />
+        <SettingsRow
+          label="Reset Nutrition Data"
+          value={resetting ? 'Resetting…' : undefined}
+          icon={
+            <AppSymbol name="arrow.counterclockwise" fallback="↺" size={20} tintColor={LiftFlowColors.textSecondary} />
+          }
+          onPress={resetting ? undefined : handleResetNutritionData}
+        />
+        <SettingsRow
+          label="Reset Workout + Nutrition"
+          value={resetting ? 'Resetting…' : undefined}
+          icon={
+            <AppSymbol name="arrow.counterclockwise" fallback="↺" size={20} tintColor={LiftFlowColors.textSecondary} />
+          }
+          onPress={resetting ? undefined : handleResetWorkoutAndNutritionData}
+        />
+        <SettingsRow
+          label="Full Test Reset"
+          value={resetting ? 'Resetting…' : 'Includes equipment'}
+          icon={
+            <AppSymbol name="arrow.counterclockwise" fallback="↺" size={20} tintColor={LiftFlowColors.textSecondary} />
+          }
+          onPress={resetting ? undefined : handleFullTestReset}
         />
       </Card>
       <PrimaryButton label="Log Out" onPress={handleSignOut} variant="secondary" />
@@ -564,6 +638,62 @@ export default function SettingsScreen() {
         </AppText>
       </View>
     </ScreenContainer>
+  );
+}
+
+function formatDebugTimestamp(value: string | null): string {
+  if (!value) return '—';
+  try {
+    return new Date(value).toLocaleString();
+  } catch {
+    return value;
+  }
+}
+
+function ValidationDebugPanel({
+  state,
+  onRefresh,
+}: {
+  state: RolloverValidationState | null;
+  onRefresh: () => void;
+}) {
+  if (!state) {
+    return (
+      <View style={styles.validationPanel}>
+        <AppText variant="footnote" color="textSecondary">
+          Loading validation state…
+        </AppText>
+      </View>
+    );
+  }
+
+  const rows: [string, string][] = [
+    ['Current local date', state.currentLocalDate],
+    ['Current training day', state.currentTrainingDay],
+    ['Current workout week', state.currentWorkoutWeek],
+    ['Current nutrition week', state.currentNutritionWeek],
+    ['Training week #', state.trainingWeekNumber != null ? String(state.trainingWeekNumber) : '—'],
+    ['Active workout plan ID', state.activeWorkoutPlanId ?? '—'],
+    ['Active nutrition plan ID', state.activeNutritionPlanId ?? '—'],
+    ['Last reset time', formatDebugTimestamp(state.lastResetTime)],
+    ['Last daily rollover', formatDebugTimestamp(state.lastDailyRollover)],
+    ['Last weekly rollover', formatDebugTimestamp(state.lastWeeklyRollover)],
+  ];
+
+  return (
+    <View style={styles.validationPanel}>
+      {rows.map(([label, value]) => (
+        <View key={label} style={styles.validationRow}>
+          <AppText variant="caption" color="textTertiary">
+            {label}
+          </AppText>
+          <AppText variant="footnote" color="textSecondary" style={styles.validationValue}>
+            {value}
+          </AppText>
+        </View>
+      ))}
+      <PrimaryButton label="Refresh validation" onPress={onRefresh} variant="secondary" />
+    </View>
   );
 }
 
@@ -674,5 +804,15 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: Spacing.md,
     color: LiftFlowColors.textPrimary,
+  },
+  validationPanel: {
+    gap: Spacing.sm,
+    paddingVertical: Spacing.xs,
+  },
+  validationRow: {
+    gap: 2,
+  },
+  validationValue: {
+    fontFamily: 'Menlo',
   },
 });

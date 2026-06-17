@@ -274,6 +274,13 @@ export const trainingService: ITrainingService = {
       const { from, to } = await import('@/lib/weekPlan').then((m) => m.getWeekRange());
       const weekRes = await this.getPlannedWorkouts(userId, from, to);
       const weekPlans = weekRes.success ? weekRes.data : [];
+
+      if (weekPlans.length === 0) {
+        const token = await getAccessToken();
+        const result = await api.regenerateProgram(userId, token, true);
+        return ok({ regenerated: result.regenerated });
+      }
+
       const lowExerciseCount = weekPlans.some((workout) => {
         if (workout.metadata?.sessionKind === 'cardio') return false;
         const count = workout.metadata?.exercises?.length ?? 0;

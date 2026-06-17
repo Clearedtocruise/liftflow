@@ -11,6 +11,7 @@ import { usePlanAdjustment } from '@/contexts/PlanAdjustmentContext';
 import { useAppResume } from '@/hooks/useAppResume';
 import { useAuth } from '@/hooks/useAuth';
 import { useLocalDayRollover } from '@/hooks/useLocalDayRollover';
+import { useLocalWeekRollover } from '@/hooks/useLocalWeekRollover';
 import { useTabataModePreference } from '@/hooks/useTabataModePreference';
 import {
     resolveActiveTrainingDay,
@@ -74,6 +75,14 @@ export default function WorkoutScreen() {
 
   useLocalDayRollover(user?.timezone, () => {
     void loadWeekPlan({ silent: true });
+  });
+
+  useLocalWeekRollover(user?.timezone, () => {
+    if (!user?.id) return;
+    void loadWeekPlan({ silent: true });
+    void trainingService.regenerateProgramIfNeeded(user.id).then((regen) => {
+      if (regen.success && regen.data.regenerated) void loadWeekPlan({ silent: true });
+    });
   });
 
   useEffect(() => {

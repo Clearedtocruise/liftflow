@@ -23,6 +23,7 @@ import { useAppResume } from '@/hooks/useAppResume';
 import { useAuth } from '@/hooks/useAuth';
 import { useInsightRotator } from '@/hooks/useInsightRotator';
 import { useLocalCalendarDay } from '@/hooks/useLocalCalendarDay';
+import { useLocalWeekRollover } from '@/hooks/useLocalWeekRollover';
 import { useSubscription } from '@/hooks/useSubscription';
 import { useTabataModePreference } from '@/hooks/useTabataModePreference';
 import { useUnits } from '@/hooks/useUnits';
@@ -178,6 +179,15 @@ export default function DashboardScreen() {
 
   useAppResume(() => {
     if (user) void load();
+  });
+
+  useLocalWeekRollover(user?.timezone, () => {
+    if (user) {
+      void load();
+      void trainingService.regenerateProgramIfNeeded(user.id).then((regen) => {
+        if (regen.success && regen.data.regenerated) void load();
+      });
+    }
   });
 
   useEffect(() => {

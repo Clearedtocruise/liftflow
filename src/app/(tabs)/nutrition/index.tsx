@@ -18,6 +18,7 @@ import { usePlanAdjustment } from '@/contexts/PlanAdjustmentContext';
 import { useAppResume } from '@/hooks/useAppResume';
 import { useAuth } from '@/hooks/useAuth';
 import { useLocalCalendarDay } from '@/hooks/useLocalCalendarDay';
+import { useLocalWeekRollover } from '@/hooks/useLocalWeekRollover';
 import { resolveActiveTrainingDay } from '@/lib/activeTrainingDay';
 import { aggregateWeeklyGroceries, groupGroceriesByCategory } from '@/lib/groceryAggregation';
 import { aggregateDailyMeals, aggregateWeeklyMeals, mealsForCalendarDay } from '@/lib/mealAggregation';
@@ -57,8 +58,8 @@ export default function NutritionScreen() {
   const [hasWorkoutToday, setHasWorkoutToday] = useState(false);
   const [recoverySleepHours, setRecoverySleepHours] = useState<number | undefined>();
 
-  const weekRange = useMemo(() => getWeekRange(new Date(), user?.timezone), [user?.timezone]);
   const today = useLocalCalendarDay(user?.timezone);
+  const weekRange = useMemo(() => getWeekRange(new Date(), user?.timezone), [user?.timezone, today]);
   const schedule = scheduleFromProfile(user, hasWorkoutToday, recoverySleepHours);
   const dietaryRestrictions = user?.metadata?.coachProfile?.dietaryRestrictions ?? [];
 
@@ -112,6 +113,10 @@ export default function NutritionScreen() {
   );
 
   useAppResume(() => {
+    if (user) void load();
+  });
+
+  useLocalWeekRollover(user?.timezone, () => {
     if (user) void load();
   });
 
@@ -177,7 +182,7 @@ export default function NutritionScreen() {
 
   async function syncGroceriesAfterReplace() {
     if (!user) return;
-    const { from, to } = getWeekRange(undefined, user.timezone);
+    const { from, to } = getWeekRange(new Date(), user.timezone);
     const grocerySync = await nutritionService.syncGroceryListFromMeals(user.id, from, to);
     if (grocerySync.success && grocerySync.data) {
       setGroceryList(grocerySync.data);
@@ -248,7 +253,7 @@ export default function NutritionScreen() {
 
   async function handleSmartReplace(anchorMeal: Meal, payload: SmartReplacementPayload) {
     if (!user) return;
-    const { from, to } = getWeekRange(undefined, user.timezone);
+    const { from, to } = getWeekRange(new Date(), user.timezone);
     const targets = selectMealsForScope(
       anchorMeal,
       weekMeals,
