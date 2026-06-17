@@ -16,6 +16,21 @@ export function clampTabataIntervalSeconds(seconds: number): number {
   return Math.min(maxSeconds, Math.max(minSeconds, stepped));
 }
 
+/** Default rest between exercises in Tabata mode (seconds). */
+export const TABATA_BETWEEN_EXERCISE_REST_DEFAULT = 120;
+
+export const TABATA_BETWEEN_EXERCISE_REST_BOUNDS = {
+  minSeconds: 30,
+  maxSeconds: 300,
+  stepSeconds: 15,
+} as const;
+
+export function clampTabataBetweenExerciseRest(seconds: number): number {
+  const { minSeconds, maxSeconds, stepSeconds } = TABATA_BETWEEN_EXERCISE_REST_BOUNDS;
+  const stepped = Math.round(seconds / stepSeconds) * stepSeconds;
+  return Math.min(maxSeconds, Math.max(minSeconds, stepped));
+}
+
 export function isTabataModeEnabled(preferences?: UserPreferences | null): boolean {
   return preferences?.coachingPreferences?.[TABATA_MODE_PREF_KEY] === true;
 }

@@ -2,7 +2,9 @@ import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { AppText } from '@/components/ui/AppText';
+import { WorkoutUpNextCard } from '@/components/workout/execution/WorkoutUpNextCard';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
+import type { WorkoutPositionLabels } from '@/lib/workoutUpNext';
 import {
   circuitPhaseLabel,
   formatTimerSeconds,
@@ -14,6 +16,7 @@ import {
 
 type WorkoutTimerOverlayProps = {
   visible: boolean;
+  position?: WorkoutPositionLabels | null;
   traditional?: {
     secondsRemaining: number | null;
     recommendedSeconds: number;
@@ -33,6 +36,12 @@ type WorkoutTimerOverlayProps = {
   onIntervalReset?: () => void;
   onIntervalConfigChange?: (patch: Partial<IntervalTimerState['config']>) => void;
   intervalSecondBounds?: { min: number; max: number; step: number };
+  intervalExerciseName?: string | null;
+  intervalNextExerciseName?: string | null;
+  onIntervalDismiss?: () => void;
+  betweenExerciseRestSeconds?: number;
+  onBetweenExerciseRestChange?: (seconds: number) => void;
+  betweenExerciseRestBounds?: { min: number; max: number; step: number };
   circuit?: CircuitTimerState | null;
   onCircuitSkip?: () => void;
   onCircuitDismiss?: () => void;
@@ -69,6 +78,7 @@ function ConfigStepper({
 
 export function WorkoutTimerOverlay({
   visible,
+  position,
   traditional,
   interval,
   onIntervalToggle,
@@ -77,6 +87,12 @@ export function WorkoutTimerOverlay({
   onIntervalReset,
   onIntervalConfigChange,
   intervalSecondBounds,
+  intervalExerciseName,
+  intervalNextExerciseName,
+  onIntervalDismiss,
+  betweenExerciseRestSeconds,
+  onBetweenExerciseRestChange,
+  betweenExerciseRestBounds,
   circuit,
   onCircuitSkip,
   onCircuitDismiss,
@@ -97,6 +113,8 @@ export function WorkoutTimerOverlay({
     <Modal visible transparent animationType="fade">
       <View style={styles.backdrop}>
         <View style={styles.card}>
+          {position ? <WorkoutUpNextCard position={position} compact /> : null}
+
           {activeMode === 'traditional' && traditional ? (
             <>
               <AppText variant="label" color="restTimer" align="center">
@@ -128,7 +146,7 @@ export function WorkoutTimerOverlay({
                   </Pressable>
                 ))}
               </ScrollView>
-              {traditional.nextExerciseName ? (
+              {traditional.nextExerciseName && !position ? (
                 <View style={styles.nextPreview}>
                   <AppText variant="label" color="textSecondary" align="center">
                     Next up
@@ -149,8 +167,20 @@ export function WorkoutTimerOverlay({
 
           {activeMode === 'interval' && interval && onIntervalToggle && onIntervalSkip && onIntervalSkipRound && onIntervalReset && onIntervalConfigChange ? (
             <>
-              <AppText variant="label" color="accent" align="center">
-                {interval.config.rounds > 0 ? `${intervalPhaseLabel(interval.phase)} · Round ${interval.round}/${interval.config.rounds}` : intervalPhaseLabel(interval.phase)}
+              {intervalExerciseName ? (
+                <AppText variant="bodyBold" align="center">
+                  {intervalExerciseName}
+                </AppText>
+              ) : null}
+              <AppText
+                variant="headline"
+                color={interval.phase === 'work' ? 'accent' : interval.phase === 'rest' ? 'restTimer' : 'textSecondary'}
+                align="center"
+                style={styles.phaseHeadline}>
+                {intervalPhaseLabel(interval.phase).toUpperCase()}
+              </AppText>
+              <AppText variant="caption" color="textSecondary" align="center">
+                {position?.currentSetLabel ?? `Round ${interval.round} of ${interval.config.rounds}`}
               </AppText>
               <AppText variant="timer" color="restTimer" align="center" style={styles.timer}>
                 {formatTimerSeconds(interval.secondsRemaining)}
@@ -204,20 +234,58 @@ export function WorkoutTimerOverlay({
                 </Pressable>
               </View>
               <PrimaryButton label="Reset" onPress={onIntervalReset} variant="secondary" />
+              {onIntervalDismiss ? (
+                <PrimaryButton label="Continue to workout" onPress={onIntervalDismiss} variant="ghost" />
+              ) : null}
             </>
           ) : null}
 
           {activeMode === 'circuit' && circuit && onCircuitSkip && onCircuitDismiss ? (
             <>
               <AppText variant="label" color="accent" align="center">
-                Circuit · {circuitPhaseLabel(circuit.phase)}
+                {betweenExerciseRestSeconds != null ? 'Rest between exercises' : `Circuit · ${circuitPhaseLabel(circuit.phase)}`}
               </AppText>
+              {intervalNextExerciseName && !position ? (
+                <>
+                  <AppText variant="caption" color="textSecondary" align="center">
+                    Next up
+                  </AppText>
+                  <AppText variant="bodyBold" align="center">
+                    {intervalNextExerciseName}
+                  </AppText>
+                </>
+              ) : null}
               <AppText variant="timer" color="restTimer" align="center" style={styles.timer}>
                 {formatTimerSeconds(circuit.secondsRemaining)}
               </AppText>
-              <AppText variant="footnote" color="textSecondary" align="center">
-                Round {circuit.round} · move to the next station
-              </AppText>
+              {betweenExerciseRestSeconds != null &&
+              onBetweenExerciseRestChange &&
+              betweenExerciseRestBounds ? (
+                <ConfigStepper
+                  label="Between exercises (sec)"
+                  value={betweenExerciseRestSeconds}
+                  onDecrease={() =>
+                    onBetweenExerciseRestChange(
+                      Math.max(
+                        betweenExerciseRestBounds.min,
+                        betweenExerciseRestSeconds - betweenExerciseRestBounds.step,
+                      ),
+                    )
+                  }
+                  onIncrease={() =>
+                    onBetweenExerciseRestChange(
+                      Math.min(
+                        betweenExerciseRestBounds.max,
+                        betweenExerciseRestSeconds + betweenExerciseRestBounds.step,
+                      ),
+                    )
+                  }
+                />
+              ) : (
+                <AppText variant="footnote" color="textSecondary" align="center">
+                  Round {circuit.round} · move to the next station
+                </AppText>
+              )}
               <View style={styles.controls}>
                 <PrimaryButton label="Skip" onPress={onCircuitSkip} variant="secondary" />
                 <PrimaryButton label="Continue" onPress={onCircuitDismiss} />
@@ -251,6 +319,9 @@ const styles = StyleSheet.create({
   timer: {
     fontSize: 56,
     lineHeight: 64,
+  },
+  phaseHeadline: {
+    letterSpacing: 2,
   },
   controls: {
     flexDirection: 'row',
