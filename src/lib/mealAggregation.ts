@@ -1,4 +1,5 @@
 import { isSameCalendarDate, localMinutesSinceMidnight, parseScheduledTimeToMinutes } from '@/lib/localDate';
+import { enrichMealMeta } from '@/lib/mealIngredients';
 import { pickMealsToKeep } from '@/lib/mealCleanup';
 import type { MealType } from '@/types/common';
 import type { Meal } from '@/types/nutrition';
