@@ -80,17 +80,23 @@ export function WorkoutSessionProvider({
   const hydrate = useCallback(async () => {
     if (!userId) {
       setActiveSession(null);
+      setIsLoading(false);
       return;
     }
     setIsLoading(true);
-    const result = await workoutService.getActiveSession(userId);
-    if (result.success && result.data && isStaleWorkoutSession(result.data.startedAt)) {
-      await workoutService.cancelSession(result.data.id);
-      setActiveSession(null);
-    } else if (result.success) {
-      setActiveSession(result.data);
+    try {
+      const result = await workoutService.getActiveSession(userId);
+      if (result.success && result.data && isStaleWorkoutSession(result.data.startedAt)) {
+        await workoutService.cancelSession(result.data.id);
+        setActiveSession(null);
+      } else if (result.success) {
+        setActiveSession(result.data);
+      }
+    } catch (error) {
+      console.warn('[workoutSession] hydrate failed', error);
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   }, [userId]);
 
   useEffect(() => {

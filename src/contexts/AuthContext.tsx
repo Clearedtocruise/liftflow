@@ -56,6 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(profile);
         setIsProfileReady(true);
         logStartup('PROFILE_LOADED');
+        logStartup('PROFILE_READY');
       } catch {
         if (!cancelled) {
           setUser(null);
@@ -70,7 +71,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: subscription } = authService.onAuthStateChange((profile) => {
       setUser(profile);
       setIsProfileReady(true);
-      if (profile) logStartup('PROFILE_LOADED');
+      if (profile) {
+        logStartup('PROFILE_LOADED');
+        logStartup('PROFILE_READY');
+      }
     });
 
     return () => {

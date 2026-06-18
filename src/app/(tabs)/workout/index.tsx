@@ -1,6 +1,6 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
@@ -18,7 +18,9 @@ import {
     validateWorkoutAssignmentConsistency,
 } from '@/lib/activeTrainingDay';
 import { localDateString } from '@/lib/localDate';
+import { planDataCache } from '@/lib/planDataCache';
 import { showWeeklyEditDayMenu } from '@/lib/planDayActions';
+import { logStartup } from '@/lib/startupLogger';
 import { enrichWithSupersetGroups } from '@/lib/supersetFlow';
 import { buildWeekPlan, getWeekRange, isConditioningWorkout, type WeekDayPlan } from '@/lib/weekPlan';
 import { serializeChallengeNotes } from '@/lib/workoutChallengeFlow';
@@ -44,6 +46,8 @@ export default function WorkoutScreen() {
   const [refreshingPlan, setRefreshingPlan] = useState(false);
   const [adaptingPlan, setAdaptingPlan] = useState(false);
   const [challengeRecords, setChallengeRecords] = useState<WorkoutChallengeRecord[]>([]);
+  const loadGenerationRef = useRef(0);
+  const hydratedFromCacheRef = useRef(false);
 
   const loadWeekPlan = useCallback(
     async (options?: { silent?: boolean }) => {
@@ -52,25 +56,38 @@ export default function WorkoutScreen() {
         return;
       }
 
-      if (options?.silent) setRefreshingPlan(true);
-      else setLoadingPlan(true);
+      const generation = ++loadGenerationRef.current;
+      const silent = options?.silent ?? (weekDays.length > 0 || hydratedFromCacheRef.current);
+
+      if (!silent) setLoadingPlan(true);
+      else setRefreshingPlan(true);
 
       try {
         const { from, to } = getWeekRange(new Date(), user?.timezone);
         const result = await trainingService.getPlannedWorkouts(user.id, from, to, user.timezone);
+        if (generation !== loadGenerationRef.current) return;
+
         const days = buildWeekPlan(result.success ? result.data : [], new Date(), user?.timezone);
         setWeekDays(days);
+        if (result.success) {
+          void planDataCache.writeWorkouts(user.id, from, to, result.data);
+          logStartup('WORKOUT_PLAN_LOADED', { count: result.data.length, source: 'workout-tab' });
+        }
+
         const todayKey = localDateString(new Date(), user?.timezone);
         const today = days.find((day) => day.date === todayKey);
         if (today?.workout) setPlannedWorkout(today.workout);
-      } catch {
-        if (!options?.silent) setWeekDays([]);
+      } catch (error) {
+        console.warn('[workout] week plan load failed', error);
+        if (!silent) setWeekDays([]);
       } finally {
-        setLoadingPlan(false);
-        setRefreshingPlan(false);
+        if (generation === loadGenerationRef.current) {
+          setLoadingPlan(false);
+          setRefreshingPlan(false);
+        }
       }
     },
-    [user?.id, user?.timezone, setPlannedWorkout],
+    [user?.id, user?.timezone, setPlannedWorkout, weekDays.length],
   );
 
   useLocalDayRollover(user?.timezone, () => {
@@ -92,26 +109,30 @@ export default function WorkoutScreen() {
     }
 
     let cancelled = false;
+    const { from, to } = getWeekRange(new Date(), user?.timezone);
 
     void (async () => {
-      try {
-        await loadWeekPlan();
-        if (cancelled) return;
+      const cached = await planDataCache.readWeek(user.id, from, to);
+      if (cancelled) return;
 
-        void trainingService.regenerateProgramIfNeeded(user.id).then((regen) => {
-          if (!cancelled && regen.success && regen.data.regenerated) {
-            void loadWeekPlan({ silent: true });
-          }
-        });
-      } catch {
-        if (!cancelled) setLoadingPlan(false);
+      if (cached.workouts.length > 0) {
+        const days = buildWeekPlan(cached.workouts, new Date(), user?.timezone);
+        setWeekDays(days);
+        setLoadingPlan(false);
+        hydratedFromCacheRef.current = true;
+
+        const todayKey = localDateString(new Date(), user?.timezone);
+        const today = days.find((day) => day.date === todayKey);
+        if (today?.workout) setPlannedWorkout(today.workout);
       }
+
+      void loadWeekPlan({ silent: hydratedFromCacheRef.current });
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [user?.id, loadWeekPlan]);
+  }, [user?.id, user?.timezone, loadWeekPlan, setPlannedWorkout]);
 
   useFocusEffect(
     useCallback(() => {
@@ -216,7 +237,7 @@ export default function WorkoutScreen() {
     setChallengeRecords((current) => [...current, record]);
   }, []);
 
-  if (loading && !session) {
+  if (loading && !session && weekDays.length === 0) {
     return (
       <View style={styles.loading}>
         <ActivityIndicator size="large" color={LiftFlowColors.accent} />

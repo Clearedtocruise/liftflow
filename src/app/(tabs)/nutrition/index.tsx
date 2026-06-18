@@ -1,6 +1,6 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 
 import { api } from '@/api/client';
@@ -34,6 +34,8 @@ import {
     selectMealsForScope,
 } from '@/lib/mealReplacement';
 import { formatScheduleSubtitle, scheduleFromProfile, scheduledTimesForDay } from '@/lib/mealSchedule';
+import { planDataCache } from '@/lib/planDataCache';
+import { logStartup } from '@/lib/startupLogger';
 import { WEEKDAY_LABELS, getWeekRange } from '@/lib/weekPlan';
 import type { MealAlternativeOption } from '@/services/nutritionAdvisoryService';
 import { nutritionService } from '@/services/nutritionService';
@@ -62,6 +64,8 @@ export default function NutritionScreen() {
   const [quickLogOpen, setQuickLogOpen] = useState(false);
   const [hasWorkoutToday, setHasWorkoutToday] = useState(false);
   const [recoverySleepHours, setRecoverySleepHours] = useState<number | undefined>();
+  const loadGenerationRef = useRef(0);
+  const hydratedFromCacheRef = useRef(false);
 
   const today = useLocalCalendarDay(user?.timezone);
   const weekRange = useMemo(() => getWeekRange(new Date(), user?.timezone), [user?.timezone, today]);
@@ -69,51 +73,80 @@ export default function NutritionScreen() {
   const dietaryRestrictions = user?.metadata?.coachProfile?.dietaryRestrictions ?? [];
 
   const load = useCallback(async (options?: { silent?: boolean }) => {
-    if (!user) return;
-    if (!options?.silent) setLoading(true);
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+
+    const generation = ++loadGenerationRef.current;
+    const hasCachedData = weekMeals.length > 0 || goals != null || hydratedFromCacheRef.current;
+    const silent = options?.silent ?? hasCachedData;
+
+    if (!silent) setLoading(true);
     setLoadError(null);
 
     const { from, to } = getWeekRange(new Date(), user.timezone);
-    await nutritionService.pruneDuplicateMeals(user.id, { from, to });
-    await nutritionService.ensureWeekMealCoverage(user.id, user.timezone);
 
-    const token = await getAccessToken();
-    const recoveryPromise = token
-      ? api.getRecoveryToday(user.id, token).catch(() => null)
-      : Promise.resolve(null);
+    try {
+      const token = await getAccessToken();
+      const recoveryPromise = token
+        ? api.getRecoveryToday(user.id, token).catch(() => null)
+        : Promise.resolve(null);
 
-    const [goalsRes, summaryRes, weekRes, plannedRes, recoveryToday, groceryRes] = await Promise.all([
-      nutritionService.getGoals(user.id),
-      nutritionService.getDailySummary(user.id, today),
-      nutritionService.getMealsForWeek(user.id, from, to),
-      trainingService.getPlannedWorkouts(user.id, from, to, user.timezone),
-      recoveryPromise,
-      nutritionService.getGroceryLists(user.id),
-    ]);
+      const [goalsRes, summaryRes, weekRes, plannedRes, recoveryToday, groceryRes] = await Promise.all([
+        nutritionService.getGoals(user.id),
+        nutritionService.getDailySummary(user.id, today),
+        nutritionService.getMealsForWeek(user.id, from, to),
+        trainingService.getPlannedWorkouts(user.id, from, to, user.timezone),
+        recoveryPromise,
+        nutritionService.getGroceryLists(user.id),
+      ]);
 
-    const errors: string[] = [];
-    if (!goalsRes.success) errors.push(goalsRes.error);
-    if (!summaryRes.success) errors.push(summaryRes.error);
-    setLoadError(errors[0] ?? null);
+      if (generation !== loadGenerationRef.current) return;
 
-    if (goalsRes.success) setGoals(goalsRes.data);
-    if (summaryRes.success) setSummary(summaryRes.data);
-    if (weekRes.success) setWeekMeals(weekRes.data);
-    if (weekRes.success && weekRes.data.length > 0) {
-      const synced = await nutritionService.syncGroceryListFromMeals(user.id, from, to);
-      if (synced.success && synced.data) setGroceryList(synced.data);
-    } else if (groceryRes.success && groceryRes.data?.[0]) {
-      setGroceryList(groceryRes.data[0]);
+      const errors: string[] = [];
+      if (!goalsRes.success) errors.push(goalsRes.error);
+      if (!summaryRes.success) errors.push(summaryRes.error);
+      setLoadError(errors[0] ?? null);
+
+      if (goalsRes.success) {
+        setGoals(goalsRes.data);
+        void planDataCache.writeGoals(user.id, goalsRes.data);
+      }
+      if (summaryRes.success) setSummary(summaryRes.data);
+      if (weekRes.success) {
+        setWeekMeals(weekRes.data);
+        void planDataCache.writeMeals(user.id, from, to, weekRes.data);
+        logStartup('NUTRITION_PLAN_LOADED', { count: weekRes.data.length, source: 'nutrition-tab' });
+      }
+
+      if (weekRes.success && weekRes.data.length > 0) {
+        const synced = await nutritionService.syncGroceryListFromMeals(user.id, from, to);
+        if (generation !== loadGenerationRef.current) return;
+        if (synced.success && synced.data) setGroceryList(synced.data);
+      } else if (groceryRes.success && groceryRes.data?.[0]) {
+        setGroceryList(groceryRes.data[0]);
+      }
+
+      const planned = plannedRes.success ? plannedRes.data : [];
+      const activeDay = resolveActiveTrainingDay(planned, { date: today, timeZone: user.timezone });
+      setHasWorkoutToday(!activeDay.isScheduledRestDay);
+
+      const sleepHours = recoveryToday?.sleepHours;
+      setRecoverySleepHours(typeof sleepHours === 'number' ? sleepHours : undefined);
+    } catch (error) {
+      console.warn('[nutrition] load failed', error);
+      if (generation === loadGenerationRef.current) {
+        setLoadError('Could not refresh nutrition data. Pull to retry.');
+      }
+    } finally {
+      if (generation === loadGenerationRef.current) {
+        setLoading(false);
+      }
     }
 
-    const planned = plannedRes.success ? plannedRes.data : [];
-    const activeDay = resolveActiveTrainingDay(planned, { date: today, timeZone: user.timezone });
-    setHasWorkoutToday(!activeDay.isScheduledRestDay);
-
-    const sleepHours = recoveryToday?.sleepHours;
-    setRecoverySleepHours(typeof sleepHours === 'number' ? sleepHours : undefined);
-    setLoading(false);
-  }, [user, today]);
+    void nutritionService.pruneDuplicateMeals(user.id, { from, to });
+  }, [user, today, weekMeals.length, goals]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -122,21 +155,45 @@ export default function NutritionScreen() {
   }, [load]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    if (!user?.id) return;
+
+    let cancelled = false;
+    const { from, to } = getWeekRange(new Date(), user.timezone);
+
+    void (async () => {
+      const cached = await planDataCache.readWeek(user.id, from, to);
+      if (cancelled) return;
+
+      if (cached.goals) setGoals(cached.goals);
+      if (cached.meals.length > 0) {
+        setWeekMeals(cached.meals);
+        setLoading(false);
+        hydratedFromCacheRef.current = true;
+      }
+
+      void load({ silent: hydratedFromCacheRef.current });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, user?.timezone, load]);
 
   useFocusEffect(
     useCallback(() => {
-      if (user) void load();
+      if (user) void load({ silent: true });
     }, [user, load]),
   );
 
   useAppResume(() => {
-    if (user) void load();
+    if (user) void load({ silent: true });
   });
 
   useLocalWeekRollover(user?.timezone, () => {
-    if (user) void load();
+    if (!user) return;
+    void nutritionService.ensureWeekMealCoverage(user.id, user.timezone).then(() => {
+      void load({ silent: true });
+    });
   });
 
   useEffect(() => {
@@ -214,9 +271,10 @@ export default function NutritionScreen() {
     const hasFullWeek = dates.every((date) => mealsForCalendarDay(weekMeals, date).length > 0);
     if (hasFullWeek) return;
     setLoading(true);
+    await nutritionService.ensureWeekMealCoverage(user.id, user.timezone);
     const result = await nutritionService.generateWeeklyMealPlan(user.id);
     setLoading(false);
-    if (result.success) await load();
+    if (result.success) await load({ silent: true });
     else Alert.alert('Error', result.error);
   }
 

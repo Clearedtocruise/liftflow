@@ -4,7 +4,7 @@ import { Card } from '@/components/layout/Card';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Spacing } from '@/constants/theme';
 import { useUnits } from '@/hooks/useUnits';
-import { formatWorkoutWeightForInput, adjustWeightKg } from '@/lib/unitConversion';
+import { adjustWeightKg, formatWorkoutWeightForInput } from '@/lib/unitConversion';
 import type { WorkoutExercise, WorkoutSet } from '@/types/workout';
 
 type WorkoutCardProps = {
