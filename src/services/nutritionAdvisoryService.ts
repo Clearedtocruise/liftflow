@@ -24,6 +24,7 @@ export type MealAlternativesResult = {
   reasoning: string;
   alternatives: MealAlternativeOption[];
   ingredientAlternatives: Array<{ from: string; to: string; reason: string }>;
+  offline?: boolean;
 };
 
 export const nutritionAdvisoryService = {
@@ -68,6 +69,7 @@ export const nutritionAdvisoryService = {
       reasoning: 'Showing on-device meal suggestions while coach AI is unavailable.',
       alternatives: local,
       ingredientAlternatives,
+      offline: true,
     } satisfies MealAlternativesResult);
   },
 

@@ -239,13 +239,30 @@ export default function CoachingScreen() {
       )}
 
       <View style={styles.linkRow}>
-        <PrimaryButton label="Today's Workout" onPress={() => router.push('/(features)/suggested-workouts')} variant="secondary" />
-        <PrimaryButton label="Nutrition Intelligence" onPress={() => router.push('/(features)/nutrition-intelligence')} variant="secondary" />
-        <PrimaryButton label="Coach Chat" onPress={() => router.push('/(features)/coach-chat')} variant="secondary" />
-        <PrimaryButton label="Recovery Dashboard" onPress={() => router.push('/(features)/recovery-analysis')} variant="secondary" />
-        <PrimaryButton label="Daily Check-in" onPress={() => router.push('/(features)/recovery-check-in')} variant="secondary" />
-        <PrimaryButton label="Weekly Check-in" onPress={() => router.push('/(features)/weekly-check-in')} variant="secondary" />
-        <PrimaryButton label="Limitations" onPress={() => router.push('/(features)/limitations')} variant="secondary" />
+        <Card style={styles.linkGroup}>
+          <AppText variant="label" color="accent">
+            Recovery
+          </AppText>
+          <PrimaryButton label="Recovery Intelligence" onPress={() => router.push('/(features)/recovery-analysis')} variant="secondary" />
+          <PrimaryButton label="Daily Check-in" onPress={() => router.push('/(features)/recovery-check-in')} variant="secondary" />
+          <PrimaryButton label="Weekly Check-in" onPress={() => router.push('/(features)/weekly-check-in')} variant="secondary" />
+        </Card>
+
+        <Card style={styles.linkGroup}>
+          <AppText variant="label" color="accent">
+            Training
+          </AppText>
+          <PrimaryButton label="Today's Workout" onPress={() => router.push('/(features)/suggested-workouts')} variant="secondary" />
+          <PrimaryButton label="Coach Chat" onPress={() => router.push('/(features)/coach-chat')} variant="secondary" />
+          <PrimaryButton label="Limitations" onPress={() => router.push('/(features)/limitations')} variant="secondary" />
+        </Card>
+
+        <Card style={styles.linkGroup}>
+          <AppText variant="label" color="accent">
+            Nutrition
+          </AppText>
+          <PrimaryButton label="Nutrition Intelligence" onPress={() => router.push('/(features)/nutrition-intelligence')} variant="secondary" />
+        </Card>
       </View>
 
       {!checkIn ? <RecoveryCheckInForm userId={user!.id} onComplete={(r) => { setCheckIn(r); load(); }} /> : null}
@@ -361,7 +378,8 @@ const styles = StyleSheet.create({
     backgroundColor: LiftFlowColors.background,
   },
   header: { gap: Spacing.xs, marginBottom: Spacing.xxl },
-  linkRow: { gap: Spacing.sm, marginBottom: Spacing.xl },
+  linkRow: { gap: Spacing.md, marginBottom: Spacing.xl },
+  linkGroup: { gap: Spacing.sm },
   macroCard: { gap: Spacing.sm, marginBottom: Spacing.xl },
   fallbackCard: { gap: Spacing.sm, marginBottom: Spacing.lg },
   questionRow: { gap: Spacing.sm, marginBottom: Spacing.md },

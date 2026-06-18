@@ -81,7 +81,7 @@ export function WorkoutCard({ exercise, onEditSet }: WorkoutCardProps) {
             adjustWeightKg(lastSet.weight ?? 0, units.preferredWeightUnit, 1),
             units.preferredWeightUnit,
           )}{' '}
-          {units.weightLabel} × 4–6 · Tap a set to edit
+          {units.weightLabel} × {exercise.suggestedReps ?? lastSet.reps ?? '8–12'} · Tap a set to edit
         </AppText>
       ) : null}
     </Card>

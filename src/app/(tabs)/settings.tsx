@@ -433,8 +433,8 @@ export default function SettingsScreen() {
           onPress={() => router.push('/(tabs)/progress')}
         />
         <SettingsRow
-          label="Training Experience"
-          value={user?.trainingExperience ?? 'Beginner'}
+          label="AI Coaching Hub"
+          value={`${user?.trainingExperience ?? 'Beginner'} · Recovery, training, nutrition`}
           icon={
             <AppSymbol name="person.fill" fallback={SYMBOL_FALLBACKS['person.fill']} size={20} tintColor={LiftFlowColors.textSecondary} />
           }

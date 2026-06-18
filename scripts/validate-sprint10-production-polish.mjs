@@ -88,6 +88,22 @@ record(
 record('StateCard shared empty/error component', exists('src/components/layout/StateCard.tsx'));
 record('recoveryScoreColor helper', exists('src/lib/recoveryScoreColor.ts'));
 
+console.log('\n--- Batch D–F polish ---');
+const nutritionTsx = read('src/app/(tabs)/nutrition/index.tsx');
+const workoutCard = read('src/components/workout/WorkoutCard.tsx');
+const weeklyPlan = read('src/components/workout/execution/WorkoutWeeklyPlanScreen.tsx');
+const settingsTsx = read('src/app/(tabs)/settings.tsx');
+
+record('N-P0-1 nutrition load error state', nutritionTsx.includes('loadError') && nutritionTsx.includes('ErrorStateCard'));
+record('N-P1-3 nutrition intelligence card', nutritionTsx.includes('Nutrition Intelligence') && nutritionTsx.includes('intelCard'));
+record('N-P1-6 nutrition preferences link', nutritionTsx.includes('nutrition-preferences'));
+record('N-P0-2 meal detail sheet', exists('src/components/nutrition/MealDetailSheet.tsx') && nutritionTsx.includes('MealDetailSheet'));
+record('W-P0-6 WorkoutCard actual reps', workoutCard.includes('suggestedReps') && !workoutCard.includes('× 4–6'));
+record('W-P1-5 quick log label', weeklyPlan.includes('Quick log') && !weeklyPlan.includes('Manual Log (fallback)'));
+record('C-P0-2 coaching hub settings label', settingsTsx.includes('AI Coaching Hub'));
+record('Coaching shortcut groups', coachingTsx.includes('linkGroup'));
+record('Meal offline suggestions badge', read('src/components/nutrition/MealReplaceSheet.tsx').includes('Offline suggestions'));
+
 console.log('\n--- Regression ---');
 const backendBuild = spawnSync('npm', ['run', 'build'], { cwd: path.join(root, 'backend'), encoding: 'utf8', shell: true });
 record('Backend TypeScript build', backendBuild.status === 0);

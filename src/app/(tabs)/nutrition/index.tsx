@@ -1,12 +1,15 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 
 import { api } from '@/api/client';
 import { Card } from '@/components/layout/Card';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
+import { SkeletonBlock } from '@/components/layout/SkeletonBlock';
+import { ErrorStateCard } from '@/components/layout/StateCard';
+import { MealDetailSheet } from '@/components/nutrition/MealDetailSheet';
 import { MealPlanCard } from '@/components/nutrition/MealPlanCard';
 import { MealReplaceSheet, type SmartReplacementPayload } from '@/components/nutrition/MealReplaceSheet';
 import { NutritionProgressHeader } from '@/components/nutrition/NutritionProgressHeader';
@@ -50,6 +53,8 @@ export default function NutritionScreen() {
   const [groceryList, setGroceryList] = useState<GroceryList | null>(null);
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [replaceMeal, setReplaceMeal] = useState<Meal | null>(null);
   const [replaceMode, setReplaceMode] = useState<'meal' | 'ingredient'>('meal');
   const [replaceIngredientName, setReplaceIngredientName] = useState<string | null>(null);
@@ -63,8 +68,11 @@ export default function NutritionScreen() {
   const schedule = scheduleFromProfile(user, hasWorkoutToday, recoverySleepHours);
   const dietaryRestrictions = user?.metadata?.coachProfile?.dietaryRestrictions ?? [];
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (options?: { silent?: boolean }) => {
     if (!user) return;
+    if (!options?.silent) setLoading(true);
+    setLoadError(null);
+
     const { from, to } = getWeekRange(new Date(), user.timezone);
     await nutritionService.pruneDuplicateMeals(user.id, { from, to });
     await nutritionService.ensureWeekMealCoverage(user.id, user.timezone);
@@ -82,6 +90,11 @@ export default function NutritionScreen() {
       recoveryPromise,
       nutritionService.getGroceryLists(user.id),
     ]);
+
+    const errors: string[] = [];
+    if (!goalsRes.success) errors.push(goalsRes.error);
+    if (!summaryRes.success) errors.push(summaryRes.error);
+    setLoadError(errors[0] ?? null);
 
     if (goalsRes.success) setGoals(goalsRes.data);
     if (summaryRes.success) setSummary(summaryRes.data);
@@ -101,6 +114,12 @@ export default function NutritionScreen() {
     setRecoverySleepHours(typeof sleepHours === 'number' ? sleepHours : undefined);
     setLoading(false);
   }, [user, today]);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await load({ silent: true });
+    setRefreshing(false);
+  }, [load]);
 
   useEffect(() => {
     load();
@@ -285,20 +304,75 @@ export default function NutritionScreen() {
     load();
   }
 
-  if (loading) {
+  if (loading && !refreshing) {
     return (
-      <View style={styles.loading}>
-        <ActivityIndicator size="large" color={LiftFlowColors.accent} />
-      </View>
+      <ScreenContainer contentContainerStyle={styles.content}>
+        <SkeletonBlock height={28} width="40%" />
+        <SkeletonBlock height={14} width="60%" />
+        <SkeletonBlock height={120} />
+        <SkeletonBlock height={160} />
+        <SkeletonBlock height={160} />
+      </ScreenContainer>
+    );
+  }
+
+  if (loadError && !goals && !summary) {
+    return (
+      <ScreenContainer contentContainerStyle={styles.errorContent}>
+        <ErrorStateCard
+          title="Nutrition unavailable"
+          message={loadError}
+          onRetry={() => void load()}
+          onBack={() => router.replace('/(tabs)/dashboard')}
+          backLabel="Back to Home"
+        />
+      </ScreenContainer>
     );
   }
 
   return (
-    <ScreenContainer contentContainerStyle={styles.content}>
-      <AppText variant="headline">Nutrition</AppText>
-      <AppText variant="footnote" color="textSecondary">
-        {formatScheduleSubtitle(schedule)}
-      </AppText>
+    <ScreenContainer
+      contentContainerStyle={styles.content}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={() => void handleRefresh()} tintColor={LiftFlowColors.accent} />
+      }>
+      <View style={styles.headerRow}>
+        <View style={styles.headerText}>
+          <AppText variant="headline">Nutrition</AppText>
+          <AppText variant="footnote" color="textSecondary">
+            {formatScheduleSubtitle(schedule)}
+          </AppText>
+        </View>
+        <Pressable onPress={() => router.push('/(features)/nutrition-preferences')} hitSlop={8}>
+          <AppText variant="caption" color="accent">
+            Preferences
+          </AppText>
+        </Pressable>
+      </View>
+
+      <Pressable onPress={() => router.push('/(features)/nutrition-intelligence')}>
+        <Card glow style={styles.intelCard}>
+          <AppText variant="label" color="accent">
+            Nutrition Intelligence
+          </AppText>
+          <AppText variant="footnote" color="textSecondary">
+            Personalized insights from your logs, plan, and recovery
+          </AppText>
+        </Card>
+      </Pressable>
+
+      {loadError ? (
+        <Card style={styles.loadWarning}>
+          <AppText variant="footnote" color="textSecondary">
+            Some nutrition data could not be refreshed: {loadError}
+          </AppText>
+          <Pressable onPress={() => void load()}>
+            <AppText variant="caption" color="accent">
+              Retry
+            </AppText>
+          </Pressable>
+        </Card>
+      ) : null}
 
       <NutritionSectionTabs active={section} onChange={setSection} />
 
@@ -446,12 +520,6 @@ export default function NutritionScreen() {
         </>
       ) : null}
 
-      <Pressable onPress={() => router.push('/(features)/nutrition-intelligence')} style={styles.fallback}>
-        <AppText variant="caption" color="textTertiary">
-          Advanced nutrition intelligence
-        </AppText>
-      </Pressable>
-
       <MealReplaceSheet
         visible={replaceMeal !== null}
         meal={replaceMeal}
@@ -472,25 +540,26 @@ export default function NutritionScreen() {
         }}
       />
 
-      {detailMeal ? (
-        <MealReplaceSheet
-          visible
-          meal={detailMeal}
-          scheduledTime={todayTimes[todayMeals.findIndex((m) => m.id === detailMeal.id)]}
-          mode="meal"
-          dietaryRestrictions={dietaryRestrictions}
-          onClose={() => setDetailMeal(null)}
-          onReplaceMeal={(option) => {
-            void handleReplaceMeal(detailMeal, option);
-            setDetailMeal(null);
-          }}
-          onReplaceIngredient={handleReplaceIngredient}
-          onSmartReplace={(payload) => {
-            void handleSmartReplace(detailMeal, payload);
-            setDetailMeal(null);
-          }}
-        />
-      ) : null}
+      <MealDetailSheet
+        visible={detailMeal !== null}
+        meal={detailMeal}
+        scheduledTime={detailMeal ? todayTimes[todayMeals.findIndex((m) => m.id === detailMeal.id)] : undefined}
+        onClose={() => setDetailMeal(null)}
+        onReplace={
+          detailMeal
+            ? () => {
+                setReplaceMeal(detailMeal);
+                setReplaceMode('meal');
+                setReplaceIngredientName(null);
+                setDetailMeal(null);
+              }
+            : undefined
+        }
+        onMarkComplete={(status) => {
+          if (detailMeal) void handleMarkMeal(detailMeal, status);
+          setDetailMeal(null);
+        }}
+      />
 
       <QuickMealLogSheet
         visible={quickLogOpen}
@@ -502,15 +571,29 @@ export default function NutritionScreen() {
 }
 
 const styles = StyleSheet.create({
-  loading: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: LiftFlowColors.background,
-  },
   content: {
     gap: Spacing.lg,
     paddingBottom: Spacing.huge,
+  },
+  errorContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: Spacing.md,
+  },
+  headerText: {
+    flex: 1,
+    gap: Spacing.xs,
+  },
+  intelCard: {
+    gap: Spacing.xs,
+  },
+  loadWarning: {
+    gap: Spacing.sm,
   },
   empty: {
     gap: Spacing.md,
@@ -547,9 +630,5 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.xs,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: LiftFlowColors.border,
-  },
-  fallback: {
-    alignItems: 'center',
-    paddingVertical: Spacing.md,
   },
 });
