@@ -48,6 +48,9 @@ export default function CoachingScreen() {
   const [generating, setGenerating] = useState(false);
   const [coachAnswer, setCoachAnswer] = useState<string | null>(null);
   const [asking, setAsking] = useState(false);
+  const [intelError, setIntelError] = useState<string | null>(null);
+  const [workoutRecError, setWorkoutRecError] = useState<string | null>(null);
+  const [nutritionIntelError, setNutritionIntelError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -70,17 +73,35 @@ export default function CoachingScreen() {
       ]);
       if (recs.success) setRecommendations(recs.data);
       else setRecommendations([]);
-      if (intel.success) setIntelligence(intel.data);
-      else setIntelligence(null);
-      if (workoutRecommendation.success) setWorkoutRec(workoutRecommendation.data);
-      else setWorkoutRec(null);
-      if (nutritionReport.success) setNutritionIntel(nutritionReport.data);
-      else setNutritionIntel(null);
+      if (intel.success) {
+        setIntelligence(intel.data);
+        setIntelError(null);
+      } else {
+        setIntelligence(null);
+        setIntelError(intel.error);
+      }
+      if (workoutRecommendation.success) {
+        setWorkoutRec(workoutRecommendation.data);
+        setWorkoutRecError(null);
+      } else {
+        setWorkoutRec(null);
+        setWorkoutRecError(workoutRecommendation.error);
+      }
+      if (nutritionReport.success) {
+        setNutritionIntel(nutritionReport.data);
+        setNutritionIntelError(null);
+      } else {
+        setNutritionIntel(null);
+        setNutritionIntelError(nutritionReport.error);
+      }
     } else {
       setRecommendations([]);
       setIntelligence(null);
       setWorkoutRec(null);
       setNutritionIntel(null);
+      setIntelError(null);
+      setWorkoutRecError(null);
+      setNutritionIntelError(null);
     }
 
     if (macros.success) {
@@ -176,6 +197,13 @@ export default function CoachingScreen() {
         <FeatureGate featureId="recovery-intelligence" hidePaywall>
           <RecoveryIntelligenceDashboard report={intelligence} compact />
         </FeatureGate>
+      ) : isPremium ? (
+        <Card style={styles.fallbackCard}>
+          <AppText variant="footnote" color="textSecondary">
+            {intelError ?? 'Recovery intelligence is temporarily unavailable.'}
+          </AppText>
+          <PrimaryButton label="Retry" onPress={() => void load()} variant="secondary" />
+        </Card>
       ) : (
         <UpgradePrompt featureId="recovery-intelligence" />
       )}
@@ -184,6 +212,13 @@ export default function CoachingScreen() {
         <FeatureGate featureId="workout-recommendations" hidePaywall>
           <WorkoutRecommendationPanel report={workoutRec} compact />
         </FeatureGate>
+      ) : isPremium ? (
+        <Card style={styles.fallbackCard}>
+          <AppText variant="footnote" color="textSecondary">
+            {workoutRecError ?? 'Workout recommendations are temporarily unavailable.'}
+          </AppText>
+          <PrimaryButton label="Retry" onPress={() => void load()} variant="secondary" />
+        </Card>
       ) : (
         <UpgradePrompt featureId="workout-recommendations" compact />
       )}
@@ -192,6 +227,13 @@ export default function CoachingScreen() {
         <FeatureGate featureId="nutrition-intelligence" hidePaywall>
           <NutritionIntelligenceDashboard report={nutritionIntel} compact />
         </FeatureGate>
+      ) : isPremium ? (
+        <Card style={styles.fallbackCard}>
+          <AppText variant="footnote" color="textSecondary">
+            {nutritionIntelError ?? 'Nutrition intelligence is temporarily unavailable.'}
+          </AppText>
+          <PrimaryButton label="Retry" onPress={() => void load()} variant="secondary" />
+        </Card>
       ) : (
         <UpgradePrompt featureId="nutrition-intelligence" compact />
       )}
@@ -321,6 +363,7 @@ const styles = StyleSheet.create({
   header: { gap: Spacing.xs, marginBottom: Spacing.xxl },
   linkRow: { gap: Spacing.sm, marginBottom: Spacing.xl },
   macroCard: { gap: Spacing.sm, marginBottom: Spacing.xl },
+  fallbackCard: { gap: Spacing.sm, marginBottom: Spacing.lg },
   questionRow: { gap: Spacing.sm, marginBottom: Spacing.md },
   questionChip: {
     paddingHorizontal: Spacing.md,

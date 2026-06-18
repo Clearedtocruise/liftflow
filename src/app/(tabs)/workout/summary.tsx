@@ -1,7 +1,9 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, View } from 'react-native';
+import { ActivityIndicator, View } from 'react-native';
 
+import { ErrorStateCard } from '@/components/layout/StateCard';
+import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { WorkoutSummaryScreen } from '@/components/workout/execution/WorkoutSummaryScreen';
 import { LiftFlowColors } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
@@ -32,6 +34,7 @@ export default function WorkoutSummaryRoute() {
   const [session, setSession] = useState<WorkoutSession | null>(null);
   const [coachSummary, setCoachSummary] = useState<PostWorkoutCoachSummary | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const challenges = useMemo(() => {
     const fromParams = parseChallengesParam(challengesParam);
@@ -41,14 +44,18 @@ export default function WorkoutSummaryRoute() {
 
   const load = useCallback(async () => {
     if (!sessionId) {
+      setLoadError('No workout session was provided.');
       setLoading(false);
       return;
     }
 
     setLoading(true);
+    setLoadError(null);
+
     const sessionResult = await workoutService.getSession(sessionId);
     if (!sessionResult.success) {
-      Alert.alert('Error', sessionResult.error);
+      setLoadError(sessionResult.error);
+      setSession(null);
       setLoading(false);
       return;
     }
@@ -58,6 +65,7 @@ export default function WorkoutSummaryRoute() {
     if (user?.id) {
       const coachResult = await coachActivationService.getPostWorkoutSummary(user.id, sessionId);
       if (coachResult.success) setCoachSummary(coachResult.data);
+      else setCoachSummary(null);
     }
 
     setLoading(false);
@@ -67,11 +75,25 @@ export default function WorkoutSummaryRoute() {
     void load();
   }, [load]);
 
-  if (loading || !session) {
+  if (loading) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: LiftFlowColors.background }}>
         <ActivityIndicator size="large" color={LiftFlowColors.accent} />
       </View>
+    );
+  }
+
+  if (loadError || !session) {
+    return (
+      <ScreenContainer contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}>
+        <ErrorStateCard
+          title="Summary unavailable"
+          message={loadError ?? 'This workout summary could not be loaded.'}
+          onRetry={() => void load()}
+          onBack={() => router.replace('/(tabs)/workout')}
+          backLabel="Back to workouts"
+        />
+      </ScreenContainer>
     );
   }
 

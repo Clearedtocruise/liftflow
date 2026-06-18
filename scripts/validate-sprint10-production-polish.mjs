@@ -63,16 +63,30 @@ record('Checklist: acceptance criteria', checklist.includes('No obvious UX frict
 record('Launch: conditional recommendation', launch.includes('CONDITIONAL GO') || launch.includes('NOT YET'));
 record('Launch: beta before public', launch.includes('Sprint 9') || launch.includes('beta'));
 
-console.log('\n--- Known P0 gaps (open until Batch A–C fixed) ---');
+console.log('\n--- Batch A–C P0 fixes ---');
 const dayTsx = read('src/app/(tabs)/workout/day.tsx');
 const coachingTsx = read('src/app/(tabs)/coaching.tsx');
 const dashboardTsx = read('src/app/(tabs)/dashboard.tsx');
 const coachCard = read('src/components/workout/ExerciseCoachCard.tsx');
 
-record('W-P0-1 day.tsx dead-end spinner', dayTsx.includes('loading || !workout'), 'known gap', false);
-record('C-P0-1 coaching paywall on null intel', coachingTsx.includes('UpgradePrompt'), 'known gap', false);
-record('R-P0-2 recovery ring fixed green', dashboardTsx.includes('color={LiftFlowColors.success}'), 'known gap', false);
-record('W-P0-4 coach silent failure', coachCard.includes('if (!prescription) return null'), 'known gap', false);
+record(
+  'W-P0-1 day.tsx error/empty states',
+  dayTsx.includes('ErrorStateCard') && !dayTsx.includes('loading || !workout'),
+);
+record(
+  'C-P0-1 coaching Pro retry on null intel',
+  coachingTsx.includes('isPremium ?') && coachingTsx.includes('fallbackCard'),
+);
+record(
+  'R-P0-2 recovery ring dynamic color',
+  dashboardTsx.includes('recoveryScoreColor') && !dashboardTsx.includes('color={LiftFlowColors.success}'),
+);
+record(
+  'W-P0-4 coach failure fallback',
+  coachCard.includes('if (!prescription)') && !coachCard.includes('if (!prescription) return null'),
+);
+record('StateCard shared empty/error component', exists('src/components/layout/StateCard.tsx'));
+record('recoveryScoreColor helper', exists('src/lib/recoveryScoreColor.ts'));
 
 console.log('\n--- Regression ---');
 const backendBuild = spawnSync('npm', ['run', 'build'], { cwd: path.join(root, 'backend'), encoding: 'utf8', shell: true });
@@ -82,6 +96,5 @@ const required = checks.filter((c) => c.required !== false);
 const requiredPass = required.filter((c) => c.pass).length;
 const pass = checks.filter((c) => c.pass).length;
 console.log(`\nSummary: ${pass}/${checks.length} checks (${requiredPass}/${required.length} required)`);
-console.log('\nNote: P0 tracking items are expected FAIL until Sprint 10 implementation batches ship.');
 
 if (requiredPass !== required.length) process.exit(1);

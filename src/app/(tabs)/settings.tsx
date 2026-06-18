@@ -440,6 +440,13 @@ export default function SettingsScreen() {
           }
           onPress={() => router.push('/(tabs)/coaching')}
         />
+        <SettingsRow
+          label="Daily recovery check-in"
+          icon={
+            <AppSymbol name="heart.fill" fallback="♥" size={20} tintColor={LiftFlowColors.textSecondary} />
+          }
+          onPress={() => router.push('/(features)/recovery-check-in')}
+        />
       </Card>
 
       <View style={styles.sectionGap}>

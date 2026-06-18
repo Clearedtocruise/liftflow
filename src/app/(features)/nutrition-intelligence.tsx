@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, RefreshControl, StyleSheet, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 
+import { EmptyStateCard, ErrorStateCard } from '@/components/layout/StateCard';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { NutritionIntelligenceDashboard } from '@/components/nutrition/NutritionIntelligenceDashboard';
@@ -73,12 +74,24 @@ export default function NutritionIntelligenceScreen() {
             <ActivityIndicator size="large" color={LiftFlowColors.accent} />
           </View>
         ) : error ? (
-          <AppText variant="body" color="restTimer">
-            {error}
-          </AppText>
+          <ErrorStateCard
+            title="Could not load nutrition intelligence"
+            message={error}
+            onRetry={() => {
+              setLoading(true);
+              void load();
+            }}
+          />
         ) : report ? (
           <NutritionIntelligenceDashboard report={report} />
-        ) : null}
+        ) : (
+          <EmptyStateCard
+            title="Not enough data yet"
+            message="Log meals and complete a recovery check-in so your coach can personalize nutrition guidance."
+            actionLabel="Open Nutrition"
+            onAction={() => router.push('/(tabs)/nutrition')}
+          />
+        )}
       </FeatureGate>
 
       <PrimaryButton label="Back" onPress={() => router.back()} variant="secondary" />

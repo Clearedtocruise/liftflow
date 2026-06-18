@@ -2,7 +2,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, RefreshControl, StyleSheet, View, type ViewStyle } from 'react-native';
+import { Alert, Pressable, RefreshControl, StyleSheet, View, type ViewStyle } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { HomeNextUpCard } from '@/components/dashboard/HomeNextUpCard';
@@ -42,6 +42,7 @@ import {
 } from '@/lib/mealAggregation';
 import { formatWorkoutTime, scheduleFromProfile, scheduledTimesForDay } from '@/lib/mealSchedule';
 import { buildHomeManageDayMenu } from '@/lib/planDayActions';
+import { recoveryScoreColor } from '@/lib/recoveryScoreColor';
 import { logStartup } from '@/lib/startupLogger';
 import { buildWeekPlan, dedupePlannedWorkoutsByDate, getWeekRange, isConditioningWorkout } from '@/lib/weekPlan';
 import { estimateWorkoutDurationMinutes, exercisesForSessionStart, exercisesFromPlannedWorkout } from '@/lib/workoutPlan';
@@ -247,6 +248,19 @@ export default function DashboardScreen() {
   const showWorkoutSection = !programLoading && (weekWorkouts.length > 0 || nextPlanned != null);
   const scheduleWithWorkout = scheduleFromProfile(user, hasWorkoutToday);
   const hasRecoveryScore = recoveryScore != null;
+  const readinessScore = recoveryIntel?.factors?.muscleReadinessScore ?? null;
+
+  const handleRecoveryPress = useCallback(() => {
+    if (!hasRecoveryScore) {
+      router.push('/(features)/recovery-check-in');
+      return;
+    }
+    if (isPremium) {
+      router.push('/(features)/recovery-analysis');
+      return;
+    }
+    router.push('/(features)/recovery-check-in');
+  }, [hasRecoveryScore, isPremium]);
 
   const trainingLabel = coachGuidance.trainingLabel;
 
@@ -482,36 +496,53 @@ export default function DashboardScreen() {
             </View>
           </Card>
         ) : (
-          <Card style={styles.recoveryCard} glow>
-            <AppText variant="label" color="accent">
-              Recovery
-            </AppText>
-            <View style={styles.gaugeRow}>
-              <RingGauge label="Score" value={recoveryScore} color={LiftFlowColors.success} />
-              <View style={styles.trainingBadge}>
-                <AppText variant="caption" color="textTertiary">
-                  Today
-                </AppText>
-                <AppText variant="headline" color="accent">
-                  {trainingLabel}
-                </AppText>
-                {recoveryIntel?.recoveryStatusLabel ? (
-                  <AppText variant="footnote" color="textSecondary" align="center">
-                    {recoveryIntel.recoveryStatusLabel}
-                  </AppText>
-                ) : !hasRecoveryScore ? (
-                  <AppText variant="footnote" color="textSecondary" align="center">
-                    Check in for your score
-                  </AppText>
+          <Pressable onPress={handleRecoveryPress} accessibilityRole="button">
+            <Card style={styles.recoveryCard} glow>
+              <AppText variant="label" color="accent">
+                Recovery
+              </AppText>
+              <View style={styles.gaugeRow}>
+                <RingGauge
+                  label="Score"
+                  value={recoveryScore}
+                  color={recoveryScoreColor(recoveryScore)}
+                />
+                {readinessScore != null ? (
+                  <RingGauge
+                    label="Readiness"
+                    value={readinessScore}
+                    color={recoveryScoreColor(readinessScore)}
+                  />
                 ) : null}
-                {recoveryIntel?.transparency?.estimatedFromDefaults ? (
-                  <AppText variant="caption" color="textTertiary" align="center">
-                    Partial check-in — some inputs estimated
+                <View style={styles.trainingBadge}>
+                  <AppText variant="caption" color="textTertiary">
+                    Today
                   </AppText>
-                ) : null}
+                  <AppText variant="headline" color="accent">
+                    {trainingLabel}
+                  </AppText>
+                  {recoveryIntel?.recoveryStatusLabel ? (
+                    <AppText variant="footnote" color="textSecondary" align="center">
+                      {recoveryIntel.recoveryStatusLabel}
+                    </AppText>
+                  ) : !hasRecoveryScore ? (
+                    <AppText variant="footnote" color="textSecondary" align="center">
+                      Tap to check in
+                    </AppText>
+                  ) : (
+                    <AppText variant="footnote" color="textSecondary" align="center">
+                      Tap for details
+                    </AppText>
+                  )}
+                  {recoveryIntel?.transparency?.estimatedFromDefaults ? (
+                    <AppText variant="caption" color="textTertiary" align="center">
+                      Partial check-in — some inputs estimated
+                    </AppText>
+                  ) : null}
+                </View>
               </View>
-            </View>
-          </Card>
+            </Card>
+          </Pressable>
         )}
       </Animated.View>
 

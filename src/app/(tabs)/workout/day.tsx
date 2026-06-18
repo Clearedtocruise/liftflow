@@ -2,10 +2,13 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
+import { ErrorStateCard } from '@/components/layout/StateCard';
+import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { WorkoutDayOverviewScreen } from '@/components/workout/execution/WorkoutDayOverviewScreen';
 import { LiftFlowColors } from '@/constants/theme';
 import { pickDefaultLocation } from '@/constants/trainingProfile';
 import { useAuth } from '@/hooks/useAuth';
+import { useTabataModePreference } from '@/hooks/useTabataModePreference';
 import { useWorkoutLocations } from '@/hooks/useWorkoutLocations';
 import { profileFigureGender } from '@/lib/exerciseMuscleMap';
 import { getWeekRange, isConditioningWorkout } from '@/lib/weekPlan';
@@ -27,28 +30,42 @@ export default function WorkoutDayScreen() {
 
   const [workout, setWorkout] = useState<PlannedWorkout | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
 
-  useEffect(() => {
-    if (!user?.id || !id) return;
-    let cancelled = false;
+  const loadWorkout = useCallback(async () => {
+    if (!user?.id || !id) {
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    setLoadError(null);
 
     const { from, to } = getWeekRange();
-    void trainingService.getPlannedWorkouts(user.id, from, to).then((result) => {
-      if (cancelled) return;
-      const found = result.success ? result.data.find((item) => item.id === id) ?? null : null;
-      if (found) {
-        setWorkout(found);
-        setPlannedWorkout(found);
-        setExercises(exercisesFromPlannedWorkout(found));
-      }
-      setLoading(false);
-    });
+    const result = await trainingService.getPlannedWorkouts(user.id, from, to);
 
-    return () => {
-      cancelled = true;
-    };
+    if (!result.success) {
+      setLoadError(result.error);
+      setWorkout(null);
+      setLoading(false);
+      return;
+    }
+
+    const found = result.data.find((item) => item.id === id) ?? null;
+    if (found) {
+      setWorkout(found);
+      setPlannedWorkout(found);
+      setExercises(exercisesFromPlannedWorkout(found));
+    } else {
+      setWorkout(null);
+    }
+    setLoading(false);
   }, [user?.id, id, setPlannedWorkout, setExercises]);
+
+  useEffect(() => {
+    void loadWorkout();
+  }, [loadWorkout]);
 
   const handleStart = useCallback(async () => {
     if (!user || !workout) return;
@@ -107,11 +124,38 @@ export default function WorkoutDayScreen() {
     [workout, exercises, setExercises, setPlannedWorkout],
   );
 
-  if (loading || !workout) {
+  if (loading) {
     return (
-      <View style={styles.loading}>
+      <View style={styles.centered}>
         <ActivityIndicator color={LiftFlowColors.accent} />
       </View>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <ScreenContainer contentContainerStyle={styles.centeredContent}>
+        <ErrorStateCard
+          title="Could not load workout"
+          message={loadError}
+          onRetry={() => void loadWorkout()}
+          onBack={() => router.replace('/(tabs)/workout')}
+          backLabel="Back to weekly plan"
+        />
+      </ScreenContainer>
+    );
+  }
+
+  if (!workout) {
+    return (
+      <ScreenContainer contentContainerStyle={styles.centeredContent}>
+        <ErrorStateCard
+          title="Workout not found"
+          message="This workout may have been moved, completed, or removed from your plan."
+          onBack={() => router.replace('/(tabs)/workout')}
+          backLabel="Back to weekly plan"
+        />
+      </ScreenContainer>
     );
   }
 
@@ -134,10 +178,14 @@ export default function WorkoutDayScreen() {
 }
 
 const styles = StyleSheet.create({
-  loading: {
+  centered: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: LiftFlowColors.background,
+  },
+  centeredContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
   },
 });

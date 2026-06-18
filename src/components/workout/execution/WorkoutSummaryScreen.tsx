@@ -124,7 +124,9 @@ export function WorkoutSummaryScreen({
             <AppText variant="bodyBold">{exercise.exercise?.name ?? 'Exercise'}</AppText>
             {exercise.sets.map((set) => (
               <AppText key={set.id} variant="footnote" color="textSecondary">
-                Set {set.setNumber}: {set.weight != null ? `${set.weight} kg × ` : ''}{set.reps ?? '—'} reps
+                Set {set.setNumber}:{' '}
+                {set.weight != null ? `${units.formatWeight(set.weight)} × ` : ''}
+                {set.reps ?? '—'} reps
                 {set.isPr ? ' · PR' : ''}
               </AppText>
             ))}
