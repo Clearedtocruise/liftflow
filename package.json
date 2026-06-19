@@ -89,6 +89,7 @@
     "validate:sprint84": "node scripts/validate-sprint84-watch.mjs",
     "validate:sprint85": "node scripts/validate-sprint85-beta-readiness.mjs",
     "validate:sprint86": "node scripts/validate-sprint86-testflight-rc.mjs",
+    "validate:critical-paths": "node scripts/validate-critical-paths.mjs",
     "validate:sprint5-nutrition": "node scripts/validate-sprint5-nutrition-audit.mjs",
     "validate:sprint6-recovery": "node scripts/validate-sprint6-recovery-audit.mjs",
     "validate:sprint7-adaptation": "node scripts/validate-sprint7-adaptation.mjs",

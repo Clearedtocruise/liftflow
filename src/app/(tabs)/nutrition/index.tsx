@@ -207,6 +207,26 @@ export default function NutritionScreen() {
         // shopping list is non-critical
       }
     })();
+
+    void (async () => {
+      try {
+        await nutritionService.pruneDuplicateMeals(user.id, { from, to });
+        if (generation !== loadGenerationRef.current) return;
+        await nutritionService.ensureWeekMealCoverage(user.id, user.timezone);
+        if (generation !== loadGenerationRef.current) return;
+        const refreshed = await nutritionService.getMealsForWeek(user.id, from, to);
+        if (generation !== loadGenerationRef.current || !refreshed.success) return;
+        if (refreshed.data.length > 0) {
+          setWeekMeals(refreshed.data);
+          void planDataCache.writeMeals(user.id, from, to, refreshed.data);
+          setSummary((prev) =>
+            buildDailySummaryFromMeals(refreshed.data, today, goals, prev?.waterMl ?? 0),
+          );
+        }
+      } catch {
+        // day sync is best-effort; explicit generate still available
+      }
+    })();
   }, [user, today, weekMeals.length, goals]);
 
   const handleRefresh = useCallback(async () => {
@@ -336,15 +356,27 @@ export default function NutritionScreen() {
 
   async function ensureMealPlan() {
     if (!user) return;
-    const { dates } = getWeekRange(new Date(), user.timezone);
-    const hasFullWeek = dates.every((date) => mealsForCalendarDay(weekMeals, date).length > 0);
-    if (hasFullWeek) return;
     setLoading(true);
-    await nutritionService.ensureWeekMealCoverage(user.id, user.timezone);
-    const result = await nutritionService.generateWeeklyMealPlan(user.id);
-    setLoading(false);
-    if (result.success) await load({ silent: true });
-    else Alert.alert('Error', result.error);
+    try {
+      const result = await nutritionService.generateWeeklyMealPlan(user.id);
+      if (result.success) {
+        const { from, to } = getWeekRange(new Date(), user.timezone);
+        const meals = result.data.meals ?? [];
+        if (meals.length === 0) {
+          Alert.alert(
+            'No meals added',
+            'Existing logged meals may be blocking this week. Try again after clearing duplicate plan slots, or contact support.',
+          );
+          return;
+        }
+        void planDataCache.writeMeals(user.id, from, to, meals);
+        await load({ silent: true });
+      } else {
+        Alert.alert('Error', result.error);
+      }
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function handleGenerateShoppingList() {
