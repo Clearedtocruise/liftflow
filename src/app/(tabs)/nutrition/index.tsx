@@ -24,7 +24,7 @@ import { useLocalCalendarDay } from '@/hooks/useLocalCalendarDay';
 import { useLocalWeekRollover } from '@/hooks/useLocalWeekRollover';
 import { resolveActiveTrainingDay } from '@/lib/activeTrainingDay';
 import { aggregateWeeklyGroceries, groupGroceriesByCategory } from '@/lib/groceryAggregation';
-import { aggregateDailyMeals, aggregateWeeklyMeals, mealsForCalendarDay } from '@/lib/mealAggregation';
+import { aggregateDailyMeals, aggregateWeeklyMeals, buildDailySummaryFromMeals, mealsForCalendarDay } from '@/lib/mealAggregation';
 import {
     enrichMealMeta,
     serializeMealMeta,
@@ -35,6 +35,7 @@ import {
 } from '@/lib/mealReplacement';
 import { formatScheduleSubtitle, scheduleFromProfile, scheduledTimesForDay } from '@/lib/mealSchedule';
 import { planDataCache } from '@/lib/planDataCache';
+import { awaitWarmWeekPlanData } from '@/lib/planDataPrefetch';
 import { logStartup } from '@/lib/startupLogger';
 import { WEEKDAY_LABELS, getWeekRange } from '@/lib/weekPlan';
 import { withTimeout } from '@/lib/withTimeout';
@@ -95,9 +96,10 @@ export default function NutritionScreen() {
     const { from, to } = getWeekRange(new Date(), user.timezone);
 
     try {
-      const [goalsRes, summaryRes, weekRes] = await Promise.all([
+      await awaitWarmWeekPlanData(user.id, user.timezone);
+
+      const [goalsRes, weekRes] = await Promise.all([
         withTimeout(nutritionService.getGoals(user.id), 8_000, 'nutrition goals'),
-        withTimeout(nutritionService.getDailySummary(user.id, today), 8_000, 'daily summary'),
         withTimeout(nutritionService.getMealsForWeek(user.id, from, to), 8_000, 'week meals'),
       ]);
 
@@ -105,19 +107,24 @@ export default function NutritionScreen() {
 
       const errors: string[] = [];
       if (!goalsRes.success) errors.push(goalsRes.error);
-      if (!summaryRes.success) errors.push(summaryRes.error);
       setLoadError(errors[0] ?? null);
+
+      const nextGoals = goalsRes.success ? goalsRes.data : goals;
+      const nextWeekMeals = weekRes.success ? weekRes.data : weekMeals;
 
       if (goalsRes.success) {
         setGoals(goalsRes.data);
         void planDataCache.writeGoals(user.id, goalsRes.data);
       }
-      if (summaryRes.success) setSummary(summaryRes.data);
       if (weekRes.success) {
         setWeekMeals(weekRes.data);
         void planDataCache.writeMeals(user.id, from, to, weekRes.data);
         logStartup('NUTRITION_PLAN_LOADED', { count: weekRes.data.length, source: 'nutrition-tab' });
       }
+
+      setSummary((prev) =>
+        buildDailySummaryFromMeals(nextWeekMeals, today, nextGoals, prev?.waterMl ?? 0),
+      );
     } catch (error) {
       console.warn('[nutrition] critical load failed', error);
       if (generation === loadGenerationRef.current) {
@@ -129,6 +136,24 @@ export default function NutritionScreen() {
         setRefreshing(false);
       }
     }
+
+    void (async () => {
+      try {
+        const summaryRes = await withTimeout(
+          nutritionService.getDailySummary(user.id, today),
+          6_000,
+          'hydration summary',
+        );
+        if (generation !== loadGenerationRef.current || !summaryRes.success) return;
+        setSummary((prev) =>
+          prev
+            ? { ...prev, waterMl: summaryRes.data.waterMl, waterTargetMl: summaryRes.data.waterTargetMl }
+            : summaryRes.data,
+        );
+      } catch {
+        // water tracking is non-critical for first paint
+      }
+    })();
 
     void (async () => {
       try {
@@ -182,8 +207,6 @@ export default function NutritionScreen() {
         // shopping list is non-critical
       }
     })();
-
-    void nutritionService.pruneDuplicateMeals(user.id, { from, to });
   }, [user, today, weekMeals.length, goals]);
 
   const handleRefresh = useCallback(async () => {
@@ -199,13 +222,16 @@ export default function NutritionScreen() {
     const { from, to } = getWeekRange(new Date(), user.timezone);
 
     void (async () => {
+      await awaitWarmWeekPlanData(user.id, user.timezone);
       const cached = await planDataCache.readWeek(user.id, from, to);
       if (cancelled) return;
 
       if (cached.goals) setGoals(cached.goals);
       if (cached.workouts.length > 0) applyWorkoutTodayFromPlan(cached.workouts);
-      if (cached.meals.length > 0) {
-        setWeekMeals(cached.meals);
+      if (cached.meals.length > 0) setWeekMeals(cached.meals);
+
+      if (cached.goals || cached.meals.length > 0) {
+        setSummary(buildDailySummaryFromMeals(cached.meals, today, cached.goals));
         setLoading(false);
         hydratedFromCacheRef.current = true;
       }
@@ -405,7 +431,7 @@ export default function NutritionScreen() {
     load();
   }
 
-  if (loading && !refreshing) {
+  if (loading && !refreshing && weekMeals.length === 0 && goals == null) {
     return (
       <ScreenContainer contentContainerStyle={styles.content}>
         <SkeletonBlock height={28} width="40%" />

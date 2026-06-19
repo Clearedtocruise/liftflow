@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 
 import { useAuthDeepLink } from '@/hooks/useAuthDeepLink';
 import { planDataCache } from '@/lib/planDataCache';
+import { warmWeekPlanData } from '@/lib/planDataPrefetch';
 import { screenDataCache } from '@/lib/screenDataCache';
 import { logStartup } from '@/lib/startupLogger';
 import { getWeekRange } from '@/lib/weekPlan';
@@ -53,6 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setIsLoading(false);
 
         const { from, to } = getWeekRange(new Date(), authUser.user_metadata?.timezone as string | undefined);
+        void warmWeekPlanData(authUser.id, authUser.user_metadata?.timezone as string | undefined);
         planDataCache.prefetchWeek(authUser.id, from, to);
         screenDataCache.prefetchProgress(authUser.id);
         screenDataCache.prefetchHistory(authUser.id);

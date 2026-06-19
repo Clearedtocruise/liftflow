@@ -2,7 +2,7 @@ import { isSameCalendarDate, localMinutesSinceMidnight, parseScheduledTimeToMinu
 import { enrichMealMeta } from '@/lib/mealIngredients';
 import { pickMealsToKeep } from '@/lib/mealCleanup';
 import type { MealType } from '@/types/common';
-import type { Meal } from '@/types/nutrition';
+import type { DailyNutritionSummary, Meal, NutritionGoals } from '@/types/nutrition';
 
 const MEAL_TYPE_ORDER: Record<MealType, number> = {
   pre_workout: 0,
@@ -191,6 +191,26 @@ export function findNextMeal(
   }
 
   return fallback;
+}
+
+/** Build today's macro summary from week meals + goals (avoids a redundant daily meals query). */
+export function buildDailySummaryFromMeals(
+  weekMeals: Meal[],
+  date: string,
+  goals: NutritionGoals | null,
+  waterMl = 0,
+): DailyNutritionSummary {
+  const aggregated = aggregateDailyMeals(mealsForCalendarDay(weekMeals, date));
+  return {
+    date,
+    caloriesConsumed: aggregated.caloriesConsumed,
+    caloriesTarget: goals?.dailyCalories,
+    proteinG: aggregated.proteinG,
+    carbsG: aggregated.carbsG,
+    fatG: aggregated.fatG,
+    waterMl,
+    waterTargetMl: goals?.waterMl,
+  };
 }
 
 export function trainingLabelFromRecoveryScore(score: number): string {

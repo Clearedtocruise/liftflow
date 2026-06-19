@@ -42,6 +42,7 @@ import {
 } from '@/lib/mealAggregation';
 import { formatWorkoutTime, scheduleFromProfile, scheduledTimesForDay } from '@/lib/mealSchedule';
 import { planDataCache } from '@/lib/planDataCache';
+import { awaitWarmWeekPlanData } from '@/lib/planDataPrefetch';
 import { buildHomeManageDayMenu } from '@/lib/planDayActions';
 import { recoveryScoreColor } from '@/lib/recoveryScoreColor';
 import { logStartup, printStartupReport } from '@/lib/startupLogger';
@@ -130,9 +131,29 @@ export default function DashboardScreen() {
     const { from, to } = getWeekRange(new Date(), user?.timezone);
 
     try {
+      await awaitWarmWeekPlanData(user.id, user.timezone);
+      const cached = await planDataCache.readWeek(user.id, from, to);
+
+      if (generation !== loadGenerationRef.current) return;
+
+      if (cached.workouts.length > 0) {
+        setWeekWorkouts(cached.workouts);
+        hydratedFromCacheRef.current = true;
+        setProgramLoading(false);
+      }
+      if (cached.goals) {
+        setNutritionGoals(cached.goals);
+        hydratedFromCacheRef.current = true;
+      }
+      if (cached.meals.length > 0) {
+        setTodayMeals(mealsForCalendarDay(cached.meals, today));
+        hydratedFromCacheRef.current = true;
+        setSummaryLoading(false);
+      }
+
       const plannedResult = await withTimeout(
         trainingService.getPlannedWorkouts(user.id, from, to, user.timezone),
-        12_000,
+        cached.workouts.length > 0 ? 8_000 : 10_000,
         'planned workouts',
       );
 
@@ -155,9 +176,19 @@ export default function DashboardScreen() {
 
     void (async () => {
       try {
+        await awaitWarmWeekPlanData(user.id, user.timezone);
+        const cached = await planDataCache.readWeek(user.id, from, to);
+        if (generation !== loadGenerationRef.current) return;
+
+        if (cached.goals && cached.meals.length > 0) return;
+
         const [goalsResult, mealsResult] = await Promise.all([
-          withTimeout(nutritionService.getGoals(user.id), 10_000, 'nutrition goals'),
-          withTimeout(nutritionService.getMealsForWeek(user.id, from, to), 10_000, 'week meals'),
+          cached.goals
+            ? Promise.resolve({ success: true as const, data: cached.goals })
+            : withTimeout(nutritionService.getGoals(user.id), 8_000, 'nutrition goals'),
+          cached.meals.length > 0
+            ? Promise.resolve({ success: true as const, data: cached.meals })
+            : withTimeout(nutritionService.getMealsForWeek(user.id, from, to), 8_000, 'week meals'),
         ]);
 
         if (generation !== loadGenerationRef.current) return;
@@ -260,6 +291,24 @@ export default function DashboardScreen() {
         setTodayMeals(mealsForCalendarDay(cached.meals, today));
         setSummaryLoading(false);
         hydratedFromCacheRef.current = true;
+      }
+
+      if (!hydratedFromCacheRef.current) {
+        await awaitWarmWeekPlanData(user.id, user.timezone);
+        if (cancelled) return;
+
+        const warmed = await planDataCache.readWeek(user.id, from, to);
+        if (warmed.workouts.length > 0) {
+          setWeekWorkouts(warmed.workouts);
+          setProgramLoading(false);
+          hydratedFromCacheRef.current = true;
+        }
+        if (warmed.goals) setNutritionGoals(warmed.goals);
+        if (warmed.meals.length > 0) {
+          setTodayMeals(mealsForCalendarDay(warmed.meals, today));
+          setSummaryLoading(false);
+          hydratedFromCacheRef.current = true;
+        }
       }
 
       void load({ silent: hydratedFromCacheRef.current });

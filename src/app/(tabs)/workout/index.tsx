@@ -19,6 +19,7 @@ import {
 } from '@/lib/activeTrainingDay';
 import { localDateString } from '@/lib/localDate';
 import { planDataCache } from '@/lib/planDataCache';
+import { awaitWarmWeekPlanData } from '@/lib/planDataPrefetch';
 import { showWeeklyEditDayMenu } from '@/lib/planDayActions';
 import { logStartup } from '@/lib/startupLogger';
 import { enrichWithSupersetGroups } from '@/lib/supersetFlow';
@@ -113,6 +114,7 @@ export default function WorkoutScreen() {
     const { from, to } = getWeekRange(new Date(), user?.timezone);
 
     void (async () => {
+      await awaitWarmWeekPlanData(user.id, user?.timezone);
       const cached = await planDataCache.readWeek(user.id, from, to);
       if (cancelled) return;
 
