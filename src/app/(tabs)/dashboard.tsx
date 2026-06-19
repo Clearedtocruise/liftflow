@@ -45,6 +45,7 @@ import { planDataCache } from '@/lib/planDataCache';
 import { buildHomeManageDayMenu } from '@/lib/planDayActions';
 import { recoveryScoreColor } from '@/lib/recoveryScoreColor';
 import { logStartup, printStartupReport } from '@/lib/startupLogger';
+import { withTimeout } from '@/lib/withTimeout';
 import { buildWeekPlan, dedupePlannedWorkoutsByDate, getWeekRange, isConditioningWorkout } from '@/lib/weekPlan';
 import { estimateWorkoutDurationMinutes, exercisesForSessionStart, exercisesFromPlannedWorkout } from '@/lib/workoutPlan';
 import { analyticsService } from '@/services/analyticsService';
@@ -86,6 +87,7 @@ export default function DashboardScreen() {
   const appReadyLoggedRef = useRef(false);
   const loadGenerationRef = useRef(0);
   const hydratedFromCacheRef = useRef(false);
+  const skipFocusLoadRef = useRef(true);
   const isPremiumRef = useRef(isPremium);
   isPremiumRef.current = isPremium;
 
@@ -123,25 +125,19 @@ export default function DashboardScreen() {
 
     if (!silent) {
       setProgramLoading(true);
-      setSummaryLoading(true);
     }
 
     const { from, to } = getWeekRange(new Date(), user?.timezone);
 
-    void nutritionService.pruneDuplicateMeals(user.id);
-
     try {
-      const [programResult, plannedResult] = await Promise.all([
-        trainingService.getDashboard(user.id),
+      const plannedResult = await withTimeout(
         trainingService.getPlannedWorkouts(user.id, from, to, user.timezone),
-      ]);
+        12_000,
+        'planned workouts',
+      );
 
       if (generation !== loadGenerationRef.current) return;
 
-      if (programResult.success) {
-        setProgram(programResult.data);
-        void planDataCache.writeProgram(user.id, from, to, programResult.data);
-      }
       if (plannedResult.success) {
         const workouts = dedupePlannedWorkoutsByDate(plannedResult.data, new Date(), user.timezone);
         setWeekWorkouts(workouts);
@@ -157,33 +153,50 @@ export default function DashboardScreen() {
       }
     }
 
-    try {
-      const [dashResult, goalsResult, mealsResult] = await Promise.all([
-        analyticsService.getDashboard(user.id),
-        nutritionService.getGoals(user.id),
-        nutritionService.getMealsForWeek(user.id, from, to),
-      ]);
+    void (async () => {
+      try {
+        const [goalsResult, mealsResult] = await Promise.all([
+          withTimeout(nutritionService.getGoals(user.id), 10_000, 'nutrition goals'),
+          withTimeout(nutritionService.getMealsForWeek(user.id, from, to), 10_000, 'week meals'),
+        ]);
 
-      if (generation !== loadGenerationRef.current) return;
+        if (generation !== loadGenerationRef.current) return;
 
-      if (dashResult.success) setData(dashResult.data);
-      if (goalsResult.success) {
-        setNutritionGoals(goalsResult.data);
-        void planDataCache.writeGoals(user.id, goalsResult.data);
+        if (goalsResult.success) {
+          setNutritionGoals(goalsResult.data);
+          void planDataCache.writeGoals(user.id, goalsResult.data);
+        }
+        if (mealsResult.success) {
+          setTodayMeals(mealsForCalendarDay(mealsResult.data, today));
+          void planDataCache.writeMeals(user.id, from, to, mealsResult.data);
+          logStartup('NUTRITION_PLAN_LOADED', { count: mealsResult.data.length });
+        }
+      } catch (error) {
+        console.warn('[dashboard] nutrition load failed', error);
+      } finally {
+        if (generation === loadGenerationRef.current) {
+          setSummaryLoading(false);
+          setRefreshing(false);
+        }
       }
-      if (mealsResult.success) {
-        setTodayMeals(mealsForCalendarDay(mealsResult.data, today));
-        void planDataCache.writeMeals(user.id, from, to, mealsResult.data);
-        logStartup('NUTRITION_PLAN_LOADED', { count: mealsResult.data.length });
+    })();
+
+    void (async () => {
+      try {
+        const [programResult, dashResult] = await Promise.all([
+          trainingService.getDashboard(user.id),
+          analyticsService.getDashboard(user.id),
+        ]);
+        if (generation !== loadGenerationRef.current) return;
+        if (programResult.success) {
+          setProgram(programResult.data);
+          void planDataCache.writeProgram(user.id, from, to, programResult.data);
+        }
+        if (dashResult.success) setData(dashResult.data);
+      } catch (error) {
+        console.warn('[dashboard] deferred dashboard load failed', error);
       }
-    } catch (error) {
-      console.warn('[dashboard] summary load failed', error);
-    } finally {
-      if (generation === loadGenerationRef.current) {
-        setSummaryLoading(false);
-        setRefreshing(false);
-      }
-    }
+    })();
 
     void (async () => {
       try {
@@ -216,6 +229,8 @@ export default function DashboardScreen() {
         console.warn('[dashboard] recovery load failed', error);
       }
     })();
+
+    void nutritionService.pruneDuplicateMeals(user.id);
 
     if (!appReadyLoggedRef.current && generation === loadGenerationRef.current) {
       appReadyLoggedRef.current = true;
@@ -257,6 +272,10 @@ export default function DashboardScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      if (skipFocusLoadRef.current) {
+        skipFocusLoadRef.current = false;
+        return;
+      }
       if (user) void load({ silent: true });
     }, [user, load]),
   );
@@ -496,7 +515,7 @@ export default function DashboardScreen() {
       </Animated.View>
 
       <Animated.View entering={FadeInDown.delay(120).duration(400)}>
-        {programLoading || summaryLoading ? (
+        {programLoading ? (
           <Card style={styles.emptyWorkout} glow>
             <SkeletonBlock height={160} />
           </Card>

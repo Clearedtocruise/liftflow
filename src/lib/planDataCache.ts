@@ -21,6 +21,7 @@ async function readJson<T>(key: string): Promise<T | null> {
   const mem = memory.get(key);
   const raw = mem ?? (await AsyncStorage.getItem(key));
   if (!raw) return null;
+  if (!mem) memory.set(key, raw);
   try {
     const envelope = JSON.parse(raw) as CacheEnvelope<T>;
     return envelope.data ?? null;
@@ -90,12 +91,17 @@ export const planDataCache = {
     await writeJson(cacheKey(userId, weekFrom, weekTo, 'program'), program);
   },
 
+  /** Warm AsyncStorage → memory for the current week (call as early as auth allows). */
+  prefetchWeek(userId: string, weekFrom: string, weekTo: string): void {
+    void this.readWeek(userId, weekFrom, weekTo);
+  },
+
   async clearUser(userId: string): Promise<void> {
     const keys = await AsyncStorage.getAllKeys();
-    const userKeys = keys.filter((key) => key.includes(`:${userId}:`) || key.endsWith(`:${userId}`));
+    const userKeys = keys.filter((key) => key.includes(`/${userId}/`) || key.endsWith(`/${userId}`));
     await AsyncStorage.multiRemove(userKeys);
     for (const key of [...memory.keys()]) {
-      if (key.includes(`:${userId}:`) || key.endsWith(`:${userId}`)) memory.delete(key);
+      if (key.includes(`/${userId}/`) || key.endsWith(`/${userId}`)) memory.delete(key);
     }
   },
 };

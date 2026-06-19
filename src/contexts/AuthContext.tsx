@@ -1,7 +1,10 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import { useAuthDeepLink } from '@/hooks/useAuthDeepLink';
+import { planDataCache } from '@/lib/planDataCache';
+import { screenDataCache } from '@/lib/screenDataCache';
 import { logStartup } from '@/lib/startupLogger';
+import { getWeekRange } from '@/lib/weekPlan';
 import { authService, type SignUpResult } from '@/services/authService';
 import type { PasswordResetPayload, SignInPayload, SignUpPayload, UserProfile } from '@/types/user';
 
@@ -44,7 +47,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         setUser(authService.stubProfileFromAuth(authUser));
+        setIsProfileReady(true);
         logStartup('AUTH_READY', { authenticated: true });
+        logStartup('PROFILE_READY', { source: 'stub' });
+        setIsLoading(false);
+
+        const { from, to } = getWeekRange(new Date(), authUser.user_metadata?.timezone as string | undefined);
+        planDataCache.prefetchWeek(authUser.id, from, to);
+        screenDataCache.prefetchProgress(authUser.id);
+        screenDataCache.prefetchHistory(authUser.id);
 
         const profile = await authService.loadProfile(
           authUser.id,
@@ -54,9 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (cancelled) return;
 
         setUser(profile);
-        setIsProfileReady(true);
         logStartup('PROFILE_LOADED');
-        logStartup('PROFILE_READY');
       } catch {
         if (!cancelled) {
           setUser(null);

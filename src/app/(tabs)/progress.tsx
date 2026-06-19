@@ -1,5 +1,5 @@
 import * as ImagePicker from 'expo-image-picker';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { BodyCompositionSummary } from '@/components/body/BodyCompositionSummary';
@@ -18,6 +18,7 @@ import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 import { useEntitlement } from '@/hooks/useEntitlement';
 import { useUnits } from '@/hooks/useUnits';
+import { screenDataCache } from '@/lib/screenDataCache';
 import { buildTransformationStory, normalizeBodyCompositionSnapshot } from '@/lib/transformation/transformationStory';
 import { bodyService } from '@/services/bodyService';
 import { productAnalyticsService } from '@/services/productAnalyticsService';
@@ -48,6 +49,8 @@ export default function ProgressScreen() {
   const [bodyFat, setBodyFat] = useState('');
   const [targetBf, setTargetBf] = useState('12');
   const [uploadAngle, setUploadAngle] = useState<PhotoAngle>('front');
+  const loadGenerationRef = useRef(0);
+  const hydratedFromCacheRef = useRef(false);
 
   const story = useMemo(() => {
     if (!isValidProjection(transformation)) return null;
@@ -58,27 +61,73 @@ export default function ProgressScreen() {
     }
   }, [transformation, measurements]);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (options?: { silent?: boolean }) => {
     if (!user) {
       setLoading(false);
       return;
     }
-    const [photosRes, bodyRes, transformRes] = await Promise.all([
+
+    const generation = ++loadGenerationRef.current;
+    const silent = options?.silent ?? hydratedFromCacheRef.current;
+    if (!silent) setLoading(true);
+
+    const [photosRes, bodyRes] = await Promise.all([
       bodyService.getProgressPhotos(user.id),
       bodyService.getCompositionHistory(user.id),
-      transformationAllowed
-        ? bodyService.getLatestTransformation(user.id)
-        : Promise.resolve({ success: true as const, data: null }),
     ]);
-    if (photosRes.success) setPhotos(photosRes.data);
-    if (bodyRes.success) setMeasurements(bodyRes.data);
-    if (transformRes.success) setTransformation(transformRes.data);
+
+    if (generation !== loadGenerationRef.current) return;
+
+    const nextPhotos = photosRes.success ? photosRes.data : [];
+    const nextMeasurements = bodyRes.success ? bodyRes.data : [];
+    if (photosRes.success) setPhotos(nextPhotos);
+    if (bodyRes.success) setMeasurements(nextMeasurements);
     setLoading(false);
+
+    let nextTransformation: TransformationProjection | null = null;
+    if (transformationAllowed) {
+      const transformRes = await bodyService.getLatestTransformation(user.id);
+      if (generation !== loadGenerationRef.current) return;
+      if (transformRes.success) {
+        nextTransformation = transformRes.data;
+        setTransformation(transformRes.data);
+      }
+    }
+
+    screenDataCache.writeProgress(user.id, {
+      photos: nextPhotos,
+      measurements: nextMeasurements,
+      transformation: nextTransformation,
+    });
   }, [user, transformationAllowed]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    if (!user?.id) {
+      setLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    void (async () => {
+      const cached = await screenDataCache.readProgress(user.id);
+      if (cancelled) return;
+
+      if (cached) {
+        setPhotos(cached.photos);
+        setMeasurements(cached.measurements);
+        setTransformation(cached.transformation);
+        setLoading(false);
+        hydratedFromCacheRef.current = true;
+      }
+
+      void load({ silent: hydratedFromCacheRef.current });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, load]);
 
   async function handleUploadPhoto() {
     if (!user) return;
@@ -156,7 +205,7 @@ export default function ProgressScreen() {
     }
   }
 
-  if (loading) {
+  if (loading && photos.length === 0 && measurements.length === 0) {
     return (
       <View style={styles.loading}>
         <ActivityIndicator size="large" color={LiftFlowColors.accent} />

@@ -261,6 +261,7 @@ export interface IGoalService {
 
 export interface IAnalyticsService {
   getDashboard(userId: string): Promise<ServiceResult<DashboardSummary>>;
+  getWorkoutStreak(userId: string): Promise<ServiceResult<number>>;
   getSnapshots(userId: string, periodType: string): Promise<ServiceResult<AnalyticsSnapshot[]>>;
   getPerformanceTrends(userId: string, exerciseId?: string): Promise<ServiceResult<PerformanceTrend[]>>;
   generateSnapshot(userId: string, date: string): Promise<ServiceResult<AnalyticsSnapshot>>;

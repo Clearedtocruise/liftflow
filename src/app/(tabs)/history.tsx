@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, RefreshControl, StyleSheet, View } from 'react-native';
 
 import { HistoryCard } from '@/components/history/HistoryCard';
@@ -9,6 +9,7 @@ import { SectionHeader } from '@/components/layout/SectionHeader';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
+import { screenDataCache } from '@/lib/screenDataCache';
 import { analyticsService } from '@/services/analyticsService';
 import { workoutService } from '@/services/workoutService';
 import type { WorkoutHistoryItem } from '@/types';
@@ -19,22 +20,62 @@ export default function HistoryScreen() {
   const [streak, setStreak] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const loadGenerationRef = useRef(0);
+  const hydratedFromCacheRef = useRef(false);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (options?: { silent?: boolean }) => {
     if (!user) return;
-    const [historyResult, dashboardResult] = await Promise.all([
-      workoutService.getHistory(user.id),
-      analyticsService.getDashboard(user.id),
-    ]);
-    if (historyResult.success) setHistory(historyResult.data.data);
-    if (dashboardResult.success) setStreak(dashboardResult.data.streak);
+
+    const generation = ++loadGenerationRef.current;
+    const silent = options?.silent ?? hydratedFromCacheRef.current;
+
+    if (!silent) setLoading(true);
+
+    const historyResult = await workoutService.getHistory(user.id);
+    if (generation !== loadGenerationRef.current) return;
+
+    const items = historyResult.success ? historyResult.data.data : [];
+    if (historyResult.success) setHistory(items);
     setLoading(false);
     setRefreshing(false);
+
+    void (async () => {
+      const streakResult = await analyticsService.getWorkoutStreak(user.id);
+      if (generation !== loadGenerationRef.current) return;
+
+      const streakValue = streakResult.success ? streakResult.data : 0;
+      if (streakResult.success) setStreak(streakValue);
+
+      screenDataCache.writeHistory(user.id, { items, streak: streakValue });
+    })();
   }, [user]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    if (!user?.id) {
+      setLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    void (async () => {
+      const cached = await screenDataCache.readHistory(user.id);
+      if (cancelled) return;
+
+      if (cached) {
+        setHistory(cached.items);
+        setStreak(cached.streak);
+        setLoading(false);
+        hydratedFromCacheRef.current = true;
+      }
+
+      void load({ silent: hydratedFromCacheRef.current });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, load]);
 
   async function handleDelete(id: string) {
     Alert.alert('Delete workout', 'Remove this session from history?', [
@@ -44,14 +85,14 @@ export default function HistoryScreen() {
         style: 'destructive',
         onPress: async () => {
           const result = await workoutService.deleteSession(id);
-          if (result.success) load();
+          if (result.success) load({ silent: true });
           else Alert.alert('Error', result.error);
         },
       },
     ]);
   }
 
-  if (loading) {
+  if (loading && history.length === 0) {
     return (
       <View style={styles.loading}>
         <ActivityIndicator size="large" color={LiftFlowColors.accent} />
@@ -61,7 +102,7 @@ export default function HistoryScreen() {
 
   return (
     <ScreenContainer
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={LiftFlowColors.accent} />}>
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load({ silent: true }); }} tintColor={LiftFlowColors.accent} />}>
       <View style={styles.header}>
         <AppText variant="headline">History</AppText>
         <AppText variant="body" color="textSecondary">
@@ -125,7 +166,7 @@ const styles = StyleSheet.create({
   statCard: {
     flex: 1,
     alignItems: 'center',
-    paddingVertical: Spacing.xl,
     gap: Spacing.xs,
+    paddingVertical: Spacing.lg,
   },
 });

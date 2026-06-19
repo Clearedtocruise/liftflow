@@ -48,6 +48,7 @@ export default function WorkoutScreen() {
   const [challengeRecords, setChallengeRecords] = useState<WorkoutChallengeRecord[]>([]);
   const loadGenerationRef = useRef(0);
   const hydratedFromCacheRef = useRef(false);
+  const skipFocusLoadRef = useRef(true);
 
   const loadWeekPlan = useCallback(
     async (options?: { silent?: boolean }) => {
@@ -136,6 +137,10 @@ export default function WorkoutScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      if (skipFocusLoadRef.current) {
+        skipFocusLoadRef.current = false;
+        return;
+      }
       if (user?.id) void loadWeekPlan({ silent: true });
       if (session) void refreshSession();
     }, [user?.id, loadWeekPlan, session, refreshSession]),
