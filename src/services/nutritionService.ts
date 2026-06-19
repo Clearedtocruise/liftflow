@@ -1,7 +1,7 @@
 import { api } from '@/api/client';
 import { mapGroceryList, mapMeal, mapMealPlan, mapNutritionGoals } from '@/lib/db-mappers';
 import { aggregateWeeklyGroceries } from '@/lib/groceryAggregation';
-import { localDateString } from '@/lib/localDate';
+import { resolveTimeZone } from '@/lib/localDate';
 import { mealSlotKey, remapApiMealsToClientWeek, type ApiPlanMeal } from '@/lib/mealPlanWeekAlign';
 import { aggregateDailyMeals, mealsForCalendarDay } from '@/lib/mealAggregation';
 import { isReplaceablePlannedMeal, pickMealsToKeep, weekEndDate } from '@/lib/mealCleanup';
@@ -17,7 +17,7 @@ function todayDate(): string {
 }
 
 function weekStartDate(timeZone?: string | null): string {
-  return getWeekRange(new Date(), timeZone).from;
+  return getWeekRange(new Date(), resolveTimeZone(timeZone)).from;
 }
 
 export const nutritionService: INutritionService = {
@@ -273,14 +273,15 @@ export const nutritionService: INutritionService = {
 
   async generateWeeklyMealPlan(userId, timeZone?: string | null) {
     try {
+      const tz = resolveTimeZone(timeZone);
       const token = await getAccessToken();
       const plan = await api.generateMealPlan(userId, token);
-      const clientWeekStart = weekStartDate(timeZone);
+      const clientWeekStart = weekStartDate(tz);
       const clientWeekEnd = weekEndDate(clientWeekStart);
       const apiWeekStart = plan.weekStartDate ?? clientWeekStart;
 
-      await this.pruneDuplicateMeals(userId, { from: clientWeekStart, to: clientWeekEnd });
       await this.removePlannedMealsForWeek(userId, clientWeekStart);
+      await this.pruneDuplicateMeals(userId, { from: clientWeekStart, to: clientWeekEnd });
 
       const { data: existingMeals } = await supabase
         .from('meals')
@@ -296,6 +297,20 @@ export const nutritionService: INutritionService = {
           .map((meal) => mealSlotKey(meal.scheduledDate, meal.mealType)),
       );
 
+      const apiMeals = (plan.meals ?? []) as ApiPlanMeal[];
+      if (apiMeals.length === 0) {
+        return fail('Meal plan API returned no meals.');
+      }
+
+      const alignedMeals = remapApiMealsToClientWeek(apiMeals, apiWeekStart, clientWeekStart);
+      const mealsToInsert = alignedMeals.filter(
+        (meal) => !occupiedSlots.has(mealSlotKey(meal.scheduledDate, meal.mealType)),
+      );
+
+      if (mealsToInsert.length === 0) {
+        return fail('Could not add meals — existing logged meals may be blocking this week.');
+      }
+
       const { data: saved, error } = await supabase
         .from('meal_plans')
         .insert({
@@ -310,18 +325,9 @@ export const nutritionService: INutritionService = {
 
       if (error) return fail(error.message);
 
-      const apiMeals = (plan.meals ?? []) as ApiPlanMeal[];
-      if (apiMeals.length === 0) {
-        return fail('Meal plan API returned no meals.');
-      }
-
-      const alignedMeals = remapApiMealsToClientWeek(apiMeals, apiWeekStart, clientWeekStart);
-      const mealsToInsert = alignedMeals.filter(
-        (meal) => !occupiedSlots.has(mealSlotKey(meal.scheduledDate, meal.mealType)),
-      );
-
-      if (mealsToInsert.length > 0) {
-        const { error: insertError } = await supabase.from('meals').insert(
+      const { data: inserted, error: insertError } = await supabase
+        .from('meals')
+        .insert(
           mealsToInsert.map((m) => ({
             meal_plan_id: saved.id,
             user_id: userId,
@@ -334,29 +340,28 @@ export const nutritionService: INutritionService = {
             fat_g: m.fatG,
             instructions: m.instructions ?? serializeMealMeta(enrichMealMeta(m.name)),
           })),
-        );
-        if (insertError) {
-          await supabase.from('meal_plans').delete().eq('id', saved.id);
-          return fail(insertError.message);
-        }
-      } else if (alignedMeals.length > 0) {
+        )
+        .select('*');
+
+      if (insertError) {
         await supabase.from('meal_plans').delete().eq('id', saved.id);
-        return fail('Could not add meals — existing logged meals may be blocking this week.');
+        return fail(insertError.message);
       }
 
-      const { data: full, error: fullError } = await supabase
-        .from('meal_plans')
-        .select('*, meals(*)')
-        .eq('id', saved.id)
-        .single();
-
-      if (fullError) return fail(fullError.message);
-      if (!full || (full.meals ?? []).length === 0) {
+      if (!inserted || inserted.length === 0) {
         await supabase.from('meal_plans').delete().eq('id', saved.id);
-        return fail('Meal plan was created but no meals were saved.');
+        return fail('Meals could not be saved to your account.');
       }
 
-      return ok(mapMealPlan(full));
+      const weekMeals = await this.getMealsForWeek(userId, clientWeekStart, clientWeekEnd);
+      if (!weekMeals.success || weekMeals.data.length === 0) {
+        return fail('Meals saved but could not be loaded — pull to refresh.');
+      }
+
+      return ok({
+        ...mapMealPlan({ ...saved, meals: inserted }),
+        meals: weekMeals.data,
+      });
     } catch (e) {
       return fromError(e);
     }

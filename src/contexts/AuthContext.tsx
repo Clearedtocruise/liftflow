@@ -5,6 +5,7 @@ import { planDataCache } from '@/lib/planDataCache';
 import { warmWeekPlanData } from '@/lib/planDataPrefetch';
 import { screenDataCache } from '@/lib/screenDataCache';
 import { logStartup } from '@/lib/startupLogger';
+import { withTimeout } from '@/lib/withTimeout';
 import { getWeekRange } from '@/lib/weekPlan';
 import { authService, type SignUpResult } from '@/services/authService';
 import type { PasswordResetPayload, SignInPayload, SignUpPayload, UserProfile } from '@/types/user';
@@ -37,7 +38,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     void (async () => {
       try {
-        const authUser = await authService.getAuthSessionUser();
+        const authUser = await withTimeout(authService.getAuthSessionUser(), 10_000, 'auth session');
         if (cancelled) return;
 
         if (!authUser) {

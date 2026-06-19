@@ -50,7 +50,7 @@ const REQUIRED = [
   {
     file: 'src/app/(tabs)/dashboard.tsx',
     label: 'Dashboard plan load',
-    patterns: ['awaitWarmWeekPlanData', 'getPlannedWorkouts', 'getMealsForWeek'],
+    patterns: ['planDataCache.readWeek', 'warmWeekPlanData', 'getPlannedWorkouts', 'getMealsForWeek'],
   },
 ];
 

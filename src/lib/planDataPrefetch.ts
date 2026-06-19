@@ -1,5 +1,6 @@
 import { planDataCache } from '@/lib/planDataCache';
 import { logStartup } from '@/lib/startupLogger';
+import { withTimeout } from '@/lib/withTimeout';
 import { getWeekRange } from '@/lib/weekPlan';
 import { nutritionService } from '@/services/nutritionService';
 import { trainingService } from '@/services/trainingService';
@@ -21,9 +22,9 @@ export function warmWeekPlanData(userId: string, timezone?: string): Promise<voi
     try {
       logStartup('PLAN_PREFETCH_START');
       const [workoutsRes, mealsRes, goalsRes] = await Promise.allSettled([
-        trainingService.getPlannedWorkouts(userId, from, to, timezone),
-        nutritionService.getMealsForWeek(userId, from, to),
-        nutritionService.getGoals(userId),
+        withTimeout(trainingService.getPlannedWorkouts(userId, from, to, timezone), 8_000, 'prefetch workouts'),
+        withTimeout(nutritionService.getMealsForWeek(userId, from, to), 8_000, 'prefetch meals'),
+        withTimeout(nutritionService.getGoals(userId), 8_000, 'prefetch goals'),
       ]);
 
       if (workoutsRes.status === 'fulfilled' && workoutsRes.value.success) {
@@ -53,8 +54,13 @@ export function getWarmWeekPlanData(userId: string, timezone?: string): Promise<
   return inflight.get(weekKey(userId, from, to));
 }
 
-/** Wait for an in-flight warm (if any) so tabs reuse auth prefetch instead of duplicating fetches. */
-export async function awaitWarmWeekPlanData(userId: string, timezone?: string): Promise<void> {
+/** Optionally wait briefly for auth prefetch — never block UI longer than maxWaitMs. */
+export async function awaitWarmWeekPlanData(
+  userId: string,
+  timezone?: string,
+  maxWaitMs = 1_500,
+): Promise<void> {
   const warm = getWarmWeekPlanData(userId, timezone);
-  if (warm) await warm.catch(() => undefined);
+  if (!warm) return;
+  await withTimeout(warm, maxWaitMs, 'plan prefetch wait').catch(() => undefined);
 }

@@ -69,9 +69,11 @@ const nutritionSrc = fs.readFileSync(path.join(root, 'src/app/(tabs)/nutrition/i
 record('Service uses week align helper', serviceSrc.includes('remapApiMealsToClientWeek'));
 record('Service passes client week to DB', serviceSrc.includes('clientWeekStart'));
 record('Service checks insert errors', serviceSrc.includes('insertError'));
-record('Service rolls back empty meal plan', serviceSrc.includes("from('meal_plans').delete()"));
-record('Nutrition passes user timezone', nutritionSrc.includes('generateWeeklyMealPlan(user.id, user.timezone)'));
-record('Generate invalidates in-flight load', nutritionSrc.includes('loadGenerationRef.current'));
+record('Service verifies saved meals', serviceSrc.includes('getMealsForWeek(userId, clientWeekStart'));
+record('Service uses resolveTimeZone', serviceSrc.includes('resolveTimeZone'));
+record('Nutrition passes resolved timezone', nutritionSrc.includes('resolveTimeZone(user.timezone)'));
+record('Prefetch has timeouts', fs.readFileSync(path.join(root, 'src/lib/planDataPrefetch.ts'), 'utf8').includes('withTimeout'));
+record('Dashboard cache-first load', fs.readFileSync(path.join(root, 'src/app/(tabs)/dashboard.tsx'), 'utf8').includes('planDataCache.readWeek'));
 
 // --- Live API contract ---
 try {

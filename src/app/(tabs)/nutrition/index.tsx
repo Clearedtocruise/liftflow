@@ -34,8 +34,9 @@ import {
     selectMealsForScope,
 } from '@/lib/mealReplacement';
 import { formatScheduleSubtitle, scheduleFromProfile, scheduledTimesForDay } from '@/lib/mealSchedule';
+import { resolveTimeZone } from '@/lib/localDate';
 import { planDataCache } from '@/lib/planDataCache';
-import { awaitWarmWeekPlanData } from '@/lib/planDataPrefetch';
+import { warmWeekPlanData } from '@/lib/planDataPrefetch';
 import { logStartup } from '@/lib/startupLogger';
 import { WEEKDAY_LABELS, getWeekRange } from '@/lib/weekPlan';
 import { withTimeout } from '@/lib/withTimeout';
@@ -96,8 +97,6 @@ export default function NutritionScreen() {
     const { from, to } = getWeekRange(new Date(), user.timezone);
 
     try {
-      await awaitWarmWeekPlanData(user.id, user.timezone);
-
       const [goalsRes, weekRes] = await Promise.all([
         withTimeout(nutritionService.getGoals(user.id), 8_000, 'nutrition goals'),
         withTimeout(nutritionService.getMealsForWeek(user.id, from, to), 8_000, 'week meals'),
@@ -242,7 +241,6 @@ export default function NutritionScreen() {
     const { from, to } = getWeekRange(new Date(), user.timezone);
 
     void (async () => {
-      await awaitWarmWeekPlanData(user.id, user.timezone);
       const cached = await planDataCache.readWeek(user.id, from, to);
       if (cancelled) return;
 
@@ -256,6 +254,7 @@ export default function NutritionScreen() {
         hydratedFromCacheRef.current = true;
       }
 
+      void warmWeekPlanData(user.id, user.timezone);
       void load({ silent: hydratedFromCacheRef.current });
     })();
 
@@ -357,9 +356,10 @@ export default function NutritionScreen() {
   async function ensureMealPlan() {
     if (!user) return;
     const generation = ++loadGenerationRef.current;
+    const tz = resolveTimeZone(user.timezone);
     setLoading(true);
     try {
-      const result = await nutritionService.generateWeeklyMealPlan(user.id, user.timezone);
+      const result = await nutritionService.generateWeeklyMealPlan(user.id, tz);
       if (generation !== loadGenerationRef.current) return;
 
       if (!result.success) {
@@ -367,24 +367,18 @@ export default function NutritionScreen() {
         return;
       }
 
-      const { from, to } = getWeekRange(new Date(), user.timezone);
-      const refreshed = await nutritionService.getMealsForWeek(user.id, from, to);
-      if (generation !== loadGenerationRef.current) return;
-
-      if (!refreshed.success || refreshed.data.length === 0) {
-        Alert.alert(
-          'Meals not visible',
-          refreshed.success
-            ? 'Plan saved but meals did not load. Pull to refresh or restart the app.'
-            : refreshed.error,
-        );
+      const { from, to } = getWeekRange(new Date(), tz);
+      const meals = result.data.meals ?? [];
+      if (meals.length === 0) {
+        Alert.alert('Could not generate meal plan', 'No meals were saved. Pull to refresh and try again.');
         return;
       }
 
-      setWeekMeals(refreshed.data);
-      setSummary((prev) => buildDailySummaryFromMeals(refreshed.data, today, goals, prev?.waterMl ?? 0));
-      void planDataCache.writeMeals(user.id, from, to, refreshed.data);
+      setWeekMeals(meals);
+      setSummary((prev) => buildDailySummaryFromMeals(meals, today, goals, prev?.waterMl ?? 0));
+      void planDataCache.writeMeals(user.id, from, to, meals);
       setLoadError(null);
+      setSection('today');
     } finally {
       if (generation === loadGenerationRef.current) {
         setLoading(false);

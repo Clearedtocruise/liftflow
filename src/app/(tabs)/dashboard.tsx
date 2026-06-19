@@ -42,7 +42,7 @@ import {
 } from '@/lib/mealAggregation';
 import { formatWorkoutTime, scheduleFromProfile, scheduledTimesForDay } from '@/lib/mealSchedule';
 import { planDataCache } from '@/lib/planDataCache';
-import { awaitWarmWeekPlanData } from '@/lib/planDataPrefetch';
+import { warmWeekPlanData } from '@/lib/planDataPrefetch';
 import { buildHomeManageDayMenu } from '@/lib/planDayActions';
 import { recoveryScoreColor } from '@/lib/recoveryScoreColor';
 import { logStartup, printStartupReport } from '@/lib/startupLogger';
@@ -131,7 +131,6 @@ export default function DashboardScreen() {
     const { from, to } = getWeekRange(new Date(), user?.timezone);
 
     try {
-      await awaitWarmWeekPlanData(user.id, user.timezone);
       const cached = await planDataCache.readWeek(user.id, from, to);
 
       if (generation !== loadGenerationRef.current) return;
@@ -150,6 +149,8 @@ export default function DashboardScreen() {
         hydratedFromCacheRef.current = true;
         setSummaryLoading(false);
       }
+
+      void warmWeekPlanData(user.id, user.timezone);
 
       const plannedResult = await withTimeout(
         trainingService.getPlannedWorkouts(user.id, from, to, user.timezone),
@@ -176,7 +177,6 @@ export default function DashboardScreen() {
 
     void (async () => {
       try {
-        await awaitWarmWeekPlanData(user.id, user.timezone);
         const cached = await planDataCache.readWeek(user.id, from, to);
         if (generation !== loadGenerationRef.current) return;
 
@@ -293,24 +293,7 @@ export default function DashboardScreen() {
         hydratedFromCacheRef.current = true;
       }
 
-      if (!hydratedFromCacheRef.current) {
-        await awaitWarmWeekPlanData(user.id, user.timezone);
-        if (cancelled) return;
-
-        const warmed = await planDataCache.readWeek(user.id, from, to);
-        if (warmed.workouts.length > 0) {
-          setWeekWorkouts(warmed.workouts);
-          setProgramLoading(false);
-          hydratedFromCacheRef.current = true;
-        }
-        if (warmed.goals) setNutritionGoals(warmed.goals);
-        if (warmed.meals.length > 0) {
-          setTodayMeals(mealsForCalendarDay(warmed.meals, today));
-          setSummaryLoading(false);
-          hydratedFromCacheRef.current = true;
-        }
-      }
-
+      void warmWeekPlanData(user.id, user.timezone);
       void load({ silent: hydratedFromCacheRef.current });
     })();
 
