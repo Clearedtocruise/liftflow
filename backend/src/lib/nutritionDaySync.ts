@@ -1,12 +1,13 @@
+import { prePostWorkoutNamesForDate } from './mealPlanTemplates.js';
 import { parseMealStatus } from './nutritionPreferenceEngine.js';
 import { requireAdmin } from './supabase.js';
 import { resolveRankedGoals, toNutritionGoal } from './trainingGoals.js';
 import {
-  calculateMacroTargets,
-  generateDailyMeals,
-  inferWorkoutType,
-  type MacroTargets,
-  type NutritionContext,
+    calculateMacroTargets,
+    generateDailyMeals,
+    inferWorkoutType,
+    type MacroTargets,
+    type NutritionContext,
 } from './workoutAwareNutrition.js';
 
 export type DayNutritionSync = {
@@ -43,9 +44,6 @@ type MealRow = {
   meal_plan_id: string | null;
 };
 
-const PRE_WORKOUT = { mealType: 'pre_workout', name: 'Pre-workout banana and oats' };
-const POST_WORKOUT = { mealType: 'post_workout', name: 'Protein shake with banana' };
-
 function hydrationNote(bodyWeightKg: number, sessionKind: 'rest' | 'strength' | 'cardio' | 'mobility'): string {
   const ml = Math.round(
     bodyWeightKg * (sessionKind === 'cardio' ? 40 : sessionKind === 'rest' ? 30 : sessionKind === 'mobility' ? 32 : 35),
@@ -71,6 +69,7 @@ function mealTimingLabels(isTrainingDay: boolean, count: number): string[] {
 }
 
 function trainingDayMeals(date: string, macros: MacroTargets, style: NutritionContext['dietaryStyle']) {
+  const { preWorkout, postWorkout } = prePostWorkoutNamesForDate(date);
   const base = generateDailyMeals(date, macros, style);
   const split = {
     pre_workout: 0.12,
@@ -94,9 +93,9 @@ function trainingDayMeals(date: string, macros: MacroTargets, style: NutritionCo
     const fallback = templates.breakfast ?? base[0];
     const name =
       mealType === 'pre_workout'
-        ? PRE_WORKOUT.name
+        ? preWorkout
         : mealType === 'post_workout'
-          ? POST_WORKOUT.name
+          ? postWorkout
           : (templates[mealType]?.name ?? fallback.name);
     return {
       mealType,
@@ -111,6 +110,7 @@ function trainingDayMeals(date: string, macros: MacroTargets, style: NutritionCo
 }
 
 function cardioDayMeals(date: string, macros: MacroTargets, style: NutritionContext['dietaryStyle']) {
+  const { preWorkout, postWorkout } = prePostWorkoutNamesForDate(date);
   const base = generateDailyMeals(date, macros, style);
   const split = {
     pre_workout: 0.1,
@@ -130,8 +130,8 @@ function cardioDayMeals(date: string, macros: MacroTargets, style: NutritionCont
   );
 
   const names: Record<string, string> = {
-    pre_workout: 'Light carb snack — banana or toast',
-    post_workout: 'Electrolyte drink with moderate carbs',
+    pre_workout: preWorkout,
+    post_workout: postWorkout,
     breakfast: templates.breakfast?.name ?? base[0].name,
     lunch: templates.lunch?.name ?? base[0].name,
     snack: templates.snack?.name ?? base[0].name,

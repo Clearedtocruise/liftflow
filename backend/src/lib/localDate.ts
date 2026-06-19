@@ -21,9 +21,20 @@ export function localDateString(date = new Date(), timeZone?: string | null): st
   }
 }
 
-export function weekStartDateString(today: string): string {
-  const d = new Date(`${today}T12:00:00`);
-  const day = d.getDay();
-  d.setDate(d.getDate() - day + (day === 0 ? -6 : 1));
+export function addCalendarDays(dateStr: string, delta: number): string {
+  const d = new Date(`${dateStr}T12:00:00.000Z`);
+  d.setUTCDate(d.getUTCDate() + delta);
   return d.toISOString().slice(0, 10);
+}
+
+export function weekStartFromDateString(dateStr: string): string {
+  const d = new Date(`${dateStr}T12:00:00.000Z`);
+  const dow = d.getUTCDay();
+  const mondayOffset = dow === 0 ? -6 : 1 - dow;
+  d.setUTCDate(d.getUTCDate() + mondayOffset);
+  return d.toISOString().slice(0, 10);
+}
+
+export function weekStartDateString(today: string): string {
+  return weekStartFromDateString(today);
 }

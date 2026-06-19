@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { AppState } from 'react-native';
 
 import { localDateString } from '@/lib/localDate';
+import { recordDailyRolloverTime } from '@/lib/rolloverDebug';
 
 /** Reload data when the local calendar day changes (midnight rollover or app resume). */
 export function useLocalDayRollover(
@@ -19,6 +20,7 @@ export function useLocalDayRollover(
       const nextDay = localDateString(new Date(), timeZone);
       if (nextDay === dayRef.current) return;
       dayRef.current = nextDay;
+      void recordDailyRolloverTime();
       onRolloverRef.current();
     };
 

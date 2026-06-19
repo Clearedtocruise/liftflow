@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
 
 import { Card } from '@/components/layout/Card';
+import { EmptyStateCard } from '@/components/layout/StateCard';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
@@ -124,7 +125,7 @@ export function WorkoutWeeklyPlanScreen({
 
       <Pressable onPress={onManualLog}>
         <AppText variant="footnote" color="accent" align="center">
-          Manual Log (fallback)
+          Quick log
         </AppText>
       </Pressable>
     </View>

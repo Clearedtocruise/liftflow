@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import { buildWeeklySchedule } from './programTypes.js';
 import {
-  buildWeeklyLiftingPlan,
-  countLiftingDaysInPattern,
-  formatWeeklyPattern,
-  getWeeklyLiftingPattern,
-  inferWeeklyLiftingSplit,
-  patternIncludesNonLiftingReplacement,
+    buildWeeklyLiftingPlan,
+    countLiftingDaysInPattern,
+    formatWeeklyPattern,
+    getWeeklyLiftingPattern,
+    inferWeeklyLiftingSplit,
+    patternIncludesNonLiftingReplacement,
 } from './weeklyLiftingGenerator.js';
 
 const ppl6 = getWeeklyLiftingPattern('push_pull_legs', 6);
@@ -20,6 +20,16 @@ assert.equal(countLiftingDaysInPattern(ul6), 6);
 
 const ppl3 = getWeeklyLiftingPattern('push_pull_legs', 3);
 assert.equal(countLiftingDaysInPattern(ppl3), 3);
+
+const bodyPart3 = getWeeklyLiftingPattern('body_part_split', 3);
+assert.equal(
+  formatWeeklyPattern(bodyPart3),
+  'Back & Biceps & Shoulders · Chest & Triceps · Legs · Rest · Rest · Rest · Rest',
+);
+assert.equal(countLiftingDaysInPattern(bodyPart3), 3);
+
+const bodyPart6 = getWeeklyLiftingPattern('body_part_split', 6);
+assert.equal(countLiftingDaysInPattern(bodyPart6), 6);
 
 const hypertrophySplit = inferWeeklyLiftingSplit({
   primaryGoal: 'muscle_gain',
@@ -41,8 +51,14 @@ const plan = buildWeeklyLiftingPlan({
 assert.equal(plan.liftingDayCount, 6);
 assert.equal(plan.pattern.length, 7);
 
-const schedule = buildWeeklySchedule('push_pull_legs', 6);
-assert.equal(schedule.filter((day) => !day.isRest && day.sessionKind === 'strength').length, 6);
-assert.equal(schedule.some((day) => day.sessionKind === 'cardio'), false);
+const schedule = buildWeeklySchedule('body_part_split', 3);
+assert.equal(schedule.filter((day) => !day.isRest).length, 3);
+assert.deepEqual(schedule[0]?.muscleGroups, ['shoulders', 'back', 'biceps', 'core']);
+assert.deepEqual(schedule[1]?.muscleGroups, ['chest', 'triceps', 'core']);
+assert.deepEqual(schedule[2]?.muscleGroups, ['legs', 'glutes', 'hamstrings', 'core']);
+
+const pplSchedule = buildWeeklySchedule('push_pull_legs', 6);
+assert.equal(pplSchedule.filter((day) => !day.isRest && day.sessionKind === 'strength').length, 6);
+assert.equal(pplSchedule.some((day) => day.sessionKind === 'cardio'), false);
 
 console.log('weeklyLiftingGenerator.test.ts — all assertions passed');

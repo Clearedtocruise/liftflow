@@ -120,12 +120,12 @@ export default function ManualLogScreen() {
   return (
     <ScreenContainer contentContainerStyle={styles.content}>
       <View style={styles.header}>
-        <AppText variant="title">Manual Log</AppText>
+        <AppText variant="title">Quick Log</AppText>
         <PrimaryButton label="Back" variant="ghost" onPress={() => router.back()} />
       </View>
 
       <AppText variant="footnote" color="textSecondary">
-        Fallback logging when you are not following today&apos;s planned workout.
+        Log sets without following today&apos;s planned workout.
       </AppText>
 
       <SectionHeader title="Log Set" subtitle="Fields adapt to the exercise type" />

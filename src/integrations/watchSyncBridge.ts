@@ -1,4 +1,11 @@
 import { Platform } from 'react-native';
+import {
+    getIsPaired,
+    getIsWatchAppInstalled,
+    sendMessage,
+    updateApplicationContext,
+    watchEvents,
+} from 'react-native-watch-connectivity';
 
 import { watchOfflineQueue } from '@/integrations/watchOfflineQueue';
 
@@ -13,43 +20,22 @@ import type { IntegrationAvailability, WatchSyncPayload } from './types';
 
 /**
  * Apple Watch sync bridge — phone hosts workout assistant; watch sends motion + voice.
- *
- * Native: add watchOS target with CoreMotion → batch samples → WCSession messages.
- * Message types: workout_state, motion_batch, voice_command, rep_correction, confirm_reps, workout_sync
  */
-
-type WatchConnectivityModule = {
-  isSupported: () => boolean;
-  isPaired: () => Promise<boolean>;
-  isWatchAppInstalled: () => Promise<boolean>;
-  sendMessage: (message: Record<string, unknown>) => Promise<void>;
-  /** Optional: subscribe to incoming messages from watch */
-  watchEvents?: { addListener: (cb: (event: { message: Record<string, unknown> }) => void) => { remove: () => void } };
-};
-
-function loadWatchConnectivity(): WatchConnectivityModule | null {
-  if (Platform.OS !== 'ios') return null;
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const mod = require('react-native-watch-connectivity');
-    return mod.default ?? mod;
-  } catch {
-    return null;
-  }
-}
 
 export function getWatchAvailability(): IntegrationAvailability {
   if (Platform.OS !== 'ios') {
     return { available: false, reason: 'Apple Watch sync requires iOS.' };
   }
-  const wc = loadWatchConnectivity();
-  if (!wc) {
+
+  try {
+    require('react-native-watch-connectivity');
+    return { available: true };
+  } catch {
     return {
       available: false,
-      reason: 'WatchConnectivity not linked. Install watchOS companion + native module for live wrist tracking.',
+      reason: 'WatchConnectivity not linked. Rebuild with the watch companion target.',
     };
   }
-  return { available: true };
 }
 
 export function normalizeWatchPayload(raw: Record<string, unknown>): WatchSyncPayload {
@@ -88,6 +74,16 @@ export function parseWatchWorkoutMessage(raw: Record<string, unknown>): WatchWor
         transcript: String(raw.transcript ?? ''),
         workoutSessionId: raw.workoutSessionId as string | undefined,
       };
+    case 'log_set':
+      return {
+        type: 'log_set',
+        workoutSessionId: raw.workoutSessionId as string | undefined,
+      };
+    case 'start_workout':
+      return {
+        type: 'start_workout',
+        workoutSessionId: raw.workoutSessionId as string | undefined,
+      };
     case 'rep_correction':
       return {
         type: 'rep_correction',
@@ -113,20 +109,45 @@ export function parseWatchWorkoutMessage(raw: Record<string, unknown>): WatchWor
   }
 }
 
-export async function sendToWatch(message: WatchWorkoutMessage | Record<string, unknown>): Promise<{ sent: boolean; error?: string }> {
-  const wc = loadWatchConnectivity();
-  if (!wc) {
+async function sendMessageAsync(message: Record<string, unknown>): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    sendMessage(
+      message,
+      () => resolve(),
+      (error) => reject(error instanceof Error ? error : new Error(String(error))),
+    );
+  });
+}
+
+export async function sendToWatch(
+  message: WatchWorkoutMessage | Record<string, unknown>,
+): Promise<{ sent: boolean; error?: string }> {
+  try {
+    require('react-native-watch-connectivity');
+  } catch {
     await watchOfflineQueue.enqueue(message as Record<string, unknown>);
     return { sent: false, error: getWatchAvailability().reason };
   }
 
   try {
-    const paired = await wc.isPaired();
+    const paired = await getIsPaired();
     if (!paired) {
       await watchOfflineQueue.enqueue(message as Record<string, unknown>);
       return { sent: false, error: 'No Apple Watch paired' };
     }
-    await wc.sendMessage(message as Record<string, unknown>);
+
+    const installed = await getIsWatchAppInstalled();
+    if (!installed) {
+      await watchOfflineQueue.enqueue(message as Record<string, unknown>);
+      return { sent: false, error: 'ONE MORE Watch app not installed — open Watch app on iPhone to install' };
+    }
+
+    await sendMessageAsync(message as Record<string, unknown>);
+
+    if ((message as Record<string, unknown>).type === 'workout_state') {
+      updateApplicationContext(message as Record<string, unknown>);
+    }
+
     return { sent: true };
   } catch (error) {
     await watchOfflineQueue.enqueue(message as Record<string, unknown>);
@@ -135,14 +156,17 @@ export async function sendToWatch(message: WatchWorkoutMessage | Record<string, 
 }
 
 export async function flushWatchOutboundQueue(): Promise<number> {
-  const wc = loadWatchConnectivity();
-  if (!wc) return 0;
+  try {
+    require('react-native-watch-connectivity');
+  } catch {
+    return 0;
+  }
 
   const queued = await watchOfflineQueue.list();
   let sent = 0;
   for (const item of queued) {
     try {
-      await wc.sendMessage(item.message);
+      await sendMessageAsync(item.message);
       await watchOfflineQueue.remove(item.id);
       sent += 1;
     } catch {
@@ -153,16 +177,21 @@ export async function flushWatchOutboundQueue(): Promise<number> {
   return sent;
 }
 
-export function subscribeToWatchMessages(
-  handler: (message: Record<string, unknown>) => void,
-): () => void {
-  const wc = loadWatchConnectivity();
-  if (!wc?.watchEvents) return () => undefined;
+export function subscribeToWatchMessages(handler: (message: Record<string, unknown>) => void): () => void {
+  try {
+    require('react-native-watch-connectivity');
+  } catch {
+    return () => undefined;
+  }
 
-  const sub = wc.watchEvents.addListener((event) => {
-    handler(event.message);
+  const subscription = watchEvents.addListener('message', (payload, reply) => {
+    if (payload && typeof payload === 'object') {
+      handler(payload as Record<string, unknown>);
+    }
+    reply?.({ received: true });
   });
-  return () => sub.remove();
+
+  return () => subscription();
 }
 
 export async function pushWorkoutStateToWatch(state: WatchWorkoutAssistantState): Promise<{ sent: boolean; error?: string }> {
@@ -181,7 +210,6 @@ export function parseIncomingWatchMessage(message: Record<string, unknown>): Wat
   return null;
 }
 
-/** Extended watch messages for Sprint 7.4 architecture (phone-side handlers) */
 export function parseWatchHealthMessage(message: Record<string, unknown>) {
   return {
     workoutDetection: parseWatchWorkoutDetection(message),
@@ -195,10 +223,12 @@ export function isWorkoutAssistantMessage(message: Record<string, unknown>): boo
   return (
     t === 'motion_batch' ||
     t === 'voice_command' ||
+    t === 'log_set' ||
     t === 'rep_correction' ||
     t === 'confirm_reps' ||
     t === 'skip_rest' ||
     t === 'next_set' ||
+    t === 'start_workout' ||
     t === 'workout_state'
   );
 }

@@ -56,8 +56,13 @@ nutritionRouter.post('/meal-plan/generate', async (req, res) => {
       }
     }
 
-    const plan = generateWeeklyMealPlan(proteinG, calories);
-    if (dietaryStyle && userId) {
+    const plan = generateWeeklyMealPlan(
+      proteinG,
+      calories,
+      (dietaryStyle as 'balanced' | 'high_protein' | 'low_carb' | 'keto' | 'mediterranean' | 'vegetarian' | undefined) ??
+        'balanced',
+    );
+    if (dietaryStyle && userId && plan.aiRationale && !plan.aiRationale.includes('Style:')) {
       plan.aiRationale = `${plan.aiRationale} Style: ${dietaryStyle}.`;
     }
     res.json(plan);

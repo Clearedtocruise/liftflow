@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
 import { Card } from '@/components/layout/Card';
@@ -33,6 +33,23 @@ function formatRest(seconds: number): string {
   return `${seconds}s`;
 }
 
+function planFallbackLine(
+  plan: Omit<ExercisePrescriptionPlanInput, 'exerciseId'> | undefined,
+  loggingMode: ExerciseLoggingMode,
+  formatWeight: (kg: number) => number,
+  weightLabel: string,
+): string {
+  if (loggingMode === 'timed') {
+    const seconds = defaultTimedDurationSeconds(plan?.plannedReps);
+    return `${seconds}s hold`;
+  }
+  if (loggingMode === 'bodyweight') {
+    return plan?.plannedReps ? `${plan.plannedReps} reps` : 'Bodyweight reps';
+  }
+  const reps = plan?.plannedReps ?? '8–12';
+  return `${reps} reps · use plan weight`;
+}
+
 export function ExerciseCoachCard({
   userId,
   exerciseId,
@@ -48,35 +65,48 @@ export function ExerciseCoachCard({
   onApplyTarget,
 }: ExerciseCoachCardProps) {
   const units = useUnits();
-  const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(false);
   const [expanded, setExpanded] = useState(variant !== 'compact');
   const [prescription, setPrescription] = useState<ExerciseCoachPrescription | null>(null);
+  const prescriptionRef = useRef<ExerciseCoachPrescription | null>(null);
+  prescriptionRef.current = prescription;
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    exerciseCoachService
-      .getPrescription(userId, exerciseId, {
+  const fetchPrescription = useCallback(
+    async (options?: { showSpinner?: boolean }) => {
+      const showSpinner = options?.showSpinner ?? prescriptionRef.current == null;
+      if (showSpinner) setInitialLoading(true);
+      setFetchError(false);
+
+      const result = await exerciseCoachService.getPrescription(userId, exerciseId, {
         ...plan,
         sessionId,
         loggingMode,
         currentSessionSets,
-      })
-      .then((result) => {
-        if (cancelled) return;
-        const next = result.success ? result.data : null;
-        setPrescription(next);
-        onPrescription?.(next);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
       });
-    return () => {
-      cancelled = true;
-    };
-  }, [userId, exerciseId, plan, sessionId, loggingMode, currentSessionSets, onPrescription]);
 
-  if (loading) {
+      const next = result.success ? result.data : null;
+      setPrescription(next);
+      onPrescription?.(next);
+      if (!result.success) setFetchError(true);
+      setInitialLoading(false);
+    },
+    [userId, exerciseId, plan, sessionId, loggingMode, currentSessionSets, onPrescription],
+  );
+
+  useEffect(() => {
+    void fetchPrescription({ showSpinner: true });
+  }, [userId, exerciseId, sessionId, loggingMode, plan?.plannedReps, plan?.plannedSets, plan?.plannedRestSeconds]);
+
+  useEffect(() => {
+    if (prescriptionRef.current == null) return;
+    const timer = setTimeout(() => {
+      void fetchPrescription({ showSpinner: false });
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [currentSessionSets, fetchPrescription]);
+
+  if (initialLoading && !prescription) {
     return (
       <View style={styles.loading}>
         <ActivityIndicator color={LiftFlowColors.accent} size="small" />
@@ -87,7 +117,47 @@ export function ExerciseCoachCard({
     );
   }
 
-  if (!prescription) return null;
+  if (!prescription) {
+    const fallbackLine = planFallbackLine(
+      plan,
+      loggingMode,
+      (kg) => kgToDisplayWeight(kg, units.preferredWeightUnit),
+      units.weightLabel,
+    );
+
+    const fallback = (
+      <>
+        <AppText variant="label" color="accent">
+          {titleLabel}{setNumber ? ` · Set ${setNumber}` : ''}
+        </AppText>
+        <AppText variant="footnote" color="textSecondary">
+          {fetchError
+            ? 'Coach unavailable — using plan targets.'
+            : 'Using plan targets while coach syncs.'}
+        </AppText>
+        <AppText variant="bodyBold">{fallbackLine}</AppText>
+        {fetchError ? (
+          <Pressable onPress={() => void fetchPrescription({ showSpinner: true })}>
+            <AppText variant="caption" color="accent">
+              Retry coach
+            </AppText>
+          </Pressable>
+        ) : null}
+      </>
+    );
+
+    if (variant === 'inline') return <View style={styles.inline}>{fallback}</View>;
+    if (variant === 'compact') {
+      return (
+        <View style={styles.compact}>
+          <AppText variant="footnote" color="textSecondary">
+            Plan target · {fallbackLine}
+          </AppText>
+        </View>
+      );
+    }
+    return <Card style={styles.card}>{fallback}</Card>;
+  }
 
   const { targets } = prescription;
   const displayLabel =

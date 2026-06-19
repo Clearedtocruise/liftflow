@@ -374,6 +374,7 @@ export const watchWorkoutService = {
           return r.success ? ok(r.data) : fail(r.error);
         }
         case 'skip_rest': {
+          await workoutService.skipActiveRestTimer(userId);
           const assistant = getAssistant(userId);
           const set = assistant.getState().activeSet;
           if (set) {
@@ -386,11 +387,17 @@ export const watchWorkoutService = {
           }
           return ok(assistant.getState());
         }
+        case 'log_set': {
+          const r = await this.completeSet(userId);
+          return r.success ? ok(r.data.state) : fail(r.error);
+        }
         case 'next_set': {
           const assistant = getAssistant(userId);
           assistant.advanceToNextSet();
           return ok(assistant.getState());
         }
+        case 'start_workout':
+          return fail('start_workout is handled by watchCompanionService');
         case 'workout_state':
           getAssistant(userId).loadState(message.state);
           return ok(message.state);

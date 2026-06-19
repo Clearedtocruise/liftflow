@@ -26,9 +26,12 @@ type HomeNextUpCardProps = {
     recoveryScore?: number | null;
   } | null;
   onLogMeal: () => void;
+  onQuickLogMeal?: () => void;
   onStartWorkout: () => void;
+  onViewWorkout?: () => void;
   onManageDay?: () => void;
   onLogActivity?: () => void;
+  tabataModeEnabled?: boolean;
   showWorkoutSection?: boolean;
   isRestDay?: boolean;
   startingWorkout?: boolean;
@@ -43,9 +46,12 @@ export function HomeNextUpCard({
   mealsTotal,
   workout,
   onLogMeal,
+  onQuickLogMeal,
   onStartWorkout,
+  onViewWorkout,
   onManageDay,
   onLogActivity,
+  tabataModeEnabled = false,
   showWorkoutSection = false,
   isRestDay = false,
   startingWorkout,
@@ -60,35 +66,46 @@ export function HomeNextUpCard({
           </AppText>
 
           {nextMeal ? (
-            <Pressable style={styles.section} onPress={onLogMeal}>
-              <View style={styles.sectionHeader}>
-                <AppText variant="bodyBold">Next meal</AppText>
-                {nextMeal.scheduledTime ? (
-                  <AppText variant="caption" color={nextMeal.overdue ? 'warning' : 'accent'}>
-                    {nextMeal.overdue ? 'Overdue · ' : ''}
-                    {nextMeal.scheduledTime}
-                  </AppText>
-                ) : null}
-              </View>
-              <AppText variant="footnote" color="textSecondary">
-                {mealTypeLabel(nextMeal.mealType)}
-              </AppText>
-              <AppText variant="body">{nextMeal.name}</AppText>
-              <AppText variant="caption" color="textTertiary">
-                {caloriesRemaining} cal left · {Math.round(proteinRemainingG)}g protein left · {mealsCompleted}/
-                {mealsTotal} meals
-              </AppText>
-            </Pressable>
+            <View style={styles.section}>
+              <Pressable onPress={onLogMeal}>
+                <View style={styles.sectionHeader}>
+                  <AppText variant="bodyBold">Next meal</AppText>
+                  {nextMeal.scheduledTime ? (
+                    <AppText variant="caption" color={nextMeal.overdue ? 'warning' : 'accent'}>
+                      {nextMeal.overdue ? 'Overdue · ' : ''}
+                      {nextMeal.scheduledTime}
+                    </AppText>
+                  ) : null}
+                </View>
+                <AppText variant="footnote" color="textSecondary">
+                  {mealTypeLabel(nextMeal.mealType)}
+                </AppText>
+                <AppText variant="body">{nextMeal.name}</AppText>
+                <AppText variant="caption" color="textTertiary">
+                  {caloriesRemaining} cal left · {Math.round(proteinRemainingG)}g protein left · {mealsCompleted}/
+                  {mealsTotal} meals
+                </AppText>
+              </Pressable>
+              <PrimaryButton label="Log Nutrition" variant="secondary" onPress={onLogMeal} />
+              {onQuickLogMeal ? (
+                <PrimaryButton label="Log a Meal" variant="ghost" onPress={onQuickLogMeal} />
+              ) : null}
+            </View>
           ) : (
             <View style={styles.section}>
-              <AppText variant="bodyBold">Nutrition on track</AppText>
+              <AppText variant="bodyBold">Nutrition</AppText>
               <AppText variant="footnote" color="textSecondary">
                 {mealsTotal > 0
-                  ? `${mealsCompleted}/${mealsTotal} meals logged today`
+                  ? `${mealsCompleted}/${mealsTotal} meals logged today · ${caloriesRemaining} cal left`
                   : 'Generate a meal plan to get coached nutrition targets.'}
               </AppText>
-              {mealsTotal === 0 ? (
-                <PrimaryButton label="Open Nutrition" onPress={onLogMeal} />
+              <PrimaryButton
+                label={mealsTotal > 0 ? 'Log Nutrition' : 'Log a Meal'}
+                onPress={mealsTotal > 0 ? onLogMeal : (onQuickLogMeal ?? onLogMeal)}
+                variant="secondary"
+              />
+              {mealsTotal === 0 && onLogMeal !== onQuickLogMeal ? (
+                <PrimaryButton label="Generate Meal Plan" variant="ghost" onPress={onLogMeal} />
               ) : null}
             </View>
           )}
@@ -107,7 +124,17 @@ export function HomeNextUpCard({
                 </View>
                 {workout && !isRestDay ? (
                   <>
-                    <AppText variant="body">{workout.title}</AppText>
+                    <Pressable
+                      onPress={onViewWorkout}
+                      disabled={!onViewWorkout}
+                      style={onViewWorkout ? styles.workoutPreview : undefined}>
+                      <AppText variant="body">{workout.title}</AppText>
+                      {onViewWorkout ? (
+                        <AppText variant="caption" color="accent">
+                          View exercises →
+                        </AppText>
+                      ) : null}
+                    </Pressable>
                     <AppText variant="footnote" color="textSecondary">
                       {workout.durationMin ? `${workout.durationMin} min · ` : ''}
                       {workout.recoveryScore != null
@@ -116,7 +143,7 @@ export function HomeNextUpCard({
                       {workout.trainingLabel}
                     </AppText>
                     <PrimaryButton
-                      label="START WORKOUT"
+                      label={tabataModeEnabled ? 'START TABATA WORKOUT' : 'START WORKOUT'}
                       onPress={onStartWorkout}
                       loading={startingWorkout}
                       size="large"
@@ -179,5 +206,8 @@ const styles = StyleSheet.create({
   divider: {
     height: 1,
     backgroundColor: LiftFlowColors.border,
+  },
+  workoutPreview: {
+    gap: 2,
   },
 });

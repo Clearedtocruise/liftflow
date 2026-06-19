@@ -1,6 +1,6 @@
 import { mapHistoryItem, mapMeal } from '@/lib/db-mappers';
-import { aggregateDailyMeals } from '@/lib/mealAggregation';
 import { localDateString } from '@/lib/localDate';
+import { aggregateDailyMeals } from '@/lib/mealAggregation';
 import { fail, fromError, ok } from '@/lib/serviceResult';
 import type { IAnalyticsService } from '@/services/interfaces';
 import { supabase } from '@/supabase/client';
@@ -120,6 +120,23 @@ export const analyticsService: IAnalyticsService = {
       };
 
       return ok(dashboard);
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
+  async getWorkoutStreak(userId) {
+    try {
+      const { data, error } = await supabase
+        .from('workout_sessions')
+        .select('started_at')
+        .eq('user_id', userId)
+        .eq('status', 'completed')
+        .order('started_at', { ascending: false })
+        .limit(60);
+
+      if (error) return fail(error.message);
+      return ok(computeStreak((data ?? []).map((d) => d.started_at)));
     } catch (e) {
       return fromError(e);
     }

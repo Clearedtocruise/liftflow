@@ -7,6 +7,7 @@ type PlanAdjustmentContextValue = {
   /** Increments on each adaptation so tabs can reload plan data. */
   revision: number;
   setFromAdaptation: (result: PlanAdaptationResult) => void;
+  bumpRevision: () => void;
   dismiss: () => void;
 };
 
@@ -26,11 +27,13 @@ export function PlanAdjustmentProvider({ children }: { children: ReactNode }) {
     setRevision((n) => n + 1);
   }, []);
 
+  const bumpRevision = useCallback(() => setRevision((n) => n + 1), []);
+
   const dismiss = useCallback(() => setAdjustment(null), []);
 
   const value = useMemo(
-    () => ({ adjustment, revision, setFromAdaptation, dismiss }),
-    [adjustment, revision, setFromAdaptation, dismiss],
+    () => ({ adjustment, revision, setFromAdaptation, bumpRevision, dismiss }),
+    [adjustment, revision, setFromAdaptation, bumpRevision, dismiss],
   );
 
   return <PlanAdjustmentContext.Provider value={value}>{children}</PlanAdjustmentContext.Provider>;

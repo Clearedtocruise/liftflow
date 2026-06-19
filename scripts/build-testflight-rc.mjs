@@ -46,6 +46,16 @@ async function main() {
 
   record('Branding enforcement', spawnSync('node', ['scripts/validate-branding-enforcement.mjs'], { cwd: root, encoding: 'utf8' }).status === 0);
 
+  record(
+    'Critical user paths',
+    spawnSync('node', ['scripts/validate-critical-paths.mjs'], { cwd: root, encoding: 'utf8' }).status === 0,
+  );
+
+  record(
+    'Meal plan generation',
+    spawnSync('node', ['scripts/validate-meal-plan-generate.mjs'], { cwd: root, encoding: 'utf8', timeout: 60000 }).status === 0,
+  );
+
   const sprint86 = spawnSync('node', ['scripts/validate-sprint86-testflight-rc.mjs'], {
     cwd: root,
     encoding: 'utf8',

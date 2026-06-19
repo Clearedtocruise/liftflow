@@ -382,7 +382,7 @@ export function mapMeal(row: MealRow): Meal {
     userId: row.user_id,
     mealType: row.meal_type as Meal['mealType'],
     name: row.name,
-    scheduledDate: row.scheduled_date ?? undefined,
+    scheduledDate: row.scheduled_date ? row.scheduled_date.slice(0, 10) : undefined,
     calories: row.calories ?? undefined,
     proteinG: row.protein_g ?? undefined,
     carbsG: row.carbs_g ?? undefined,

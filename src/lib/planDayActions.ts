@@ -208,8 +208,25 @@ function formatWeekSchedule(weeklyPlan: WeeklyPlanEntry[]): string {
   return weeklyPlan.map((entry) => (entry.isRestDay ? `${entry.day}: Rest` : `${entry.day}: ${entry.title}`)).join('\n');
 }
 
-/** Home screen — Manage Day menu for today. */
-export function showHomeManageDayMenu(deps: PlanDayActionDeps, today = localDateString()) {
+export type ManageDayAction = {
+  id: string;
+  label: string;
+  destructive?: boolean;
+  onPress: () => void;
+};
+
+export type ManageDayMenuContent = {
+  weeklyPlan: WeeklyPlanEntry[];
+  todayDate: string;
+  todayLabel: string;
+  actions: ManageDayAction[];
+};
+
+/** Home screen — structured Manage Day menu content. */
+export function buildHomeManageDayMenu(
+  deps: PlanDayActionDeps,
+  today = localDateString(),
+): ManageDayMenuContent | null {
   const normalized = normalizeWorkouts(deps);
   const weeklyPlan = weeklyPlanFor(deps);
   const availableMoveTargets = moveTargetsForDate(weeklyPlan, today);
@@ -218,46 +235,61 @@ export function showHomeManageDayMenu(deps: PlanDayActionDeps, today = localDate
   const todayWorkout = plannedWorkoutOnDate(normalized, today);
   const tomorrow = addDays(today, 1);
   const hasOtherWorkouts = weeklyPlan.some((entry) => entry.date !== today && entry.workoutId);
-
-  type AlertOption = { text: string; style?: 'destructive' | 'cancel'; onPress?: () => void };
-  const options: AlertOption[] = [];
+  const actions: ManageDayAction[] = [];
 
   if (!todayWorkout && hasOtherWorkouts) {
-    options.push({ text: 'Do Today', onPress: () => promptDoToday(deps, today) });
+    actions.push({ id: 'do-today', label: 'Do Today', onPress: () => promptDoToday(deps, today) });
   }
 
   if (todayWorkout) {
-    options.push({
-      text: 'Move To Tomorrow',
+    actions.push({
+      id: 'move-tomorrow',
+      label: 'Move To Tomorrow',
       onPress: () => void executeAdapt(deps, { type: 'move', workoutId: todayWorkout.id, toDate: tomorrow }),
     });
-    options.push({
-      text: 'Move To Another Day',
+    actions.push({
+      id: 'move-day',
+      label: 'Move To Another Day',
       onPress: () => promptMoveToDay(deps, todayWorkout),
     });
-    options.push({
-      text: 'Swap With Rest Day',
+    actions.push({
+      id: 'swap-rest',
+      label: 'Swap With Rest Day',
       onPress: () => promptSwapWithRestDay(deps, todayWorkout),
     });
-    options.push({
-      text: 'Make Today Rest Day',
-      style: 'destructive',
+    actions.push({
+      id: 'make-rest',
+      label: 'Make Today Rest Day',
+      destructive: true,
       onPress: () => confirmSkip(deps, todayWorkout),
     });
   } else if (hasOtherWorkouts) {
-    options.push({ text: 'Swap With Rest Day', onPress: () => promptDoToday(deps, today) });
+    actions.push({ id: 'swap-rest', label: 'Swap With Rest Day', onPress: () => promptDoToday(deps, today) });
   }
 
-  if (options.length === 0) {
+  if (actions.length === 0) return null;
+
+  const todayLabel = todayWorkout ? `Today: ${todayWorkout.name}` : 'Today is a rest day';
+
+  return { weeklyPlan, todayDate: today, todayLabel, actions };
+}
+
+/** Home screen — legacy alert-based Manage Day menu. */
+export function showHomeManageDayMenu(deps: PlanDayActionDeps, today = localDateString()) {
+  const content = buildHomeManageDayMenu(deps, today);
+  if (!content) {
     Alert.alert('Manage Day', 'No planned workouts this week to adjust.');
     return;
   }
 
-  Alert.alert(
-    'Manage Day',
-    `${formatWeekSchedule(weeklyPlan)}\n\n${todayWorkout ? `Today: ${todayWorkout.name}` : 'Today is a rest day.'}`,
-    [...options, { text: 'Cancel', style: 'cancel' }],
-  );
+  Alert.alert('Manage Day', `${formatWeekSchedule(content.weeklyPlan)}\n\n${content.todayLabel}`, [
+    ...content.actions.map((action) => ({
+      text: action.label,
+      style: action.destructive ? ('destructive' as const) : undefined,
+      onPress: action.onPress,
+    })),
+    { text: 'Cancel', style: 'cancel' },
+  ]);
 }
 
 /** Weekly planner — Edit Day menu for a specific date. */

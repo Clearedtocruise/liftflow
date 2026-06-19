@@ -4,7 +4,7 @@ import { Card } from '@/components/layout/Card';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Spacing } from '@/constants/theme';
 import { useUnits } from '@/hooks/useUnits';
-import { formatWorkoutWeightForInput, adjustWeightKg } from '@/lib/unitConversion';
+import { adjustWeightKg, formatWorkoutWeightForInput } from '@/lib/unitConversion';
 import type { WorkoutExercise, WorkoutSet } from '@/types/workout';
 
 type WorkoutCardProps = {
@@ -81,7 +81,7 @@ export function WorkoutCard({ exercise, onEditSet }: WorkoutCardProps) {
             adjustWeightKg(lastSet.weight ?? 0, units.preferredWeightUnit, 1),
             units.preferredWeightUnit,
           )}{' '}
-          {units.weightLabel} × 4–6 · Tap a set to edit
+          {units.weightLabel} × {exercise.suggestedReps ?? lastSet.reps ?? '8–12'} · Tap a set to edit
         </AppText>
       ) : null}
     </Card>

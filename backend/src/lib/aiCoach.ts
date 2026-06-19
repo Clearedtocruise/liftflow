@@ -1,5 +1,7 @@
 import { answerSmartCoachQuestion, loadCoachContext } from './coachContext.js';
 import { loadRecoveryIntelligence } from './loadRecoveryIntelligence.js';
+import { localDateString, weekStartFromDateString } from './localDate.js';
+import { generateWeeklyMealPlanMeals } from './mealPlanTemplates.js';
 import { getOpenAI, hasOpenAI } from './openai.js';
 import { requireAdmin } from './supabase.js';
 import {
@@ -222,42 +224,15 @@ export async function coachResponse(context: string, message: string, userId: st
   };
 }
 
-export function generateWeeklyMealPlan(proteinG = 180, calories = 2400) {
-  const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  const templates = [
-    { type: 'pre_workout', name: 'Pre-workout banana and oats', calories: 280, proteinG: 12, carbsG: 48, fatG: 5 },
-    { type: 'post_workout', name: 'Protein shake with banana', calories: 300, proteinG: 30, carbsG: 30, fatG: 5 },
-    { type: 'breakfast', name: 'Greek yogurt bowl with berries', calories: 450, proteinG: 35, carbsG: 45, fatG: 12 },
-    { type: 'lunch', name: 'Grilled chicken rice bowl', calories: 650, proteinG: 50, carbsG: 60, fatG: 15 },
-    { type: 'snack', name: 'Apple with almond butter', calories: 220, proteinG: 6, carbsG: 24, fatG: 12 },
-    { type: 'dinner', name: 'Salmon with roasted vegetables', calories: 700, proteinG: 45, carbsG: 35, fatG: 28 },
-  ];
-
-  const start = new Date();
-  const day = start.getDay();
-  const diff = start.getDate() - day + (day === 0 ? -6 : 1);
-  start.setDate(diff);
-
-  const meals = days.flatMap((_, dayIndex) => {
-    const date = new Date(start);
-    date.setDate(start.getDate() + dayIndex);
-    const dateStr = date.toISOString().slice(0, 10);
-    return templates.map((t) => ({
-      mealType: t.type,
-      name: t.name,
-      scheduledDate: dateStr,
-      calories: Math.round(t.calories * (calories / 2400)),
-      proteinG: Math.round(t.proteinG * (proteinG / 180)),
-      carbsG: t.carbsG,
-      fatG: t.fatG,
-    }));
-  });
+export function generateWeeklyMealPlan(proteinG = 180, calories = 2400, dietaryStyle: 'balanced' | 'high_protein' | 'low_carb' | 'keto' | 'mediterranean' | 'vegetarian' = 'balanced') {
+  const weekStart = weekStartFromDateString(localDateString());
+  const meals = generateWeeklyMealPlanMeals(proteinG, calories, dietaryStyle, weekStart);
 
   return {
     name: 'Weekly Meal Plan',
-    weekStartDate: start.toISOString().slice(0, 10),
+    weekStartDate: weekStart,
     aiGenerated: true,
-    aiRationale: `Balanced plan targeting ~${calories} kcal and ${proteinG}g protein daily.`,
+    aiRationale: `Balanced plan targeting ~${calories} kcal and ${proteinG}g protein daily with rotating meals across the week.`,
     meals,
   };
 }

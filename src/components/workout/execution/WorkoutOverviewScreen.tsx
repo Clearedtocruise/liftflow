@@ -103,13 +103,13 @@ export function WorkoutOverviewScreen({
           <AppText variant="footnote" color="textSecondary">
             Pull to refresh on Home or start a manual session below.
           </AppText>
-          <PrimaryButton label="Open Manual Log" variant="secondary" onPress={() => router.push('/(tabs)/workout/manual-log')} />
+          <PrimaryButton label="Open Quick Log" variant="secondary" onPress={() => router.push('/(tabs)/workout/manual-log')} />
         </Card>
       )}
 
       <Pressable onPress={() => router.push('/(tabs)/workout/manual-log')} style={styles.manualLink}>
         <AppText variant="footnote" color="accent" align="center">
-          Manual Log
+          Quick log
         </AppText>
       </Pressable>
     </ScreenContainer>

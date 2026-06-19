@@ -1,3 +1,4 @@
+import { useFocusEffect } from '@react-navigation/native';
 import Constants from 'expo-constants';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
@@ -18,20 +19,27 @@ import { Brand, LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import { summarizeGoals } from '@/constants/trainingGoals';
 import { getPrimaryGymLabel, summarizeEquipment } from '@/constants/trainingProfile';
 import { summarizeUnitPreferences } from '@/constants/units';
+import { usePlanAdjustment } from '@/contexts/PlanAdjustmentContext';
 import { useAuth } from '@/hooks/useAuth';
 import { useSubscription } from '@/hooks/useSubscription';
 import { useUnits } from '@/hooks/useUnits';
+import { loadRolloverValidationState, type RolloverValidationState } from '@/lib/rolloverDebug';
+import { isTabataModeEnabled, TABATA_MODE_PREF_KEY, tabataModeSummary } from '@/lib/trainingPreferences';
 import { resolveUnitPreferences } from '@/lib/unitConversion';
 import { coachingPrefsPatch } from '@/lib/voice/voicePreferences';
+import { dataResetService, formatResetConfirmation, type DataResetType } from '@/services/dataResetService';
 import { deviceLocationService } from '@/services/deviceLocationService';
 import { exportService } from '@/services/exportService';
 import { feedbackService } from '@/services/feedbackService';
 import { userService } from '@/services/userService';
+import { useWorkoutSession } from '@/state/workout/WorkoutSessionContext';
 import type { ConfirmationMode } from '@/types/common';
 import type { VoiceInputMode } from '@/types/voice';
 
 export default function SettingsScreen() {
   const { user, signOut, refreshProfile, deleteAccount } = useAuth();
+  const { bumpRevision, dismiss } = usePlanAdjustment();
+  const { hydrate: hydrateWorkoutSession } = useWorkoutSession();
   const units = useUnits();
   const { isPremium, isFounder, isBetaTester } = useSubscription();
   const [confirmationMode, setConfirmationMode] = useState<ConfirmationMode>('smart');
@@ -39,8 +47,26 @@ export default function SettingsScreen() {
   const [voiceFeedback, setVoiceFeedback] = useState(true);
   const [voiceInputMode, setVoiceInputMode] = useState<VoiceInputMode>('push_to_talk');
   const [exporting, setExporting] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const [locationDetection, setLocationDetection] = useState(true);
   const [locationPermission, setLocationPermission] = useState<string>('—');
+  const [tabataMode, setTabataMode] = useState(false);
+  const [validationState, setValidationState] = useState<RolloverValidationState | null>(null);
+
+  const refreshValidationState = useCallback(async () => {
+    if (!user) {
+      setValidationState(null);
+      return;
+    }
+    const state = await loadRolloverValidationState(user.id, user.timezone);
+    setValidationState(state);
+  }, [user]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void refreshValidationState();
+    }, [refreshValidationState]),
+  );
 
   useEffect(() => {
     if (!user) return;
@@ -54,6 +80,7 @@ export default function SettingsScreen() {
         if (mode === 'tap_toggle' || mode === 'continuous' || mode === 'push_to_talk') {
           setVoiceInputMode(mode);
         }
+        setTabataMode(isTabataModeEnabled(result.data));
       }
     });
     deviceLocationService.getPermissionStatus().then((status) => {
@@ -122,6 +149,70 @@ export default function SettingsScreen() {
           },
         },
       ],
+    );
+  }
+
+  function confirmReset(type: DataResetType, label: string, detail: string) {
+    if (!user) return;
+    Alert.alert(
+      label,
+      `${detail}\n\nYour account, login, and subscription are kept.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reset',
+          style: 'destructive',
+          onPress: () => void runReset(type),
+        },
+      ],
+    );
+  }
+
+  async function runReset(type: DataResetType) {
+    if (!user) return;
+    setResetting(true);
+    const result = await dataResetService.resetData(user.id, type, user.timezone);
+    await hydrateWorkoutSession();
+    dismiss();
+    bumpRevision();
+    setResetting(false);
+    await refreshValidationState();
+    if (!result.success) {
+      Alert.alert('Reset failed', result.error);
+      return;
+    }
+    Alert.alert('Reset complete', formatResetConfirmation(result.data));
+  }
+
+  function handleResetWorkoutData() {
+    confirmReset(
+      'workout',
+      'Reset Workout Data',
+      'Deletes workout sessions, logged sets, weekly workout plans, moved/swapped days, and recovery history from workouts.',
+    );
+  }
+
+  function handleResetNutritionData() {
+    confirmReset(
+      'nutrition',
+      'Reset Nutrition Data',
+      'Deletes nutrition logs, completed meals, meal replacements, weekly meal plans, and shopping lists.',
+    );
+  }
+
+  function handleResetWorkoutAndNutritionData() {
+    confirmReset(
+      'both',
+      'Reset Workout + Nutrition Data',
+      'Deletes all workout and nutrition test data listed above.',
+    );
+  }
+
+  function handleFullTestReset() {
+    confirmReset(
+      'full',
+      'Full Test Reset',
+      'Deletes all generated plans and logs, clears equipment profile, and keeps your login, profile basics, and access.',
     );
   }
 
@@ -214,6 +305,32 @@ export default function SettingsScreen() {
           }}
         />
         <SettingsRow label="Wake phrase" value="Coming soon" />
+      </Card>
+
+      <View style={styles.sectionGap}>
+        <SectionHeader
+          title="Workout style"
+          subtitle="Tabata only when enabled — work and rest timers adjustable 10–45s in workout"
+        />
+      </View>
+      <Card style={styles.group}>
+        <SettingsRow
+          label="Tabata mode"
+          value={tabataMode ? `On · ${tabataModeSummary()}` : 'Off'}
+          icon={
+            <AppSymbol name="timer" fallback="⏱" size={20} tintColor={LiftFlowColors.textSecondary} />
+          }
+          onPress={async () => {
+            if (!user) return;
+            const next = !tabataMode;
+            setTabataMode(next);
+            const prefs = await userService.getPreferences(user.id);
+            const coaching = prefs.success ? prefs.data.coachingPreferences ?? {} : {};
+            await userService.updatePreferences(user.id, {
+              coachingPreferences: { ...coaching, [TABATA_MODE_PREF_KEY]: next },
+            });
+          }}
+        />
       </Card>
 
       <View style={styles.sectionGap}>
@@ -316,12 +433,19 @@ export default function SettingsScreen() {
           onPress={() => router.push('/(tabs)/progress')}
         />
         <SettingsRow
-          label="Training Experience"
-          value={user?.trainingExperience ?? 'Beginner'}
+          label="AI Coaching Hub"
+          value={`${user?.trainingExperience ?? 'Beginner'} · Recovery, training, nutrition`}
           icon={
             <AppSymbol name="person.fill" fallback={SYMBOL_FALLBACKS['person.fill']} size={20} tintColor={LiftFlowColors.textSecondary} />
           }
           onPress={() => router.push('/(tabs)/coaching')}
+        />
+        <SettingsRow
+          label="Daily recovery check-in"
+          icon={
+            <AppSymbol name="heart.fill" fallback="♥" size={20} tintColor={LiftFlowColors.textSecondary} />
+          }
+          onPress={() => router.push('/(features)/recovery-check-in')}
         />
       </Card>
 
@@ -459,8 +583,49 @@ export default function SettingsScreen() {
       </Card>
 
       <View style={styles.sectionGap}>
+        <SectionHeader title="Validation" subtitle="Current app state for testing" />
+      </View>
+      <Card style={styles.group}>
+        <ValidationDebugPanel state={validationState} onRefresh={refreshValidationState} />
+      </Card>
+
+      <View style={styles.sectionGap}>
         <SectionHeader title="Account" />
       </View>
+      <Card style={styles.group}>
+        <SettingsRow
+          label="Reset Workout Data"
+          value={resetting ? 'Resetting…' : undefined}
+          icon={
+            <AppSymbol name="arrow.counterclockwise" fallback="↺" size={20} tintColor={LiftFlowColors.textSecondary} />
+          }
+          onPress={resetting ? undefined : handleResetWorkoutData}
+        />
+        <SettingsRow
+          label="Reset Nutrition Data"
+          value={resetting ? 'Resetting…' : undefined}
+          icon={
+            <AppSymbol name="arrow.counterclockwise" fallback="↺" size={20} tintColor={LiftFlowColors.textSecondary} />
+          }
+          onPress={resetting ? undefined : handleResetNutritionData}
+        />
+        <SettingsRow
+          label="Reset Workout + Nutrition"
+          value={resetting ? 'Resetting…' : undefined}
+          icon={
+            <AppSymbol name="arrow.counterclockwise" fallback="↺" size={20} tintColor={LiftFlowColors.textSecondary} />
+          }
+          onPress={resetting ? undefined : handleResetWorkoutAndNutritionData}
+        />
+        <SettingsRow
+          label="Full Test Reset"
+          value={resetting ? 'Resetting…' : 'Includes equipment'}
+          icon={
+            <AppSymbol name="arrow.counterclockwise" fallback="↺" size={20} tintColor={LiftFlowColors.textSecondary} />
+          }
+          onPress={resetting ? undefined : handleFullTestReset}
+        />
+      </Card>
       <PrimaryButton label="Log Out" onPress={handleSignOut} variant="secondary" />
       <PrimaryButton label="Delete Account" onPress={handleDeleteAccount} variant="secondary" />
 
@@ -480,6 +645,62 @@ export default function SettingsScreen() {
         </AppText>
       </View>
     </ScreenContainer>
+  );
+}
+
+function formatDebugTimestamp(value: string | null): string {
+  if (!value) return '—';
+  try {
+    return new Date(value).toLocaleString();
+  } catch {
+    return value;
+  }
+}
+
+function ValidationDebugPanel({
+  state,
+  onRefresh,
+}: {
+  state: RolloverValidationState | null;
+  onRefresh: () => void;
+}) {
+  if (!state) {
+    return (
+      <View style={styles.validationPanel}>
+        <AppText variant="footnote" color="textSecondary">
+          Loading validation state…
+        </AppText>
+      </View>
+    );
+  }
+
+  const rows: [string, string][] = [
+    ['Current local date', state.currentLocalDate],
+    ['Current training day', state.currentTrainingDay],
+    ['Current workout week', state.currentWorkoutWeek],
+    ['Current nutrition week', state.currentNutritionWeek],
+    ['Training week #', state.trainingWeekNumber != null ? String(state.trainingWeekNumber) : '—'],
+    ['Active workout plan ID', state.activeWorkoutPlanId ?? '—'],
+    ['Active nutrition plan ID', state.activeNutritionPlanId ?? '—'],
+    ['Last reset time', formatDebugTimestamp(state.lastResetTime)],
+    ['Last daily rollover', formatDebugTimestamp(state.lastDailyRollover)],
+    ['Last weekly rollover', formatDebugTimestamp(state.lastWeeklyRollover)],
+  ];
+
+  return (
+    <View style={styles.validationPanel}>
+      {rows.map(([label, value]) => (
+        <View key={label} style={styles.validationRow}>
+          <AppText variant="caption" color="textTertiary">
+            {label}
+          </AppText>
+          <AppText variant="footnote" color="textSecondary" style={styles.validationValue}>
+            {value}
+          </AppText>
+        </View>
+      ))}
+      <PrimaryButton label="Refresh validation" onPress={onRefresh} variant="secondary" />
+    </View>
   );
 }
 
@@ -590,5 +811,15 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: Spacing.md,
     color: LiftFlowColors.textPrimary,
+  },
+  validationPanel: {
+    gap: Spacing.sm,
+    paddingVertical: Spacing.xs,
+  },
+  validationRow: {
+    gap: 2,
+  },
+  validationValue: {
+    fontFamily: 'Menlo',
   },
 });

@@ -258,6 +258,66 @@ async function createWorkoutSession(
   return ok(session);
 }
 
+async function applySessionExercisePlanInternal(
+  sessionId: string,
+  userId: string,
+  exercises: EditableWorkoutExercise[],
+): Promise<ServiceResult<WorkoutSession>> {
+  try {
+    let session = await loadSession(sessionId);
+    if (!session) return fail('Session not found');
+
+    const desiredNames = exercises.map((exercise) => exercise.name.trim().toLowerCase());
+    for (const current of session.exercises) {
+      const name = current.exercise?.name?.trim().toLowerCase() ?? '';
+      if (!desiredNames.includes(name)) {
+        await supabase.from('workout_sets').delete().eq('workout_exercise_id', current.id);
+        await supabase.from('workout_exercises').delete().eq('id', current.id);
+      }
+    }
+
+    session = await loadSession(sessionId);
+    if (!session) return fail('Session not found');
+
+    for (let index = 0; index < exercises.length; index += 1) {
+      const template = exercises[index];
+      const normalized = template.name.trim();
+      const existing = session.exercises.find(
+        (exercise) => exercise.exercise?.name?.trim().toLowerCase() === normalized.toLowerCase(),
+      );
+
+      if (existing) {
+        await supabase
+          .from('workout_exercises')
+          .update({
+            sort_order: index,
+            suggested_reps: template.repRange ?? undefined,
+            suggested_weight: template.weightLbs ? template.weightLbs / 2.2046226218 : undefined,
+          })
+          .eq('id', existing.id);
+        continue;
+      }
+
+      const exerciseIdResult = await findOrCreateExerciseByNameInternal(normalized, userId);
+      if (!exerciseIdResult) continue;
+
+      await supabase.from('workout_exercises').insert({
+        session_id: sessionId,
+        exercise_id: exerciseIdResult,
+        sort_order: index,
+        suggested_reps: template.repRange ?? undefined,
+        suggested_weight: template.weightLbs ? template.weightLbs / 2.2046226218 : undefined,
+      });
+    }
+
+    const updated = await loadSession(sessionId);
+    if (!updated) return fail('Failed to load session');
+    return ok(updated);
+  } catch (e) {
+    return fromError(e);
+  }
+}
+
 export const workoutService: IWorkoutService = {
   async startSession(userId, payload: StartSessionPayload) {
     try {
@@ -279,7 +339,6 @@ export const workoutService: IWorkoutService = {
       if (plannedError) return fail(plannedError.message);
       if (!planned) return fail('Planned workout not found');
 
-      const exercises = await loadPlannedExercises(plannedWorkoutId);
       const startResult = await createWorkoutSession(userId, {
         ...payload,
         plannedWorkoutId,
@@ -288,8 +347,18 @@ export const workoutService: IWorkoutService = {
 
       if (!startResult.success) return startResult;
 
-      if (exercises.length > 0) {
-        await preloadSessionExercises(startResult.data.id, userId, exercises);
+      if (payload.exercisePlan && payload.exercisePlan.length > 0) {
+        const applyResult = await applySessionExercisePlanInternal(
+          startResult.data.id,
+          userId,
+          payload.exercisePlan,
+        );
+        if (!applyResult.success) return applyResult;
+      } else {
+        const exercises = await loadPlannedExercises(plannedWorkoutId);
+        if (exercises.length > 0) {
+          await preloadSessionExercises(startResult.data.id, userId, exercises);
+        }
       }
 
       await syncPlannedWorkoutStatus(plannedWorkoutId, 'active');
@@ -689,6 +758,33 @@ export const workoutService: IWorkoutService = {
     }
   },
 
+  async skipActiveRestTimer(userId: string) {
+    try {
+      const sessionResult = await this.getActiveSession(userId);
+      if (!sessionResult.success || !sessionResult.data) return ok(undefined);
+
+      const { data: rest, error } = await supabase
+        .from('rest_periods')
+        .select('*')
+        .eq('session_id', sessionResult.data.id)
+        .is('ended_at', null)
+        .order('started_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) return fail(error.message);
+      if (!rest) return ok(undefined);
+
+      const elapsed = Math.max(
+        0,
+        Math.floor((Date.now() - new Date(rest.started_at).getTime()) / 1000),
+      );
+      return this.endRestTimer(rest.id, elapsed, true);
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
   async endRestTimer(restPeriodId, actualSeconds, wasSkipped = false) {
     try {
       const { data, error } = await supabase
@@ -894,58 +990,6 @@ export const workoutService: IWorkoutService = {
   },
 
   async applySessionExercisePlan(sessionId: string, userId: string, exercises: EditableWorkoutExercise[]) {
-    try {
-      let session = await loadSession(sessionId);
-      if (!session) return fail('Session not found');
-
-      const desiredNames = exercises.map((exercise) => exercise.name.trim().toLowerCase());
-      for (const current of session.exercises) {
-        const name = current.exercise?.name?.trim().toLowerCase() ?? '';
-        if (!desiredNames.includes(name)) {
-          await supabase.from('workout_sets').delete().eq('workout_exercise_id', current.id);
-          await supabase.from('workout_exercises').delete().eq('id', current.id);
-        }
-      }
-
-      session = await loadSession(sessionId);
-      if (!session) return fail('Session not found');
-
-      for (let index = 0; index < exercises.length; index += 1) {
-        const template = exercises[index];
-        const normalized = template.name.trim();
-        const existing = session.exercises.find(
-          (exercise) => exercise.exercise?.name?.trim().toLowerCase() === normalized.toLowerCase(),
-        );
-
-        if (existing) {
-          await supabase
-            .from('workout_exercises')
-            .update({
-              sort_order: index,
-              suggested_reps: template.repRange ?? undefined,
-              suggested_weight: template.weightLbs ? template.weightLbs / 2.2046226218 : undefined,
-            })
-            .eq('id', existing.id);
-          continue;
-        }
-
-        const exerciseIdResult = await findOrCreateExerciseByNameInternal(normalized, userId);
-        if (!exerciseIdResult) continue;
-
-        await supabase.from('workout_exercises').insert({
-          session_id: sessionId,
-          exercise_id: exerciseIdResult,
-          sort_order: index,
-          suggested_reps: template.repRange ?? undefined,
-          suggested_weight: template.weightLbs ? template.weightLbs / 2.2046226218 : undefined,
-        });
-      }
-
-      const updated = await loadSession(sessionId);
-      if (!updated) return fail('Failed to load session');
-      return ok(updated);
-    } catch (e) {
-      return fromError(e);
-    }
+    return applySessionExercisePlanInternal(sessionId, userId, exercises);
   },
 };

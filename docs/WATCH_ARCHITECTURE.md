@@ -36,7 +36,8 @@ flowchart LR
 | `workout_state` | Phone → Watch | Active set, rest timer, recovery, recommendations |
 | `motion_batch` | Watch → Phone | Accelerometer/gyro rep detection |
 | `voice_command` | Watch → Phone | Hands-free logging & queries |
-| `skip_rest` / `next_set` | Watch → Phone | Rest control |
+| `skip_rest` / `next_set` / `log_set` | Watch → Phone | Rest control & set logging |
+| `start_workout` | Watch → Phone | Start today's planned workout from wrist |
 | `rep_correction` | Watch → Phone | Manual rep fix |
 | `workout_sync` | Watch → Phone | HR, steps, calories batch |
 | `health_sync` | Watch → Phone | Recovery data sync |

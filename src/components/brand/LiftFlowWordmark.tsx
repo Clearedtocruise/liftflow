@@ -10,9 +10,9 @@ type LiftFlowWordmarkProps = {
 };
 
 const SIZES = {
-  sm: { fontSize: 14, letterSpacing: 4 },
-  md: { fontSize: 18, letterSpacing: 5 },
-  lg: { fontSize: 22, letterSpacing: 6 },
+  sm: { fontSize: 14, lineHeight: 18, letterSpacing: 4 },
+  md: { fontSize: 18, lineHeight: 24, letterSpacing: 5 },
+  lg: { fontSize: 28, lineHeight: 34, letterSpacing: 5 },
 } as const;
 
 export function LiftFlowWordmark({ size = 'md', align = 'center', showTagline = false }: LiftFlowWordmarkProps) {
@@ -21,7 +21,7 @@ export function LiftFlowWordmark({ size = 'md', align = 'center', showTagline = 
   return (
     <View style={[styles.block, align === 'center' && styles.centered]}>
       <View style={[styles.row, align === 'center' && styles.centered]}>
-        <AppText variant="caption" align={align} style={[styles.word, scale]}>
+        <AppText align={align} style={[styles.word, scale]}>
           {Brand.name}
         </AppText>
       </View>
@@ -37,6 +37,7 @@ export function LiftFlowWordmark({ size = 'md', align = 'center', showTagline = 
 const styles = StyleSheet.create({
   block: {
     gap: 6,
+    maxWidth: '100%',
   },
   row: {
     flexDirection: 'row',

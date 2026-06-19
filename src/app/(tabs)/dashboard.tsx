@@ -2,11 +2,12 @@ import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, RefreshControl, StyleSheet, View, type ViewStyle } from 'react-native';
+import { Alert, InteractionManager, Pressable, RefreshControl, StyleSheet, View, type ViewStyle } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { HomeNextUpCard } from '@/components/dashboard/HomeNextUpCard';
 import { HomePlanAdjustedBanner } from '@/components/dashboard/HomePlanAdjustedBanner';
+import { ManageDayModal } from '@/components/dashboard/ManageDayModal';
 import { RingGauge } from '@/components/dashboard/RingGauge';
 import { WeeklyReviewCard } from '@/components/dashboard/WeeklyReviewCard';
 import { InsightCard } from '@/components/insights/InsightCard';
@@ -16,12 +17,14 @@ import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { AppText } from '@/components/ui/AppText';
 import { HOME_ACTIVITY_OPTIONS } from '@/constants/activityOptions';
 import { Brand, LiftFlowColors, Radius, Spacing } from '@/constants/theme';
-import { pickDefaultLocation } from '@/constants/trainingProfile';
 import { usePlanAdjustment } from '@/contexts/PlanAdjustmentContext';
+import { useAppResume } from '@/hooks/useAppResume';
 import { useAuth } from '@/hooks/useAuth';
 import { useInsightRotator } from '@/hooks/useInsightRotator';
-import { useLocalDayRollover } from '@/hooks/useLocalDayRollover';
+import { useLocalCalendarDay } from '@/hooks/useLocalCalendarDay';
+import { useLocalWeekRollover } from '@/hooks/useLocalWeekRollover';
 import { useSubscription } from '@/hooks/useSubscription';
+import { useTabataModePreference } from '@/hooks/useTabataModePreference';
 import { useUnits } from '@/hooks/useUnits';
 import { closingWeekStart, useWeeklyReviewWindow } from '@/hooks/useWeeklyReviewPrompt';
 import { useWorkoutLocations } from '@/hooks/useWorkoutLocations';
@@ -30,15 +33,21 @@ import {
     resolveCoachTrainingGuidance,
     validateWorkoutAssignmentConsistency,
 } from '@/lib/activeTrainingDay';
-import { deviceTimeZone, formatScheduledDbTime, localDateString } from '@/lib/localDate';
+import { deviceTimeZone, formatScheduledDbTime } from '@/lib/localDate';
 import {
     aggregateDailyMeals,
     findNextMeal,
+    mealsForCalendarDay,
 } from '@/lib/mealAggregation';
 import { formatWorkoutTime, scheduleFromProfile, scheduledTimesForDay } from '@/lib/mealSchedule';
-import { showHomeManageDayMenu } from '@/lib/planDayActions';
-import { logStartup } from '@/lib/startupLogger';
+import { planDataCache } from '@/lib/planDataCache';
+import { warmWeekPlanData } from '@/lib/planDataPrefetch';
+import { buildHomeManageDayMenu } from '@/lib/planDayActions';
+import { recoveryScoreColor } from '@/lib/recoveryScoreColor';
+import { startPlannedWorkout } from '@/lib/startPlannedWorkout';
+import { logStartup, printStartupReport } from '@/lib/startupLogger';
 import { buildWeekPlan, dedupePlannedWorkoutsByDate, getWeekRange } from '@/lib/weekPlan';
+import { withTimeout } from '@/lib/withTimeout';
 import { estimateWorkoutDurationMinutes, exercisesFromPlannedWorkout } from '@/lib/workoutPlan';
 import { analyticsService } from '@/services/analyticsService';
 import { nutritionService } from '@/services/nutritionService';
@@ -46,6 +55,7 @@ import { recoveryService } from '@/services/recoveryService';
 import { trainingService } from '@/services/trainingService';
 import { userService } from '@/services/userService';
 import { weeklyCloseoutService } from '@/services/weeklyCloseoutService';
+import { useWorkoutPlanDraft } from '@/state/workout/WorkoutPlanDraftContext';
 import { useWorkoutSession } from '@/state/workout/WorkoutSessionContext';
 import type { DashboardSummary, Meal, NutritionGoals, PlannedWorkout, ProgramDashboard } from '@/types';
 import type { RecoveryIntelligenceReport } from '@/types/recoveryIntelligence';
@@ -56,7 +66,9 @@ export default function DashboardScreen() {
   const { isPremium } = useSubscription();
   const units = useUnits();
   const { insight } = useInsightRotator();
-  const { startSessionFromPlanned } = useWorkoutSession();
+  const { startSessionFromPlanned, refreshSession } = useWorkoutSession();
+  const { setPlannedWorkout, setExercises } = useWorkoutPlanDraft();
+  const { tabataModeEnabled } = useTabataModePreference();
   const { locations, selectedId } = useWorkoutLocations(user?.id);
   const [data, setData] = useState<DashboardSummary | null>(null);
   const [recoveryScore, setRecoveryScore] = useState<number | null>(null);
@@ -72,10 +84,17 @@ export default function DashboardScreen() {
   const [adaptingPlan, setAdaptingPlan] = useState(false);
   const [acceptingWeeklyPlan, setAcceptingWeeklyPlan] = useState(false);
   const [weeklyCloseoutId, setWeeklyCloseoutId] = useState<string | null>(null);
+  const [manageDayOpen, setManageDayOpen] = useState(false);
   const homeRenderedRef = useRef(false);
   const appReadyLoggedRef = useRef(false);
+  const loadGenerationRef = useRef(0);
+  const hydratedFromCacheRef = useRef(false);
+  const skipFocusLoadRef = useRef(true);
+  const regenCheckedRef = useRef(false);
+  const isPremiumRef = useRef(isPremium);
+  isPremiumRef.current = isPremium;
 
-  const today = useMemo(() => localDateString(new Date(), user?.timezone), [user?.timezone]);
+  const today = useLocalCalendarDay(user?.timezone);
   const showWeeklyReview = useWeeklyReviewWindow(user?.timezone);
   const closingWeek = useMemo(() => closingWeekStart(new Date(), user?.timezone), [user?.timezone]);
 
@@ -96,85 +115,215 @@ export default function DashboardScreen() {
     }
   }, [isProfileReady, user]);
 
-  const load = useCallback(async () => {
-    if (!user) return;
+  const load = useCallback(async (options?: { silent?: boolean }) => {
+    if (!user) {
+      setProgramLoading(false);
+      setSummaryLoading(false);
+      return;
+    }
 
-    setProgramLoading(true);
-    setSummaryLoading(true);
+    const generation = ++loadGenerationRef.current;
+    const silent = options?.silent ?? hydratedFromCacheRef.current;
+
+    if (!silent) {
+      setProgramLoading(true);
+    }
 
     const { from, to } = getWeekRange(new Date(), user?.timezone);
 
-    void nutritionService.pruneDuplicateMeals(user.id);
-
-    void Promise.all([
-      trainingService.getDashboard(user.id),
-      trainingService.getPlannedWorkouts(user.id, from, to, user.timezone),
-    ]).then(([programResult, plannedResult]) => {
-      if (programResult.success) setProgram(programResult.data);
-      if (plannedResult.success) {
-        setWeekWorkouts(dedupePlannedWorkoutsByDate(plannedResult.data, new Date(), user.timezone));
+    const applyWeekCache = (cached: Awaited<ReturnType<typeof planDataCache.readWeek>>) => {
+      if (cached.workouts.length > 0) {
+        const workouts = dedupePlannedWorkoutsByDate(cached.workouts, new Date(), user.timezone);
+        setWeekWorkouts(workouts);
+        hydratedFromCacheRef.current = true;
+        setProgramLoading(false);
       }
-      setProgramLoading(false);
-      logStartup('WORKOUTS_LOADED');
+      if (cached.goals) {
+        setNutritionGoals(cached.goals);
+        hydratedFromCacheRef.current = true;
+      }
+      if (cached.meals.length > 0) {
+        setTodayMeals(mealsForCalendarDay(cached.meals, today));
+        hydratedFromCacheRef.current = true;
+        setSummaryLoading(false);
+      }
+      if (cached.program) setProgram(cached.program);
+    };
+
+    try {
+      const cached = await planDataCache.readWeek(user.id, from, to);
+      if (generation !== loadGenerationRef.current) return;
+      applyWeekCache(cached);
+    } catch (error) {
+      console.warn('[dashboard] workout plan load failed', error);
+    } finally {
+      if (generation === loadGenerationRef.current) {
+        setProgramLoading(false);
+        setSummaryLoading(false);
+        setRefreshing(false);
+      }
+    }
+
+    void withTimeout(
+      warmWeekPlanData(user.id, user.timezone),
+      hydratedFromCacheRef.current ? 8_000 : 10_000,
+      'week plan warm',
+    )
+      .catch(() => undefined)
+      .then(async () => {
+        if (generation !== loadGenerationRef.current) return;
+        try {
+          const fresh = await planDataCache.readWeek(user.id, from, to);
+          if (generation !== loadGenerationRef.current) return;
+          applyWeekCache(fresh);
+          logStartup('WORKOUT_PLAN_LOADED', { count: fresh.workouts.length });
+          logStartup('WORKOUTS_LOADED');
+          if (fresh.meals.length > 0) {
+            logStartup('NUTRITION_PLAN_LOADED', { count: fresh.meals.length });
+          }
+        } catch (error) {
+          console.warn('[dashboard] week plan refresh failed', error);
+        }
+      });
+
+    InteractionManager.runAfterInteractions(() => {
+      void (async () => {
+        try {
+          const [programResult, dashResult] = await Promise.all([
+            trainingService.getDashboard(user.id),
+            analyticsService.getDashboard(user.id),
+          ]);
+          if (generation !== loadGenerationRef.current) return;
+          if (programResult.success) {
+            setProgram(programResult.data);
+            void planDataCache.writeProgram(user.id, from, to, programResult.data);
+          }
+          if (dashResult.success) setData(dashResult.data);
+        } catch (error) {
+          console.warn('[dashboard] deferred dashboard load failed', error);
+        }
+      })();
+
+      void (async () => {
+        try {
+          const recoveryResult = isPremiumRef.current
+            ? await recoveryService.getIntelligence(user.id)
+            : await recoveryService.getToday(user.id);
+
+          if (generation !== loadGenerationRef.current) return;
+
+          if (isPremiumRef.current) {
+            const intelResult = recoveryResult as Awaited<ReturnType<typeof recoveryService.getIntelligence>>;
+            if (intelResult.success) {
+              setRecoveryIntel(intelResult.data);
+              setRecoveryScore(intelResult.data.recoveryScore);
+            } else {
+              setRecoveryIntel(null);
+              setRecoveryScore(null);
+            }
+          } else {
+            const todayResult = recoveryResult as Awaited<ReturnType<typeof recoveryService.getToday>>;
+            setRecoveryIntel(null);
+            if (todayResult.success && todayResult.data) {
+              setRecoveryScore(todayResult.data.recoveryScore);
+            } else {
+              setRecoveryScore(null);
+            }
+          }
+          logStartup('RECOVERY_LOADED');
+        } catch (error) {
+          console.warn('[dashboard] recovery load failed', error);
+        }
+      })();
+
+      void nutritionService.pruneDuplicateMeals(user.id).catch(() => undefined);
     });
 
-    void Promise.all([
-      analyticsService.getDashboard(user.id),
-      nutritionService.getGoals(user.id),
-      nutritionService.getMealsForWeek(user.id, from, to),
-      isPremium ? recoveryService.getIntelligence(user.id) : recoveryService.getToday(user.id),
-    ]).then(([dashResult, goalsResult, mealsResult, recoveryResult]) => {
-      if (dashResult.success) setData(dashResult.data);
-      if (goalsResult.success) setNutritionGoals(goalsResult.data);
-      if (mealsResult.success) {
-        setTodayMeals(mealsResult.data.filter((meal) => meal.scheduledDate === today));
-      }
-
-      if (isPremium) {
-        const intelResult = recoveryResult as Awaited<ReturnType<typeof recoveryService.getIntelligence>>;
-        if (intelResult.success) {
-          setRecoveryIntel(intelResult.data);
-          setRecoveryScore(intelResult.data.recoveryScore);
-        } else {
-          setRecoveryIntel(null);
-          setRecoveryScore(null);
-        }
-      } else {
-        const todayResult = recoveryResult as Awaited<ReturnType<typeof recoveryService.getToday>>;
-        setRecoveryIntel(null);
-        if (todayResult.success && todayResult.data) {
-          setRecoveryScore(todayResult.data.recoveryScore);
-        } else {
-          setRecoveryScore(null);
-        }
-      }
-
-      setSummaryLoading(false);
-      setRefreshing(false);
-
-      if (!appReadyLoggedRef.current) {
-        appReadyLoggedRef.current = true;
-        logStartup('APP_READY');
-      }
-    });
-  }, [user, isPremium, today]);
+    if (!appReadyLoggedRef.current && generation === loadGenerationRef.current) {
+      appReadyLoggedRef.current = true;
+      logStartup('APP_READY');
+      printStartupReport();
+    }
+  }, [user?.id, user?.timezone, today]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    if (!user?.id || regenCheckedRef.current) return;
+    regenCheckedRef.current = true;
+
+    const task = InteractionManager.runAfterInteractions(() => {
+      void trainingService.regenerateProgramIfNeeded(user.id).then((regen) => {
+        if (regen.success && regen.data.regenerated) void load({ silent: true });
+      });
+    });
+
+    return () => task.cancel();
+  }, [user?.id, load]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    let cancelled = false;
+    const { from, to } = getWeekRange(new Date(), user.timezone);
+
+    void (async () => {
+      const cached = await planDataCache.readWeek(user.id, from, to);
+      if (cancelled) return;
+
+      if (cached.workouts.length > 0) {
+        setWeekWorkouts(cached.workouts);
+        setProgramLoading(false);
+        hydratedFromCacheRef.current = true;
+      }
+      if (cached.program) setProgram(cached.program);
+      if (cached.goals) setNutritionGoals(cached.goals);
+      if (cached.meals.length > 0) {
+        setTodayMeals(mealsForCalendarDay(cached.meals, today));
+        setSummaryLoading(false);
+        hydratedFromCacheRef.current = true;
+      }
+
+      const hasCache =
+        cached.workouts.length > 0 || cached.meals.length > 0 || cached.program != null;
+      if (hasCache) {
+        InteractionManager.runAfterInteractions(() => {
+          void load({ silent: true });
+        });
+      } else {
+        void warmWeekPlanData(user.id, user.timezone);
+        void load({ silent: false });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, user?.timezone, load, today]);
 
   useFocusEffect(
     useCallback(() => {
-      if (user) load();
+      if (skipFocusLoadRef.current) {
+        skipFocusLoadRef.current = false;
+        return;
+      }
+      if (user) void load({ silent: true });
     }, [user, load]),
   );
 
-  useLocalDayRollover(user?.timezone, () => {
-    load();
+  useAppResume(() => {
+    if (user) void load({ silent: true });
+  });
+
+  useLocalWeekRollover(user?.timezone, () => {
+    if (user) {
+      void load();
+      void trainingService.regenerateProgramIfNeeded(user.id).then((regen) => {
+        if (regen.success && regen.data.regenerated) void load();
+      });
+    }
   });
 
   useEffect(() => {
-    if (adjustment && user) load();
+    if (adjustment && user) void load({ silent: true });
   }, [adjustment?.id, revision, user, load]);
 
   useEffect(() => {
@@ -227,9 +376,22 @@ export default function DashboardScreen() {
   const todaysWorkout = activeTrainingDay.workout;
   const hasWorkoutToday = todaysWorkout != null;
   const nextPlanned = program?.nextWorkout;
-  const showWorkoutSection = !programLoading && (weekWorkouts.length > 0 || nextPlanned != null);
+  const showWorkoutSection = !programLoading;
   const scheduleWithWorkout = scheduleFromProfile(user, hasWorkoutToday);
   const hasRecoveryScore = recoveryScore != null;
+  const readinessScore = recoveryIntel?.factors?.muscleReadinessScore ?? null;
+
+  const handleRecoveryPress = useCallback(() => {
+    if (!hasRecoveryScore) {
+      router.push('/(features)/recovery-check-in');
+      return;
+    }
+    if (isPremium) {
+      router.push('/(features)/recovery-analysis');
+      return;
+    }
+    router.push('/(features)/recovery-check-in');
+  }, [hasRecoveryScore, isPremium]);
 
   const trainingLabel = coachGuidance.trainingLabel;
 
@@ -284,9 +446,9 @@ export default function DashboardScreen() {
   const workoutStartTime =
     formatScheduledDbTime(todaysWorkout?.scheduledTime) ?? formatWorkoutTime(scheduleWithWorkout);
 
-  async function handleManageDay() {
-    if (!user) return;
-    showHomeManageDayMenu(
+  const manageDayMenu = useMemo(() => {
+    if (!user) return null;
+    return buildHomeManageDayMenu(
       {
         userId: user.id,
         workouts: weekWorkouts,
@@ -297,20 +459,37 @@ export default function DashboardScreen() {
       },
       today,
     );
+  }, [user, weekWorkouts, setFromAdaptation, today, load]);
+
+  function handleManageDay() {
+    if (!manageDayMenu) {
+      Alert.alert('Manage Day', 'No planned workouts this week to adjust.');
+      return;
+    }
+    setManageDayOpen(true);
   }
 
   async function handleStartNextWorkout(planned: PlannedWorkout) {
-    if (!user) return;
-    const location = pickDefaultLocation(locations, selectedId);
+    if (!user || startingWorkout) return;
     setStartingWorkout(true);
-    const started = await startSessionFromPlanned(planned.id, {
-      name: planned.name,
-      gymName: location?.name ?? user.primaryGymName ?? undefined,
-      trainingLocation: location?.locationType ?? user.trainingLocation,
-      workoutLocationId: location?.id,
-    });
-    setStartingWorkout(false);
-    if (started) router.push('/(tabs)/workout');
+    try {
+      const result = await startPlannedWorkout({
+        user,
+        planned,
+        tabataModeEnabled,
+        locations,
+        selectedLocationId: selectedId,
+        startSessionFromPlanned,
+        refreshSession,
+      });
+      if (!result) return;
+
+      setPlannedWorkout(planned);
+      setExercises(result.sessionExercises);
+      router.push('/(tabs)/workout');
+    } finally {
+      setStartingWorkout(false);
+    }
   }
 
   return (
@@ -364,7 +543,7 @@ export default function DashboardScreen() {
       </Animated.View>
 
       <Animated.View entering={FadeInDown.delay(120).duration(400)}>
-        {programLoading || summaryLoading ? (
+        {programLoading ? (
           <Card style={styles.emptyWorkout} glow>
             <SkeletonBlock height={160} />
           </Card>
@@ -396,9 +575,16 @@ export default function DashboardScreen() {
                 : null
             }
             onLogMeal={() => router.push('/(tabs)/nutrition')}
+            onQuickLogMeal={() => router.push('/(tabs)/nutrition?log=1')}
+            onGenerateMealPlan={() => router.push('/(tabs)/nutrition?generate=1')}
+            onViewWorkout={() => {
+              if (!todaysWorkout) return;
+              router.push({ pathname: '/(tabs)/workout/day', params: { id: todaysWorkout.id } });
+            }}
             onStartWorkout={() => todaysWorkout && handleStartNextWorkout(todaysWorkout)}
             onManageDay={showWorkoutSection ? handleManageDay : undefined}
             onLogActivity={handleLogActivity}
+            tabataModeEnabled={tabataModeEnabled}
             showWorkoutSection={showWorkoutSection}
             isRestDay={!todaysWorkout}
             startingWorkout={startingWorkout}
@@ -441,36 +627,53 @@ export default function DashboardScreen() {
             </View>
           </Card>
         ) : (
-          <Card style={styles.recoveryCard} glow>
-            <AppText variant="label" color="accent">
-              Recovery
-            </AppText>
-            <View style={styles.gaugeRow}>
-              <RingGauge label="Score" value={recoveryScore} color={LiftFlowColors.success} />
-              <View style={styles.trainingBadge}>
-                <AppText variant="caption" color="textTertiary">
-                  Today
-                </AppText>
-                <AppText variant="headline" color="accent">
-                  {trainingLabel}
-                </AppText>
-                {recoveryIntel?.recoveryStatusLabel ? (
-                  <AppText variant="footnote" color="textSecondary" align="center">
-                    {recoveryIntel.recoveryStatusLabel}
-                  </AppText>
-                ) : !hasRecoveryScore ? (
-                  <AppText variant="footnote" color="textSecondary" align="center">
-                    Check in for your score
-                  </AppText>
+          <Pressable onPress={handleRecoveryPress} accessibilityRole="button">
+            <Card style={styles.recoveryCard} glow>
+              <AppText variant="label" color="accent">
+                Recovery
+              </AppText>
+              <View style={styles.gaugeRow}>
+                <RingGauge
+                  label="Score"
+                  value={recoveryScore}
+                  color={recoveryScoreColor(recoveryScore)}
+                />
+                {readinessScore != null ? (
+                  <RingGauge
+                    label="Readiness"
+                    value={readinessScore}
+                    color={recoveryScoreColor(readinessScore)}
+                  />
                 ) : null}
-                {recoveryIntel?.transparency?.estimatedFromDefaults ? (
-                  <AppText variant="caption" color="textTertiary" align="center">
-                    Partial check-in — some inputs estimated
+                <View style={styles.trainingBadge}>
+                  <AppText variant="caption" color="textTertiary">
+                    Today
                   </AppText>
-                ) : null}
+                  <AppText variant="headline" color="accent">
+                    {trainingLabel}
+                  </AppText>
+                  {recoveryIntel?.recoveryStatusLabel ? (
+                    <AppText variant="footnote" color="textSecondary" align="center">
+                      {recoveryIntel.recoveryStatusLabel}
+                    </AppText>
+                  ) : !hasRecoveryScore ? (
+                    <AppText variant="footnote" color="textSecondary" align="center">
+                      Tap to check in
+                    </AppText>
+                  ) : (
+                    <AppText variant="footnote" color="textSecondary" align="center">
+                      Tap for details
+                    </AppText>
+                  )}
+                  {recoveryIntel?.transparency?.estimatedFromDefaults ? (
+                    <AppText variant="caption" color="textTertiary" align="center">
+                      Partial check-in — some inputs estimated
+                    </AppText>
+                  ) : null}
+                </View>
               </View>
-            </View>
-          </Card>
+            </Card>
+          </Pressable>
         )}
       </Animated.View>
 
@@ -503,6 +706,17 @@ export default function DashboardScreen() {
           </AppText>
           <InsightCard insight={insight} />
         </Animated.View>
+      ) : null}
+
+      {manageDayMenu ? (
+        <ManageDayModal
+          visible={manageDayOpen}
+          weeklyPlan={manageDayMenu.weeklyPlan}
+          todayDate={manageDayMenu.todayDate}
+          todayLabel={manageDayMenu.todayLabel}
+          actions={manageDayMenu.actions}
+          onClose={() => setManageDayOpen(false)}
+        />
       ) : null}
     </ScreenContainer>
   );

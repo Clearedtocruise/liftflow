@@ -92,7 +92,7 @@ export function ManualSetEntry({ exercises, onLogSet, disabled }: ManualSetEntry
   return (
     <Card style={styles.card}>
       <AppText variant="subhead" color="textSecondary">
-        Manual Log
+        Quick log
       </AppText>
 
       <TextInput

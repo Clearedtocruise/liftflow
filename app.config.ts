@@ -32,7 +32,11 @@ const config: ExpoConfig = {
   ios: {
     icon: './assets/branding/one-more-icon-1024.png',
     bundleIdentifier: 'com.liftflow.app',
-    buildNumber: '13',
+    buildNumber: '14',
+    appleTeamId: 'DZXP5Q6649',
+    entitlements: {
+      'com.apple.security.application-groups': ['group.com.liftflow.app'],
+    },
     infoPlist: {
       NSMicrophoneUsageDescription: 'ONE MORE uses the microphone for voice workout logging and AI coaching.',
       NSSpeechRecognitionUsageDescription: 'ONE MORE converts speech to workout sets and coaching questions.',
@@ -46,7 +50,7 @@ const config: ExpoConfig = {
   },
   android: {
     package: 'com.liftflow.app',
-    versionCode: 13,
+    versionCode: 14,
     permissions: [
       'android.permission.ACCESS_COARSE_LOCATION',
       'android.permission.ACCESS_FINE_LOCATION',
@@ -95,6 +99,7 @@ const config: ExpoConfig = {
     ],
     // expo-notifications plugin omitted — package autolinks; strip push entitlement below.
     './plugins/withLocalNotificationsOnly.js',
+    ...(process.env.INCLUDE_WATCH_TARGET !== '0' ? (['@bacons/apple-targets'] as const) : []),
     [
       'expo-splash-screen',
       {
@@ -115,6 +120,22 @@ const config: ExpoConfig = {
     apiUrl,
     eas: {
       projectId: '62d95ef4-66d9-4638-8e66-93d27e1fb48d',
+      build: {
+        experimental: {
+          ios: {
+            appExtensions: [
+              {
+                targetName: 'ONEMOREWatch',
+                bundleIdentifier: 'com.liftflow.app.watch',
+                entitlements: {
+                  'com.apple.security.application-groups': ['group.com.liftflow.app'],
+                  'com.apple.developer.healthkit': true,
+                },
+              },
+            ],
+          },
+        },
+      },
     },
     supportUrl: 'https://liftflow-api.onrender.com/legal/support',
     privacyPolicyUrl: 'https://liftflow-api.onrender.com/legal/privacy',

@@ -64,10 +64,15 @@ export function MealReplaceSheet({
     Array<{ from: string; to: string; reason: string }>
   >([]);
   const [reasoning, setReasoning] = useState<string | null>(null);
+  const [offlineSuggestions, setOfflineSuggestions] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     if (!visible) {
       setReplacementMethod('smart');
+      setFetchError(null);
+      setOfflineSuggestions(false);
       return;
     }
   }, [visible]);
@@ -77,6 +82,7 @@ export function MealReplaceSheet({
 
     let cancelled = false;
     setLoading(true);
+    setFetchError(null);
 
     void nutritionAdvisoryService.getMealAlternatives(meal, reason, dietaryRestrictions).then((result) => {
       if (cancelled) return;
@@ -84,6 +90,10 @@ export function MealReplaceSheet({
         setAlternatives(result.data.alternatives);
         setIngredientAlternatives(result.data.ingredientAlternatives);
         setReasoning(result.data.reasoning);
+        setOfflineSuggestions(Boolean(result.data.offline));
+      } else {
+        setFetchError(result.error);
+        setAlternatives([]);
       }
       setLoading(false);
     });
@@ -91,7 +101,7 @@ export function MealReplaceSheet({
     return () => {
       cancelled = true;
     };
-  }, [visible, meal, mode, reason, dietaryRestrictions, replacementMethod]);
+  }, [visible, meal, mode, reason, dietaryRestrictions, replacementMethod, refreshKey]);
 
   if (!meal) return null;
 
@@ -147,6 +157,27 @@ export function MealReplaceSheet({
                   </Pressable>
                 ))}
               </ScrollView>
+            ) : null}
+
+            {offlineSuggestions && mode === 'meal' ? (
+              <View style={styles.offlineBadge}>
+                <AppText variant="caption" color="warning">
+                  Offline suggestions
+                </AppText>
+              </View>
+            ) : null}
+
+            {fetchError && mode === 'meal' ? (
+              <View style={styles.errorRow}>
+                <AppText variant="footnote" color="textSecondary">
+                  {fetchError}
+                </AppText>
+                <Pressable onPress={() => setRefreshKey((key) => key + 1)}>
+                  <AppText variant="caption" color="accent">
+                    Retry
+                  </AppText>
+                </Pressable>
+              </View>
             ) : null}
 
             {reasoning && mode === 'meal' ? (
@@ -274,5 +305,18 @@ const styles = StyleSheet.create({
   },
   ingredientSection: {
     gap: Spacing.sm,
+  },
+  offlineBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    borderRadius: Radius.full,
+    backgroundColor: LiftFlowColors.surfaceElevated,
+  },
+  errorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.md,
   },
 });

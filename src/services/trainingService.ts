@@ -2,6 +2,7 @@ import { api, apiClient } from '@/api/client';
 import { WORKOUT_PLAN_RULES_VERSION } from '@/constants/workout';
 import { fail, fromError, ok } from '@/lib/serviceResult';
 import { dedupePlannedWorkoutsByDate } from '@/lib/weekPlan';
+import { withTimeout } from '@/lib/withTimeout';
 import type { ITrainingService } from '@/services/interfaces';
 import { getAccessToken, supabase } from '@/supabase/client';
 import type {
@@ -192,14 +193,7 @@ export const trainingService: ITrainingService = {
   },
 
   async getPlannedWorkouts(userId, from, to, timeZone?: string | null) {
-    try {
-      const token = await getAccessToken();
-      const remote = await apiClient.get<PlannedRow[]>(
-        `/api/training/programs/planned?userId=${userId}&from=${from}&to=${to}`,
-        token,
-      );
-      return ok(dedupePlannedWorkoutsByDate((remote ?? []).map(mapPlanned), new Date(), timeZone));
-    } catch {
+    const fromSupabase = async () => {
       const { data, error } = await supabase
         .from('planned_workouts')
         .select('*')
@@ -209,8 +203,37 @@ export const trainingService: ITrainingService = {
         .order('scheduled_date', { ascending: true });
 
       if (error) return fail(error.message);
-      return ok(dedupePlannedWorkoutsByDate((data ?? []).map((row) => mapPlanned(row as PlannedRow)), new Date(), timeZone));
+      return ok(
+        dedupePlannedWorkoutsByDate((data ?? []).map((row) => mapPlanned(row as PlannedRow)), new Date(), timeZone),
+      );
+    };
+
+    const fromApi = async () => {
+      const token = await getAccessToken();
+      const remote = await withTimeout(
+        apiClient.get<PlannedRow[]>(
+          `/api/training/programs/planned?userId=${userId}&from=${from}&to=${to}`,
+          token,
+        ),
+        6_000,
+        'planned workouts API',
+      );
+      return ok(dedupePlannedWorkoutsByDate((remote ?? []).map(mapPlanned), new Date(), timeZone));
+    };
+
+    const [apiResult, sbResult] = await Promise.allSettled([fromApi(), fromSupabase()]);
+
+    if (apiResult.status === 'fulfilled' && apiResult.value.success) {
+      return apiResult.value;
     }
+    if (sbResult.status === 'fulfilled' && sbResult.value.success) {
+      return sbResult.value;
+    }
+
+    if (apiResult.status === 'fulfilled' && !apiResult.value.success) return apiResult.value;
+    if (sbResult.status === 'fulfilled' && !sbResult.value.success) return sbResult.value;
+
+    return fail('Could not load planned workouts');
   },
 
   async suggestMuscleGroups(userId) {
@@ -274,6 +297,13 @@ export const trainingService: ITrainingService = {
       const { from, to } = await import('@/lib/weekPlan').then((m) => m.getWeekRange());
       const weekRes = await this.getPlannedWorkouts(userId, from, to);
       const weekPlans = weekRes.success ? weekRes.data : [];
+
+      if (weekPlans.length === 0) {
+        const token = await getAccessToken();
+        const result = await api.regenerateProgram(userId, token, true);
+        return ok({ regenerated: result.regenerated });
+      }
+
       const lowExerciseCount = weekPlans.some((workout) => {
         if (workout.metadata?.sessionKind === 'cardio') return false;
         const count = workout.metadata?.exercises?.length ?? 0;

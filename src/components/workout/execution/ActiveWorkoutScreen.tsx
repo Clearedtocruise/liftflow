@@ -13,8 +13,10 @@ import { GuidedWorkoutMetrics, WorkoutProgressBar } from '@/components/workout/e
 import { SetLoggingControls } from '@/components/workout/execution/SetLoggingControls';
 import { WorkoutChallengeModal } from '@/components/workout/execution/WorkoutChallengeModal';
 import { WorkoutTimerOverlay } from '@/components/workout/execution/WorkoutTimerOverlay';
+import { WorkoutUpNextCard } from '@/components/workout/execution/WorkoutUpNextCard';
 import { ExerciseCoachCard } from '@/components/workout/ExerciseCoachCard';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
+import { useAppResume } from '@/hooks/useAppResume';
 import { useAuth } from '@/hooks/useAuth';
 import { useUnits } from '@/hooks/useUnits';
 import { formatWorkoutClockTime, useWorkoutElapsedSeconds } from '@/hooks/useWorkoutElapsedSeconds';
@@ -49,11 +51,13 @@ import {
     intervalPhaseLabel,
     resolveTraditionalRestSeconds,
 } from '@/lib/timerEngine';
+import { TABATA_BETWEEN_EXERCISE_REST_BOUNDS, TABATA_BETWEEN_EXERCISE_REST_DEFAULT, TABATA_INTERVAL_BOUNDS, TABATA_PREP_SECONDS_DEFAULT, clampTabataBetweenExerciseRest, clampTabataIntervalSeconds } from '@/lib/trainingPreferences';
 import { formatWorkoutWeightForInput } from '@/lib/unitConversion';
 import { pickWorkoutChallenge } from '@/lib/workoutChallengeFlow';
 import { normalizeExecutionMode } from '@/lib/workoutExecutionMode';
 import { parseTargetReps } from '@/lib/workoutPlan';
 import { logWorkoutProgressionDecision } from '@/lib/workoutProgressionDebug';
+import { resolveBetweenExerciseUpNext, resolveTabataPrepUpNext, resolveWorkoutUpNext } from '@/lib/workoutUpNext';
 import { workoutService } from '@/services/workoutService';
 import { useWorkoutSession } from '@/state/workout/WorkoutSessionContext';
 import type { Exercise, WorkoutSession } from '@/types';
@@ -66,6 +70,9 @@ import type {
 } from '@/types/workoutChallenge';
 import type { EditableWorkoutExercise, ExerciseHistorySet } from '@/types/workoutExecution';
 import type { WorkoutExecutionMode } from '@/types/workoutExecutionMode';
+
+/** Brief pause on exercise complete before auto-advancing (hands-free flow). */
+const AUTO_ADVANCE_EXERCISE_MS = 1800;
 
 type ActiveWorkoutScreenProps = {
   session: WorkoutSession;
@@ -91,6 +98,7 @@ export function ActiveWorkoutScreen({
     intervalTimer,
     circuitTimer,
     startIntervalTimer,
+    dismissIntervalTimer,
     toggleIntervalTimer,
     resetIntervalTimer,
     updateIntervalConfig,
@@ -100,6 +108,19 @@ export function ActiveWorkoutScreen({
     skipCircuitTimer,
     dismissCircuitTimer,
   } = useWorkoutTimerEngine(executionMode);
+
+  const handleIntervalConfigChange = useCallback(
+    (patch: Partial<{ workSeconds: number; restSeconds: number; rounds: number }>) => {
+      const next = { ...patch };
+      if (executionMode === 'tabata') {
+        if (next.workSeconds != null) next.workSeconds = clampTabataIntervalSeconds(next.workSeconds);
+        if (next.restSeconds != null) next.restSeconds = clampTabataIntervalSeconds(next.restSeconds);
+      }
+      updateIntervalConfig(next);
+    },
+    [executionMode, updateIntervalConfig],
+  );
+
   const { user } = useAuth();
   const figureGender = profileFigureGender(user?.sex);
   const units = useUnits();
@@ -120,6 +141,10 @@ export function ActiveWorkoutScreen({
   } = useWorkoutSession();
 
   const elapsedSeconds = useWorkoutElapsedSeconds(session.startedAt, session.status);
+
+  useAppResume(() => {
+    void refreshSession();
+  });
 
   const sortedExercises = useMemo(
     () => [...session.exercises].sort((a, b) => a.sortOrder - b.sortOrder),
@@ -146,11 +171,25 @@ export function ActiveWorkoutScreen({
   const [loadingMethod, setLoadingMethod] = useState<LoadingMethod>('external_load');
   const pendingAdvanceRef = useRef<number | null>(null);
   const pendingAdvanceAfterChallengeRef = useRef<(() => void) | null>(null);
+  const pendingExerciseAdvanceAfterRestRef = useRef(false);
+  const autoAdvanceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const advanceExerciseRef = useRef<() => void>(() => {});
   const pendingRoundIncrementRef = useRef(false);
   const offeredExerciseCompleteRef = useRef<number | null>(null);
   const [circuitRound, setCircuitRound] = useState(1);
   const [bonusSets, setBonusSets] = useState(0);
   const [exercisePickerVisible, setExercisePickerVisible] = useState(false);
+  const [intervalOverlayOpen, setIntervalOverlayOpen] = useState(false);
+  const [restOverlayOpen, setRestOverlayOpen] = useState(false);
+  const [circuitOverlayOpen, setCircuitOverlayOpen] = useState(false);
+  const [tabataBetweenExerciseRestSeconds, setTabataBetweenExerciseRestSeconds] = useState(
+    TABATA_BETWEEN_EXERCISE_REST_DEFAULT,
+  );
+  const [pendingAdvanceIndex, setPendingAdvanceIndex] = useState<number | null>(null);
+  const [isTabataPrepActive, setIsTabataPrepActive] = useState(false);
+  const tabataBetweenExercisePendingRef = useRef(false);
+  const tabataExercisePrepPendingRef = useRef(false);
+  const tabataSkipPrepAfterTransitionRef = useRef(false);
 
   const currentExercise = sortedExercises[currentIndex];
   const planMeta = planExercises[currentIndex] ?? planExercises.find(
@@ -179,6 +218,65 @@ export function ActiveWorkoutScreen({
     loggingMode === 'any' ? undefined : (loggingMode as Exclude<typeof loggingMode, 'any'>);
   const nextSetNumber = Math.min(completedSets.length + 1, targetSets);
   const remainingSets = Math.max(targetSets - completedSets.length, 0);
+
+  const workoutPosition = useMemo(() => {
+    if (
+      executionMode === 'tabata' &&
+      circuitTimer &&
+      circuitTimer.phase !== 'done' &&
+      isTabataPrepActive
+    ) {
+      return resolveTabataPrepUpNext(
+        currentExercise?.exercise?.name ?? 'Exercise',
+        targetSets,
+      );
+    }
+
+    if (
+      executionMode === 'tabata' &&
+      circuitTimer &&
+      circuitTimer.phase !== 'done' &&
+      pendingAdvanceIndex != null
+    ) {
+      const pendingExercise = sortedExercises[pendingAdvanceIndex];
+      const pendingMeta =
+        planExercises[pendingAdvanceIndex] ??
+        planExercises.find(
+          (item) =>
+            item.name.toLowerCase() === pendingExercise?.exercise?.name?.toLowerCase(),
+        );
+      return resolveBetweenExerciseUpNext(
+        pendingExercise?.exercise?.name ?? 'Next exercise',
+        pendingMeta?.sets ?? targetSets,
+      );
+    }
+
+    return resolveWorkoutUpNext({
+      exerciseName: currentExercise?.exercise?.name ?? 'Exercise',
+      targetSets,
+      completedSetsCount: completedSets.length,
+      isLastExercise,
+      nextExerciseName: nextExercise?.exercise?.name,
+      nextExerciseTargetSets: nextPlanMeta?.sets,
+      activeSetNumber:
+        executionModeUsesIntervalTimer(executionMode) && intervalTimer ? intervalTimer.round : null,
+    });
+  }, [
+    executionMode,
+    circuitTimer,
+    isTabataPrepActive,
+    pendingAdvanceIndex,
+    currentExercise?.exercise?.name,
+    targetSets,
+    completedSets.length,
+    isLastExercise,
+    nextExercise?.exercise?.name,
+    nextPlanMeta?.sets,
+    intervalTimer?.round,
+    sortedExercises,
+    planExercises,
+  ]);
+
   const workoutProgress = useMemo(
     () => computeWorkoutSetProgress(session.exercises, planExercises),
     [session.exercises, planExercises],
@@ -262,12 +360,43 @@ export function ActiveWorkoutScreen({
   }, [restSecondsRemaining]);
 
   useEffect(() => {
+    if (!restActive) setRestOverlayOpen(false);
+  }, [restActive]);
+
+  useEffect(() => {
+    if (!intervalTimer) setIntervalOverlayOpen(false);
+  }, [intervalTimer]);
+
+  useEffect(() => {
+    if (!circuitTimer || circuitTimer.phase === 'done') setCircuitOverlayOpen(false);
+  }, [circuitTimer]);
+
+  useEffect(() => {
+    setIntervalOverlayOpen(false);
+    setRestOverlayOpen(false);
+    setCircuitOverlayOpen(false);
+    setIsTabataPrepActive(false);
+    tabataBetweenExercisePendingRef.current = false;
+    tabataExercisePrepPendingRef.current = false;
+    tabataSkipPrepAfterTransitionRef.current = false;
+    setPendingAdvanceIndex(null);
+
+    if (!executionModeUsesIntervalTimer(executionMode)) {
+      dismissIntervalTimer();
+    }
+    if (executionMode !== 'tabata' && executionMode !== 'circuit') {
+      dismissCircuitTimer();
+    }
+  }, [executionMode, dismissIntervalTimer, dismissCircuitTimer]);
+
+  useEffect(() => {
     const nextRest = planMeta?.restSeconds ?? resolveTraditionalRestSeconds(executionMode);
     setRestTargetSeconds(nextRest);
   }, [currentExercise?.id, planMeta?.restSeconds, executionMode]);
 
   useEffect(() => {
     if (circuitTimer?.phase !== 'done') return;
+    if (tabataExercisePrepPendingRef.current || tabataBetweenExercisePendingRef.current) return;
     dismissCircuitTimer();
     if (pendingRoundIncrementRef.current) {
       setCircuitRound((round) => round + 1);
@@ -276,6 +405,7 @@ export function ActiveWorkoutScreen({
     if (pendingAdvanceRef.current != null) {
       setCurrentIndex(pendingAdvanceRef.current);
       pendingAdvanceRef.current = null;
+      setPendingAdvanceIndex(null);
       setShowComplete(false);
     }
   }, [circuitTimer?.phase, dismissCircuitTimer]);
@@ -353,8 +483,88 @@ export function ActiveWorkoutScreen({
 
   useEffect(() => {
     if (!executionModeUsesIntervalTimer(executionMode) || showComplete) return;
+    if (circuitTimer && circuitTimer.phase !== 'done') return;
+
+    if (executionMode === 'tabata') {
+      const skipPrep = tabataSkipPrepAfterTransitionRef.current;
+      tabataSkipPrepAfterTransitionRef.current = false;
+      if (!skipPrep) {
+        tabataExercisePrepPendingRef.current = true;
+        setIsTabataPrepActive(true);
+        startCircuitTransition('transition', 1, {
+          restBetweenExercisesSeconds: TABATA_PREP_SECONDS_DEFAULT,
+        }, TABATA_PREP_SECONDS_DEFAULT);
+        return;
+      }
+    }
+
     startIntervalTimer(undefined, executionMode === 'tabata');
-  }, [currentExercise?.id, executionMode, showComplete, startIntervalTimer]);
+    setIntervalOverlayOpen(false);
+  }, [currentExercise?.id, executionMode, showComplete, startIntervalTimer, circuitTimer?.phase]);
+
+  useEffect(() => {
+    if (executionMode !== 'tabata' || showComplete || isPaused) return;
+    if (intervalTimer?.phase !== 'done') return;
+    if (completedSets.length < targetSets) return;
+    setShowComplete(true);
+    setExerciseHadPr(completedSets.some((set) => set.isPr));
+  }, [
+    executionMode,
+    showComplete,
+    isPaused,
+    intervalTimer?.phase,
+    completedSets,
+    targetSets,
+  ]);
+
+  const scheduleAutoExerciseAdvance = useCallback(() => {
+    if (autoAdvanceTimeoutRef.current) clearTimeout(autoAdvanceTimeoutRef.current);
+    autoAdvanceTimeoutRef.current = setTimeout(() => {
+      autoAdvanceTimeoutRef.current = null;
+      advanceExerciseRef.current();
+    }, AUTO_ADVANCE_EXERCISE_MS);
+  }, []);
+
+  useEffect(() => {
+    if (!showComplete || restActive || activeChallenge || isPaused) return;
+    scheduleAutoExerciseAdvance();
+    return () => {
+      if (autoAdvanceTimeoutRef.current) {
+        clearTimeout(autoAdvanceTimeoutRef.current);
+        autoAdvanceTimeoutRef.current = null;
+      }
+    };
+  }, [showComplete, restActive, activeChallenge, isPaused, currentIndex, scheduleAutoExerciseAdvance]);
+
+  useEffect(() => {
+    return () => {
+      if (autoAdvanceTimeoutRef.current) clearTimeout(autoAdvanceTimeoutRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!circuitTimer || circuitTimer.phase !== 'done') return;
+
+    if (tabataExercisePrepPendingRef.current) {
+      tabataExercisePrepPendingRef.current = false;
+      setIsTabataPrepActive(false);
+      dismissCircuitTimer();
+      startIntervalTimer(undefined, true);
+      setIntervalOverlayOpen(false);
+      return;
+    }
+
+    if (!tabataBetweenExercisePendingRef.current) return;
+    tabataBetweenExercisePendingRef.current = false;
+    tabataSkipPrepAfterTransitionRef.current = true;
+    if (pendingAdvanceRef.current != null) {
+      setCurrentIndex(pendingAdvanceRef.current);
+      pendingAdvanceRef.current = null;
+    }
+    setPendingAdvanceIndex(null);
+    dismissCircuitTimer();
+    setShowComplete(false);
+  }, [circuitTimer, dismissCircuitTimer, startIntervalTimer]);
 
   useEffect(() => {
     setBonusSets(0);
@@ -458,6 +668,13 @@ export function ActiveWorkoutScreen({
     setShowComplete(false);
   }, [restSecondsRemaining]);
 
+  useEffect(() => {
+    if (restSecondsRemaining !== 0) return;
+    if (!pendingExerciseAdvanceAfterRestRef.current) return;
+    pendingExerciseAdvanceAfterRestRef.current = false;
+    scheduleAutoExerciseAdvance();
+  }, [restSecondsRemaining, scheduleAutoExerciseAdvance]);
+
   const exerciseVolume = completedSets.reduce((total, set) => {
     if (!set.weight || !set.reps) return total;
     return total + set.weight * set.reps;
@@ -538,18 +755,40 @@ export function ActiveWorkoutScreen({
         setShowComplete(false);
       } else if (flowAction.afterRestAdvanceIndex != null) {
         pendingAdvanceRef.current = flowAction.afterRestAdvanceIndex;
+      } else if (
+        exerciseAdvance &&
+        executionModeUsesTraditionalRest(executionMode) &&
+        !skipRest
+      ) {
+        pendingExerciseAdvanceAfterRestRef.current = true;
       }
 
-      offerBetweenSetsChallenge();
+      if (completedAfterLog < targetSets) {
+        offerBetweenSetsChallenge();
+      }
     } finally {
       setLogging(false);
     }
   }
 
-  function performExerciseAdvance() {
+  function performExerciseAdvanceDirect() {
+    if (autoAdvanceTimeoutRef.current) {
+      clearTimeout(autoAdvanceTimeoutRef.current);
+      autoAdvanceTimeoutRef.current = null;
+    }
     if (usesSupersetRotation && supersetGroup && supersetGroup.memberIndices.length >= 2) {
       const next = nextExerciseIndexAfterGroup(supersetGroup, sortedExercises.length);
       if (next != null) {
+        if (executionMode === 'tabata') {
+          pendingAdvanceRef.current = next;
+          setPendingAdvanceIndex(next);
+          tabataBetweenExercisePendingRef.current = true;
+          dismissIntervalTimer();
+          startCircuitTransition('transition', 1, {
+            restBetweenExercisesSeconds: tabataBetweenExerciseRestSeconds,
+          });
+          return;
+        }
         setCurrentIndex(next);
         setShowComplete(false);
         return;
@@ -559,8 +798,43 @@ export function ActiveWorkoutScreen({
       onFinish();
       return;
     }
+    if (executionMode === 'tabata') {
+      pendingAdvanceRef.current = currentIndex + 1;
+      setPendingAdvanceIndex(currentIndex + 1);
+      tabataBetweenExercisePendingRef.current = true;
+      dismissIntervalTimer();
+      startCircuitTransition('transition', 1, {
+        restBetweenExercisesSeconds: tabataBetweenExerciseRestSeconds,
+      });
+      return;
+    }
     setCurrentIndex((index) => index + 1);
     setShowComplete(false);
+  }
+
+  advanceExerciseRef.current = performExerciseAdvanceDirect;
+
+  function performExerciseAdvance() {
+    performExerciseAdvanceDirect();
+  }
+
+  function handleFinishBetweenExerciseRest() {
+    tabataBetweenExercisePendingRef.current = false;
+    skipCircuitTimer();
+  }
+
+  function handleFinishTabataPrep() {
+    tabataExercisePrepPendingRef.current = false;
+    setIsTabataPrepActive(false);
+    skipCircuitTimer();
+  }
+
+  function handleFinishCircuitTimer() {
+    if (isTabataPrepActive) {
+      handleFinishTabataPrep();
+      return;
+    }
+    handleFinishBetweenExerciseRest();
   }
 
   function handleNextExercise() {
@@ -587,6 +861,7 @@ export function ActiveWorkoutScreen({
   }
 
   async function handleSkipRest() {
+    setRestOverlayOpen(false);
     await skipRestTimer();
     setRestPaused(false);
   }
@@ -638,6 +913,8 @@ export function ActiveWorkoutScreen({
               <AppText variant="headline" style={styles.exerciseName}>
                 {(currentExercise.exercise?.name ?? 'Exercise').toUpperCase()}
               </AppText>
+
+              {!showComplete ? <WorkoutUpNextCard position={workoutPosition} /> : null}
 
               {executionMode === 'circuit' ? (
                 <AppText variant="caption" color="accent">
@@ -721,24 +998,75 @@ export function ActiveWorkoutScreen({
                 </View>
               ) : null}
 
+              {restActive && !showComplete ? (
+                <View style={styles.intervalBanner}>
+                  <AppText variant="label" color="restTimer">
+                    Rest timer
+                  </AppText>
+                  <AppText variant="bodyBold" color="restTimer">
+                    {formatTimerSeconds(restSecondsRemaining ?? restTargetSeconds)}
+                  </AppText>
+                  <AppText variant="footnote" color="textSecondary">
+                    {workoutPosition.currentSetLabel} · {workoutPosition.upNextLabel}
+                  </AppText>
+                  <PrimaryButton
+                    label={restOverlayOpen ? 'Hide timer' : 'Open timer'}
+                    variant="secondary"
+                    onPress={() => setRestOverlayOpen((open) => !open)}
+                  />
+                </View>
+              ) : null}
+
+              {circuitTimer &&
+              circuitTimer.phase !== 'done' &&
+              !showComplete ? (
+                <View style={styles.intervalBanner}>
+                  <AppText variant="label" color="accent">
+                    {isTabataPrepActive ? 'Get ready' : 'Rest between exercises'}
+                  </AppText>
+                  <AppText variant="bodyBold">
+                    {formatTimerSeconds(circuitTimer.secondsRemaining)}
+                  </AppText>
+                  <AppText variant="footnote" color="textSecondary">
+                    {workoutPosition.currentSetLabel} · {workoutPosition.upNextLabel}
+                  </AppText>
+                  <PrimaryButton
+                    label={circuitOverlayOpen ? 'Hide timer' : 'Open timer'}
+                    variant="secondary"
+                    onPress={() => setCircuitOverlayOpen((open) => !open)}
+                  />
+                </View>
+              ) : null}
+
               {executionModeUsesIntervalTimer(executionMode) && !showComplete ? (
                 <View style={styles.intervalBanner}>
                   <AppText variant="label" color="accent">
                     {executionMode === 'tabata' ? 'Tabata timer' : 'HIIT timer'}
                   </AppText>
                   {intervalTimer ? (
-                    <AppText variant="footnote" color="textSecondary">
-                      {intervalPhaseLabel(intervalTimer.phase)} · {formatTimerSeconds(intervalTimer.secondsRemaining)}
-                    </AppText>
+                    <>
+                      <AppText variant="bodyBold">
+                        {intervalPhaseLabel(intervalTimer.phase).toUpperCase()} ·{' '}
+                        {formatTimerSeconds(intervalTimer.secondsRemaining)}
+                      </AppText>
+                      <AppText variant="footnote" color="textSecondary">
+                        {workoutPosition.currentSetLabel} · {workoutPosition.upNextLabel}
+                      </AppText>
+                    </>
                   ) : (
                     <AppText variant="footnote" color="textSecondary">
-                      Configurable work, rest, and rounds
+                      {executionMode === 'tabata'
+                        ? 'Work & rest 20s default · adjust 10–45s each in timer · 10 rounds'
+                        : 'Configurable work, rest, and rounds'}
                     </AppText>
                   )}
                   <PrimaryButton
-                    label={intervalTimer ? 'Open interval timer' : 'Start interval timer'}
+                    label={intervalOverlayOpen ? 'Hide timer' : intervalTimer ? 'Open timer' : 'Start timer'}
                     variant="secondary"
-                    onPress={() => startIntervalTimer(undefined, true)}
+                    onPress={() => {
+                      if (!intervalTimer) startIntervalTimer(undefined, true);
+                      setIntervalOverlayOpen((open) => !open);
+                    }}
                   />
                 </View>
               ) : null}
@@ -827,20 +1155,12 @@ export function ActiveWorkoutScreen({
           })}
         </Card>
 
-        {!showComplete && nextExercise ? (
-          <Card style={styles.nextPreview}>
-            <AppText variant="label" color="textSecondary">
-              Next exercise
-            </AppText>
-            <AppText variant="bodyBold">{nextExercise.exercise?.name ?? 'Up next'}</AppText>
-          </Card>
-        ) : null}
-
         {showComplete ? (
           <ExerciseCompleteCard
             volumeKg={exerciseVolume}
             hasPr={exerciseHadPr}
             onNext={handleNextExercise}
+            autoAdvancing={!restActive && !activeChallenge}
             isLastExercise={
               usesSupersetRotation && inSuperset
                 ? nextExerciseIndexAfterGroup(supersetGroup!, sortedExercises.length) === null
@@ -868,10 +1188,11 @@ export function ActiveWorkoutScreen({
         visible={
           !showComplete &&
           !activeChallenge &&
-          (restActive ||
-            intervalTimer != null ||
-            (circuitTimer != null && circuitTimer.phase !== 'done'))
+          ((restActive && restOverlayOpen) ||
+            (intervalTimer != null && intervalOverlayOpen) ||
+            (circuitTimer != null && circuitTimer.phase !== 'done' && circuitOverlayOpen))
         }
+        position={workoutPosition}
         traditional={restActive && !intervalTimer && !circuitTimer ? {
                 secondsRemaining: restSecondsRemaining,
                 recommendedSeconds: activeRestPeriod?.recommendedSeconds ?? restTargetSeconds,
@@ -891,14 +1212,48 @@ export function ActiveWorkoutScreen({
               }
             : undefined}
         interval={intervalTimer && !circuitTimer ? intervalTimer : null}
+        intervalExerciseName={currentExercise.exercise?.name ?? 'Exercise'}
+        intervalNextExerciseName={nextExercise?.exercise?.name}
+        onIntervalDismiss={() => setIntervalOverlayOpen(false)}
         onIntervalToggle={toggleIntervalTimer}
         onIntervalSkip={skipIntervalPhase}
         onIntervalSkipRound={skipIntervalRound}
         onIntervalReset={resetIntervalTimer}
-        onIntervalConfigChange={updateIntervalConfig}
+        onIntervalConfigChange={handleIntervalConfigChange}
+        intervalSecondBounds={
+          executionMode === 'tabata'
+            ? {
+                min: TABATA_INTERVAL_BOUNDS.minSeconds,
+                max: TABATA_INTERVAL_BOUNDS.maxSeconds,
+                step: TABATA_INTERVAL_BOUNDS.stepSeconds,
+              }
+            : undefined
+        }
+        betweenExerciseRestSeconds={
+          executionMode === 'tabata' && circuitTimer && circuitTimer.phase !== 'done'
+            ? isTabataPrepActive
+              ? TABATA_PREP_SECONDS_DEFAULT
+              : tabataBetweenExerciseRestSeconds
+            : undefined
+        }
+        circuitTimerMode={isTabataPrepActive ? 'prep' : 'between_exercises'}
+        onBetweenExerciseRestChange={(seconds) => {
+          const next = clampTabataBetweenExerciseRest(seconds);
+          setTabataBetweenExerciseRestSeconds(next);
+          startCircuitTransition('transition', 1, { restBetweenExercisesSeconds: next }, next);
+        }}
+        betweenExerciseRestBounds={
+          executionMode === 'tabata'
+            ? {
+                min: TABATA_BETWEEN_EXERCISE_REST_BOUNDS.minSeconds,
+                max: TABATA_BETWEEN_EXERCISE_REST_BOUNDS.maxSeconds,
+                step: TABATA_BETWEEN_EXERCISE_REST_BOUNDS.stepSeconds,
+              }
+            : undefined
+        }
         circuit={circuitTimer && circuitTimer.phase !== 'done' ? circuitTimer : null}
-        onCircuitSkip={skipCircuitTimer}
-        onCircuitDismiss={dismissCircuitTimer}
+        onCircuitSkip={handleFinishCircuitTimer}
+        onCircuitDismiss={handleFinishCircuitTimer}
       />
 
       <WorkoutChallengeModal

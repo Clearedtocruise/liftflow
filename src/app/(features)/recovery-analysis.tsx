@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, RefreshControl, StyleSheet, View } from 'react-native';
 
+import { EmptyStateCard, ErrorStateCard } from '@/components/layout/StateCard';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { RecoveryIntelligenceDashboard } from '@/components/recovery/RecoveryIntelligenceDashboard';
@@ -60,12 +61,24 @@ export default function RecoveryAnalysisScreen() {
             <ActivityIndicator size="large" color={LiftFlowColors.accent} />
           </View>
         ) : error ? (
-          <AppText variant="body" color="restTimer">
-            {error}
-          </AppText>
+          <ErrorStateCard
+            title="Could not load recovery intelligence"
+            message={error}
+            onRetry={() => {
+              setLoading(true);
+              void load();
+            }}
+          />
         ) : report ? (
           <RecoveryIntelligenceDashboard report={report} />
-        ) : null}
+        ) : (
+          <EmptyStateCard
+            title="Complete a check-in first"
+            message="Recovery Intelligence combines your daily check-in, training load, and muscle readiness into one score."
+            actionLabel="Daily check-in"
+            onAction={() => router.push('/(features)/recovery-check-in')}
+          />
+        )}
       </FeatureGate>
 
       <PrimaryButton label="Back" onPress={() => router.back()} variant="secondary" />

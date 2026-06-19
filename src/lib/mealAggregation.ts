@@ -1,8 +1,8 @@
+import { isSameCalendarDate, localMinutesSinceMidnight, parseScheduledTimeToMinutes } from '@/lib/localDate';
 import { pickMealsToKeep } from '@/lib/mealCleanup';
-import { enrichMealMeta } from '@/lib/mealIngredients';
-import { localMinutesSinceMidnight, parseScheduledTimeToMinutes } from '@/lib/localDate';
+import { enrichMealMeta, resolveMealMacros } from '@/lib/mealIngredients';
 import type { MealType } from '@/types/common';
-import type { Meal } from '@/types/nutrition';
+import type { DailyNutritionSummary, Meal, NutritionGoals } from '@/types/nutrition';
 
 const MEAL_TYPE_ORDER: Record<MealType, number> = {
   pre_workout: 0,
@@ -45,6 +45,11 @@ function isScheduledMeal(meal: Meal): boolean {
   return mealStatus(meal) !== 'skipped';
 }
 
+/** Meals scheduled on a calendar day (YYYY-MM-DD), deduped by meal type. */
+export function mealsForCalendarDay(meals: Meal[], date: string): Meal[] {
+  return dedupeMealsByType(meals.filter((meal) => isSameCalendarDate(meal.scheduledDate, date)));
+}
+
 /** Keep the newest row per meal type to avoid duplicate weekly plan inserts. */
 export function dedupeMealsByType(meals: Meal[]): Meal[] {
   const { keep } = pickMealsToKeep(meals);
@@ -61,10 +66,11 @@ export function aggregateDailyMeals(meals: Meal[]): DailyMealAggregation {
 
   for (const meal of dedupeMealsByType(meals)) {
     if (!isConsumedMeal(meal)) continue;
-    caloriesConsumed += meal.calories ?? 0;
-    proteinG += Number(meal.proteinG ?? 0);
-    carbsG += Number(meal.carbsG ?? 0);
-    fatG += Number(meal.fatG ?? 0);
+    const macros = resolveMealMacros(meal);
+    caloriesConsumed += macros.calories;
+    proteinG += macros.proteinG;
+    carbsG += macros.carbsG;
+    fatG += macros.fatG;
   }
 
   const mealsCompleted = dedupedMeals.filter((meal) => {
@@ -80,8 +86,8 @@ export function aggregateDailyMeals(meals: Meal[]): DailyMealAggregation {
     fatG,
     mealsCompleted,
     mealsTotal: dedupedMeals.length,
-    plannedCalories: dedupedMeals.reduce((sum, meal) => sum + (meal.calories ?? 0), 0),
-    plannedProteinG: dedupedMeals.reduce((sum, meal) => sum + Number(meal.proteinG ?? 0), 0),
+    plannedCalories: dedupedMeals.reduce((sum, meal) => sum + resolveMealMacros(meal).calories, 0),
+    plannedProteinG: dedupedMeals.reduce((sum, meal) => sum + resolveMealMacros(meal).proteinG, 0),
   };
 }
 
@@ -95,7 +101,9 @@ export function aggregateWeeklyMeals(meals: Meal[]): WeeklyMealAggregation {
   const byDate: WeeklyMealAggregation['byDate'] = {};
 
   for (const date of dates) {
-    byDate[date] = dailyTotalsWithoutMeals(aggregateDailyMeals(meals.filter((meal) => meal.scheduledDate === date)));
+    byDate[date] = dailyTotalsWithoutMeals(
+      aggregateDailyMeals(meals.filter((meal) => isSameCalendarDate(meal.scheduledDate, date))),
+    );
   }
 
   const weekTotals = Object.values(byDate).reduce<Omit<DailyMealAggregation, 'dedupedMeals'>>(
@@ -184,6 +192,26 @@ export function findNextMeal(
   }
 
   return fallback;
+}
+
+/** Build today's macro summary from week meals + goals (avoids a redundant daily meals query). */
+export function buildDailySummaryFromMeals(
+  weekMeals: Meal[],
+  date: string,
+  goals: NutritionGoals | null,
+  waterMl = 0,
+): DailyNutritionSummary {
+  const aggregated = aggregateDailyMeals(mealsForCalendarDay(weekMeals, date));
+  return {
+    date,
+    caloriesConsumed: aggregated.caloriesConsumed,
+    caloriesTarget: goals?.dailyCalories,
+    proteinG: aggregated.proteinG,
+    carbsG: aggregated.carbsG,
+    fatG: aggregated.fatG,
+    waterMl,
+    waterTargetMl: goals?.waterMl,
+  };
 }
 
 export function trainingLabelFromRecoveryScore(score: number): string {

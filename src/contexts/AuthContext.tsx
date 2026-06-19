@@ -1,7 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import { useAuthDeepLink } from '@/hooks/useAuthDeepLink';
+import { startPlanPrefetch } from '@/lib/planDataPrefetch';
 import { logStartup } from '@/lib/startupLogger';
+import { withTimeout } from '@/lib/withTimeout';
 import { authService, type SignUpResult } from '@/services/authService';
 import type { PasswordResetPayload, SignInPayload, SignUpPayload, UserProfile } from '@/types/user';
 
@@ -33,7 +35,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     void (async () => {
       try {
-        const authUser = await authService.getAuthSessionUser();
+        const authUser = await withTimeout(authService.getAuthSessionUser(), 10_000, 'auth session');
         if (cancelled) return;
 
         if (!authUser) {
@@ -43,8 +45,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return;
         }
 
-        setUser(authService.stubProfileFromAuth(authUser));
+        const stub = authService.stubProfileFromAuth(authUser);
+        setUser(stub);
+        setIsProfileReady(true);
         logStartup('AUTH_READY', { authenticated: true });
+        logStartup('PROFILE_READY', { source: 'stub' });
+        setIsLoading(false);
+
+        startPlanPrefetch(authUser.id, stub.timezone);
 
         const profile = await authService.loadProfile(
           authUser.id,
@@ -54,7 +62,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (cancelled) return;
 
         setUser(profile);
-        setIsProfileReady(true);
         logStartup('PROFILE_LOADED');
       } catch {
         if (!cancelled) {
@@ -70,7 +77,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: subscription } = authService.onAuthStateChange((profile) => {
       setUser(profile);
       setIsProfileReady(true);
-      if (profile) logStartup('PROFILE_LOADED');
+      if (profile) {
+        logStartup('PROFILE_LOADED');
+        logStartup('PROFILE_READY');
+      }
     });
 
     return () => {
@@ -83,6 +93,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const profile = await authService.signIn(payload);
     setUser(profile);
     setIsProfileReady(true);
+    startPlanPrefetch(profile.id, profile.timezone);
   }, []);
 
   const signUp = useCallback(async (payload: SignUpPayload) => {
@@ -90,6 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (result.status === 'session') {
       setUser(result.profile);
       setIsProfileReady(true);
+      startPlanPrefetch(result.profile.id, result.profile.timezone);
     }
     return result;
   }, []);

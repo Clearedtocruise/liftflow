@@ -37,8 +37,14 @@ export function dayLabel(index: number): string {
 export function muscleGroupsForWorkout(label: string): string[] {
   const key = label.toLowerCase();
   if (key.includes('condition')) return ['core', 'legs'];
-  if (key.includes('push')) return ['chest', 'shoulders', 'triceps', 'core'];
-  if (key.includes('pull')) return ['back', 'biceps', 'core'];
+  if (key.includes('back & biceps') || (key.includes('back') && key.includes('biceps') && key.includes('shoulder'))) {
+    return ['shoulders', 'back', 'biceps', 'core'];
+  }
+  if (key.includes('chest & triceps') || (key.includes('chest') && key.includes('triceps'))) {
+    return ['chest', 'triceps', 'core'];
+  }
+  if (key.includes('push')) return ['chest', 'triceps', 'core'];
+  if (key.includes('pull')) return ['back', 'biceps', 'shoulders', 'core'];
   if (key.includes('leg')) return ['legs', 'glutes', 'hamstrings', 'core'];
   if (key.includes('upper')) return ['chest', 'back', 'shoulders', 'core'];
   if (key.includes('lower')) return ['legs', 'glutes', 'hamstrings', 'core'];
@@ -106,7 +112,8 @@ export function buildWeeklySchedule(
   }
 
   const rawPattern = getWeeklyLiftingPatternForFrequency(programType, frequency);
-  const pattern = enforceUpperFocusSpacing(rawPattern);
+  const pattern =
+    programType === 'body_part_split' ? rawPattern : enforceUpperFocusSpacing(rawPattern);
 
   return pattern.map((label, index) =>
     label === 'Rest' ? restDay(index) : workoutDay(index, label),
