@@ -18,47 +18,7 @@ export type MacroTargets = {
   rationale: string;
 };
 
-const MEAL_TEMPLATES: Record<
-  string,
-  { breakfast: string; lunch: string; dinner: string; snack: string }
-> = {
-  high_protein: {
-    breakfast: 'Greek yogurt with berries and whey',
-    lunch: 'Grilled chicken quinoa bowl',
-    dinner: 'Salmon with roasted vegetables',
-    snack: 'Protein shake with almonds',
-  },
-  low_carb: {
-    breakfast: 'Eggs with avocado and spinach',
-    lunch: 'Turkey lettuce wraps',
-    dinner: 'Grilled steak with asparagus',
-    snack: 'Cottage cheese with walnuts',
-  },
-  keto: {
-    breakfast: 'Scrambled eggs with cheese and avocado',
-    lunch: 'Salmon salad with olive oil dressing',
-    dinner: 'Ribeye with buttered greens',
-    snack: 'Macadamia nuts and cheese',
-  },
-  mediterranean: {
-    breakfast: 'Oats with nuts and honey',
-    lunch: 'Grilled fish with couscous',
-    dinner: 'Chicken souvlaki with salad',
-    snack: 'Hummus with vegetables',
-  },
-  vegetarian: {
-    breakfast: 'Tofu scramble with toast',
-    lunch: 'Lentil and vegetable bowl',
-    dinner: 'Chickpea curry with rice',
-    snack: 'Greek yogurt with fruit',
-  },
-  balanced: {
-    breakfast: 'Oatmeal with banana and peanut butter',
-    lunch: 'Chicken rice bowl with vegetables',
-    dinner: 'Lean beef stir-fry with rice',
-    snack: 'Protein bar and apple',
-  },
-};
+import { selectDailyCoreMeals } from './mealPlanTemplates.js';
 
 export function calculateMacroTargets(ctx: NutritionContext): MacroTargets {
   const bw = ctx.bodyWeightKg ?? 75;
@@ -139,17 +99,9 @@ export function generateDailyMeals(
   macros: MacroTargets,
   style: NutritionContext['dietaryStyle'] = 'balanced',
 ) {
-  const templates = MEAL_TEMPLATES[style ?? 'balanced'];
-  const split = { breakfast: 0.25, lunch: 0.35, dinner: 0.3, snack: 0.1 };
-
-  return (['breakfast', 'lunch', 'dinner', 'snack'] as const).map((mealType) => ({
-    mealType,
-    name: templates[mealType],
+  return selectDailyCoreMeals(date, macros, style ?? 'balanced').map((meal) => ({
+    ...meal,
     scheduledDate: date,
-    calories: Math.round(macros.calories * split[mealType]),
-    proteinG: Math.round(macros.proteinG * split[mealType]),
-    carbsG: Math.round(macros.carbsG * split[mealType]),
-    fatG: Math.round(macros.fatG * split[mealType]),
   }));
 }
 

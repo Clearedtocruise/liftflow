@@ -72,10 +72,16 @@ record('Service checks insert errors', serviceSrc.includes('insertError'));
 record('Service verifies saved meals', serviceSrc.includes('getMealsForWeek(userId, clientWeekStart'));
 record('Service uses resolveTimeZone', serviceSrc.includes('resolveTimeZone'));
 record('Nutrition passes resolved timezone', nutritionSrc.includes('resolveTimeZone(user.timezone)'));
+record('Nutrition single generate button', (nutritionSrc.match(/Generate Weekly Meal Plan/g) ?? []).length === 1);
+record('Nutrition generate deep link', nutritionSrc.includes("generate !== '1'"));
+record('Home generate meal plan wired', fs.readFileSync(path.join(root, 'src/app/(tabs)/dashboard.tsx'), 'utf8').includes('nutrition?generate=1'));
 record('Prefetch has timeouts', fs.readFileSync(path.join(root, 'src/lib/planDataPrefetch.ts'), 'utf8').includes('withTimeout'));
 record('Dashboard cache-first load', fs.readFileSync(path.join(root, 'src/app/(tabs)/dashboard.tsx'), 'utf8').includes('planDataCache.readWeek'));
 
-// --- Live API contract ---
+record('Backend rotates weekly meals', fs.readFileSync(path.join(root, 'backend/src/lib/mealPlanTemplates.ts'), 'utf8').includes('pickFromPool'));
+record('Weekly generator uses day index', fs.readFileSync(path.join(root, 'backend/src/lib/aiCoach.ts'), 'utf8').includes('generateWeeklyMealPlanMeals'));
+record('Program varies exercises per calendar day', fs.readFileSync(path.join(root, 'backend/src/lib/programEngine.ts'), 'utf8').includes('day-${slot.dayIndex}'));
+record('PLAN_RULES_VERSION bumped for regen', fs.readFileSync(path.join(root, 'backend/src/lib/programEngine.ts'), 'utf8').includes('PLAN_RULES_VERSION = 5'));
 try {
   const res = await fetch(`${api}/api/nutrition/meal-plan/generate`, {
     method: 'POST',
@@ -91,6 +97,16 @@ try {
   record('All meal types valid enum', badTypes.length === 0, badTypes[0]?.mealType ?? 'ok');
   const dates = [...new Set(meals.map((m) => m.scheduledDate.slice(0, 10)))].sort();
   record('API spans 7 distinct dates', dates.length === 7, `dates=${dates.length}`);
+  const breakfasts = meals.filter((m) => m.mealType === 'breakfast').map((m) => m.name);
+  const uniqueBreakfasts = new Set(breakfasts);
+  const localRotates = fs.readFileSync(path.join(root, 'backend/src/lib/mealPlanTemplates.ts'), 'utf8').includes('pickFromPool');
+  const liveRotates = uniqueBreakfasts.size > 1;
+  check(
+    'Production API rotates breakfast (live)',
+    liveRotates,
+    liveRotates ? 'ok' : `unique=${uniqueBreakfasts.size} — push backend + redeploy Render`,
+  );
+  record('Backend meal rotation source ready', localRotates);
 } catch (error) {
   record('Meal plan API reachable', false, error instanceof Error ? error.message : String(error));
 }

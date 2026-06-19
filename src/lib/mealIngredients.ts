@@ -1,12 +1,8 @@
+import { estimateFoodMacrosLocal } from '@/lib/foodMacroLookup';
+
 export type MealIngredient = {
   name: string;
   serving: string;
-};
-
-export type MealMeta = {
-  status?: 'planned' | 'completed' | 'skipped' | 'modified';
-  scheduledTime?: string;
-  ingredients?: MealIngredient[];
 };
 
 export type MealMacros = {
@@ -14,6 +10,12 @@ export type MealMacros = {
   proteinG: number;
   carbsG: number;
   fatG: number;
+};
+
+export type MealMeta = {
+  status?: 'planned' | 'completed' | 'skipped' | 'modified';
+  scheduledTime?: string;
+  ingredients?: MealIngredient[];
 };
 
 const MEAL_INGREDIENT_TEMPLATES: Record<string, MealIngredient[]> = {
@@ -224,6 +226,46 @@ export function enrichMealMeta(name: string, instructions?: string): MealMeta {
     scheduledTime: existing.scheduledTime,
     ingredients: existing.ingredients?.length ? existing.ingredients : ingredientsForMealName(name),
   };
+}
+
+type MealMacroFields = {
+  name: string;
+  instructions?: string;
+  calories?: number;
+  proteinG?: number;
+  carbsG?: number;
+  fatG?: number;
+};
+
+/** Stored macros when present; otherwise estimate from logged ingredients. */
+export function resolveMealMacros(meal: MealMacroFields): MealMacros {
+  const stored: MealMacros = {
+    calories: meal.calories ?? 0,
+    proteinG: meal.proteinG ?? 0,
+    carbsG: meal.carbsG ?? 0,
+    fatG: meal.fatG ?? 0,
+  };
+
+  if (stored.calories > 0 || stored.proteinG > 0 || stored.carbsG > 0 || stored.fatG > 0) {
+    return stored;
+  }
+
+  const meta = enrichMealMeta(meal.name, meal.instructions);
+  const ingredients = meta.ingredients ?? [];
+  if (ingredients.length === 0) return stored;
+
+  return ingredients.reduce<MealMacros>(
+    (acc, ingredient) => {
+      const estimate = estimateFoodMacrosLocal(ingredient.name, ingredient.serving);
+      return {
+        calories: acc.calories + estimate.calories,
+        proteinG: Math.round((acc.proteinG + estimate.proteinG) * 10) / 10,
+        carbsG: Math.round((acc.carbsG + estimate.carbsG) * 10) / 10,
+        fatG: Math.round((acc.fatG + estimate.fatG) * 10) / 10,
+      };
+    },
+    { calories: 0, proteinG: 0, carbsG: 0, fatG: 0 },
+  );
 }
 
 export function alternativesForIngredient(ingredientName: string): string[] {

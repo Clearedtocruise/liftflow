@@ -46,6 +46,21 @@ Phone entry: `integrationService.handleWatchMessage()` → `watchWorkoutService.
 
 See `EXERCISE_MOTION_PROFILES` in `src/integrations/watch/exerciseMotionProfiles.ts` (Bench Press, Squats, Rows, etc.).
 
+## Phase 2 (watchOS companion)
+
+Shipped in native target `targets/watch/`:
+
+1. **Motion rep counting** — `MotionCapture.swift` streams 25 Hz accelerometer/gyro batches as `motion_batch` during active sets (motion-tracked exercises only).
+2. **Voice on wrist** — Dictation via `presentTextInput` plus quick chips (“Log set”, “How recovered am I?”).
+3. **Richer UI** — Recovery score, progression line, rep count, confidence bar, confirm reps when low confidence.
+4. **Start from Watch** — “Start Today's Workout” sends `start_workout` to iPhone (starts today's planned session).
+
+Phone-side handlers were already in `watchWorkoutService` / `watchCompanionService`; Phase 2 wires the native Watch app to use them.
+
+### Complications (Phase 2.5)
+
+Watch face complications for rest timer / active workout are not yet implemented.
+
 ## Dev without Watch hardware
 
 - Open `/(features)/apple-watch`

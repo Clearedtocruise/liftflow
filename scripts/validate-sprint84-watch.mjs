@@ -106,6 +106,14 @@ record('FeatureGate apple-watch-advanced', screen.includes('apple-watch-advanced
 record('Rest timer display', screen.includes('restSecondsRemaining'));
 record('Recovery score display', screen.includes('recoveryScore'));
 
+console.log('\n--- Native watchOS target (Phase 2) ---');
+record('MotionCapture.swift', exists('targets/watch/MotionCapture.swift'));
+record('Watch motion_batch sender', read('targets/watch/MotionCapture.swift').includes('motion_batch'));
+record('Watch voice dictation', read('targets/watch/content.swift').includes('presentTextInput'));
+record('Watch start workout button', read('targets/watch/content.swift').includes("Start Today's Workout"));
+record('Phone start_workout bridge', bridge.includes('start_workout'));
+record('watchCompanionService.startTodaysWorkoutFromWatch', companion.includes('startTodaysWorkoutFromWatch'));
+
 console.log('\n--- Documentation ---');
 record('Watch architecture doc', exists('docs/WATCH_ARCHITECTURE.md'));
 record('HealthKit requirements doc', exists('docs/HEALTHKIT_REQUIREMENTS.md'));

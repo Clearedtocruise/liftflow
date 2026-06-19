@@ -328,6 +328,7 @@ function scoreExercise(
   family: string,
   recentSlugs: Map<string, Date>,
   lastWeekSlugs: Set<string>,
+  rotationSeed = 0,
 ): number {
   let score = 10;
   const lastUsed = recentSlugs.get(exercise.slug);
@@ -343,6 +344,8 @@ function scoreExercise(
   if (exercise.metadata?.movement_family === family) {
     score += 5;
   }
+  const slugHash = exercise.slug.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  score += ((slugHash + rotationSeed * 17) % 11) * 0.4;
   return score;
 }
 
@@ -384,6 +387,7 @@ export function selectRotatedExercises(
   targetMuscles: string[],
   recentSlugs: Map<string, Date>,
   count: number,
+  rotationSeed = 0,
 ): ExerciseRecord[] {
   const familiesNeeded = new Set<string>();
   for (const muscle of targetMuscles) {
@@ -423,7 +427,7 @@ export function selectRotatedExercises(
   for (const family of familiesNeeded) {
     const candidates = pool
       .filter((e) => e.metadata?.movement_family === family && canPick(e))
-      .map((e) => ({ exercise: e, score: scoreExercise(e, family, recentSlugs, lastWeekSlugs) }))
+      .map((e) => ({ exercise: e, score: scoreExercise(e, family, recentSlugs, lastWeekSlugs, rotationSeed) }))
       .sort((a, b) => b.score - a.score);
 
     const pick = candidates[0]?.exercise;
@@ -441,7 +445,7 @@ export function selectRotatedExercises(
       if (selected.length >= count) break;
       const candidates = pool
         .filter((e) => e.metadata?.movement_family === family && canPick(e))
-        .map((e) => ({ exercise: e, score: scoreExercise(e, family, recentSlugs, lastWeekSlugs) }))
+        .map((e) => ({ exercise: e, score: scoreExercise(e, family, recentSlugs, lastWeekSlugs, rotationSeed) }))
         .sort((a, b) => b.score - a.score);
 
       const pick = candidates[0]?.exercise;
@@ -491,6 +495,10 @@ export type BuildWorkoutPlanOptions = {
   targetExerciseCount?: number;
   minimumExercises?: number;
   minimumSets?: number;
+  /** Slugs already assigned earlier in this program generation — avoids duplicate days. */
+  programRecentSlugs?: Map<string, Date>;
+  /** Per-calendar-day seed so repeated split labels (e.g. two Push days) pick different exercises. */
+  rotationSeed?: number;
 };
 
 export function normalizeTargetMuscleGroups(muscles: string[]): string[] {
@@ -531,6 +539,15 @@ export async function buildAdaptiveWorkoutPlan(
   );
   const pool = await loadAvailableExercises(userId, options?.equipmentOverride);
   const recentSlugs = await getRecentExerciseSlugs(userId);
+  if (options?.programRecentSlugs) {
+    for (const [slug, usedAt] of options.programRecentSlugs) {
+      const existing = recentSlugs.get(slug);
+      if (!existing || usedAt > existing) {
+        recentSlugs.set(slug, usedAt);
+      }
+    }
+  }
+  const rotationSeed = options?.rotationSeed ?? 0;
   const performance = await getLastPerformanceBySlug(userId);
   const limitations = await loadActiveLimitations(userId);
   const recoveryMods = await loadRecoveryModifiers(userId);
@@ -566,7 +583,14 @@ export async function buildAdaptiveWorkoutPlan(
     };
   }
 
-  let picked = selectRotatedExercises(pool, normalizedMuscles, recentSlugs, adjustedPreset.exerciseCount);
+  let picked = selectRotatedExercises(pool, normalizedMuscles, recentSlugs, adjustedPreset.exerciseCount, rotationSeed);
+
+  if (options?.programRecentSlugs) {
+    const now = new Date();
+    for (const exercise of picked) {
+      options.programRecentSlugs.set(exercise.slug, now);
+    }
+  }
 
   if (options?.includeCore && !picked.some((exercise) => exercise.muscle_groups?.includes('core'))) {
     const corePick = pool.find(

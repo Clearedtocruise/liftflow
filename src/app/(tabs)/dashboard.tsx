@@ -2,7 +2,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Pressable, RefreshControl, StyleSheet, View, type ViewStyle } from 'react-native';
+import { Alert, InteractionManager, Pressable, RefreshControl, StyleSheet, View, type ViewStyle } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { HomeNextUpCard } from '@/components/dashboard/HomeNextUpCard';
@@ -17,7 +17,6 @@ import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { AppText } from '@/components/ui/AppText';
 import { HOME_ACTIVITY_OPTIONS } from '@/constants/activityOptions';
 import { Brand, LiftFlowColors, Radius, Spacing } from '@/constants/theme';
-import { pickDefaultLocation } from '@/constants/trainingProfile';
 import { usePlanAdjustment } from '@/contexts/PlanAdjustmentContext';
 import { useAppResume } from '@/hooks/useAppResume';
 import { useAuth } from '@/hooks/useAuth';
@@ -45,17 +44,18 @@ import { planDataCache } from '@/lib/planDataCache';
 import { warmWeekPlanData } from '@/lib/planDataPrefetch';
 import { buildHomeManageDayMenu } from '@/lib/planDayActions';
 import { recoveryScoreColor } from '@/lib/recoveryScoreColor';
+import { startPlannedWorkout } from '@/lib/startPlannedWorkout';
 import { logStartup, printStartupReport } from '@/lib/startupLogger';
+import { buildWeekPlan, dedupePlannedWorkoutsByDate, getWeekRange } from '@/lib/weekPlan';
 import { withTimeout } from '@/lib/withTimeout';
-import { buildWeekPlan, dedupePlannedWorkoutsByDate, getWeekRange, isConditioningWorkout } from '@/lib/weekPlan';
-import { estimateWorkoutDurationMinutes, exercisesForSessionStart, exercisesFromPlannedWorkout } from '@/lib/workoutPlan';
+import { estimateWorkoutDurationMinutes, exercisesFromPlannedWorkout } from '@/lib/workoutPlan';
 import { analyticsService } from '@/services/analyticsService';
 import { nutritionService } from '@/services/nutritionService';
 import { recoveryService } from '@/services/recoveryService';
 import { trainingService } from '@/services/trainingService';
 import { userService } from '@/services/userService';
 import { weeklyCloseoutService } from '@/services/weeklyCloseoutService';
-import { workoutService } from '@/services/workoutService';
+import { useWorkoutPlanDraft } from '@/state/workout/WorkoutPlanDraftContext';
 import { useWorkoutSession } from '@/state/workout/WorkoutSessionContext';
 import type { DashboardSummary, Meal, NutritionGoals, PlannedWorkout, ProgramDashboard } from '@/types';
 import type { RecoveryIntelligenceReport } from '@/types/recoveryIntelligence';
@@ -67,6 +67,7 @@ export default function DashboardScreen() {
   const units = useUnits();
   const { insight } = useInsightRotator();
   const { startSessionFromPlanned, refreshSession } = useWorkoutSession();
+  const { setPlannedWorkout, setExercises } = useWorkoutPlanDraft();
   const { tabataModeEnabled } = useTabataModePreference();
   const { locations, selectedId } = useWorkoutLocations(user?.id);
   const [data, setData] = useState<DashboardSummary | null>(null);
@@ -89,6 +90,7 @@ export default function DashboardScreen() {
   const loadGenerationRef = useRef(0);
   const hydratedFromCacheRef = useRef(false);
   const skipFocusLoadRef = useRef(true);
+  const regenCheckedRef = useRef(false);
   const isPremiumRef = useRef(isPremium);
   isPremiumRef.current = isPremium;
 
@@ -121,8 +123,7 @@ export default function DashboardScreen() {
     }
 
     const generation = ++loadGenerationRef.current;
-    const hasCachedPlan = weekWorkouts.length > 0 || hydratedFromCacheRef.current;
-    const silent = options?.silent ?? hasCachedPlan;
+    const silent = options?.silent ?? hydratedFromCacheRef.current;
 
     if (!silent) {
       setProgramLoading(true);
@@ -130,13 +131,10 @@ export default function DashboardScreen() {
 
     const { from, to } = getWeekRange(new Date(), user?.timezone);
 
-    try {
-      const cached = await planDataCache.readWeek(user.id, from, to);
-
-      if (generation !== loadGenerationRef.current) return;
-
+    const applyWeekCache = (cached: Awaited<ReturnType<typeof planDataCache.readWeek>>) => {
       if (cached.workouts.length > 0) {
-        setWeekWorkouts(cached.workouts);
+        const workouts = dedupePlannedWorkoutsByDate(cached.workouts, new Date(), user.timezone);
+        setWeekWorkouts(workouts);
         hydratedFromCacheRef.current = true;
         setProgramLoading(false);
       }
@@ -149,126 +147,117 @@ export default function DashboardScreen() {
         hydratedFromCacheRef.current = true;
         setSummaryLoading(false);
       }
+      if (cached.program) setProgram(cached.program);
+    };
 
-      void warmWeekPlanData(user.id, user.timezone);
-
-      const plannedResult = await withTimeout(
-        trainingService.getPlannedWorkouts(user.id, from, to, user.timezone),
-        cached.workouts.length > 0 ? 8_000 : 10_000,
-        'planned workouts',
-      );
-
+    try {
+      const cached = await planDataCache.readWeek(user.id, from, to);
       if (generation !== loadGenerationRef.current) return;
-
-      if (plannedResult.success) {
-        const workouts = dedupePlannedWorkoutsByDate(plannedResult.data, new Date(), user.timezone);
-        setWeekWorkouts(workouts);
-        void planDataCache.writeWorkouts(user.id, from, to, workouts);
-      }
-      logStartup('WORKOUT_PLAN_LOADED', { count: plannedResult.success ? plannedResult.data.length : 0 });
-      logStartup('WORKOUTS_LOADED');
+      applyWeekCache(cached);
     } catch (error) {
       console.warn('[dashboard] workout plan load failed', error);
     } finally {
       if (generation === loadGenerationRef.current) {
         setProgramLoading(false);
+        setSummaryLoading(false);
+        setRefreshing(false);
       }
     }
 
-    void (async () => {
-      try {
-        const cached = await planDataCache.readWeek(user.id, from, to);
+    void withTimeout(
+      warmWeekPlanData(user.id, user.timezone),
+      hydratedFromCacheRef.current ? 8_000 : 10_000,
+      'week plan warm',
+    )
+      .catch(() => undefined)
+      .then(async () => {
         if (generation !== loadGenerationRef.current) return;
-
-        if (cached.goals && cached.meals.length > 0) return;
-
-        const [goalsResult, mealsResult] = await Promise.all([
-          cached.goals
-            ? Promise.resolve({ success: true as const, data: cached.goals })
-            : withTimeout(nutritionService.getGoals(user.id), 8_000, 'nutrition goals'),
-          cached.meals.length > 0
-            ? Promise.resolve({ success: true as const, data: cached.meals })
-            : withTimeout(nutritionService.getMealsForWeek(user.id, from, to), 8_000, 'week meals'),
-        ]);
-
-        if (generation !== loadGenerationRef.current) return;
-
-        if (goalsResult.success) {
-          setNutritionGoals(goalsResult.data);
-          void planDataCache.writeGoals(user.id, goalsResult.data);
+        try {
+          const fresh = await planDataCache.readWeek(user.id, from, to);
+          if (generation !== loadGenerationRef.current) return;
+          applyWeekCache(fresh);
+          logStartup('WORKOUT_PLAN_LOADED', { count: fresh.workouts.length });
+          logStartup('WORKOUTS_LOADED');
+          if (fresh.meals.length > 0) {
+            logStartup('NUTRITION_PLAN_LOADED', { count: fresh.meals.length });
+          }
+        } catch (error) {
+          console.warn('[dashboard] week plan refresh failed', error);
         }
-        if (mealsResult.success) {
-          setTodayMeals(mealsForCalendarDay(mealsResult.data, today));
-          void planDataCache.writeMeals(user.id, from, to, mealsResult.data);
-          logStartup('NUTRITION_PLAN_LOADED', { count: mealsResult.data.length });
+      });
+
+    InteractionManager.runAfterInteractions(() => {
+      void (async () => {
+        try {
+          const [programResult, dashResult] = await Promise.all([
+            trainingService.getDashboard(user.id),
+            analyticsService.getDashboard(user.id),
+          ]);
+          if (generation !== loadGenerationRef.current) return;
+          if (programResult.success) {
+            setProgram(programResult.data);
+            void planDataCache.writeProgram(user.id, from, to, programResult.data);
+          }
+          if (dashResult.success) setData(dashResult.data);
+        } catch (error) {
+          console.warn('[dashboard] deferred dashboard load failed', error);
         }
-      } catch (error) {
-        console.warn('[dashboard] nutrition load failed', error);
-      } finally {
-        if (generation === loadGenerationRef.current) {
-          setSummaryLoading(false);
-          setRefreshing(false);
-        }
-      }
-    })();
+      })();
 
-    void (async () => {
-      try {
-        const [programResult, dashResult] = await Promise.all([
-          trainingService.getDashboard(user.id),
-          analyticsService.getDashboard(user.id),
-        ]);
-        if (generation !== loadGenerationRef.current) return;
-        if (programResult.success) {
-          setProgram(programResult.data);
-          void planDataCache.writeProgram(user.id, from, to, programResult.data);
-        }
-        if (dashResult.success) setData(dashResult.data);
-      } catch (error) {
-        console.warn('[dashboard] deferred dashboard load failed', error);
-      }
-    })();
+      void (async () => {
+        try {
+          const recoveryResult = isPremiumRef.current
+            ? await recoveryService.getIntelligence(user.id)
+            : await recoveryService.getToday(user.id);
 
-    void (async () => {
-      try {
-        const recoveryResult = isPremiumRef.current
-          ? await recoveryService.getIntelligence(user.id)
-          : await recoveryService.getToday(user.id);
+          if (generation !== loadGenerationRef.current) return;
 
-        if (generation !== loadGenerationRef.current) return;
-
-        if (isPremiumRef.current) {
-          const intelResult = recoveryResult as Awaited<ReturnType<typeof recoveryService.getIntelligence>>;
-          if (intelResult.success) {
-            setRecoveryIntel(intelResult.data);
-            setRecoveryScore(intelResult.data.recoveryScore);
+          if (isPremiumRef.current) {
+            const intelResult = recoveryResult as Awaited<ReturnType<typeof recoveryService.getIntelligence>>;
+            if (intelResult.success) {
+              setRecoveryIntel(intelResult.data);
+              setRecoveryScore(intelResult.data.recoveryScore);
+            } else {
+              setRecoveryIntel(null);
+              setRecoveryScore(null);
+            }
           } else {
+            const todayResult = recoveryResult as Awaited<ReturnType<typeof recoveryService.getToday>>;
             setRecoveryIntel(null);
-            setRecoveryScore(null);
+            if (todayResult.success && todayResult.data) {
+              setRecoveryScore(todayResult.data.recoveryScore);
+            } else {
+              setRecoveryScore(null);
+            }
           }
-        } else {
-          const todayResult = recoveryResult as Awaited<ReturnType<typeof recoveryService.getToday>>;
-          setRecoveryIntel(null);
-          if (todayResult.success && todayResult.data) {
-            setRecoveryScore(todayResult.data.recoveryScore);
-          } else {
-            setRecoveryScore(null);
-          }
+          logStartup('RECOVERY_LOADED');
+        } catch (error) {
+          console.warn('[dashboard] recovery load failed', error);
         }
-        logStartup('RECOVERY_LOADED');
-      } catch (error) {
-        console.warn('[dashboard] recovery load failed', error);
-      }
-    })();
+      })();
 
-    void nutritionService.pruneDuplicateMeals(user.id);
+      void nutritionService.pruneDuplicateMeals(user.id).catch(() => undefined);
+    });
 
     if (!appReadyLoggedRef.current && generation === loadGenerationRef.current) {
       appReadyLoggedRef.current = true;
       logStartup('APP_READY');
       printStartupReport();
     }
-  }, [user, today, weekWorkouts.length]);
+  }, [user?.id, user?.timezone, today]);
+
+  useEffect(() => {
+    if (!user?.id || regenCheckedRef.current) return;
+    regenCheckedRef.current = true;
+
+    const task = InteractionManager.runAfterInteractions(() => {
+      void trainingService.regenerateProgramIfNeeded(user.id).then((regen) => {
+        if (regen.success && regen.data.regenerated) void load({ silent: true });
+      });
+    });
+
+    return () => task.cancel();
+  }, [user?.id, load]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -293,8 +282,16 @@ export default function DashboardScreen() {
         hydratedFromCacheRef.current = true;
       }
 
-      void warmWeekPlanData(user.id, user.timezone);
-      void load({ silent: hydratedFromCacheRef.current });
+      const hasCache =
+        cached.workouts.length > 0 || cached.meals.length > 0 || cached.program != null;
+      if (hasCache) {
+        InteractionManager.runAfterInteractions(() => {
+          void load({ silent: true });
+        });
+      } else {
+        void warmWeekPlanData(user.id, user.timezone);
+        void load({ silent: false });
+      }
     })();
 
     return () => {
@@ -473,27 +470,26 @@ export default function DashboardScreen() {
   }
 
   async function handleStartNextWorkout(planned: PlannedWorkout) {
-    if (!user) return;
-    const location = pickDefaultLocation(locations, selectedId);
+    if (!user || startingWorkout) return;
     setStartingWorkout(true);
-    const started = await startSessionFromPlanned(planned.id, {
-      name: planned.name,
-      gymName: location?.name ?? user.primaryGymName ?? undefined,
-      trainingLocation: location?.locationType ?? user.trainingLocation,
-      workoutLocationId: location?.id,
-    });
-    if (started) {
-      const sessionExercises = exercisesForSessionStart(
+    try {
+      const result = await startPlannedWorkout({
+        user,
         planned,
-        tabataModeEnabled && !isConditioningWorkout(planned),
-      );
-      if (sessionExercises.length > 0) {
-        await workoutService.applySessionExercisePlan(started.id, user.id, sessionExercises);
-        await refreshSession();
-      }
+        tabataModeEnabled,
+        locations,
+        selectedLocationId: selectedId,
+        startSessionFromPlanned,
+        refreshSession,
+      });
+      if (!result) return;
+
+      setPlannedWorkout(planned);
+      setExercises(result.sessionExercises);
       router.push('/(tabs)/workout');
+    } finally {
+      setStartingWorkout(false);
     }
-    setStartingWorkout(false);
   }
 
   return (
@@ -580,6 +576,7 @@ export default function DashboardScreen() {
             }
             onLogMeal={() => router.push('/(tabs)/nutrition')}
             onQuickLogMeal={() => router.push('/(tabs)/nutrition?log=1')}
+            onGenerateMealPlan={() => router.push('/(tabs)/nutrition?generate=1')}
             onViewWorkout={() => {
               if (!todaysWorkout) return;
               router.push({ pathname: '/(tabs)/workout/day', params: { id: todaysWorkout.id } });

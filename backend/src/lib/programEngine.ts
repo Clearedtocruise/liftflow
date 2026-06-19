@@ -53,7 +53,7 @@ export type CreateProgramInput = {
 };
 
 /** Bump when workout planning rules change so existing programs can be regenerated. */
-export const PLAN_RULES_VERSION = 3;
+export const PLAN_RULES_VERSION = 5;
 
 const MIN_ACCEPTABLE_EXERCISES_PER_SESSION = 8;
 
@@ -94,9 +94,8 @@ function scaleExercises(
 }
 
 function shouldIncludeCore(slot: DaySlot): boolean {
-  if (slot.sessionKind === 'cardio') return false;
-  const key = slot.label.toLowerCase();
-  return key.includes('leg') || key.includes('lower') || key.includes('full') || key.includes('push');
+  if (slot.isRest || slot.sessionKind === 'cardio') return false;
+  return true;
 }
 
 async function ensurePhaseForWeek(
@@ -201,6 +200,7 @@ export async function generateTrainingProgram(input: CreateProgramInput) {
   if (programError) throw programError;
 
   const templateCache = new Map<string, string>();
+  const programRecentSlugs = new Map<string, Date>();
   let plannedCount = 0;
 
   for (let week = 1; week <= durationWeeks; week++) {
@@ -239,7 +239,8 @@ export async function generateTrainingProgram(input: CreateProgramInput) {
         continue;
       }
 
-      const cacheKey = `${slot.label}-${phaseSpec.sprintPhase}`;
+      const cacheKey = `${slot.label}-${phaseSpec.sprintPhase}-week-${week}-day-${slot.dayIndex}`;
+      const rotationSeed = (week - 1) * 7 + slot.dayIndex;
 
       let templateId = templateCache.get(cacheKey);
       if (!templateId) {
@@ -253,6 +254,8 @@ export async function generateTrainingProgram(input: CreateProgramInput) {
             targetExerciseCount: WORKOUT_TARGET_EXERCISES,
             minimumExercises: WORKOUT_MIN_EXERCISES,
             minimumSets: WORKOUT_MIN_SETS,
+            programRecentSlugs,
+            rotationSeed,
           },
         );
 
@@ -381,16 +384,16 @@ export async function regenerateActiveProgram(userId: string, options?: { force?
       return { regenerated: false as const, reason: 'already_current' as const, program, plannedCount: 0 };
     }
 
-    const fallback = !meta.programType || !meta.frequency ? await buildProgramInputFromProfile(userId) : null;
+    const profileInput = await buildProgramInputFromProfile(userId);
 
     const input: CreateProgramInput = {
       userId,
-      programType: meta.programType ?? fallback!.programType,
-      frequency: meta.frequency ?? fallback!.frequency,
-      goal: meta.goal ?? fallback?.goal,
-      experience: meta.experience ?? fallback?.experience,
+      programType: profileInput.programType,
+      frequency: profileInput.frequency,
+      goal: profileInput.goal ?? meta.goal,
+      experience: profileInput.experience ?? meta.experience,
       durationWeeks: program.duration_weeks ?? 12,
-      equipment: meta.equipment ?? fallback?.equipment,
+      equipment: profileInput.equipment ?? meta.equipment,
       locationId: meta.locationId,
       locationName: meta.locationName,
       customSchedule: meta.customSchedule,

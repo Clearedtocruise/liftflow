@@ -1,6 +1,6 @@
 import { isSameCalendarDate, localMinutesSinceMidnight, parseScheduledTimeToMinutes } from '@/lib/localDate';
-import { enrichMealMeta } from '@/lib/mealIngredients';
 import { pickMealsToKeep } from '@/lib/mealCleanup';
+import { enrichMealMeta, resolveMealMacros } from '@/lib/mealIngredients';
 import type { MealType } from '@/types/common';
 import type { DailyNutritionSummary, Meal, NutritionGoals } from '@/types/nutrition';
 
@@ -66,10 +66,11 @@ export function aggregateDailyMeals(meals: Meal[]): DailyMealAggregation {
 
   for (const meal of dedupeMealsByType(meals)) {
     if (!isConsumedMeal(meal)) continue;
-    caloriesConsumed += meal.calories ?? 0;
-    proteinG += Number(meal.proteinG ?? 0);
-    carbsG += Number(meal.carbsG ?? 0);
-    fatG += Number(meal.fatG ?? 0);
+    const macros = resolveMealMacros(meal);
+    caloriesConsumed += macros.calories;
+    proteinG += macros.proteinG;
+    carbsG += macros.carbsG;
+    fatG += macros.fatG;
   }
 
   const mealsCompleted = dedupedMeals.filter((meal) => {
@@ -85,8 +86,8 @@ export function aggregateDailyMeals(meals: Meal[]): DailyMealAggregation {
     fatG,
     mealsCompleted,
     mealsTotal: dedupedMeals.length,
-    plannedCalories: dedupedMeals.reduce((sum, meal) => sum + (meal.calories ?? 0), 0),
-    plannedProteinG: dedupedMeals.reduce((sum, meal) => sum + Number(meal.proteinG ?? 0), 0),
+    plannedCalories: dedupedMeals.reduce((sum, meal) => sum + resolveMealMacros(meal).calories, 0),
+    plannedProteinG: dedupedMeals.reduce((sum, meal) => sum + resolveMealMacros(meal).proteinG, 0),
   };
 }
 

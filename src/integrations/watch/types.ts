@@ -90,4 +90,6 @@ export type WatchWorkoutMessage =
   | { type: 'confirm_reps'; workoutSessionId: string; workoutExerciseId: string }
   | { type: 'skip_rest'; workoutSessionId?: string }
   | { type: 'next_set'; workoutSessionId?: string }
+  | { type: 'log_set'; workoutSessionId?: string }
+  | { type: 'start_workout'; workoutSessionId?: string }
   | { type: 'workout_sync'; [key: string]: unknown };

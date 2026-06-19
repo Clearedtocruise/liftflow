@@ -1,7 +1,7 @@
 import { planDataCache } from '@/lib/planDataCache';
 import { logStartup } from '@/lib/startupLogger';
-import { withTimeout } from '@/lib/withTimeout';
 import { getWeekRange } from '@/lib/weekPlan';
+import { withTimeout } from '@/lib/withTimeout';
 import { nutritionService } from '@/services/nutritionService';
 import { trainingService } from '@/services/trainingService';
 
@@ -10,6 +10,18 @@ function weekKey(userId: string, weekFrom: string, weekTo: string): string {
 }
 
 const inflight = new Map<string, Promise<void>>();
+
+export function invalidateWeekPlanPrefetch(userId: string, timezone?: string): void {
+  const { from, to } = getWeekRange(new Date(), timezone);
+  inflight.delete(weekKey(userId, from, to));
+}
+
+/** Kick off AsyncStorage read + network warm as early as auth allows. */
+export function startPlanPrefetch(userId: string, timezone?: string): void {
+  const { from, to } = getWeekRange(new Date(), timezone);
+  planDataCache.prefetchWeek(userId, from, to);
+  void warmWeekPlanData(userId, timezone);
+}
 
 /** Fetch week plan data once and write to planDataCache (shared across tabs). */
 export function warmWeekPlanData(userId: string, timezone?: string): Promise<void> {
