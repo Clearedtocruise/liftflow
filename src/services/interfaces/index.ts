@@ -215,7 +215,7 @@ export interface INutritionService {
   getMealsForDate(userId: string, date: string): Promise<ServiceResult<import('@/types').Meal[]>>;
   getDailySummary(userId: string, date?: string): Promise<ServiceResult<import('@/types').DailyNutritionSummary>>;
   getMealPlans(userId: string): Promise<ServiceResult<MealPlan[]>>;
-  generateWeeklyMealPlan(userId: string): Promise<ServiceResult<MealPlan>>;
+  generateWeeklyMealPlan(userId: string, timeZone?: string | null): Promise<ServiceResult<MealPlan>>;
   pruneDuplicateMeals(userId: string, range?: { from?: string; to?: string }): Promise<ServiceResult<number>>;
   getMealsForWeek(userId: string, from: string, to: string): Promise<ServiceResult<import('@/types').Meal[]>>;
   generateGroceryList(userId: string, mealPlanId?: string): Promise<ServiceResult<GroceryList>>;

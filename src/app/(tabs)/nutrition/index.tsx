@@ -356,26 +356,39 @@ export default function NutritionScreen() {
 
   async function ensureMealPlan() {
     if (!user) return;
+    const generation = ++loadGenerationRef.current;
     setLoading(true);
     try {
-      const result = await nutritionService.generateWeeklyMealPlan(user.id);
-      if (result.success) {
-        const { from, to } = getWeekRange(new Date(), user.timezone);
-        const meals = result.data.meals ?? [];
-        if (meals.length === 0) {
-          Alert.alert(
-            'No meals added',
-            'Existing logged meals may be blocking this week. Try again after clearing duplicate plan slots, or contact support.',
-          );
-          return;
-        }
-        void planDataCache.writeMeals(user.id, from, to, meals);
-        await load({ silent: true });
-      } else {
-        Alert.alert('Error', result.error);
+      const result = await nutritionService.generateWeeklyMealPlan(user.id, user.timezone);
+      if (generation !== loadGenerationRef.current) return;
+
+      if (!result.success) {
+        Alert.alert('Could not generate meal plan', result.error);
+        return;
       }
+
+      const { from, to } = getWeekRange(new Date(), user.timezone);
+      const refreshed = await nutritionService.getMealsForWeek(user.id, from, to);
+      if (generation !== loadGenerationRef.current) return;
+
+      if (!refreshed.success || refreshed.data.length === 0) {
+        Alert.alert(
+          'Meals not visible',
+          refreshed.success
+            ? 'Plan saved but meals did not load. Pull to refresh or restart the app.'
+            : refreshed.error,
+        );
+        return;
+      }
+
+      setWeekMeals(refreshed.data);
+      setSummary((prev) => buildDailySummaryFromMeals(refreshed.data, today, goals, prev?.waterMl ?? 0));
+      void planDataCache.writeMeals(user.id, from, to, refreshed.data);
+      setLoadError(null);
     } finally {
-      setLoading(false);
+      if (generation === loadGenerationRef.current) {
+        setLoading(false);
+      }
     }
   }
 

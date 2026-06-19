@@ -38,7 +38,14 @@ const REQUIRED = [
   {
     file: 'src/services/nutritionService.ts',
     label: 'Nutrition service generate',
-    patterns: ['ensureWeekMealCoverage', 'generateWeeklyMealPlan', 'removePlannedMealsForWeek'],
+    patterns: [
+      'ensureWeekMealCoverage',
+      'generateWeeklyMealPlan',
+      'removePlannedMealsForWeek',
+      'remapApiMealsToClientWeek',
+      'clientWeekStart',
+      'insertError',
+    ],
   },
   {
     file: 'src/app/(tabs)/dashboard.tsx',
