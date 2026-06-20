@@ -21,6 +21,7 @@ final class WorkoutConnectivity: NSObject, ObservableObject, WCSessionDelegate {
   @Published var workoutRecommendation = ""
   @Published var progressionLine = ""
   @Published var lastSpokenResponse = ""
+  @Published var weightLbs: Int?
 
   private(set) var workoutSessionId: String?
   private var restEndDate: Date?
@@ -96,6 +97,7 @@ final class WorkoutConnectivity: NSObject, ObservableObject, WCSessionDelegate {
       needsConfirmation = activeSet["needsConfirmation"] as? Bool ?? false
       motionTrackingEnabled = activeSet["exerciseProfileId"] != nil
       workoutSessionId = activeSet["workoutSessionId"] as? String
+      weightLbs = activeSet["weightLbs"] as? Int
       setLabel = "Set \(setNumber)/\(targetSets) · \(targetReps) reps"
       phase = activeSet["phase"] as? String ?? "active_set"
 
@@ -123,6 +125,7 @@ final class WorkoutConnectivity: NSObject, ObservableObject, WCSessionDelegate {
       targetReps = 0
       motionTrackingEnabled = false
       workoutSessionId = nil
+      weightLbs = nil
       clearRestCountdown()
     }
 
@@ -196,8 +199,6 @@ final class WorkoutConnectivity: NSObject, ObservableObject, WCSessionDelegate {
   }
 
   func skipRest() {
-    clearRestCountdown()
-    phase = "active_set"
     sendToPhone(type: "skip_rest")
   }
 
@@ -215,6 +216,47 @@ final class WorkoutConnectivity: NSObject, ObservableObject, WCSessionDelegate {
 
   func startTodaysWorkout() {
     sendToPhone(type: "start_workout")
+  }
+
+  func cancelWorkout() {
+    sendToPhone(type: "cancel_workout")
+  }
+
+  func voiceReps() {
+    guard let controller = WKExtension.shared().visibleInterfaceController else {
+      lastSpokenResponse = "Open ONE MORE on iPhone"
+      return
+    }
+    controller.presentTextInputController(
+      withSuggestions: ["6", "8", "10", "12"],
+      allowedInputMode: .plain
+    ) { [weak self] results in
+      DispatchQueue.main.async {
+        guard let self, let text = results?.first as? String, !text.isEmpty else { return }
+        self.sendVoiceCommand(text)
+      }
+    }
+  }
+
+  func voiceWeight() {
+    guard let controller = WKExtension.shared().visibleInterfaceController else {
+      lastSpokenResponse = "Open ONE MORE on iPhone"
+      return
+    }
+    controller.presentTextInputController(
+      withSuggestions: ["135", "185", "225"],
+      allowedInputMode: .plain
+    ) { [weak self] results in
+      DispatchQueue.main.async {
+        guard let self, let text = results?.first as? String, !text.isEmpty else { return }
+        let digits = text.filter { $0.isNumber }
+        guard let lbs = Int(digits), lbs > 0 else {
+          self.lastSpokenResponse = "Enter weight in pounds"
+          return
+        }
+        self.sendToPhone(type: "set_weight", extra: ["weightLbs": lbs])
+      }
+    }
   }
 
   func requestPhoneSync() {

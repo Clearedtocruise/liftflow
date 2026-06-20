@@ -16,9 +16,13 @@ import { trainingService } from '@/services/trainingService';
 import { watchWorkoutService } from '@/services/watchWorkoutService';
 import { workoutRecommendationService } from '@/services/workoutRecommendationService';
 import { workoutService } from '@/services/workoutService';
+import { watchPhoneBridge } from '@/state/WatchPhoneBridge';
 import { supabase } from '@/supabase/client';
 import type { WorkoutSession } from '@/types';
 import type { ServiceResult } from '@/types/common';
+
+/** Phone-side commands that must not trigger syncActiveSession + enrichState on the Watch. */
+const LIGHTWEIGHT_INBOUND = new Set(['skip_rest', 'set_weight', 'voice_command', 'log_set']);
 
 export const watchCompanionService = {
   async enrichState(userId: string, state: WatchWorkoutAssistantState): Promise<WatchWorkoutAssistantState> {
@@ -86,15 +90,14 @@ export const watchCompanionService = {
       session: WorkoutSession | null;
       restSecondsRemaining: number | null;
       activeExerciseIndex?: number;
+      /** When true, never re-fetch an active session from the database. */
+      forceClear?: boolean;
     },
   ): Promise<void> {
-    let session = params.session;
-    if (!session) {
-      const active = await workoutService.getActiveSession(userId);
-      if (active.success && active.data) {
-        session = active.data;
-      }
-    }
+    const exerciseIndex = params.activeExerciseIndex ?? watchPhoneBridge.getExerciseIndex();
+    const restSeconds = params.restSecondsRemaining ?? watchPhoneBridge.getRestSecondsRemaining();
+
+    const session = params.forceClear ? null : params.session;
 
     if (!session) {
       const cleared = watchWorkoutService.getState(userId);
@@ -105,7 +108,7 @@ export const watchCompanionService = {
     }
 
     const sync = await watchWorkoutService.syncActiveSession(userId, session, {
-      exerciseIndex: params.activeExerciseIndex ?? 0,
+      exerciseIndex,
     });
     if (!sync.success) {
       const feedback = await this.buildFeedbackState(userId, sync.error ?? 'Could not sync workout to Watch.');
@@ -114,8 +117,8 @@ export const watchCompanionService = {
     }
 
     let state = sync.data;
-    if (params.restSecondsRemaining != null && state.activeSet) {
-      state = watchWorkoutService.updateRestTimer(userId, params.restSecondsRemaining);
+    if (restSeconds != null && state.activeSet) {
+      state = watchWorkoutService.updateRestTimer(userId, restSeconds);
     }
 
     const enriched = await this.enrichState(userId, state);
@@ -211,9 +214,34 @@ export const watchCompanionService = {
       const sessionResult = await workoutService.getActiveSession(userId);
       await this.pushPhoneWorkoutState(userId, {
         session: sessionResult.success ? sessionResult.data : null,
-        restSecondsRemaining: null,
+        restSecondsRemaining: watchPhoneBridge.getRestSecondsRemaining(),
+        activeExerciseIndex: watchPhoneBridge.getExerciseIndex(),
       });
       return this.replyWithCurrentState(userId);
+    }
+
+    if (message.type === 'cancel_workout') {
+      const bridgeResult = await watchPhoneBridge.cancelWorkout();
+      if (!bridgeResult.ok) {
+        const active = await workoutService.getActiveSession(userId);
+        if (active.success && active.data) {
+          await workoutService.cancelSession(active.data.id);
+        }
+      }
+      await this.pushPhoneWorkoutState(userId, {
+        session: null,
+        restSecondsRemaining: null,
+        forceClear: true,
+      });
+      const cleared = watchWorkoutService.getState(userId);
+      const enriched = await this.enrichState(userId, { ...cleared, activeSet: null });
+      watchWorkoutService.loadState(userId, enriched);
+      return {
+        reply: {
+          type: 'workout_state',
+          state: { ...enriched, lastSpokenResponse: 'Workout cancelled.' },
+        },
+      };
     }
 
     if (message.type === 'start_workout') {
@@ -235,11 +263,7 @@ export const watchCompanionService = {
 
     const result = await integrationService.handleWatchMessage(message, userId);
 
-    const sessionResult = await workoutService.getActiveSession(userId);
-    await this.pushPhoneWorkoutState(userId, {
-      session: sessionResult.success ? sessionResult.data : null,
-      restSecondsRemaining: null,
-    });
+    const messageType = typeof message.type === 'string' ? message.type : '';
 
     if (result && typeof result === 'object' && 'success' in result && result.success === false) {
       const errorMessage =
@@ -249,13 +273,30 @@ export const watchCompanionService = {
       return { reply: { type: 'workout_state', state: feedback } };
     }
 
+    if (LIGHTWEIGHT_INBOUND.has(messageType)) {
+      const state = watchWorkoutService.getState(userId);
+      await pushWorkoutStateToWatch(state);
+      return { reply: { type: 'workout_state', state } };
+    }
+
+    const restAfterCommand = watchPhoneBridge.getRestSecondsRemaining();
+    const sessionResult = await workoutService.getActiveSession(userId);
+    await this.pushPhoneWorkoutState(userId, {
+      session: sessionResult.success ? sessionResult.data : null,
+      restSecondsRemaining: restAfterCommand,
+      activeExerciseIndex: watchPhoneBridge.getExerciseIndex(),
+    });
+
     return this.replyWithCurrentState(userId);
   },
 
-  startInboundListener(userId: string, onSessionChange?: () => void): () => void {
+  startInboundListener(
+    userId: string,
+    onSessionChange?: (message: Record<string, unknown>) => void,
+  ): () => void {
     return subscribeToWatchMessages(async (message) => {
       const result = await this.handleInboundMessage(userId, message);
-      onSessionChange?.();
+      onSessionChange?.(message);
       return result;
     });
   },

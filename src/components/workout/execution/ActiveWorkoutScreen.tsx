@@ -59,6 +59,7 @@ import { parseTargetReps } from '@/lib/workoutPlan';
 import { logWorkoutProgressionDecision } from '@/lib/workoutProgressionDebug';
 import { resolveBetweenExerciseUpNext, resolveTabataPrepUpNext, resolveWorkoutUpNext } from '@/lib/workoutUpNext';
 import { workoutService } from '@/services/workoutService';
+import { watchPhoneBridge } from '@/state/WatchPhoneBridge';
 import { useWorkoutSession } from '@/state/workout/WorkoutSessionContext';
 import type { Exercise, WorkoutSession } from '@/types';
 import type { ExerciseCoachPrescription } from '@/types/exerciseCoach';
@@ -139,7 +140,16 @@ export function ActiveWorkoutScreen({
     deleteSet,
     addExerciseByName,
     setActiveExerciseIndex,
+    watchDraftReps,
+    setWatchDraftReps,
+    watchDraftWeightKg,
+    setWatchDraftWeightKg,
   } = useWorkoutSession();
+
+  const watchDraftRepsRef = useRef<number | null>(null);
+  watchDraftRepsRef.current = watchDraftReps;
+  const watchDraftWeightKgRef = useRef<number | null>(null);
+  watchDraftWeightKgRef.current = watchDraftWeightKg;
 
   const elapsedSeconds = useWorkoutElapsedSeconds(session.startedAt, session.status);
 
@@ -415,6 +425,28 @@ export function ActiveWorkoutScreen({
   }, [circuitTimer?.phase, dismissCircuitTimer]);
 
   useEffect(() => {
+    if (watchDraftReps != null) {
+      setReps(watchDraftReps);
+      return;
+    }
+    const pending = watchPhoneBridge.getPendingWatchReps();
+    if (pending != null) {
+      setReps(pending);
+    }
+  }, [watchDraftReps]);
+
+  useEffect(() => {
+    if (watchDraftWeightKg != null) {
+      setWeightKg(watchDraftWeightKg);
+      return;
+    }
+    const pending = watchPhoneBridge.getPendingWatchWeightKg();
+    if (pending != null) {
+      setWeightKg(pending);
+    }
+  }, [watchDraftWeightKg]);
+
+  useEffect(() => {
     if (!user || !currentExercise?.exerciseId) return;
 
     const mode = getExerciseLoggingMode(
@@ -474,6 +506,13 @@ export function ActiveWorkoutScreen({
         setReps(parseTargetReps(repRange));
       } else {
         setReps(parseTargetReps(repRange));
+      }
+
+      if (watchDraftRepsRef.current != null) {
+        setReps(watchDraftRepsRef.current);
+      }
+      if (watchDraftWeightKgRef.current != null) {
+        setWeightKg(watchDraftWeightKgRef.current);
       }
     });
 
@@ -621,9 +660,10 @@ export function ActiveWorkoutScreen({
     if (activeChallenge || groupComplete) return;
     const template = pickWorkoutChallenge(challengeRecords, 'between_sets');
     if (!template) return;
+    setChallengeTargetExerciseName(currentExercise?.exercise?.name ?? null);
     setChallengeTrigger('between_sets');
     setActiveChallenge(template);
-  }, [activeChallenge, challengeRecords, groupComplete]);
+  }, [activeChallenge, challengeRecords, groupComplete, currentExercise?.exercise?.name]);
 
   const handleChallengeSkip = useCallback(() => {
     if (!activeChallenge) return;
@@ -770,10 +810,32 @@ export function ActiveWorkoutScreen({
       if (completedAfterLog < targetSets) {
         offerBetweenSetsChallenge();
       }
+
+      setWatchDraftReps(null);
+      watchPhoneBridge.clearPendingWatchReps();
+      setWatchDraftWeightKg(null);
+      watchPhoneBridge.clearPendingWatchWeightKg();
     } finally {
       setLogging(false);
     }
   }
+
+  const handleLogSetRef = useRef(handleLogSet);
+  handleLogSetRef.current = handleLogSet;
+
+  useEffect(() => {
+    watchPhoneBridge.setLogSetHandler(async () => {
+      await handleLogSetRef.current();
+    });
+    return () => {
+      watchPhoneBridge.setLogSetHandler(null);
+    };
+  }, []);
+
+  useEffect(() => {
+    watchPhoneBridge.setTargetSetsReader(() => targetSets);
+    return () => watchPhoneBridge.setTargetSetsReader(null);
+  }, [targetSets]);
 
   function performExerciseAdvanceDirect() {
     if (autoAdvanceTimeoutRef.current) {

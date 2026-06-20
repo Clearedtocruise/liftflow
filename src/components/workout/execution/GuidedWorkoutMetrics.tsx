@@ -80,6 +80,22 @@ export function GuidedWorkoutMetrics({
 
       <View style={styles.block}>
         <AppText variant="label" color="textSecondary">
+          Suggested Weight
+        </AppText>
+        {historySets.length > 0 && loggingMode === 'weighted' && historySets[0]?.weightKg != null && historySets[0].weightKg > 0 ? (
+          <AppText variant="bodyBold" color="accent">
+            {formatPreviousPerformanceLine(historySets[0], loggingMode, formatWeight, weightLabel, distanceUnit)}
+            {' · from last session'}
+          </AppText>
+        ) : (
+          <AppText variant="footnote" color="textTertiary">
+            Log your first set — we'll suggest weight next time
+          </AppText>
+        )}
+      </View>
+
+      <View style={styles.block}>
+        <AppText variant="label" color="textSecondary">
           Target Performance
         </AppText>
         <AppText variant="bodyBold">{targetPerformanceLine ?? planFallback}</AppText>

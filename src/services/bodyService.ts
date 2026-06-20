@@ -1,29 +1,11 @@
 import { API_BASE_URL } from '@/constants/api';
 import { mapBodyRecord, mapProgressPhoto } from '@/lib/db-mappers';
+import { resolveProgressPhotos } from '@/lib/progressPhotoUrls';
 import { fail, fromError, ok } from '@/lib/serviceResult';
+import { uploadProgressPhotoFile } from '@/lib/uploadProgressPhotoFile';
 import type { IBodyService } from '@/services/interfaces';
 import { getAccessToken, supabase } from '@/supabase/client';
 import type { PhotoAngle, PhysiqueProjection } from '@/types';
-
-const BUCKET = 'progress-photos';
-
-async function uploadPhotoFile(userId: string, uri: string): Promise<string> {
-  const ext = uri.split('.').pop()?.toLowerCase() ?? 'jpg';
-  const path = `${userId}/${Date.now()}.${ext}`;
-
-  const response = await fetch(uri);
-  const blob = await response.blob();
-
-  const { error } = await supabase.storage.from(BUCKET).upload(path, blob, {
-    contentType: blob.type || `image/${ext === 'png' ? 'png' : 'jpeg'}`,
-    upsert: false,
-  });
-
-  if (error) throw error;
-
-  const { data } = supabase.storage.from(BUCKET).getPublicUrl(path);
-  return data.publicUrl;
-}
 
 export const bodyService: IBodyService = {
   async recordComposition(userId, record) {
@@ -113,7 +95,8 @@ export const bodyService: IBodyService = {
         .order('taken_at', { ascending: false });
 
       if (error) return fail(error.message);
-      return ok((data ?? []).map(mapProgressPhoto));
+      const photos = (data ?? []).map(mapProgressPhoto);
+      return ok(await resolveProgressPhotos(photos));
     } catch (e) {
       return fromError(e);
     }
@@ -271,7 +254,7 @@ export const bodyService: IBodyService = {
 
   async uploadFromPicker(userId: string, uri: string, angle: PhotoAngle, weightKg?: number) {
     try {
-      const photoUrl = await uploadPhotoFile(userId, uri);
+      const photoUrl = await uploadProgressPhotoFile(userId, uri);
       return this.uploadProgressPhoto(userId, {
         userId,
         photoUrl,

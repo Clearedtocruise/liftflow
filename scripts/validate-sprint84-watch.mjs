@@ -109,7 +109,7 @@ record('Recovery score display', screen.includes('recoveryScore'));
 console.log('\n--- Native watchOS target (Phase 2) ---');
 record('MotionCapture.swift', exists('targets/watch/MotionCapture.swift'));
 record('Watch motion_batch sender', read('targets/watch/MotionCapture.swift').includes('motion_batch'));
-record('Watch voice commands', read('targets/watch/content.swift').includes('sendVoiceCommand'));
+record('Watch voice commands removed', !read('targets/watch/content.swift').includes('sendVoiceCommand'));
 record('Watch start workout button', read('targets/watch/content.swift').includes("Start Today's Workout"));
 record('Phone start_workout bridge', bridge.includes('start_workout'));
 record('watchCompanionService.startTodaysWorkoutFromWatch', companion.includes('startTodaysWorkoutFromWatch'));

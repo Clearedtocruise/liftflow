@@ -97,6 +97,21 @@ export type RecommendationEngineInput = {
 
 const TRACKED_MUSCLES = ['chest', 'back', 'legs', 'shoulders', 'biceps', 'triceps', 'core', 'arms', 'glutes'];
 
+function suggestCardioForGoals(fitnessGoals: string[], primaryGoal: string): string | null {
+  const goals = fitnessGoals.length ? fitnessGoals : primaryGoal ? [primaryGoal] : [];
+  const primary = goals[0] ?? 'general_fitness';
+  if (primary === 'fat_loss' || primary === 'weight_loss' || goals.includes('fat_loss')) {
+    return 'For your fat-loss goal: add 25–35 min brisk walk, or 20 min HIIT intervals on rest days.';
+  }
+  if (primary === 'hypertrophy' || primary === 'muscle_gain') {
+    return 'Optional: 15–20 min incline walk or light cycling to support recovery without hurting gains.';
+  }
+  if (primary === 'strength' || goals.includes('strength')) {
+    return 'Optional: 10–15 min easy bike or row on rest days for blood flow.';
+  }
+  return null;
+}
+
 const SPLIT_LABELS: Record<WorkoutSplitStyle, string> = {
   push_pull_legs: 'Push / Pull / Legs',
   upper_lower: 'Upper / Lower',
@@ -134,7 +149,7 @@ export function inferSplitStyle(fitnessGoals: string[], daysPerWeek: number): Wo
     return daysPerWeek >= 5 ? 'bodybuilding' : 'push_pull_legs';
   }
   if (primary === 'fat_loss' || primary === 'weight_loss') return 'fat_loss';
-  if (daysPerWeek <= 3) return 'full_body';
+  if (daysPerWeek <= 3) return 'bodybuilding';
   if (daysPerWeek >= 5) return 'push_pull_legs';
   return 'upper_lower';
 }
@@ -293,16 +308,23 @@ function buildDailyRec(
     slot.isRest ||
     (input.trainingRecommendation === 'rest_day' && !hasScheduledWorkout)
   ) {
+    const cardioHint = suggestCardioForGoals(input.fitnessGoals, input.primaryGoal);
+    const restLine = input.trainingRecommendation === 'rest_day'
+      ? `Recovery score ${input.recoveryScore} — rest day recommended.`
+      : 'Rest day on your weekly split.';
+    const whySelected = [restLine];
+    if (cardioHint) whySelected.push(cardioHint);
+
     return {
       date: dateStr,
       dayLabel: dayLabel(idx),
       isRestDay: true,
       targetMuscles: [],
-      whySelected: input.trainingRecommendation === 'rest_day'
-        ? [`Recovery score ${input.recoveryScore} — rest day recommended.`]
-        : ['Rest day on your weekly split.'],
+      whySelected,
       whyNotSelected: [],
-      voiceLine: 'Take a rest day. Your recovery score supports full rest today.',
+      voiceLine: cardioHint
+        ? `Rest day from lifting. ${cardioHint}`
+        : 'Take a rest day. Your recovery score supports full rest today.',
     };
   }
 
