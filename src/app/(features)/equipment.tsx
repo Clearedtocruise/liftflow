@@ -11,6 +11,7 @@ import { summarizeEquipment, type EquipmentId } from '@/constants/equipmentCatal
 import { Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 import { adaptationService } from '@/services/adaptationService';
+import { trainingService } from '@/services/trainingService';
 import { userService } from '@/services/userService';
 import { workoutLocationService } from '@/services/workoutLocationService';
 
@@ -55,10 +56,18 @@ export default function EquipmentScreen() {
 
     await refreshProfile();
 
-    const adaptResult = await adaptationService.applyChanges(user.id, 'equipment');
+    const [adaptResult, regenResult] = await Promise.all([
+      adaptationService.applyChanges(user.id, 'equipment'),
+      trainingService.forceRegenerateProgram(user.id),
+    ]);
     setSaving(false);
 
-    if (adaptResult.success && adaptResult.data.adapted) {
+    if (regenResult.success && regenResult.data.regenerated) {
+      Alert.alert(
+        'Plan updated',
+        'Your workouts were rebuilt to match your equipment.',
+      );
+    } else if (adaptResult.success && adaptResult.data.adapted) {
       Alert.alert(adaptResult.data.notificationTitle, adaptResult.data.notificationBody);
     } else if (adaptResult.success) {
       Alert.alert('Saved', 'Equipment updated. Your current plan already matches this setup.');

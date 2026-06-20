@@ -292,6 +292,16 @@ export const trainingService: ITrainingService = {
     }
   },
 
+  async forceRegenerateProgram(userId: string) {
+    try {
+      const token = await getAccessToken();
+      const result = await api.regenerateProgram(userId, token, true);
+      return ok({ regenerated: result.regenerated });
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
   async regenerateProgramIfNeeded(userId: string) {
     try {
       const { from, to } = await import('@/lib/weekPlan').then((m) => m.getWeekRange());
