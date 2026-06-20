@@ -217,6 +217,10 @@ final class WorkoutConnectivity: NSObject, ObservableObject, WCSessionDelegate {
     sendToPhone(type: "start_workout")
   }
 
+  func requestPhoneSync() {
+    sendToPhone(type: "request_sync")
+  }
+
   var isActiveSetPhase: Bool {
     phase == "active_set" || phase == "between_sets"
   }

@@ -56,6 +56,7 @@ struct ContentView: View {
     .onAppear {
       heartRate.requestAuthorization()
       heartRate.start()
+      connectivity.requestPhoneSync()
     }
     .onDisappear {
       heartRate.stop()

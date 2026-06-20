@@ -12,7 +12,7 @@ type AuthContextValue = {
   isLoading: boolean;
   isProfileReady: boolean;
   isAuthenticated: boolean;
-  signIn: (payload: SignInPayload) => Promise<void>;
+  signIn: (payload: SignInPayload) => Promise<UserProfile>;
   signUp: (payload: SignUpPayload) => Promise<SignUpResult>;
   signOut: () => Promise<void>;
   resetPassword: (payload: PasswordResetPayload) => Promise<void>;
@@ -94,6 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(profile);
     setIsProfileReady(true);
     startPlanPrefetch(profile.id, profile.timezone);
+    return profile;
   }, []);
 
   const signUp = useCallback(async (payload: SignUpPayload) => {

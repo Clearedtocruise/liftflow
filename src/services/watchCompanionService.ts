@@ -85,6 +85,7 @@ export const watchCompanionService = {
     params: {
       session: WorkoutSession | null;
       restSecondsRemaining: number | null;
+      activeExerciseIndex?: number;
     },
   ): Promise<void> {
     let session = params.session;
@@ -103,8 +104,14 @@ export const watchCompanionService = {
       return;
     }
 
-    const sync = await watchWorkoutService.syncActiveSession(userId, session);
-    if (!sync.success) return;
+    const sync = await watchWorkoutService.syncActiveSession(userId, session, {
+      exerciseIndex: params.activeExerciseIndex ?? 0,
+    });
+    if (!sync.success) {
+      const feedback = await this.buildFeedbackState(userId, sync.error ?? 'Could not sync workout to Watch.');
+      await pushWorkoutStateToWatch(feedback);
+      return;
+    }
 
     let state = sync.data;
     if (params.restSecondsRemaining != null && state.activeSet) {
@@ -200,6 +207,15 @@ export const watchCompanionService = {
     userId: string,
     message: Record<string, unknown>,
   ): Promise<WatchInboundHandlerResult> {
+    if (message.type === 'request_sync') {
+      const sessionResult = await workoutService.getActiveSession(userId);
+      await this.pushPhoneWorkoutState(userId, {
+        session: sessionResult.success ? sessionResult.data : null,
+        restSecondsRemaining: null,
+      });
+      return this.replyWithCurrentState(userId);
+    }
+
     if (message.type === 'start_workout') {
       const started = await this.startTodaysWorkoutFromWatch(userId);
       const sessionResult = await workoutService.getActiveSession(userId);

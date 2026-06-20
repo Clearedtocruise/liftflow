@@ -138,6 +138,7 @@ export function ActiveWorkoutScreen({
     refreshSession,
     deleteSet,
     addExerciseByName,
+    setActiveExerciseIndex,
   } = useWorkoutSession();
 
   const elapsedSeconds = useWorkoutElapsedSeconds(session.startedAt, session.status);
@@ -152,6 +153,9 @@ export function ActiveWorkoutScreen({
   );
 
   const [currentIndex, setCurrentIndex] = useState(0);
+  useEffect(() => {
+    setActiveExerciseIndex(currentIndex);
+  }, [currentIndex, setActiveExerciseIndex]);
   const [weightKg, setWeightKg] = useState(0);
   const [reps, setReps] = useState(8);
   const [durationSeconds, setDurationSeconds] = useState(30);

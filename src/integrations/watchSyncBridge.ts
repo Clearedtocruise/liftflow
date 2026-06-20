@@ -233,7 +233,7 @@ export function subscribeToWatchMessages(
 }
 
 export async function pushWorkoutStateToWatch(state: WatchWorkoutAssistantState): Promise<{ sent: boolean; error?: string }> {
-  return sendToWatch({ type: 'workout_state', state });
+  return sendToWatch({ type: 'workout_state', state: serializeWatchStateForNative(state) });
 }
 
 export async function requestWatchSync(): Promise<{ queued: boolean; error?: string }> {
@@ -274,8 +274,13 @@ export function isWorkoutAssistantMessage(message: Record<string, unknown>): boo
 /** Watch → phone commands (not phone → watch state echoes). */
 export function isInboundWatchCommand(message: Record<string, unknown>): boolean {
   const type = message.type;
-  if (typeof type !== 'string' || type === 'workout_state' || type === 'request_sync') return false;
+  if (typeof type !== 'string' || type === 'workout_state') return false;
+  if (type === 'request_sync') return true;
   return isWorkoutAssistantMessage(message);
+}
+
+export function serializeWatchStateForNative(state: WatchWorkoutAssistantState): WatchWorkoutAssistantState {
+  return JSON.parse(JSON.stringify(state)) as WatchWorkoutAssistantState;
 }
 
 export type WatchInboundHandlerResult = {

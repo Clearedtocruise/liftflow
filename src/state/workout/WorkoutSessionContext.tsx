@@ -18,6 +18,7 @@ import type { CreateSetPayload, RestPeriod, StartSessionPayload, UpdateSetPayloa
 
 type WorkoutSessionState = {
   activeSession: WorkoutSession | null;
+  activeExerciseIndex: number;
   activeRestPeriod: RestPeriod | null;
   restSecondsRemaining: number | null;
   isListening: boolean;
@@ -28,6 +29,7 @@ type WorkoutSessionState = {
 type WorkoutSessionActions = {
   hydrate: () => Promise<void>;
   refreshSession: () => Promise<void>;
+  setActiveExerciseIndex: (index: number) => void;
   startSession: (payload: StartSessionPayload) => Promise<WorkoutSession | null>;
   startSessionFromPlanned: (plannedWorkoutId: string, payload: StartSessionPayload) => Promise<WorkoutSession | null>;
   endSession: () => Promise<WorkoutSession | null>;
@@ -62,6 +64,7 @@ export function WorkoutSessionProvider({
   restTimerHaptics?: boolean;
 }) {
   const [activeSession, setActiveSession] = useState<WorkoutSession | null>(null);
+  const [activeExerciseIndex, setActiveExerciseIndex] = useState(0);
   const [activeRestPeriod, setActiveRestPeriod] = useState<RestPeriod | null>(null);
   const [restSecondsRemaining, setRestSecondsRemaining] = useState<number | null>(null);
   const [isListening, setIsListening] = useState(false);
@@ -98,6 +101,10 @@ export function WorkoutSessionProvider({
       setIsLoading(false);
     }
   }, [userId]);
+
+  useEffect(() => {
+    setActiveExerciseIndex(0);
+  }, [activeSession?.id]);
 
   useEffect(() => {
     hydrate();
@@ -371,6 +378,7 @@ export function WorkoutSessionProvider({
   const value = useMemo<WorkoutSessionContextValue>(
     () => ({
       activeSession,
+      activeExerciseIndex,
       activeRestPeriod,
       restSecondsRemaining,
       isListening,
@@ -378,6 +386,7 @@ export function WorkoutSessionProvider({
       lastLoggedSet,
       hydrate,
       refreshSession,
+      setActiveExerciseIndex,
       startSession,
       startSessionFromPlanned,
       endSession,
@@ -399,6 +408,7 @@ export function WorkoutSessionProvider({
     }),
     [
       activeSession,
+      activeExerciseIndex,
       activeRestPeriod,
       restSecondsRemaining,
       isListening,
@@ -406,6 +416,7 @@ export function WorkoutSessionProvider({
       lastLoggedSet,
       hydrate,
       refreshSession,
+      setActiveExerciseIndex,
       startSession,
       startSessionFromPlanned,
       endSession,
