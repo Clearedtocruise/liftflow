@@ -122,6 +122,8 @@ async function sendMessageAsync(message: Record<string, unknown>): Promise<void>
 export async function sendToWatch(
   message: WatchWorkoutMessage | Record<string, unknown>,
 ): Promise<{ sent: boolean; error?: string }> {
+  const isWorkoutState = (message as Record<string, unknown>).type === 'workout_state';
+
   try {
     require('react-native-watch-connectivity');
   } catch {
@@ -130,6 +132,10 @@ export async function sendToWatch(
   }
 
   try {
+    if (isWorkoutState) {
+      updateApplicationContext(message as Record<string, unknown>);
+    }
+
     const paired = await getIsPaired();
     if (!paired) {
       await watchOfflineQueue.enqueue(message as Record<string, unknown>);
@@ -143,10 +149,6 @@ export async function sendToWatch(
     }
 
     await sendMessageAsync(message as Record<string, unknown>);
-
-    if ((message as Record<string, unknown>).type === 'workout_state') {
-      updateApplicationContext(message as Record<string, unknown>);
-    }
 
     return { sent: true };
   } catch (error) {
@@ -177,21 +179,57 @@ export async function flushWatchOutboundQueue(): Promise<number> {
   return sent;
 }
 
-export function subscribeToWatchMessages(handler: (message: Record<string, unknown>) => void): () => void {
+export function subscribeToWatchMessages(
+  handler: (
+    message: Record<string, unknown>,
+  ) => Promise<WatchInboundHandlerResult | void> | WatchInboundHandlerResult | void,
+): () => void {
   try {
     require('react-native-watch-connectivity');
   } catch {
     return () => undefined;
   }
 
-  const subscription = watchEvents.addListener('message', (payload, reply) => {
-    if (payload && typeof payload === 'object') {
-      handler(payload as Record<string, unknown>);
+  const dispatch = async (
+    payload: Record<string, unknown> | null | undefined,
+    reply?: ((resp: Record<string, unknown>) => void) | null,
+  ) => {
+    if (!payload || typeof payload !== 'object') return;
+    if (!isInboundWatchCommand(payload)) return;
+
+    try {
+      const result = await handler(payload);
+      if (result?.reply) {
+        reply?.(result.reply);
+      } else {
+        reply?.({ received: true });
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Watch command failed';
+      console.warn('[watchSyncBridge] inbound command failed', message);
+      reply?.({ type: 'error', message });
     }
-    reply?.({ received: true });
+  };
+
+  const unsubMessage = watchEvents.addListener('message', (payload, reply) => {
+    void dispatch(payload as Record<string, unknown>, reply);
   });
 
-  return () => subscription();
+  const unsubContext = watchEvents.addListener('application-context', (payload) => {
+    void dispatch(payload as Record<string, unknown>);
+  });
+
+  const unsubUserInfo = watchEvents.addListener('user-info', (items) => {
+    for (const item of items) {
+      void dispatch(item as Record<string, unknown>);
+    }
+  });
+
+  return () => {
+    unsubMessage();
+    unsubContext();
+    unsubUserInfo();
+  };
 }
 
 export async function pushWorkoutStateToWatch(state: WatchWorkoutAssistantState): Promise<{ sent: boolean; error?: string }> {
@@ -232,3 +270,14 @@ export function isWorkoutAssistantMessage(message: Record<string, unknown>): boo
     t === 'workout_state'
   );
 }
+
+/** Watch → phone commands (not phone → watch state echoes). */
+export function isInboundWatchCommand(message: Record<string, unknown>): boolean {
+  const type = message.type;
+  if (typeof type !== 'string' || type === 'workout_state' || type === 'request_sync') return false;
+  return isWorkoutAssistantMessage(message);
+}
+
+export type WatchInboundHandlerResult = {
+  reply?: Record<string, unknown>;
+};

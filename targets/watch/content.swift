@@ -6,7 +6,6 @@ struct ContentView: View {
   @StateObject private var connectivity = WorkoutConnectivity()
   @StateObject private var heartRate = HeartRateReader()
   @StateObject private var motion = MotionCapture()
-  @Environment(\.presentTextInput) private var presentTextInput
 
   var body: some View {
     ScrollView {
@@ -62,15 +61,15 @@ struct ContentView: View {
       heartRate.stop()
       motion.stopStreaming()
     }
-    .onChange(of: heartRate.bpm) { _, newValue in
+    .onChange(of: heartRate.bpm) { newValue in
       if let newValue {
         connectivity.heartRateBpm = newValue
       }
     }
-    .onChange(of: connectivity.phase) { _, newPhase in
+    .onChange(of: connectivity.phase) { newPhase in
       syncMotionStreaming(for: newPhase)
     }
-    .onChange(of: connectivity.motionTrackingEnabled) { _, enabled in
+    .onChange(of: connectivity.motionTrackingEnabled) { enabled in
       if enabled && connectivity.isActiveSetPhase {
         motion.startStreaming(connectivity: connectivity)
       } else {
@@ -166,13 +165,6 @@ struct ContentView: View {
 
   private var idlePanel: some View {
     VStack(spacing: 8) {
-      if !connectivity.workoutRecommendation.isEmpty {
-        Text(connectivity.workoutRecommendation)
-          .font(.caption2)
-          .foregroundStyle(.secondary)
-          .lineLimit(3)
-      }
-
       Button("Start Today's Workout") { connectivity.startTodaysWorkout() }
         .buttonStyle(.borderedProminent)
         .tint(accent)
@@ -199,17 +191,11 @@ struct ContentView: View {
 
   private var voiceQuickActions: some View {
     VStack(spacing: 4) {
-      Button {
-        presentVoiceInput()
-      } label: {
-        Label("Voice", systemImage: "mic.fill")
-      }
-      .buttonStyle(.bordered)
-
       HStack(spacing: 4) {
         quickVoiceChip("Log set") { connectivity.sendVoiceCommand("Log set") }
         quickVoiceChip("Recovery") { connectivity.sendVoiceCommand("How recovered am I?") }
       }
+      quickVoiceChip("Next set") { connectivity.sendVoiceCommand("Next set") }
     }
   }
 
@@ -218,14 +204,6 @@ struct ContentView: View {
       .font(.caption2)
       .buttonStyle(.bordered)
       .tint(accent)
-  }
-
-  private func presentVoiceInput() {
-    presentTextInput { result in
-      if case .success(let text) = result, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-        connectivity.sendVoiceCommand(text)
-      }
-    }
   }
 
   private func syncMotionStreaming(for phase: String) {

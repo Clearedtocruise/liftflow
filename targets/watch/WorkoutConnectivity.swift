@@ -71,6 +71,11 @@ final class WorkoutConnectivity: NSObject, ObservableObject, WCSessionDelegate {
       } else if let state = message["state"] as? NSDictionary {
         applyWorkoutState(state as? [String: Any] ?? [:])
       }
+      return
+    }
+
+    if type == "error", let messageText = message["message"] as? String {
+      lastSpokenResponse = messageText
     }
   }
 
@@ -100,8 +105,19 @@ final class WorkoutConnectivity: NSObject, ObservableObject, WCSessionDelegate {
         clearRestCountdown()
       }
     } else {
-      exerciseName = "Start on iPhone"
-      setLabel = workoutRecommendation.isEmpty ? "Open ONE MORE on iPhone" : workoutRecommendation
+      if !workoutRecommendation.isEmpty {
+        let parts = workoutRecommendation.components(separatedBy: " · ")
+        if parts.count >= 2 {
+          exerciseName = parts[0]
+          setLabel = parts.dropFirst().joined(separator: " · ")
+        } else {
+          exerciseName = workoutRecommendation
+          setLabel = "Start Today's Workout"
+        }
+      } else {
+        exerciseName = "Start on iPhone"
+        setLabel = "Open ONE MORE on iPhone"
+      }
       phase = "idle"
       currentRepCount = 0
       targetReps = 0
@@ -148,14 +164,28 @@ final class WorkoutConnectivity: NSObject, ObservableObject, WCSessionDelegate {
       payload["workoutSessionId"] = sessionId
     }
 
-    guard WCSession.default.activationState == .activated else { return }
+    guard WCSession.default.activationState == .activated else {
+      lastSpokenResponse = "Waiting for iPhone…"
+      return
+    }
+
+    lastSpokenResponse = "Contacting iPhone…"
 
     if WCSession.default.isReachable {
-      WCSession.default.sendMessage(payload, replyHandler: nil) { error in
-        print("[ONEMOREWatch] sendMessage failed: \(error.localizedDescription)")
-      }
+      WCSession.default.sendMessage(payload, replyHandler: { [weak self] reply in
+        DispatchQueue.main.async {
+          self?.applyMessage(reply)
+        }
+      }, errorHandler: { [weak self] error in
+        DispatchQueue.main.async {
+          self?.lastSpokenResponse = "Open ONE MORE on iPhone"
+          print("[ONEMOREWatch] sendMessage failed: \(error.localizedDescription)")
+          WCSession.default.transferUserInfo(payload)
+        }
+      })
     } else {
-      try? WCSession.default.updateApplicationContext(payload)
+      WCSession.default.transferUserInfo(payload)
+      lastSpokenResponse = "Open ONE MORE on iPhone"
     }
 
     WKInterfaceDevice.current().play(.click)

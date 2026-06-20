@@ -50,7 +50,7 @@ const REQUIRED = [
   {
     file: 'targets/watch/content.swift',
     label: 'Watch Phase 2 UI',
-    patterns: ['Log Set', 'Skip Rest', 'Start Today\'s Workout', 'MotionCapture', 'presentTextInput'],
+    patterns: ['Log Set', 'Skip Rest', 'Start Today\'s Workout', 'MotionCapture', 'sendVoiceCommand'],
   },
   {
     file: 'targets/watch/MotionCapture.swift',

@@ -11,9 +11,18 @@ import {
 import { fail, fromError, ok } from '@/lib/serviceResult';
 import { workoutService } from '@/services/workoutService';
 import { supabase } from '@/supabase/client';
+import type { WorkoutSession } from '@/types';
 import type { ServiceResult } from '@/types/common';
 
 const assistants = new Map<string, WatchWorkoutAssistant>();
+
+function parseSuggestedReps(value?: string): number | undefined {
+  if (!value) return undefined;
+  const match = value.match(/\d+/);
+  if (!match) return undefined;
+  const parsed = Number(match[0]);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
 
 function getAssistant(userId: string): WatchWorkoutAssistant {
   let a = assistants.get(userId);
@@ -129,9 +138,14 @@ export const watchWorkoutService = {
     return undefined;
   },
 
-  async syncActiveSession(userId: string): Promise<ServiceResult<WatchWorkoutAssistantState>> {
+  async syncActiveSession(
+    userId: string,
+    sessionOverride?: WorkoutSession,
+  ): Promise<ServiceResult<WatchWorkoutAssistantState>> {
     try {
-      const sessionResult = await workoutService.getActiveSession(userId);
+      const sessionResult = sessionOverride
+        ? { success: true as const, data: sessionOverride }
+        : await workoutService.getActiveSession(userId);
       if (!sessionResult.success) return fail(sessionResult.error);
       if (!sessionResult.data) {
         getAssistant(userId).clearSet();
@@ -146,8 +160,10 @@ export const watchWorkoutService = {
 
       const setNumber = (activeExercise.sets.length ?? 0) + 1;
       const profile = resolveExerciseProfile(activeExercise.exercise.name);
+      const parsedReps = parseSuggestedReps(activeExercise.suggestedReps);
+      const targetReps = parsedReps ?? profile?.targetRepsDefault ?? 8;
       const last = await getLastPerformance(userId, activeExercise.exerciseId);
-      const suggested = await suggestWeight(userId, activeExercise.exerciseId, profile?.targetRepsDefault ?? 8);
+      const suggested = await suggestWeight(userId, activeExercise.exerciseId, targetReps);
 
       const state = getAssistant(userId).startSet({
         userId,
@@ -157,7 +173,7 @@ export const watchWorkoutService = {
         exerciseName: activeExercise.exercise.name,
         setNumber,
         targetSets: profile?.targetSetsDefault,
-        targetReps: profile?.targetRepsDefault,
+        targetReps,
         weightLbs: suggested.weightLbs ?? last.weightLbs,
       });
 
