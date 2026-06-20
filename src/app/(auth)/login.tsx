@@ -40,8 +40,8 @@ export default function LoginScreen() {
     setBanner(null);
     setLoading(true);
     try {
-      await signIn({ email, password });
-      router.replace('/');
+      const profile = await signIn({ email, password });
+      router.replace(profile.onboardingCompleted ? '/(tabs)/dashboard' : '/(onboarding)/legal');
     } catch (err) {
       setError(mapAuthError(err, 'login'));
     } finally {

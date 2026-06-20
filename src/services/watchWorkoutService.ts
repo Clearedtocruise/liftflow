@@ -101,6 +101,11 @@ async function persistMotionSamples(
   await supabase.from('motion_samples').insert(rows);
 }
 
+async function resolveExerciseName(exerciseId: string): Promise<string | undefined> {
+  const { data } = await supabase.from('exercises').select('name').eq('id', exerciseId).maybeSingle();
+  return data?.name ?? undefined;
+}
+
 export const watchWorkoutService = {
   getState(userId: string): WatchWorkoutAssistantState {
     return getAssistant(userId).getState();
@@ -141,6 +146,7 @@ export const watchWorkoutService = {
   async syncActiveSession(
     userId: string,
     sessionOverride?: WorkoutSession,
+    options?: { exerciseIndex?: number },
   ): Promise<ServiceResult<WatchWorkoutAssistantState>> {
     try {
       const sessionResult = sessionOverride
@@ -153,13 +159,18 @@ export const watchWorkoutService = {
       }
 
       const session = sessionResult.data;
-      const activeExercise = session.exercises.find((e) => e.isActive) ?? session.exercises[0];
-      if (!activeExercise?.exercise) {
-        return ok(getAssistant(userId).getState());
+      const sorted = [...session.exercises].sort((a, b) => a.sortOrder - b.sortOrder);
+      if (sorted.length === 0) {
+        return fail('Workout has no exercises yet.');
       }
 
+      const index = Math.min(Math.max(options?.exerciseIndex ?? 0, 0), sorted.length - 1);
+      const activeExercise = sorted.find((e) => e.isActive) ?? sorted[index];
+      const exerciseName =
+        activeExercise.exercise?.name ?? (await resolveExerciseName(activeExercise.exerciseId)) ?? 'Exercise';
+
       const setNumber = (activeExercise.sets.length ?? 0) + 1;
-      const profile = resolveExerciseProfile(activeExercise.exercise.name);
+      const profile = resolveExerciseProfile(exerciseName);
       const parsedReps = parseSuggestedReps(activeExercise.suggestedReps);
       const targetReps = parsedReps ?? profile?.targetRepsDefault ?? 8;
       const last = await getLastPerformance(userId, activeExercise.exerciseId);
@@ -170,7 +181,7 @@ export const watchWorkoutService = {
         workoutSessionId: session.id,
         workoutExerciseId: activeExercise.id,
         exerciseId: activeExercise.exerciseId,
-        exerciseName: activeExercise.exercise.name,
+        exerciseName,
         setNumber,
         targetSets: profile?.targetSetsDefault,
         targetReps,
