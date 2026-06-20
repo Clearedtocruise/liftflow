@@ -1,5 +1,6 @@
 import { applyEquipmentSubstitutionsToExercises } from './equipmentSubstitutionEngine.js';
 import { adaptMealName, parseMealStatus, type MealSwap } from './nutritionPreferenceEngine.js';
+import { regenerateActiveProgram } from './programEngine.js';
 import { requireAdmin } from './supabase.js';
 import { loadAvailableExercises, type ExerciseRecord } from './workoutPlanner.js';
 
@@ -63,51 +64,57 @@ export async function adaptToPreferenceChanges(
   }
 
   if (trigger === 'equipment' || trigger === 'all') {
-    const { data: program } = await db
-      .from('training_programs')
-      .select('id')
-      .eq('user_id', userId)
-      .eq('is_active', true)
-      .maybeSingle();
-
-    if (program) {
-      const { data: planned } = await db
-        .from('planned_workouts')
-        .select('id, name, scheduled_date, metadata, ai_rationale')
+    const regen = await regenerateActiveProgram(userId, { force: true });
+    if (regen.regenerated) {
+      changes.push('Workouts rebuilt for your updated equipment');
+    } else {
+      // Fallback: patch upcoming sessions when a full rebuild was skipped.
+      const { data: program } = await db
+        .from('training_programs')
+        .select('id')
         .eq('user_id', userId)
-        .contains('metadata', { programId: program.id })
-        .eq('status', 'planned')
-        .gte('scheduled_date', today)
-        .lte('scheduled_date', horizon)
-        .order('scheduled_date', { ascending: true });
+        .eq('is_active', true)
+        .maybeSingle();
 
-      for (const workout of planned ?? []) {
-        const meta = (workout.metadata ?? {}) as { exercises?: PlannedExercise[] };
-        if (!meta.exercises?.length) continue;
-
-        const { exercises, swaps } = applyEquipmentSubstitutionsToExercises(
-          meta.exercises,
-          equipment,
-          exercisePool,
-        );
-        if (swaps.length === 0) continue;
-
-        await db
+      if (program) {
+        const { data: planned } = await db
           .from('planned_workouts')
-          .update({
-            metadata: { ...meta, exercises, equipmentAdjusted: true, equipmentAdjustedAt: new Date().toISOString() },
-            ai_rationale: `${workout.ai_rationale ?? ''} · Equipment-adjusted exercises`.trim(),
-          })
-          .eq('id', workout.id);
+          .select('id, name, scheduled_date, metadata, ai_rationale')
+          .eq('user_id', userId)
+          .contains('metadata', { programId: program.id })
+          .eq('status', 'planned')
+          .gte('scheduled_date', today)
+          .lte('scheduled_date', horizon)
+          .order('scheduled_date', { ascending: true });
 
-        for (const swap of swaps) {
-          workoutSwaps.push({
-            from: swap.from,
-            to: swap.to,
-            workoutDate: workout.scheduled_date,
-            workoutName: workout.name,
-          });
-          changes.push(`${workout.scheduled_date}: ${swap.from} → ${swap.to}`);
+        for (const workout of planned ?? []) {
+          const meta = (workout.metadata ?? {}) as { exercises?: PlannedExercise[] };
+          if (!meta.exercises?.length) continue;
+
+          const { exercises, swaps } = applyEquipmentSubstitutionsToExercises(
+            meta.exercises,
+            equipment,
+            exercisePool,
+          );
+          if (swaps.length === 0) continue;
+
+          await db
+            .from('planned_workouts')
+            .update({
+              metadata: { ...meta, exercises, equipmentAdjusted: true, equipmentAdjustedAt: new Date().toISOString() },
+              ai_rationale: `${workout.ai_rationale ?? ''} · Equipment-adjusted exercises`.trim(),
+            })
+            .eq('id', workout.id);
+
+          for (const swap of swaps) {
+            workoutSwaps.push({
+              from: swap.from,
+              to: swap.to,
+              workoutDate: workout.scheduled_date,
+              workoutName: workout.name,
+            });
+            changes.push(`${workout.scheduled_date}: ${swap.from} → ${swap.to}`);
+          }
         }
       }
     }
@@ -165,14 +172,20 @@ export async function adaptToPreferenceChanges(
   }
 
   const adapted = changes.length > 0;
-  const notificationTitle = adapted ? 'Plan updated for your preferences' : 'No changes needed';
+  const notificationTitle = adapted
+    ? trigger === 'equipment' && changes.some((c) => c.includes('rebuilt'))
+      ? 'Workouts updated'
+      : 'Plan updated for your preferences'
+    : 'No changes needed';
   const notificationBody = adapted
-    ? [
-        workoutSwaps.length > 0 ? `${workoutSwaps.length} exercise swap(s)` : null,
-        mealSwaps.length > 0 ? `${mealSwaps.length} meal update(s)` : null,
-      ]
-        .filter(Boolean)
-        .join(' · ')
+    ? changes.some((c) => c.includes('rebuilt'))
+      ? 'Your upcoming workouts were rebuilt to match your equipment.'
+      : [
+          workoutSwaps.length > 0 ? `${workoutSwaps.length} exercise swap(s)` : null,
+          mealSwaps.length > 0 ? `${mealSwaps.length} meal update(s)` : null,
+        ]
+          .filter(Boolean)
+          .join(' · ')
     : 'Your current plan already matches your equipment and nutrition preferences.';
 
   return {
