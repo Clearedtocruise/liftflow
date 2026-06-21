@@ -5,6 +5,13 @@
 
 type LogSetResult = { ok: true } | { ok: false; error: string };
 
+export type WatchDisplayContext = {
+  stationLabel?: string;
+  statusLine?: string;
+  supersetHint?: string;
+  draftReps?: number;
+};
+
 const LB_PER_KG = 2.2046226218;
 
 let logSetHandler: (() => Promise<void>) | null = null;
@@ -17,6 +24,7 @@ let pendingWatchWeightKg: number | null = null;
 let readExerciseIndex: (() => number) | null = null;
 let readRestSeconds: (() => number | null) | null = null;
 let readTargetSets: (() => number) | null = null;
+let displayContext: WatchDisplayContext | null = null;
 
 export const watchPhoneBridge = {
   setLogSetHandler(handler: (() => Promise<void>) | null) {
@@ -74,6 +82,14 @@ export const watchPhoneBridge = {
 
   setTargetSetsReader(reader: (() => number) | null) {
     readTargetSets = reader;
+  },
+
+  setDisplayContext(context: WatchDisplayContext | null) {
+    displayContext = context;
+  },
+
+  getDisplayContext(): WatchDisplayContext | null {
+    return displayContext;
   },
 
   getTargetSets(): number {

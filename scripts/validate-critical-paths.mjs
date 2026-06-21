@@ -138,6 +138,11 @@ const REQUIRED = [
     patterns: ['styles.brandBlock', 'HeroImages.welcome', 'alignItems: \'center\''],
   },
   {
+    file: 'src/services/watchWorkoutService.ts',
+    label: 'Watch workout service import',
+    patterns: ["import { workoutService } from '@/services/workoutService'", 'workoutService.getActiveSession'],
+  },
+  {
     file: 'src/services/watchCompanionService.ts',
     label: 'Watch skip rest lightweight',
     patterns: ['LIGHTWEIGHT_INBOUND', 'skip_rest', 'set_weight'],

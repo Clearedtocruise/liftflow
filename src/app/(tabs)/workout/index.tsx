@@ -22,7 +22,7 @@ import { planDataCache } from '@/lib/planDataCache';
 import { warmWeekPlanData } from '@/lib/planDataPrefetch';
 import { showWeeklyEditDayMenu } from '@/lib/planDayActions';
 import { logStartup } from '@/lib/startupLogger';
-import { enrichWithSupersetGroups } from '@/lib/supersetFlow';
+import { enrichWithSupersetGroups, inferExecutionModeFromPlan } from '@/lib/supersetFlow';
 import { buildWeekPlan, getWeekRange, isConditioningWorkout, type WeekDayPlan } from '@/lib/weekPlan';
 import { serializeChallengeNotes } from '@/lib/workoutChallengeFlow';
 import { normalizeExecutionMode } from '@/lib/workoutExecutionMode';
@@ -279,10 +279,13 @@ export default function WorkoutScreen() {
             })),
     );
 
-    const executionMode = normalizeExecutionMode(
-      draftExercises[0]?.executionMode ??
-        plannedWorkout?.metadata?.executionMode ??
-        (sessionTabata ? 'tabata' : undefined),
+    const executionMode = inferExecutionModeFromPlan(
+      planForSession,
+      normalizeExecutionMode(
+        draftExercises[0]?.executionMode ??
+          plannedWorkout?.metadata?.executionMode ??
+          (sessionTabata ? 'tabata' : undefined),
+      ),
     );
 
     return (

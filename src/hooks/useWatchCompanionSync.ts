@@ -33,13 +33,13 @@ export function useWatchCompanionSync(userId: string | undefined) {
   exerciseIndexRef.current = activeExerciseIndex;
   restSecondsRef.current = restSecondsRemaining;
 
-  const sessionSyncKey = useMemo(() => {
+  const sessionStructureKey = useMemo(() => {
     if (!activeSession) return 'none';
     const sorted = [...activeSession.exercises].sort((a, b) => a.sortOrder - b.sortOrder);
     const activeExercise = sorted[activeExerciseIndex] ?? sorted[0];
     const setCount = activeSession.exercises.reduce((total, exercise) => total + exercise.sets.length, 0);
-    return `${activeSession.id}:${activeSession.status}:${activeExercise?.id ?? 'none'}:${setCount}:${activeExerciseIndex}:${restSecondsRemaining ?? 'none'}`;
-  }, [activeSession, activeExerciseIndex, restSecondsRemaining]);
+    return `${activeSession.id}:${activeSession.status}:${activeExercise?.id ?? 'none'}:${setCount}:${activeExerciseIndex}`;
+  }, [activeSession, activeExerciseIndex]);
 
   useEffect(() => {
     if (!userId) {
@@ -67,7 +67,7 @@ export function useWatchCompanionSync(userId: string | undefined) {
     };
   }, [userId, skipRestTimer, cancelSession, setWatchDraftReps, setWatchDraftWeightKg]);
 
-  const pushState = () => {
+  const pushFullState = () => {
     if (!userId) return;
     void watchCompanionService.pushPhoneWorkoutState(userId, {
       session: activeSession,
@@ -89,12 +89,17 @@ export function useWatchCompanionSync(userId: string | undefined) {
   }, [userId, refreshSession, activeSession?.id]);
 
   useEffect(() => {
-    pushState();
+    pushFullState();
     if (activeSession && !watchSyncTracked.current) {
       watchSyncTracked.current = true;
       void productAnalyticsService.trackWatchSync(userId!);
     }
-  }, [userId, sessionSyncKey, activeSession]);
+  }, [userId, sessionStructureKey, activeSession]);
+
+  useEffect(() => {
+    if (!userId || !activeSession) return;
+    void watchCompanionService.pushRestTimerOnly(userId, restSecondsRemaining);
+  }, [userId, activeSession?.id, restSecondsRemaining]);
 
   useEffect(() => {
     if (!userId) return;
@@ -104,8 +109,8 @@ export function useWatchCompanionSync(userId: string | undefined) {
   useEffect(() => {
     if (!userId || !activeSession) return;
     const subscription = AppState.addEventListener('change', (state) => {
-      if (state === 'active') pushState();
+      if (state === 'active') pushFullState();
     });
     return () => subscription.remove();
-  }, [userId, activeSession?.id, sessionSyncKey]);
-}
+  }, [userId, activeSession?.id, sessionStructureKey]);
+};

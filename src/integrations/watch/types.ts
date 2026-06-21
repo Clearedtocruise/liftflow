@@ -47,6 +47,12 @@ export type WatchActiveSetState = {
   weightLbs?: number;
   restSecondsRemaining?: number;
   phase: 'active_set' | 'rest' | 'between_sets' | 'idle';
+  /** A1, B2, etc. during supersets */
+  stationLabel?: string;
+  /** e.g. A1 · Set 2/3 */
+  statusLine?: string;
+  /** Partner / next station during superset rotation */
+  supersetHint?: string;
 };
 
 export type WatchWorkoutAssistantState = {
@@ -69,6 +75,7 @@ export type WatchHealthSnapshot = {
   restingHeartRateBpm?: number;
   hrvMs?: number;
   activeCalories?: number;
+  sessionCalories?: number;
   sleepHours?: number;
   steps?: number;
   syncedAt?: string;

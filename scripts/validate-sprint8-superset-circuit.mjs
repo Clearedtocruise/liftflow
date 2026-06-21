@@ -45,6 +45,13 @@ record('Uses resolvePostSetFlowAction', active.includes('resolvePostSetFlowActio
 record('Station label in active workout', active.includes('formatExerciseStationLabel'));
 record('Replace/day overview station labels', detail.includes('formatExerciseStationLabel'));
 record('Backend superset enrichment', program.includes('enrichExercisesWithSupersetGroups'));
+record('Auto superset execution mode', flow.includes('inferExecutionModeFromPlan'));
+record('Superset position resolver', flow.includes('resolveSupersetWorkoutPosition'));
+record('Superset prep detection', flow.includes('shouldShowSupersetPrep'));
+record('Superset prep banner', fs.existsSync(path.join(root, 'src/components/workout/execution/SupersetPrepBanner.tsx')));
+record('Workout tab infers superset mode', read('src/app/(tabs)/workout/index.tsx').includes('inferExecutionModeFromPlan'));
+record('Active workout superset banner', active.includes('SupersetPrepBanner'));
+record('Watch rest-only sync', read('src/services/watchCompanionService.ts').includes('pushRestTimerOnly'));
 
 console.log('\nFlow: enrichWithSupersetGroups → resolvePostSetFlowAction → timer/advance');
 console.log('Labels: A1 Bench Press · A2 Row · Circuit Round N');

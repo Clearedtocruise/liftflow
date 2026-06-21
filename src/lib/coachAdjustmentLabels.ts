@@ -3,7 +3,7 @@ import type { CoachAdjustmentLabel } from '@/types/exerciseCoach';
 const LABELS: Record<CoachAdjustmentLabel, string> = {
   increase_weight: 'Increase weight',
   increase_reps: 'Increase reps',
-  increase_sets: 'Increase sets',
+  increase_sets: 'Coach adding a set',
   increase_duration: 'Increase hold time',
   maintain: 'Maintain',
   deload: 'Deload',

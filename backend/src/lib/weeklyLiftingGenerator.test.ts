@@ -61,4 +61,18 @@ const pplSchedule = buildWeeklySchedule('push_pull_legs', 6);
 assert.equal(pplSchedule.filter((day) => !day.isRest && day.sessionKind === 'strength').length, 6);
 assert.equal(pplSchedule.some((day) => day.sessionKind === 'cardio'), false);
 
+const bodyPart7 = getWeeklyLiftingPattern('body_part_split', 7);
+assert.equal(countLiftingDaysInPattern(bodyPart7), 7);
+assert.equal(formatWeeklyPattern(bodyPart7).includes('Back, Biceps & Core'), true);
+
+const plan7 = buildWeeklyLiftingPlan({
+  programType: 'body_part_split',
+  liftingDaysPerWeek: 7,
+  primaryGoal: 'muscle_gain',
+});
+assert.equal(plan7.liftingDayCount, 7);
+
+const schedule7 = buildWeeklySchedule('body_part_split', 7);
+assert.equal(schedule7.filter((day) => !day.isRest).length, 7);
+
 console.log('weeklyLiftingGenerator.test.ts — all assertions passed');

@@ -29,6 +29,28 @@ export function parseWatchVoiceCommand(transcript: string, ctx: WatchVoiceContex
 
   const set = ctx.activeSet;
 
+  if (/what exercise|which exercise|current exercise|what am i doing/.test(text)) {
+    if (!set) {
+      return { intent: 'query_current_exercise', spokenResponse: 'No active exercise. Start your workout on iPhone.' };
+    }
+    const station = set.stationLabel ? `${set.stationLabel} · ` : '';
+    return {
+      intent: 'query_current_exercise',
+      spokenResponse: `${station}${set.exerciseName}, set ${set.setNumber} of ${set.targetSets}.`,
+    };
+  }
+
+  if (/what set|which set|current set|where am i/.test(text)) {
+    if (!set) {
+      return { intent: 'query_current_set', spokenResponse: 'No active set.' };
+    }
+    const line = set.statusLine ?? `Set ${set.setNumber} of ${set.targetSets}`;
+    return {
+      intent: 'query_current_set',
+      spokenResponse: `${set.exerciseName}. ${line}.`,
+    };
+  }
+
   if (/what rep am i on|which rep|current rep/.test(text)) {
     const rep = set?.currentRepCount ?? 0;
     return {

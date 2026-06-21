@@ -18,7 +18,7 @@ export const TIMELINE_OPTIONS = [
 
 export type TimelineId = (typeof TIMELINE_OPTIONS)[number]['id'];
 
-export const DAYS_PER_WEEK_OPTIONS = [3, 4, 5, 6] as const;
+export const DAYS_PER_WEEK_OPTIONS = [3, 4, 5, 6, 7] as const;
 
 export const WORKOUT_DURATION_OPTIONS = [30, 45, 60, 75, 90] as const;
 

@@ -8,9 +8,11 @@ import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { AppText } from '@/components/ui/AppText';
 import { ExerciseCompleteCard } from '@/components/workout/execution/ExerciseCompleteCard';
+import { ExerciseGuideSheet } from '@/components/workout/execution/ExerciseGuideSheet';
 import { ExercisePickerModal } from '@/components/workout/execution/ExercisePickerModal';
 import { GuidedWorkoutMetrics, WorkoutProgressBar } from '@/components/workout/execution/GuidedWorkoutMetrics';
 import { SetLoggingControls } from '@/components/workout/execution/SetLoggingControls';
+import { SupersetPrepBanner } from '@/components/workout/execution/SupersetPrepBanner';
 import { WorkoutChallengeModal } from '@/components/workout/execution/WorkoutChallengeModal';
 import { WorkoutTimerOverlay } from '@/components/workout/execution/WorkoutTimerOverlay';
 import { WorkoutUpNextCard } from '@/components/workout/execution/WorkoutUpNextCard';
@@ -43,6 +45,8 @@ import {
     isSupersetGroupComplete,
     nextExerciseIndexAfterGroup,
     resolvePostSetFlowAction,
+    resolveSupersetWorkoutPosition,
+    shouldShowSupersetPrep,
 } from '@/lib/supersetFlow';
 import {
     executionModeUsesIntervalTimer,
@@ -193,6 +197,7 @@ export function ActiveWorkoutScreen({
   const [circuitRound, setCircuitRound] = useState(1);
   const [bonusSets, setBonusSets] = useState(0);
   const [exercisePickerVisible, setExercisePickerVisible] = useState(false);
+  const [exerciseGuideOpen, setExerciseGuideOpen] = useState(false);
   const [intervalOverlayOpen, setIntervalOverlayOpen] = useState(false);
   const [restOverlayOpen, setRestOverlayOpen] = useState(false);
   const [circuitOverlayOpen, setCircuitOverlayOpen] = useState(false);
@@ -201,6 +206,8 @@ export function ActiveWorkoutScreen({
   );
   const [pendingAdvanceIndex, setPendingAdvanceIndex] = useState<number | null>(null);
   const [isTabataPrepActive, setIsTabataPrepActive] = useState(false);
+  const dismissedSupersetGroupsRef = useRef<Set<string>>(new Set());
+  const [supersetBannerTick, setSupersetBannerTick] = useState(0);
   const tabataBetweenExercisePendingRef = useRef(false);
   const tabataExercisePrepPendingRef = useRef(false);
   const tabataSkipPrepAfterTransitionRef = useRef(false);
@@ -210,7 +217,9 @@ export function ActiveWorkoutScreen({
     (item) => item.name.toLowerCase() === currentExercise?.exercise?.name?.toLowerCase(),
   );
   const targetSets = planMeta?.sets ?? 3;
-  const effectiveTargetSets = targetSets + bonusSets;
+  const coachRecommendedSets = coachPrescription?.targets.sets ?? targetSets;
+  const coachExtraSets = Math.max(0, coachRecommendedSets - targetSets);
+  const effectiveTargetSets = Math.max(targetSets + bonusSets, coachRecommendedSets);
   const repRange = planMeta?.repRange ?? currentExercise?.suggestedReps ?? '8-10';
   const completedSets = currentExercise?.sets ?? [];
   const isPaused = session.status === 'paused';
@@ -218,8 +227,11 @@ export function ActiveWorkoutScreen({
     executionModeUsesTraditionalRest(executionMode) &&
     restSecondsRemaining !== null &&
     restSecondsRemaining > 0;
-  const programmedSetsComplete = completedSets.length >= targetSets;
   const allSetsDone = completedSets.length >= effectiveTargetSets;
+  const coachSetNotice =
+    coachExtraSets > 0
+      ? `Coach added ${coachExtraSets} set${coachExtraSets > 1 ? 's' : ''} — ${effectiveTargetSets} sets total today.`
+      : null;
   const isLastExercise = currentIndex >= sortedExercises.length - 1;
   const nextExercise = sortedExercises[currentIndex + 1];
   const nextPlanMeta = planExercises[currentIndex + 1];
@@ -230,8 +242,22 @@ export function ActiveWorkoutScreen({
   const loggingMode = loadingMethodToLoggingMode(loadingMethod);
   const coachLoggingMode =
     loggingMode === 'any' ? undefined : (loggingMode as Exclude<typeof loggingMode, 'any'>);
-  const nextSetNumber = Math.min(completedSets.length + 1, targetSets);
-  const remainingSets = Math.max(targetSets - completedSets.length, 0);
+  const nextSetNumber = completedSets.length + 1;
+  const remainingSets = Math.max(effectiveTargetSets - completedSets.length, 0);
+  const supersetGroup = getSupersetGroupForIndex(currentIndex, planExercises);
+  const stationLabel = planMeta
+    ? formatExerciseStationLabel(planMeta, currentIndex, planExercises)
+    : null;
+  const inSuperset = Boolean(supersetGroup && supersetGroup.memberIndices.length >= 2);
+  const usesSupersetRotation = executionModeUsesSupersetRotation(executionMode);
+  const supersetPrepGroup =
+    usesSupersetRotation && !showComplete
+      ? shouldShowSupersetPrep(currentIndex, planExercises, sortedExercises)
+      : null;
+  const showSupersetPrepBanner =
+    supersetBannerTick >= 0 &&
+    supersetPrepGroup != null &&
+    !dismissedSupersetGroupsRef.current.has(supersetPrepGroup.id);
 
   const workoutPosition = useMemo(() => {
     if (
@@ -265,9 +291,22 @@ export function ActiveWorkoutScreen({
       );
     }
 
-    return resolveWorkoutUpNext({
+    return usesSupersetRotation && inSuperset
+      ? resolveSupersetWorkoutPosition(
+          currentIndex,
+          planExercises,
+          sortedExercises,
+          (index) => {
+            const meta = planExercises[index];
+            const base = meta?.sets ?? 3;
+            if (index === currentIndex) return effectiveTargetSets;
+            return base;
+          },
+          isLastExercise,
+        )
+      : resolveWorkoutUpNext({
       exerciseName: currentExercise?.exercise?.name ?? 'Exercise',
-      targetSets,
+      targetSets: effectiveTargetSets,
       completedSetsCount: completedSets.length,
       isLastExercise,
       nextExerciseName: nextExercise?.exercise?.name,
@@ -281,7 +320,7 @@ export function ActiveWorkoutScreen({
     isTabataPrepActive,
     pendingAdvanceIndex,
     currentExercise?.exercise?.name,
-    targetSets,
+    effectiveTargetSets,
     completedSets.length,
     isLastExercise,
     nextExercise?.exercise?.name,
@@ -289,6 +328,9 @@ export function ActiveWorkoutScreen({
     intervalTimer?.round,
     sortedExercises,
     planExercises,
+    currentIndex,
+    usesSupersetRotation,
+    inSuperset,
   ]);
 
   const workoutProgress = useMemo(
@@ -305,12 +347,6 @@ export function ActiveWorkoutScreen({
       repRange,
     );
   }, [coachPrescription, loggingMode, units.preferredWeightUnit, units.weightLabel, repRange]);
-  const supersetGroup = getSupersetGroupForIndex(currentIndex, planExercises);
-  const stationLabel = planMeta
-    ? formatExerciseStationLabel(planMeta, currentIndex, planExercises)
-    : null;
-  const inSuperset = Boolean(supersetGroup && supersetGroup.memberIndices.length >= 2);
-  const usesSupersetRotation = executionModeUsesSupersetRotation(executionMode);
   const groupComplete =
     usesSupersetRotation && inSuperset && supersetGroup
       ? isSupersetGroupComplete(supersetGroup, sortedExercises, planExercises)
@@ -548,7 +584,7 @@ export function ActiveWorkoutScreen({
   useEffect(() => {
     if (executionMode !== 'tabata' || showComplete || isPaused) return;
     if (intervalTimer?.phase !== 'done') return;
-    if (completedSets.length < targetSets) return;
+    if (completedSets.length < effectiveTargetSets) return;
     setShowComplete(true);
     setExerciseHadPr(completedSets.some((set) => set.isPr));
   }, [
@@ -557,7 +593,7 @@ export function ActiveWorkoutScreen({
     isPaused,
     intervalTimer?.phase,
     completedSets,
-    targetSets,
+    effectiveTargetSets,
   ]);
 
   const scheduleAutoExerciseAdvance = useCallback(() => {
@@ -612,6 +648,18 @@ export function ActiveWorkoutScreen({
   useEffect(() => {
     setBonusSets(0);
   }, [currentExercise?.id]);
+
+  useEffect(() => {
+    if (coachExtraSets <= 0) return;
+    setBonusSets((current) => (current >= coachExtraSets ? current : coachExtraSets));
+    setShowComplete(false);
+    pendingExerciseAdvanceAfterRestRef.current = false;
+    pendingAdvanceRef.current = null;
+    if (autoAdvanceTimeoutRef.current) {
+      clearTimeout(autoAdvanceTimeoutRef.current);
+      autoAdvanceTimeoutRef.current = null;
+    }
+  }, [coachExtraSets, currentExercise?.id]);
 
   useEffect(() => {
     if (groupComplete && completedSets.length > 0 && allSetsDone) {
@@ -744,7 +792,7 @@ export function ActiveWorkoutScreen({
         completedAfterLog,
       );
 
-      const exerciseAdvance = completedAfterLog >= targetSets;
+      const exerciseAdvance = completedAfterLog >= effectiveTargetSets;
       logWorkoutProgressionDecision({
         exerciseId: currentExercise.exerciseId ?? currentExercise.id,
         exerciseName: currentExercise.exercise?.name ?? 'Exercise',
@@ -807,7 +855,7 @@ export function ActiveWorkoutScreen({
         pendingExerciseAdvanceAfterRestRef.current = true;
       }
 
-      if (completedAfterLog < targetSets) {
+      if (completedAfterLog < effectiveTargetSets) {
         offerBetweenSetsChallenge();
       }
 
@@ -833,9 +881,26 @@ export function ActiveWorkoutScreen({
   }, []);
 
   useEffect(() => {
-    watchPhoneBridge.setTargetSetsReader(() => targetSets);
+    watchPhoneBridge.setTargetSetsReader(() => effectiveTargetSets);
     return () => watchPhoneBridge.setTargetSetsReader(null);
-  }, [targetSets]);
+  }, [effectiveTargetSets]);
+
+  useEffect(() => {
+    watchPhoneBridge.setDisplayContext({
+      stationLabel: stationLabel ?? undefined,
+      statusLine: workoutPosition.currentSetLabel,
+      supersetHint: usesSupersetRotation && inSuperset ? workoutPosition.upNextLabel : undefined,
+      draftReps: watchDraftReps ?? undefined,
+    });
+    return () => watchPhoneBridge.setDisplayContext(null);
+  }, [
+    stationLabel,
+    workoutPosition.currentSetLabel,
+    workoutPosition.upNextLabel,
+    usesSupersetRotation,
+    inSuperset,
+    watchDraftReps,
+  ]);
 
   function performExerciseAdvanceDirect() {
     if (autoAdvanceTimeoutRef.current) {
@@ -976,11 +1041,38 @@ export function ActiveWorkoutScreen({
         <View style={styles.heroOuter}>
           <LinearGradient colors={['rgba(31, 107, 255, 0.35)', 'rgba(0, 229, 255, 0.12)']} style={styles.heroBorder}>
             <View style={styles.heroCard}>
-              <AppText variant="headline" style={styles.exerciseName}>
-                {(currentExercise.exercise?.name ?? 'Exercise').toUpperCase()}
-              </AppText>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`How to do ${currentExercise.exercise?.name ?? 'exercise'}`}
+                onPress={() => setExerciseGuideOpen(true)}
+                style={styles.exerciseNamePressable}>
+                <AppText variant="headline" style={styles.exerciseName}>
+                  {(currentExercise.exercise?.name ?? 'Exercise').toUpperCase()}
+                </AppText>
+                <AppText variant="caption" color="accent">
+                  Tap for form guide
+                </AppText>
+              </Pressable>
 
-              {!showComplete ? <WorkoutUpNextCard position={workoutPosition} /> : null}
+              {!showComplete ? <WorkoutUpNextCard position={workoutPosition} supersetActive={usesSupersetRotation && inSuperset} /> : null}
+
+              {showSupersetPrepBanner && supersetPrepGroup ? (
+                <SupersetPrepBanner
+                  group={supersetPrepGroup}
+                  planExercises={planExercises}
+                  sessionExercises={sortedExercises}
+                  onDismiss={() => {
+                    dismissedSupersetGroupsRef.current.add(supersetPrepGroup.id);
+                    setSupersetBannerTick((tick) => tick + 1);
+                  }}
+                />
+              ) : null}
+
+              {usesSupersetRotation && inSuperset && !showComplete && !showSupersetPrepBanner ? (
+                <AppText variant="footnote" color="accent">
+                  Superset active · {workoutPosition.upNextLabel}
+                </AppText>
+              ) : null}
 
               {executionMode === 'circuit' ? (
                 <AppText variant="caption" color="accent">
@@ -1010,7 +1102,7 @@ export function ActiveWorkoutScreen({
               {!showComplete ? (
                 <GuidedWorkoutMetrics
                   currentSet={nextSetNumber}
-                  targetSets={targetSets}
+                  targetSets={effectiveTargetSets}
                   remainingSets={remainingSets}
                   loggingMode={loggingMode}
                   repRange={repRange}
@@ -1021,6 +1113,12 @@ export function ActiveWorkoutScreen({
                   distanceUnit={units.preferredDistanceUnit}
                   fallbackWeightKg={weightKg > 0 ? weightKg : currentExercise.suggestedWeight}
                 />
+              ) : null}
+
+              {coachSetNotice ? (
+                <AppText variant="footnote" color="success">
+                  {coachSetNotice}
+                </AppText>
               ) : null}
 
               {user && currentExercise.exerciseId && loggingMode !== 'cardio' && !showComplete ? (
@@ -1164,7 +1262,7 @@ export function ActiveWorkoutScreen({
                     disabled={isPaused || logging}
                   />
                   <PrimaryButton
-                    label={allSetsDone && programmedSetsComplete ? 'All sets logged' : `Log Set ${nextSetNumber}`}
+                    label={allSetsDone ? 'All sets logged' : `Log Set ${nextSetNumber}`}
                     size="large"
                     loading={logging}
                     disabled={isPaused}
@@ -1268,9 +1366,13 @@ export function ActiveWorkoutScreen({
                 onSkip: handleSkipRest,
                 onAdjust: adjustRestTimer,
                 onSetRest: setRestTimer,
-                nextExerciseName: nextExercise?.exercise?.name,
+                nextExerciseName: usesSupersetRotation && inSuperset
+                  ? workoutPosition.upNextLabel
+                  : nextExercise?.exercise?.name,
                 nextExerciseDetail:
-                  nextPlanMeta
+                  usesSupersetRotation && inSuperset
+                    ? 'Superset rotation'
+                    : nextPlanMeta
                     ? `${nextPlanMeta.sets} sets · ${nextPlanMeta.repRange ?? '8-10'} reps`
                     : nextExercise?.suggestedReps
                       ? `${nextExercise.suggestedReps} reps`
@@ -1337,6 +1439,13 @@ export function ActiveWorkoutScreen({
         onSelect={handleAddExercise}
         title="Add Exercise"
       />
+
+      <ExerciseGuideSheet
+        visible={exerciseGuideOpen}
+        exercise={currentExercise.exercise}
+        exerciseName={currentExercise.exercise?.name}
+        onClose={() => setExerciseGuideOpen(false)}
+      />
     </View>
   );
 }
@@ -1386,6 +1495,9 @@ const styles = StyleSheet.create({
     borderRadius: Radius.lg - 1,
     padding: Spacing.lg,
     gap: Spacing.lg,
+  },
+  exerciseNamePressable: {
+    gap: Spacing.xs,
   },
   exerciseName: {
     letterSpacing: 1,
