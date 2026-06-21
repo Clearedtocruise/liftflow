@@ -7,11 +7,17 @@ import type { WorkoutPositionLabels } from '@/lib/workoutUpNext';
 type WorkoutUpNextCardProps = {
   position: WorkoutPositionLabels;
   compact?: boolean;
+  supersetActive?: boolean;
 };
 
-export function WorkoutUpNextCard({ position, compact = false }: WorkoutUpNextCardProps) {
+export function WorkoutUpNextCard({ position, compact = false, supersetActive = false }: WorkoutUpNextCardProps) {
   return (
     <View style={[styles.card, compact && styles.cardCompact]}>
+      {supersetActive ? (
+        <AppText variant="caption" color="accent">
+          Superset rotation
+        </AppText>
+      ) : null}
       <View style={styles.row}>
         <View style={styles.cell}>
           <AppText variant="caption" color="textSecondary">

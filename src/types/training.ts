@@ -88,7 +88,7 @@ export type ProgramType =
   | 'body_part_split'
   | 'strength';
 
-export type ProgramFrequency = 3 | 4 | 5 | 6 | 'custom';
+export type ProgramFrequency = 3 | 4 | 5 | 6 | 7 | 'custom';
 
 export type CreateProgramPayload = {
   programType: ProgramType;

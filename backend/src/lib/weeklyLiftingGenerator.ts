@@ -1,7 +1,7 @@
 import { inferProgramType, type ProgramSelectionInput } from './programSelection.js';
 
-/** User-selected lifting frequency (3–6). Cardio/sports never occupy these slots. */
-export const LIFTING_DAYS_OPTIONS = [3, 4, 5, 6] as const;
+/** User-selected lifting frequency (3–7). Cardio/sports never occupy these slots. */
+export const LIFTING_DAYS_OPTIONS = [3, 4, 5, 6, 7] as const;
 export type LiftingDaysPerWeek = (typeof LIFTING_DAYS_OPTIONS)[number];
 
 export type WeeklyLiftingSplit = 'push_pull_legs' | 'upper_lower';
@@ -13,7 +13,7 @@ export type LiftingProgramType =
   | 'body_part_split'
   | 'strength';
 
-export type LiftingProgramFrequency = 3 | 4 | 5 | 6 | 'custom';
+export type LiftingProgramFrequency = 3 | 4 | 5 | 6 | 7 | 'custom';
 
 /**
  * Seven-day patterns (Mon–Sun). Every non-rest label is a lifting session.
@@ -28,35 +28,40 @@ const WEEKLY_LIFTING_PATTERNS: Record<
     4: ['Push', 'Pull', 'Legs', 'Push', 'Rest', 'Rest', 'Rest'],
     5: ['Push', 'Pull', 'Legs', 'Push', 'Pull', 'Rest', 'Rest'],
     6: ['Push', 'Pull', 'Legs', 'Push', 'Pull', 'Legs', 'Rest'],
+    7: ['Push', 'Pull', 'Legs', 'Push', 'Pull', 'Legs', 'Push'],
   },
   upper_lower: {
     3: ['Upper', 'Lower', 'Upper', 'Rest', 'Rest', 'Rest', 'Rest'],
     4: ['Upper', 'Lower', 'Rest', 'Upper', 'Lower', 'Rest', 'Rest'],
     5: ['Upper', 'Lower', 'Upper', 'Lower', 'Upper', 'Rest', 'Rest'],
     6: ['Upper', 'Lower', 'Upper', 'Lower', 'Upper', 'Lower', 'Rest'],
+    7: ['Upper', 'Lower', 'Upper', 'Lower', 'Upper', 'Lower', 'Upper'],
   },
   full_body: {
     3: ['Full Body', 'Rest', 'Full Body', 'Rest', 'Full Body', 'Rest', 'Rest'],
     4: ['Full Body', 'Rest', 'Full Body', 'Rest', 'Full Body', 'Rest', 'Full Body'],
     5: ['Full Body', 'Rest', 'Full Body', 'Full Body', 'Rest', 'Full Body', 'Full Body'],
     6: ['Full Body', 'Full Body', 'Full Body', 'Full Body', 'Full Body', 'Full Body', 'Rest'],
+    7: ['Full Body', 'Full Body', 'Full Body', 'Full Body', 'Full Body', 'Full Body', 'Full Body'],
   },
   body_part_split: {
     3: ['Back, Biceps & Core', 'Chest, Shoulders & Triceps', 'Legs & Core', 'Rest', 'Rest', 'Rest', 'Rest'],
     4: ['Back, Biceps & Core', 'Chest, Shoulders & Triceps', 'Legs & Core', 'Back, Biceps & Core', 'Rest', 'Rest', 'Rest'],
     5: ['Back, Biceps & Core', 'Chest, Shoulders & Triceps', 'Legs & Core', 'Back, Biceps & Core', 'Chest, Shoulders & Triceps', 'Rest', 'Rest'],
     6: ['Back, Biceps & Core', 'Chest, Shoulders & Triceps', 'Legs & Core', 'Back, Biceps & Core', 'Chest, Shoulders & Triceps', 'Legs & Core', 'Rest'],
+    7: ['Back, Biceps & Core', 'Chest, Shoulders & Triceps', 'Legs & Core', 'Back, Biceps & Core', 'Chest, Shoulders & Triceps', 'Legs & Core', 'Back, Biceps & Core'],
   },
   strength: {
     3: ['Squat Day', 'Bench Day', 'Deadlift Day', 'Rest', 'Rest', 'Rest', 'Rest'],
     4: ['Squat Day', 'Bench Day', 'Rest', 'Deadlift Day', 'Press Day', 'Rest', 'Rest'],
     5: ['Squat Day', 'Bench Day', 'Deadlift Day', 'Press Day', 'Squat Day', 'Rest', 'Rest'],
     6: ['Squat Day', 'Bench Day', 'Deadlift Day', 'Press Day', 'Squat Day', 'Bench Day', 'Rest'],
+    7: ['Squat Day', 'Bench Day', 'Deadlift Day', 'Press Day', 'Squat Day', 'Bench Day', 'Deadlift Day'],
   },
 };
 
 export function resolveLiftingDaysPerWeek(days?: number): LiftingDaysPerWeek {
-  if (days === 3 || days === 4 || days === 5 || days === 6) return days;
+  if (days === 3 || days === 4 || days === 5 || days === 6 || days === 7) return days;
   return 4;
 }
 

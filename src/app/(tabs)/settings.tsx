@@ -24,7 +24,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useSubscription } from '@/hooks/useSubscription';
 import { useUnits } from '@/hooks/useUnits';
 import { loadRolloverValidationState, type RolloverValidationState } from '@/lib/rolloverDebug';
-import { isTabataModeEnabled, TABATA_MODE_PREF_KEY, tabataModeSummary } from '@/lib/trainingPreferences';
+import { resolveDaysPerWeek, summarizeTrainingSchedule } from '@/lib/trainingSchedule';
 import { resolveUnitPreferences } from '@/lib/unitConversion';
 import { coachingPrefsPatch } from '@/lib/voice/voicePreferences';
 import { dataResetService, formatResetConfirmation, type DataResetType } from '@/services/dataResetService';
@@ -367,6 +367,14 @@ export default function SettingsScreen() {
               );
             }
           }}
+        />
+        <SettingsRow
+          label="Workouts per week"
+          value={user ? summarizeTrainingSchedule(resolveDaysPerWeek(user)) : 'Not set'}
+          icon={
+            <AppSymbol name="calendar" fallback="📅" size={20} tintColor={LiftFlowColors.textSecondary} />
+          }
+          onPress={() => router.push('/(features)/training-schedule')}
         />
         <SettingsRow
           label="Training goals"

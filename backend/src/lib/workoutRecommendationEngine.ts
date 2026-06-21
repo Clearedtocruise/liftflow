@@ -484,7 +484,9 @@ export function inferSplitFromProfile(
 
 export function inferDaysPerWeek(metadata?: Record<string, unknown>, sessionCount7d?: number): number {
   const coachProfile = (metadata?.coachProfile ?? {}) as { daysPerWeek?: number };
-  if (coachProfile.daysPerWeek && coachProfile.daysPerWeek >= 3) return coachProfile.daysPerWeek;
-  if (sessionCount7d != null && sessionCount7d > 0) return Math.min(6, Math.max(3, Math.round(sessionCount7d)));
+  if (coachProfile.daysPerWeek && coachProfile.daysPerWeek >= 3 && coachProfile.daysPerWeek <= 7) {
+    return coachProfile.daysPerWeek;
+  }
+  if (sessionCount7d != null && sessionCount7d > 0) return Math.min(7, Math.max(3, Math.round(sessionCount7d)));
   return 4;
 }

@@ -9,6 +9,7 @@ import {
     type WatchWorkoutMessage,
 } from '@/integrations/watch';
 import { fail, fromError, ok } from '@/lib/serviceResult';
+import { workoutService } from '@/services/workoutService';
 import { watchPhoneBridge } from '@/state/WatchPhoneBridge';
 import { supabase } from '@/supabase/client';
 import type { WorkoutSession } from '@/types';
@@ -184,7 +185,11 @@ export const watchWorkoutService = {
       const last = await getLastPerformance(userId, activeExercise.exerciseId);
       const suggested = await suggestWeight(userId, activeExercise.exerciseId, targetReps);
 
-      const state = getAssistant(userId).startSet({
+      const assistant = getAssistant(userId);
+      const previousSet = assistant.getState().activeSet;
+      const sameExercise = previousSet?.workoutExerciseId === activeExercise.id;
+
+      let state = assistant.startSet({
         userId,
         workoutSessionId: session.id,
         workoutExerciseId: activeExercise.id,
@@ -195,6 +200,23 @@ export const watchWorkoutService = {
         targetReps,
         weightLbs: suggested.weightLbs ?? last.weightLbs,
       });
+
+      if (sameExercise && previousSet && state.activeSet) {
+        const pendingReps = watchPhoneBridge.getPendingWatchReps();
+        const pendingWeightKg = watchPhoneBridge.getPendingWatchWeightKg();
+        state = {
+          ...state,
+          activeSet: {
+            ...state.activeSet,
+            currentRepCount: pendingReps ?? previousSet.currentRepCount,
+            weightLbs:
+              pendingWeightKg != null
+                ? Math.round(pendingWeightKg * 2.2046226218)
+                : previousSet.weightLbs ?? state.activeSet.weightLbs,
+          },
+        };
+        assistant.loadState(state);
+      }
 
       return ok(state);
     } catch (e) {

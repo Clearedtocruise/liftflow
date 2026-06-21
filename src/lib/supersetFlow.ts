@@ -1,4 +1,6 @@
 import { CIRCUIT_MODE_DEFAULTS, SUPERSET_MODE_DEFAULTS } from '@/constants/workoutExecutionModes';
+import type { WorkoutPositionLabels } from '@/lib/workoutUpNext';
+import { resolveWorkoutUpNext } from '@/lib/workoutUpNext';
 import type { WorkoutExercise } from '@/types/workout';
 import type { EditableWorkoutExercise } from '@/types/workoutExecution';
 import type { WorkoutExecutionMode } from '@/types/workoutExecutionMode';
@@ -317,4 +319,125 @@ export function nextExerciseIndexAfterGroup(
   const lastInGroup = Math.max(...group.memberIndices);
   const next = lastInGroup + 1;
   return next < totalExercises ? next : null;
+}
+
+/** Use superset rotation when the plan pairs exercises, unless user chose tabata/circuit/hiit. */
+export function inferExecutionModeFromPlan(
+  planExercises: EditableWorkoutExercise[],
+  preferred: WorkoutExecutionMode,
+): WorkoutExecutionMode {
+  if (preferred === 'tabata' || preferred === 'circuit' || preferred === 'hiit') {
+    return preferred;
+  }
+  if (buildSupersetGroups(planExercises).length > 0) {
+    return 'superset';
+  }
+  return preferred;
+}
+
+export function formatSupersetPartnerNames(
+  group: SupersetGroup,
+  planExercises: EditableWorkoutExercise[],
+  sessionExercises: WorkoutExercise[],
+): string {
+  return group.memberIndices
+    .map((index) => sessionExercises[index]?.exercise?.name ?? planExercises[index]?.name ?? 'Exercise')
+    .join(' · ');
+}
+
+/** Set/exercise labels during superset rotation (A1 · Set 2/3, partner up next). */
+export function resolveSupersetWorkoutPosition(
+  currentIndex: number,
+  planExercises: EditableWorkoutExercise[],
+  sessionExercises: WorkoutExercise[],
+  targetSetsForIndex: (index: number) => number,
+  isLastExercise: boolean,
+): WorkoutPositionLabels {
+  const planExercise = planExercises[currentIndex];
+  const sessionExercise = sessionExercises[currentIndex];
+  const exerciseName = sessionExercise?.exercise?.name ?? planExercise?.name ?? 'Exercise';
+  const completed = sessionExercise?.sets?.length ?? 0;
+  const target = targetSetsForIndex(currentIndex);
+  const activeSet = Math.min(completed + 1, target);
+  const station = formatExerciseStationLabel(planExercise, currentIndex, planExercises);
+  const currentSetLabel = station
+    ? `${station} · Set ${activeSet}/${target}`
+    : `Set ${activeSet} of ${target}`;
+
+  const group = getSupersetGroupForIndex(currentIndex, planExercises);
+  if (!group || group.memberIndices.length < 2) {
+    return resolveWorkoutUpNext({
+      exerciseName,
+      targetSets: target,
+      completedSetsCount: completed,
+      isLastExercise,
+      nextExerciseName: sessionExercises[currentIndex + 1]?.exercise?.name,
+      nextExerciseTargetSets: planExercises[currentIndex + 1]?.sets,
+    });
+  }
+
+  const ordered = [...group.memberIndices].sort((a, b) => a - b);
+  const currentPos = ordered.indexOf(currentIndex);
+  const nextSetNumber = completed + 1;
+
+  for (let offset = 1; offset < ordered.length; offset += 1) {
+    const partnerIndex = ordered[(currentPos + offset) % ordered.length];
+    const partnerCompleted = sessionExercises[partnerIndex]?.sets?.length ?? 0;
+    if (partnerCompleted < nextSetNumber) {
+      const partnerName =
+        sessionExercises[partnerIndex]?.exercise?.name ?? planExercises[partnerIndex]?.name ?? 'Partner';
+      const partnerStation = formatExerciseStationLabel(planExercises[partnerIndex], partnerIndex, planExercises);
+      const partnerTarget = targetSetsForIndex(partnerIndex);
+      const partnerSet = partnerCompleted + 1;
+      const partnerLabel = partnerStation
+        ? `${partnerName} (${partnerStation}) · Set ${partnerSet}/${partnerTarget}`
+        : `${partnerName} · Set ${partnerSet}/${partnerTarget}`;
+      const goNow = partnerCompleted < completed;
+      return {
+        exerciseName,
+        currentSetLabel,
+        upNextLabel: goNow ? `${partnerLabel} · go now` : partnerLabel,
+      };
+    }
+  }
+
+  const firstIdx = ordered[0];
+  const firstName = sessionExercises[firstIdx]?.exercise?.name ?? planExercises[firstIdx]?.name ?? 'Exercise';
+  const firstCompleted = sessionExercises[firstIdx]?.sets?.length ?? 0;
+  const firstTarget = targetSetsForIndex(firstIdx);
+
+  if (nextSetNumber <= target) {
+    return {
+      exerciseName,
+      currentSetLabel,
+      upNextLabel: `Rest · then ${firstName} · Set ${firstCompleted + 1}/${firstTarget}`,
+    };
+  }
+
+  const afterGroup = nextExerciseIndexAfterGroup(group, sessionExercises.length);
+  if (afterGroup != null) {
+    const nextName = sessionExercises[afterGroup]?.exercise?.name ?? planExercises[afterGroup]?.name;
+    const nextTarget = targetSetsForIndex(afterGroup);
+    return {
+      exerciseName,
+      currentSetLabel,
+      upNextLabel: nextName ? `${nextName} · Set 1/${nextTarget}` : 'Finish workout',
+    };
+  }
+
+  return { exerciseName, currentSetLabel, upNextLabel: 'Finish workout' };
+}
+
+export function shouldShowSupersetPrep(
+  currentIndex: number,
+  planExercises: EditableWorkoutExercise[],
+  sessionExercises: WorkoutExercise[],
+): SupersetGroup | null {
+  const group = getSupersetGroupForIndex(currentIndex, planExercises);
+  if (!group || group.memberIndices.length < 2) return null;
+  const entryIndex = Math.min(...group.memberIndices);
+  if (currentIndex !== entryIndex) return null;
+  const completed = sessionExercises[currentIndex]?.sets?.length ?? 0;
+  if (completed > 0) return null;
+  return group;
 }

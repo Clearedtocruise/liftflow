@@ -121,9 +121,48 @@ export const watchCompanionService = {
       state = watchWorkoutService.updateRestTimer(userId, restSeconds);
     }
 
+    state = this.applyDisplayContext(state, watchPhoneBridge.getDisplayContext());
+
     const enriched = await this.enrichState(userId, state);
     watchWorkoutService.loadState(userId, enriched);
     await pushWorkoutStateToWatch(enriched);
+  },
+
+  /** Rest tick only — avoids re-syncing exercise/set state every second. */
+  async pushRestTimerOnly(userId: string, restSecondsRemaining: number | null): Promise<void> {
+    const assistantState = watchWorkoutService.getState(userId);
+    if (!assistantState.activeSet) return;
+
+    const restSeconds = restSecondsRemaining ?? 0;
+    const state = watchWorkoutService.updateRestTimer(userId, restSeconds);
+    const display = watchPhoneBridge.getDisplayContext();
+    const patched = this.applyDisplayContext(state, display);
+    watchWorkoutService.loadState(userId, patched);
+    await pushWorkoutStateToWatch(patched);
+  },
+
+  applyDisplayContext(
+    state: WatchWorkoutAssistantState,
+    display: ReturnType<typeof watchPhoneBridge.getDisplayContext>,
+  ): WatchWorkoutAssistantState {
+    if (!display?.statusLine && !display?.stationLabel && display?.draftReps == null) {
+      return state;
+    }
+    const set = state.activeSet;
+    if (!set) return state;
+
+    const draftReps = display?.draftReps ?? watchPhoneBridge.getPendingWatchReps();
+    return {
+      ...state,
+      activeSet: {
+        ...set,
+        currentRepCount: draftReps ?? set.currentRepCount,
+        stationLabel: display?.stationLabel,
+        statusLine: display?.statusLine,
+        supersetHint: display?.supersetHint,
+      },
+      updatedAt: new Date().toISOString(),
+    };
   },
 
   async buildFeedbackState(
@@ -274,7 +313,11 @@ export const watchCompanionService = {
     }
 
     if (LIGHTWEIGHT_INBOUND.has(messageType)) {
-      const state = watchWorkoutService.getState(userId);
+      const state = this.applyDisplayContext(
+        watchWorkoutService.getState(userId),
+        watchPhoneBridge.getDisplayContext(),
+      );
+      watchWorkoutService.loadState(userId, state);
       await pushWorkoutStateToWatch(state);
       return { reply: { type: 'workout_state', state } };
     }

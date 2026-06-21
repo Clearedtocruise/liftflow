@@ -414,7 +414,7 @@ export function WorkoutSessionProvider({
     await workoutService.endRestTimer(activeRestPeriod.id, elapsed, true);
     if (userId) void peakMusicService.onSetCompleted(userId);
     setActiveRestPeriod(null);
-    setRestSecondsRemaining(null);
+    setRestSecondsRemaining(0);
     restEndAtRef.current = null;
     pausedRemainingRef.current = null;
   }, [activeRestPeriod, userId]);

@@ -19,15 +19,38 @@ export function inferProgramType(input: ProgramSelectionInput): ProgramType {
     return 'body_part_split';
   }
   if (goals.length >= 2) return 'body_part_split';
-  if (days >= 4 && days <= 6) return 'body_part_split';
+  if (days >= 4 && days <= 7) return 'body_part_split';
   if (primary === 'fat_loss' || primary === 'weight_loss') return 'upper_lower';
 
   return 'body_part_split';
 }
 
+export function resolveDaysPerWeekFromProfile(input: {
+  coachProfileDays?: number;
+  programFrequency?: number | string;
+  coachActivationFrequency?: number;
+}): number {
+  if (input.coachProfileDays != null && input.coachProfileDays >= 3 && input.coachProfileDays <= 7) {
+    return input.coachProfileDays;
+  }
+  if (typeof input.programFrequency === 'number' && input.programFrequency >= 3 && input.programFrequency <= 7) {
+    return input.programFrequency;
+  }
+  if (
+    input.coachActivationFrequency != null &&
+    input.coachActivationFrequency >= 3 &&
+    input.coachActivationFrequency <= 7
+  ) {
+    return input.coachActivationFrequency;
+  }
+  return 4;
+}
+
 export function inferProgramFrequency(input: ProgramSelectionInput): ProgramFrequency {
-  const days = input.daysPerWeek ?? 4;
-  if (days >= 3 && days <= 6) return days as ProgramFrequency;
+  const days = resolveDaysPerWeekFromProfile({
+    coachProfileDays: input.daysPerWeek,
+  });
+  if (days >= 3 && days <= 7) return days as ProgramFrequency;
   return 4;
 }
 

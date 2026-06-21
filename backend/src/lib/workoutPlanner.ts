@@ -3,7 +3,7 @@ import {
     applySubstitutionsToExercises,
     type LimitationContext,
 } from './exerciseSubstitution.js';
-import { patternExclusionGroupId } from './movementPatternExclusion.js';
+import { maxPatternUsesForDayFocus, patternExclusionGroupId } from './movementPatternExclusion.js';
 import { requireAdmin } from './supabase.js';
 import { blendWorkoutPreset, resolveRankedGoals, toPlannerGoal } from './trainingGoals.js';
 
@@ -66,9 +66,9 @@ const MUSCLE_TO_FAMILIES: Record<string, string[]> = {
   shoulders: ['vertical_press', 'rear_delt'],
   legs: ['squat_pattern', 'hinge_pattern', 'lunge_pattern'],
   arms: ['biceps', 'triceps'],
-  core: ['core'],
+  core: ['core', 'core_flexion', 'core_rotation', 'core_anti_extension'],
   quads: ['squat_pattern', 'lunge_pattern'],
-  glutes: ['hinge_pattern', 'lunge_pattern'],
+  glutes: ['hinge_pattern', 'lunge_pattern', 'glute_pattern'],
   hamstrings: ['hinge_pattern', 'hamstrings'],
   calves: ['calves'],
   biceps: ['biceps'],
@@ -89,7 +89,7 @@ export const BODY_PART_DAY_PLANS: Record<string, DayFocusPlan> = {
     quotas: [
       { muscles: ['back'], min: 4 },
       { muscles: ['biceps'], min: 2 },
-      { muscles: ['core'], min: 2 },
+      { muscles: ['core'], min: 3 },
     ],
     excludePrimaryMuscles: ['chest', 'triceps', 'shoulders'],
   },
@@ -106,9 +106,9 @@ export const BODY_PART_DAY_PLANS: Record<string, DayFocusPlan> = {
   legs_core: {
     key: 'legs_core',
     quotas: [
-      { muscles: ['quads', 'legs'], min: 3 },
-      { muscles: ['hamstrings'], min: 2 },
+      { muscles: ['quads'], min: 3 },
       { muscles: ['glutes'], min: 2 },
+      { muscles: ['hamstrings'], min: 2 },
       { muscles: ['calves'], min: 1 },
       { muscles: ['core'], min: 2 },
     ],
@@ -135,10 +135,97 @@ function exerciseHitsMuscle(exercise: ExerciseRecord, muscle: string): boolean {
 
 function isExcludedForDayFocus(exercise: ExerciseRecord, excludePrimaryMuscles: string[]): boolean {
   if (excludePrimaryMuscles.length === 0) return false;
-  const groups = (exercise.muscle_groups ?? []).map((group) => group.toLowerCase());
-  if (groups.length === 0) return false;
-  const primary = groups[0]!;
+  const primary = primaryMuscleGroup(exercise);
+  if (!primary) return false;
   return excludePrimaryMuscles.includes(primary);
+}
+
+const LEG_PRIMARY_MUSCLES = new Set(['quads', 'hamstrings', 'glutes', 'calves', 'legs', 'unilateral']);
+const UPPER_PRIMARY_MUSCLES = new Set(['chest', 'back', 'shoulders', 'biceps', 'triceps']);
+const CORE_MOVEMENT_FAMILIES = new Set(['core', 'core_flexion', 'core_rotation', 'core_anti_extension']);
+const CORE_FOCUSED_SLUGS = new Set([
+  'plank',
+  'side-plank',
+  'hanging-leg-raise',
+  'crunch',
+  'cable-crunch',
+  'reverse-crunch',
+  'bicycle-crunch',
+  'sit-up',
+  'dead-bug',
+  'hollow-hold',
+  'russian-twist',
+  'wood-chop',
+]);
+
+function primaryMuscleGroup(exercise: ExerciseRecord): string {
+  return (exercise.muscle_groups ?? [])[0]?.toLowerCase() ?? '';
+}
+
+/** True when core is the primary training target — not a secondary tag on a leg lift. */
+export function isCoreFocusedExercise(exercise: ExerciseRecord): boolean {
+  const primary = primaryMuscleGroup(exercise);
+  if (primary === 'core' || primary === 'obliques') return true;
+  if (exercise.category === 'core') return true;
+  const family = exercise.metadata?.movement_family ?? '';
+  if (CORE_MOVEMENT_FAMILIES.has(family)) return true;
+  if (CORE_FOCUSED_SLUGS.has(exercise.slug)) return true;
+  return false;
+}
+
+export function exerciseMatchesQuotaMuscle(exercise: ExerciseRecord, muscle: string): boolean {
+  if (muscle === 'core') {
+    return isCoreFocusedExercise(exercise);
+  }
+
+  const primary = primaryMuscleGroup(exercise);
+  const family = exercise.metadata?.movement_family ?? '';
+
+  if (muscle === 'back') {
+    return (
+      primary === 'back' ||
+      ['horizontal_pull', 'vertical_pull'].includes(family) ||
+      (family === 'rear_delt' && (exercise.muscle_groups ?? []).map((g) => g.toLowerCase()).includes('back'))
+    );
+  }
+
+  if (muscle === 'biceps') {
+    return primary === 'biceps' || family === 'biceps';
+  }
+
+  if (muscle === 'chest') {
+    return primary === 'chest' || family === 'horizontal_press';
+  }
+
+  if (muscle === 'shoulders') {
+    return primary === 'shoulders' || ['vertical_press', 'rear_delt'].includes(family);
+  }
+
+  if (muscle === 'triceps') {
+    return primary === 'triceps' || family === 'triceps';
+  }
+
+  if (['quads', 'glutes', 'hamstrings', 'calves'].includes(muscle)) {
+    return primary === muscle || (muscle === 'quads' && primary === 'legs');
+  }
+
+  return primary === muscle;
+}
+
+export function isAllowedOnDayFocus(exercise: ExerciseRecord, plan: DayFocusPlan): boolean {
+  if (isExcludedForDayFocus(exercise, plan.excludePrimaryMuscles)) return false;
+
+  const primary = primaryMuscleGroup(exercise);
+  const allowedMuscles = plan.quotas.flatMap((quota) => quota.muscles);
+
+  if (plan.key === 'back_biceps_core' || plan.key === 'chest_shoulders_triceps') {
+    if (LEG_PRIMARY_MUSCLES.has(primary)) return false;
+  }
+  if (plan.key === 'legs_core') {
+    if (UPPER_PRIMARY_MUSCLES.has(primary)) return false;
+  }
+
+  return allowedMuscles.some((muscle) => exerciseMatchesQuotaMuscle(exercise, muscle));
 }
 
 const GOAL_PRESETS: Record<
@@ -151,7 +238,7 @@ const GOAL_PRESETS: Record<
   general_fitness: { sets: 3, reps: '10-12', restSeconds: 60, exerciseCount: 10 },
 };
 
-export const WORKOUT_MIN_EXERCISES = 4;
+export const WORKOUT_MIN_EXERCISES = 8;
 export const WORKOUT_MIN_SETS = 3;
 export const WORKOUT_TARGET_EXERCISES = 10;
 export const WORKOUT_TARGET_MINUTES = 60;
@@ -465,16 +552,18 @@ export function selectFocusedSplitExercises(
     [...recentSlugs.entries()].filter(([, date]) => date >= weekAgo).map(([slug]) => slug),
   );
 
-  const eligible = pool.filter((exercise) => !isExcludedForDayFocus(exercise, plan.excludePrimaryMuscles));
+  const eligible = pool.filter((exercise) => isAllowedOnDayFocus(exercise, plan));
   const selected: ExerciseRecord[] = [];
   const usedSlugs = new Set<string>();
-  const usedPatternGroups = new Set<string>();
+  const patternUseCounts = new Map<string, number>();
 
   function registerPick(exercise: ExerciseRecord): void {
     selected.push(exercise);
     usedSlugs.add(exercise.slug);
     const patternGroup = patternExclusionGroupId(exercise.slug);
-    if (patternGroup) usedPatternGroups.add(patternGroup);
+    if (patternGroup) {
+      patternUseCounts.set(patternGroup, (patternUseCounts.get(patternGroup) ?? 0) + 1);
+    }
   }
 
   function rankCandidates(candidates: ExerciseRecord[], seedOffset: number) {
@@ -493,11 +582,17 @@ export function selectFocusedSplitExercises(
       .sort((a, b) => b.score - a.score);
   }
 
-  function canPick(exercise: ExerciseRecord, allowProgramReuse = false): boolean {
+  function canPick(exercise: ExerciseRecord, allowProgramReuse = false, relaxPatterns = false): boolean {
     if (usedSlugs.has(exercise.slug)) return false;
     if (!allowProgramReuse && programRecentSlugs?.has(exercise.slug)) return false;
     const patternGroup = patternExclusionGroupId(exercise.slug);
-    if (patternGroup && usedPatternGroups.has(patternGroup)) return false;
+    if (patternGroup) {
+      const maxUses = relaxPatterns
+        ? maxPatternUsesForDayFocus(plan.key, patternGroup) + 1
+        : maxPatternUsesForDayFocus(plan.key, patternGroup);
+      const used = patternUseCounts.get(patternGroup) ?? 0;
+      if (used >= maxUses) return false;
+    }
     return true;
   }
 
@@ -508,7 +603,7 @@ export function selectFocusedSplitExercises(
         eligible.filter(
           (exercise) =>
             canPick(exercise, allowProgramReuse) &&
-            quota.muscles.some((muscle) => exerciseHitsMuscle(exercise, muscle)),
+            quota.muscles.some((muscle) => exerciseMatchesQuotaMuscle(exercise, muscle)),
         ),
         pickedForQuota * 17 + selected.length,
       );
@@ -533,7 +628,7 @@ export function selectFocusedSplitExercises(
       eligible.filter(
         (exercise) =>
           canPick(exercise, false) &&
-          [...allowedMuscles].some((muscle) => exerciseHitsMuscle(exercise, muscle)),
+          [...allowedMuscles].some((muscle) => exerciseMatchesQuotaMuscle(exercise, muscle)),
       ),
       selected.length * 23,
     );
@@ -543,7 +638,7 @@ export function selectFocusedSplitExercises(
         eligible.filter(
           (exercise) =>
             canPick(exercise, true) &&
-            [...allowedMuscles].some((muscle) => exerciseHitsMuscle(exercise, muscle)),
+            [...allowedMuscles].some((muscle) => exerciseMatchesQuotaMuscle(exercise, muscle)),
         ),
         selected.length * 29,
       );
@@ -551,6 +646,22 @@ export function selectFocusedSplitExercises(
     }
     if (!pick) break;
     registerPick(pick);
+  }
+
+  if (selected.length < count) {
+    while (selected.length < count) {
+      const candidates = rankCandidates(
+        eligible.filter(
+          (exercise) =>
+            canPick(exercise, true, true) &&
+            [...allowedMuscles].some((muscle) => exerciseMatchesQuotaMuscle(exercise, muscle)),
+        ),
+        selected.length * 31,
+      );
+      const pick = candidates[0]?.exercise;
+      if (!pick) break;
+      registerPick(pick);
+    }
   }
 
   return selected.slice(0, count);
@@ -793,22 +904,28 @@ export async function buildAdaptiveWorkoutPlan(
     }
   }
 
-  if (options?.includeCore && !picked.some((exercise) => exercise.muscle_groups?.includes('core'))) {
+  if (options?.includeCore && !picked.some((exercise) => isCoreFocusedExercise(exercise))) {
     const corePick = pool.find(
       (exercise) =>
-        exercise.muscle_groups?.includes('core') ||
-        exercise.metadata?.movement_family === 'core' ||
-        exercise.name.toLowerCase().includes('plank'),
+        isCoreFocusedExercise(exercise) &&
+        (!focusPlan || isAllowedOnDayFocus(exercise, focusPlan)),
     );
     if (corePick && !picked.some((exercise) => exercise.slug === corePick.slug)) {
       picked = [...picked, corePick];
     }
   }
 
-  if (picked.length < (options?.minimumExercises ?? WORKOUT_MIN_EXERCISES)) {
+  if (picked.length < targetCount) {
+    const allowedMuscles = focusPlan
+      ? focusPlan.quotas.flatMap((quota) => quota.muscles)
+      : normalizedMuscles;
     const fillers = pool
-      .filter((exercise) => !picked.some((item) => item.slug === exercise.slug))
-      .slice(0, (options?.minimumExercises ?? WORKOUT_MIN_EXERCISES) - picked.length);
+      .filter((exercise) => {
+        if (picked.some((item) => item.slug === exercise.slug)) return false;
+        if (focusPlan) return isAllowedOnDayFocus(exercise, focusPlan);
+        return allowedMuscles.some((muscle) => exerciseHitsMuscle(exercise, muscle));
+      })
+      .slice(0, targetCount - picked.length);
     picked = [...picked, ...fillers];
   }
 

@@ -5,12 +5,14 @@ import WatchKit
 final class WorkoutConnectivity: NSObject, ObservableObject, WCSessionDelegate {
   @Published var exerciseName = "Start on iPhone"
   @Published var setLabel = ""
+  @Published var statusLine = ""
+  @Published var stationLabel = ""
+  @Published var supersetHint = ""
   @Published var phase = "idle"
   @Published var restSeconds: Int?
   @Published var heartRateBpm: Int?
   @Published var isReachable = false
 
-  // Phase 2 — rep tracking + intelligence
   @Published var currentRepCount = 0
   @Published var targetReps = 0
   @Published var motionConfidence: Double = 0
@@ -22,10 +24,15 @@ final class WorkoutConnectivity: NSObject, ObservableObject, WCSessionDelegate {
   @Published var progressionLine = ""
   @Published var lastSpokenResponse = ""
   @Published var weightLbs: Int?
+  @Published var sessionCalories = 0
+  @Published var activeCalories = 0
 
   private(set) var workoutSessionId: String?
   private var restEndDate: Date?
   private var restTimer: Timer?
+  private var calorieTimer: Timer?
+  private var lastHrSampleAt: Date?
+  private var restingHeartRate = 65
 
   override init() {
     super.init()
@@ -63,6 +70,52 @@ final class WorkoutConnectivity: NSObject, ObservableObject, WCSessionDelegate {
     }
   }
 
+  func recordHeartRate(_ bpm: Int) {
+    heartRateBpm = bpm
+    let now = Date()
+    if let last = lastHrSampleAt {
+      let elapsed = now.timeIntervalSince(last)
+      accumulateCalories(bpm: bpm, seconds: elapsed)
+    }
+    lastHrSampleAt = now
+    if calorieTimer == nil {
+      startCalorieTimer()
+    }
+  }
+
+  private func startCalorieTimer() {
+    calorieTimer?.invalidate()
+    calorieTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+      guard let self, let bpm = self.heartRateBpm else { return }
+      self.accumulateCalories(bpm: bpm, seconds: 1)
+      self.lastHrSampleAt = Date()
+    }
+  }
+
+  private func stopCalorieTimer() {
+    calorieTimer?.invalidate()
+    calorieTimer = nil
+    lastHrSampleAt = nil
+  }
+
+  /** Rough active calorie estimate from heart rate (Keytel-style, 80 kg default). */
+  private func accumulateCalories(bpm: Int, seconds: TimeInterval) {
+    guard bpm > restingHeartRate + 5, seconds > 0 else { return }
+    let weightKg = 80.0
+    let age = 30.0
+    let male = true
+    let hours = seconds / 3600.0
+    let perHour: Double
+    if male {
+      perHour = (-55.0969 + 0.6309 * Double(bpm) + 0.1988 * weightKg + 0.2017 * age) / 4.184
+    } else {
+      perHour = (-20.4022 + 0.4472 * Double(bpm) - 0.1263 * weightKg + 0.074 * age) / 4.184
+    }
+    let burned = max(0, perHour * hours)
+    sessionCalories = max(0, sessionCalories + Int(burned.rounded()))
+    activeCalories = sessionCalories
+  }
+
   private func applyMessage(_ message: [String: Any]) {
     guard let type = message["type"] as? String else { return }
 
@@ -98,7 +151,13 @@ final class WorkoutConnectivity: NSObject, ObservableObject, WCSessionDelegate {
       motionTrackingEnabled = activeSet["exerciseProfileId"] != nil
       workoutSessionId = activeSet["workoutSessionId"] as? String
       weightLbs = activeSet["weightLbs"] as? Int
+      stationLabel = activeSet["stationLabel"] as? String ?? ""
+      statusLine = activeSet["statusLine"] as? String ?? ""
+      supersetHint = activeSet["supersetHint"] as? String ?? ""
       setLabel = "Set \(setNumber)/\(targetSets) · \(targetReps) reps"
+      if statusLine.isEmpty {
+        statusLine = "Set \(setNumber)/\(targetSets)"
+      }
       phase = activeSet["phase"] as? String ?? "active_set"
 
       if let rest = activeSet["restSecondsRemaining"] as? Int, rest > 0 {
@@ -126,12 +185,28 @@ final class WorkoutConnectivity: NSObject, ObservableObject, WCSessionDelegate {
       motionTrackingEnabled = false
       workoutSessionId = nil
       weightLbs = nil
+      stationLabel = ""
+      statusLine = ""
+      supersetHint = ""
       clearRestCountdown()
+      stopCalorieTimer()
+      sessionCalories = 0
+      activeCalories = 0
     }
 
-    if let health = state["healthSnapshot"] as? [String: Any],
-       let hr = health["heartRateBpm"] as? Int {
-      heartRateBpm = hr
+    if let health = state["healthSnapshot"] as? [String: Any] {
+      if let hr = health["heartRateBpm"] as? Int {
+        heartRateBpm = hr
+      }
+      if let resting = health["restingHeartRateBpm"] as? Int {
+        restingHeartRate = resting
+      }
+      if let active = health["activeCalories"] as? Int {
+        activeCalories = active
+      }
+      if let session = health["sessionCalories"] as? Int {
+        sessionCalories = session
+      }
     }
   }
 

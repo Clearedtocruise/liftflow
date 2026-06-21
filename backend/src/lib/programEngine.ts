@@ -1,6 +1,6 @@
 import { applySubstitutionsToExercises, type LimitationContext } from './exerciseSubstitution.js';
 import { applyWeeklyProgression, totalPlannedVolume } from './programProgression.js';
-import { inferProgramFrequency, inferProgramType } from './programSelection.js';
+import { inferProgramFrequency, inferProgramType, resolveDaysPerWeekFromProfile } from './programSelection.js';
 import {
     addDays,
     buildWeeklySchedule,
@@ -53,7 +53,7 @@ export type CreateProgramInput = {
 };
 
 /** Bump when workout planning rules change so existing programs can be regenerated. */
-export const PLAN_RULES_VERSION = 6;
+export const PLAN_RULES_VERSION = 9;
 
 const MIN_ACCEPTABLE_EXERCISES_PER_SESSION = 8;
 
@@ -348,11 +348,26 @@ async function buildProgramInputFromProfile(userId: string): Promise<CreateProgr
   const { data: profile, error } = await db.from('profiles').select('*').eq('id', userId).single();
   if (error || !profile) throw new Error('Profile not found');
 
-  const coachProfile = ((profile.metadata ?? {}) as { coachProfile?: { daysPerWeek?: number; timeline?: string } })
-    .coachProfile ?? {};
+  const { data: activeProgram } = await db
+    .from('training_programs')
+    .select('metadata')
+    .eq('user_id', userId)
+    .eq('is_active', true)
+    .maybeSingle();
+
+  const profileMetadata = (profile.metadata ?? {}) as {
+    coachProfile?: { daysPerWeek?: number; timeline?: string };
+    coachActivation?: { frequency?: number };
+  };
+  const coachProfile = profileMetadata.coachProfile ?? {};
+  const programMeta = (activeProgram?.metadata ?? {}) as StoredProgramMetadata;
   const rankedGoals = resolveRankedGoals(profile.fitness_goals, profile.primary_training_goal);
   const primaryGoal = rankedGoals[0];
-  const daysPerWeek = coachProfile.daysPerWeek ?? 4;
+  const daysPerWeek = resolveDaysPerWeekFromProfile({
+    coachProfileDays: coachProfile.daysPerWeek,
+    programFrequency: typeof programMeta.frequency === 'number' ? programMeta.frequency : undefined,
+    coachActivationFrequency: profileMetadata.coachActivation?.frequency,
+  });
 
   return {
     userId,

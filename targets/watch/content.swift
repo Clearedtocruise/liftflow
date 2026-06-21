@@ -8,33 +8,13 @@ struct ContentView: View {
 
   var body: some View {
     ScrollView {
-      VStack(alignment: .leading, spacing: 8) {
+      VStack(alignment: .leading, spacing: 10) {
         statusRow
-
-        Text(connectivity.exerciseName)
-          .font(.headline)
-          .lineLimit(2)
-          .minimumScaleFactor(0.8)
-
-        if !connectivity.setLabel.isEmpty {
-          Text(connectivity.setLabel)
-            .font(.caption)
-            .foregroundStyle(.secondary)
-        }
-
-        if !connectivity.progressionLine.isEmpty {
-          Text(connectivity.progressionLine)
-            .font(.caption2)
-            .foregroundStyle(accent)
-            .lineLimit(2)
-        }
-
+        workoutStatusCard
         metricsRow
 
         if connectivity.isRestPhase {
           restPanel
-        } else if connectivity.isActiveSetPhase {
-          activeSetPanel
         } else if connectivity.workoutSessionId != nil {
           activeSetPanel
         } else {
@@ -48,7 +28,7 @@ struct ContentView: View {
             .lineLimit(3)
         }
       }
-      .padding(.horizontal, 4)
+      .padding(.horizontal, 6)
     }
     .onAppear {
       heartRate.requestAuthorization()
@@ -60,7 +40,7 @@ struct ContentView: View {
     }
     .onChange(of: heartRate.bpm) { newValue in
       if let newValue {
-        connectivity.heartRateBpm = newValue
+        connectivity.recordHeartRate(newValue)
       }
     }
   }
@@ -77,72 +57,130 @@ struct ContentView: View {
     }
   }
 
-  private var metricsRow: some View {
-    HStack(spacing: 12) {
-      if let hr = heartRate.bpm ?? connectivity.heartRateBpm {
-        Label("\(hr)", systemImage: "heart.fill")
+  private var workoutStatusCard: some View {
+    VStack(alignment: .leading, spacing: 4) {
+      if !connectivity.stationLabel.isEmpty {
+        Text(connectivity.stationLabel)
           .font(.caption)
           .foregroundStyle(accent)
       }
-      if connectivity.isActiveSetPhase {
-        if let weight = connectivity.weightLbs, weight > 0 {
-          Text("\(weight) lb · \(connectivity.targetReps) reps")
+
+      Text(connectivity.exerciseName)
+        .font(.headline)
+        .lineLimit(2)
+        .minimumScaleFactor(0.75)
+
+      if !connectivity.statusLine.isEmpty {
+        Text(connectivity.statusLine)
+          .font(.system(size: 22, weight: .bold, design: .rounded))
+          .monospacedDigit()
+      } else if !connectivity.setLabel.isEmpty {
+        Text(connectivity.setLabel)
+          .font(.system(size: 22, weight: .bold, design: .rounded))
+          .monospacedDigit()
+      }
+
+      if !connectivity.supersetHint.isEmpty {
+        Text(connectivity.supersetHint)
+          .font(.caption)
+          .foregroundStyle(accent)
+          .lineLimit(2)
+      }
+
+      if connectivity.currentRepCount > 0 {
+        Text("\(connectivity.currentRepCount) reps logged")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .padding(8)
+    .background(Color.white.opacity(0.06))
+    .clipShape(RoundedRectangle(cornerRadius: 10))
+  }
+
+  private var metricsRow: some View {
+    HStack(spacing: 10) {
+      if let hr = heartRate.bpm ?? connectivity.heartRateBpm {
+        Label("\(hr)", systemImage: "heart.fill")
+          .font(.caption)
+          .foregroundStyle(.pink)
+      }
+      if connectivity.sessionCalories > 0 {
+        VStack(alignment: .leading, spacing: 0) {
+          Text("\(connectivity.sessionCalories) cal")
             .font(.caption)
-            .foregroundStyle(.secondary)
-        } else {
-          Text("Target \(connectivity.targetReps) reps")
-            .font(.caption)
+            .foregroundStyle(.orange)
+          Text("session")
+            .font(.caption2)
             .foregroundStyle(.secondary)
         }
+      }
+      if connectivity.activeCalories > 0 {
+        VStack(alignment: .leading, spacing: 0) {
+          Text("\(connectivity.activeCalories) cal")
+            .font(.caption)
+            .foregroundStyle(accent)
+          Text("active")
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+        }
+      }
+      if let weight = connectivity.weightLbs, weight > 0 {
+        Text("\(weight) lb")
+          .font(.caption)
+          .foregroundStyle(.secondary)
       }
     }
   }
 
   private var restPanel: some View {
-    VStack(spacing: 6) {
+    VStack(spacing: 8) {
       Text("REST")
         .font(.caption2)
         .foregroundStyle(.secondary)
       Text(formatRest(connectivity.restSeconds ?? 0))
-        .font(.system(size: 34, weight: .bold, design: .rounded))
+        .font(.system(size: 36, weight: .bold, design: .rounded))
         .monospacedDigit()
+      if !connectivity.supersetHint.isEmpty {
+        Text("Next: \(connectivity.supersetHint)")
+          .font(.caption2)
+          .foregroundStyle(accent)
+          .multilineTextAlignment(.center)
+          .lineLimit(2)
+      }
       Button("Skip Rest") { connectivity.skipRest() }
         .buttonStyle(.borderedProminent)
         .tint(accent)
-
       Button("End Workout") { connectivity.cancelWorkout() }
         .buttonStyle(.bordered)
         .tint(.red)
     }
     .frame(maxWidth: .infinity)
-    .padding(.vertical, 6)
   }
 
   private var activeSetPanel: some View {
     VStack(spacing: 8) {
-      if connectivity.progressionLine.isEmpty == false {
+      if !connectivity.progressionLine.isEmpty {
         Text(connectivity.progressionLine)
           .font(.caption2)
           .foregroundStyle(accent)
           .multilineTextAlignment(.center)
-      } else {
-        Text("Log on iPhone for weight & reps")
-          .font(.caption2)
-          .foregroundStyle(.secondary)
-          .multilineTextAlignment(.center)
+          .lineLimit(2)
       }
 
       Button("Log Set") { connectivity.logSet() }
         .buttonStyle(.borderedProminent)
         .tint(accent)
 
-      Button("Say Reps") { connectivity.voiceReps() }
-        .buttonStyle(.bordered)
-        .tint(accent)
-
-      Button("Say Weight") { connectivity.voiceWeight() }
-        .buttonStyle(.bordered)
-        .tint(accent)
+      HStack(spacing: 6) {
+        Button("Say Reps") { connectivity.voiceReps() }
+          .buttonStyle(.bordered)
+          .tint(accent)
+        Button("Say Weight") { connectivity.voiceWeight() }
+          .buttonStyle(.bordered)
+          .tint(accent)
+      }
 
       Button("End Workout") { connectivity.cancelWorkout() }
         .buttonStyle(.bordered)
@@ -152,6 +190,13 @@ struct ContentView: View {
 
   private var idlePanel: some View {
     VStack(spacing: 8) {
+      if !connectivity.workoutRecommendation.isEmpty {
+        Text(connectivity.workoutRecommendation)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+          .multilineTextAlignment(.center)
+          .lineLimit(3)
+      }
       Button("Start Today's Workout") { connectivity.startTodaysWorkout() }
         .buttonStyle(.borderedProminent)
         .tint(accent)

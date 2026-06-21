@@ -20,7 +20,7 @@ const PROGRAM_TYPES: { id: ProgramType; label: string }[] = [
   { id: 'strength', label: 'Strength' },
 ];
 
-const FREQUENCIES: ProgramFrequency[] = [3, 4, 5, 6, 'custom'];
+const FREQUENCIES: ProgramFrequency[] = [3, 4, 5, 6, 7, 'custom'];
 const GOALS = ['muscle_gain', 'fat_loss', 'strength', 'general_fitness'];
 const EXPERIENCE = ['beginner', 'intermediate', 'advanced'];
 

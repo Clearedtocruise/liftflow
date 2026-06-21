@@ -409,7 +409,7 @@ export default function ProfileOnboardingScreen() {
               {DAYS_PER_WEEK_OPTIONS.map((n) => (
                 <SelectableChip
                   key={n}
-                  label={n === 6 ? `${n} days (max)` : `${n} lift days`}
+                  label={n === 7 ? '7 days (every day)' : n === 6 ? `${n} lift days` : `${n} lift days`}
                   selected={daysPerWeek === n}
                   onPress={() => setDaysPerWeek(n)}
                 />

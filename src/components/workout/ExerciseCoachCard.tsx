@@ -201,6 +201,11 @@ export function ExerciseCoachCard({
           ? ` · ${prescription.contextUsed.trainingLabel}`
           : null}
       </AppText>
+      {prescription.adjustmentLabel === 'increase_sets' ? (
+        <AppText variant="footnote" color="success">
+          Coach is adding a set — {prescription.targets.sets} sets total today.
+        </AppText>
+      ) : null}
       <AppText variant="footnote" color="textSecondary">
         {prescription.reason}
       </AppText>
