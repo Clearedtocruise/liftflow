@@ -31,7 +31,7 @@ export default function LoginScreen() {
 
   useEffect(() => {
     if (loading || !isAuthenticated || !isProfileReady || !user) return;
-    void navigateAfterAuth();
+    navigateAfterAuth(user);
   }, [loading, isAuthenticated, isProfileReady, user]);
 
   async function handleLogin() {
@@ -46,8 +46,8 @@ export default function LoginScreen() {
     setBanner(null);
     setLoading(true);
     try {
-      await signIn({ email, password });
-      await navigateAfterAuth();
+      const profile = await signIn({ email, password });
+      navigateAfterAuth(profile);
     } catch (err) {
       setError(mapAuthError(err, 'login'));
       setLoading(false);

@@ -90,11 +90,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signIn = useCallback(async (payload: SignInPayload) => {
-    const profile = await authService.signIn(payload);
-    setUser(profile);
+    const authUser = await authService.signInWithPassword(payload);
+    const stub = authService.stubProfileFromAuth(authUser);
+    setUser(stub);
     setIsProfileReady(true);
-    startPlanPrefetch(profile.id, profile.timezone);
-    return profile;
+    startPlanPrefetch(authUser.id, stub.timezone);
+
+    void authService
+      .loadProfile(authUser.id, authUser.email ?? payload.email, authUser.user_metadata)
+      .then((profile) => {
+        setUser(profile);
+        logStartup('PROFILE_LOADED');
+      })
+      .catch((error) => {
+        console.warn('[auth] profile load after sign-in failed', error);
+      });
+
+    return stub;
   }, []);
 
   const signUp = useCallback(async (payload: SignUpPayload) => {

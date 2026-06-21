@@ -4,6 +4,7 @@ import { PRO_FEATURE_LABELS, type ProFeatureId } from '@/constants/subscription'
 import { useAuth } from '@/hooks/useAuth';
 import { hasPremiumAccessOverride, isBetaTesterUser, isFounderUser } from '@/lib/accessOverride';
 import { hasProFeature, isTrialingSubscription } from '@/lib/entitlements';
+import { withTimeout } from '@/lib/withTimeout';
 import { productAnalyticsService } from '@/services/productAnalyticsService';
 import { subscriptionService } from '@/services/subscriptionService';
 import type { Subscription } from '@/types/platform';
@@ -40,17 +41,27 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     if (options?.showLoading) setLoading(true);
     try {
       try {
-        const rcResult = await subscriptionService.syncFromRevenueCat(user.id);
+        const rcResult = await withTimeout(
+          subscriptionService.syncFromRevenueCat(user.id),
+          5_000,
+          'revenuecat sync',
+        );
         if (rcResult.success) {
           setSubscription(rcResult.data);
           return;
         }
       } catch {
-        // RevenueCat not configured — fall back to Supabase
+        // RevenueCat not configured or timed out — fall back to Supabase
       }
 
-      const result = await subscriptionService.getSubscription(user.id);
+      const result = await withTimeout(
+        subscriptionService.getSubscription(user.id),
+        5_000,
+        'subscription load',
+      );
       if (result.success) setSubscription(result.data);
+    } catch {
+      // Never block auth/home on subscription fetch
     } finally {
       if (options?.showLoading) setLoading(false);
     }
