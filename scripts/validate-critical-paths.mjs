@@ -154,12 +154,16 @@ const REQUIRED = [
     ],
   },
   {
+    file: 'src/lib/navigateAfterAuth.ts',
+    label: 'Login post-auth navigation',
+    patterns: ["router.replace('/')", 'InteractionManager.runAfterInteractions'],
+  },
+  {
     file: 'src/app/(auth)/login.tsx',
     label: 'Login hooks before redirect',
     patterns: [
       'useEffect(() => {',
-      'Redirect href={redirectTarget}',
-      'const authedProfile =',
+      'navigateAfterAuth',
     ],
   },
 ];
