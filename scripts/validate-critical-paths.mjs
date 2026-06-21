@@ -29,7 +29,7 @@ const REQUIRED = [
   {
     file: 'src/contexts/AuthContext.tsx',
     label: 'Auth fast gate',
-    patterns: ['stubProfileFromAuth', 'setIsLoading(false)', 'loadProfile', 'startPlanPrefetch'],
+    patterns: ['signInWithPassword', 'stubProfileFromAuth', 'startPlanPrefetch'],
   },
   {
     file: 'src/lib/planDataPrefetch.ts',
@@ -156,7 +156,7 @@ const REQUIRED = [
   {
     file: 'src/lib/navigateAfterAuth.ts',
     label: 'Login post-auth navigation',
-    patterns: ["router.replace('/')", 'InteractionManager.runAfterInteractions'],
+    patterns: ['authHomeRoute', 'router.replace(authHomeRoute'],
   },
   {
     file: 'src/app/(auth)/login.tsx',

@@ -1,5 +1,4 @@
 import { router } from 'expo-router';
-import { InteractionManager } from 'react-native';
 
 import type { UserProfile } from '@/types/user';
 
@@ -10,14 +9,7 @@ export function authHomeRoute(
   return profile.onboardingCompleted ? '/(tabs)/dashboard' : '/(onboarding)/legal';
 }
 
-/**
- * Leave the auth stack after sign-in. Routes through `/` so the same index gate
- * that runs on cold start picks dashboard vs onboarding — nested `<Redirect>`
- * from `(auth)/login` is unreliable on device.
- */
-export async function navigateAfterAuth(): Promise<void> {
-  await new Promise<void>((resolve) => {
-    InteractionManager.runAfterInteractions(() => resolve());
-  });
-  router.replace('/');
+/** Jump straight to home — avoid routing through `/` (extra splash hop). */
+export function navigateAfterAuth(profile: Pick<UserProfile, 'onboardingCompleted'>): void {
+  router.replace(authHomeRoute(profile));
 }

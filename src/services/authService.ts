@@ -76,7 +76,7 @@ export const authService = {
     return { status: 'session', profile };
   },
 
-  async signIn({ email, password }: SignInPayload): Promise<UserProfile> {
+  async signInWithPassword({ email, password }: SignInPayload) {
     if (!isSupabaseConfigured) {
       throw new Error('Supabase is not configured. Add credentials to .env');
     }
@@ -89,8 +89,13 @@ export const authService = {
       throw new Error(mapAuthError(new Error('Sign in failed'), 'login'));
     }
 
+    return data.user;
+  },
+
+  async signIn({ email, password }: SignInPayload): Promise<UserProfile> {
+    const authUser = await this.signInWithPassword({ email, password });
     return withTimeout(
-      fetchProfile(data.user.id, data.user.email ?? email, data.user.user_metadata),
+      fetchProfile(authUser.id, authUser.email ?? email, authUser.user_metadata),
       15_000,
       'profile load',
     );
@@ -172,7 +177,7 @@ export const authService = {
   },
 
   onAuthStateChange(callback: (profile: UserProfile | null) => void) {
-    return supabase.auth.onAuthStateChange(async (event, session) => {
+    return supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'INITIAL_SESSION') return;
 
       if (!session?.user) {
@@ -180,8 +185,16 @@ export const authService = {
         return;
       }
 
-      const profile = await fetchProfile(session.user.id, session.user.email ?? '', session.user.user_metadata);
-      callback(profile);
+      const authUser = session.user;
+      callback(stubProfileFromAuth(authUser));
+
+      void withTimeout(
+        fetchProfile(authUser.id, authUser.email ?? '', authUser.user_metadata),
+        15_000,
+        'profile load',
+      )
+        .then(callback)
+        .catch(() => undefined);
     });
   },
 };
