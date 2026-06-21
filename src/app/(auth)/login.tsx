@@ -1,4 +1,4 @@
-import { Redirect, router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
@@ -9,6 +9,7 @@ import { AppText, textStyles } from '@/components/ui/AppText';
 import { Brand, LiftFlowColors, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 import { mapAuthError } from '@/lib/authErrors';
+import { navigateAfterAuth } from '@/lib/navigateAfterAuth';
 
 export default function LoginScreen() {
   const { signIn, isAuthenticated, user, isProfileReady } = useAuth();
@@ -18,7 +19,6 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [banner, setBanner] = useState<string | null>(null);
-  const [signedInProfile, setSignedInProfile] = useState<Awaited<ReturnType<typeof signIn>> | null>(null);
 
   useEffect(() => {
     if (params.verified === '1') {
@@ -29,12 +29,10 @@ export default function LoginScreen() {
     }
   }, [params.authError, params.verified]);
 
-  const authedProfile = signedInProfile ?? (isAuthenticated && isProfileReady ? user : null);
-  const redirectTarget = authedProfile
-    ? authedProfile.onboardingCompleted
-      ? '/(tabs)/dashboard'
-      : '/(onboarding)/legal'
-    : null;
+  useEffect(() => {
+    if (loading || !isAuthenticated || !isProfileReady || !user) return;
+    void navigateAfterAuth();
+  }, [loading, isAuthenticated, isProfileReady, user]);
 
   async function handleLogin() {
     if (loading) return;
@@ -48,11 +46,10 @@ export default function LoginScreen() {
     setBanner(null);
     setLoading(true);
     try {
-      const profile = await signIn({ email, password });
-      setSignedInProfile(profile);
+      await signIn({ email, password });
+      await navigateAfterAuth();
     } catch (err) {
       setError(mapAuthError(err, 'login'));
-    } finally {
       setLoading(false);
     }
   }
@@ -66,10 +63,6 @@ export default function LoginScreen() {
         </AppText>
       </View>
     );
-  }
-
-  if (redirectTarget) {
-    return <Redirect href={redirectTarget} />;
   }
 
   return (

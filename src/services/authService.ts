@@ -2,6 +2,7 @@ import { DEFAULT_UNIT_PREFERENCES } from '@/constants/units';
 import { mapAuthError } from '@/lib/authErrors';
 import { getEmailConfirmRedirectUrl, getPasswordResetRedirectUrl } from '@/lib/authRedirects';
 import { mapProfile } from '@/lib/db-mappers';
+import { withTimeout } from '@/lib/withTimeout';
 import { isSupabaseConfigured, supabase } from '@/supabase/client';
 import type { PasswordResetPayload, SignInPayload, SignUpPayload, UserProfile } from '@/types/user';
 
@@ -88,7 +89,11 @@ export const authService = {
       throw new Error(mapAuthError(new Error('Sign in failed'), 'login'));
     }
 
-    return fetchProfile(data.user.id, data.user.email ?? email, data.user.user_metadata);
+    return withTimeout(
+      fetchProfile(data.user.id, data.user.email ?? email, data.user.user_metadata),
+      15_000,
+      'profile load',
+    );
   },
 
   async signOut(): Promise<void> {
