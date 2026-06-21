@@ -1,4 +1,5 @@
 import { applySubstitutionsToExercises, type LimitationContext } from './exerciseSubstitution.js';
+import { applyEquipmentSubstitutionsToExercises } from './equipmentSubstitutionEngine.js';
 import { applyWeeklyProgression, totalPlannedVolume } from './programProgression.js';
 import { inferProgramFrequency, inferProgramType, resolveDaysPerWeekFromProfile } from './programSelection.js';
 import {
@@ -19,6 +20,7 @@ import {
     buildAdaptiveWorkoutPlan,
     getLastPerformanceBySlug,
     loadActiveLimitations,
+    loadAvailableExercises,
     loadRecoveryModifiers,
     WORKOUT_MIN_EXERCISES,
     WORKOUT_MIN_SETS,
@@ -53,7 +55,7 @@ export type CreateProgramInput = {
 };
 
 /** Bump when workout planning rules change so existing programs can be regenerated. */
-export const PLAN_RULES_VERSION = 9;
+export const PLAN_RULES_VERSION = 10;
 
 const MIN_ACCEPTABLE_EXERCISES_PER_SESSION = 8;
 
@@ -266,6 +268,11 @@ export async function generateTrainingProgram(input: CreateProgramInput) {
         );
 
         let exercises = scaleExercises(plan.exercises, phaseSpec.volumeMultiplier, phaseSpec.repRangeAdjust);
+        if (equipment?.length) {
+          const exercisePool = await loadAvailableExercises(input.userId, equipment);
+          const swapped = applyEquipmentSubstitutionsToExercises(exercises, equipment, exercisePool);
+          exercises = swapped.exercises;
+        }
         exercises = applyWeeklyProgression(
           exercises,
           performance,

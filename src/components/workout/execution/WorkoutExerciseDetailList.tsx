@@ -4,6 +4,7 @@ import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 import { ExerciseMusclePanel } from '@/components/exercise/ExerciseMusclePanel';
 import { Card } from '@/components/layout/Card';
 import { AppText } from '@/components/ui/AppText';
+import { ExerciseGuideSheet } from '@/components/workout/execution/ExerciseGuideSheet';
 import { LiftFlowColors, Spacing } from '@/constants/theme';
 import { coachAdjustmentLabel } from '@/lib/coachAdjustmentLabels';
 import { formatExerciseStationLabel } from '@/lib/supersetFlow';
@@ -32,6 +33,7 @@ export function WorkoutExerciseDetailList({
 }: WorkoutExerciseDetailListProps) {
   const [loading, setLoading] = useState(false);
   const [prescriptions, setPrescriptions] = useState<ExerciseCoachPrescription[]>([]);
+  const [guideExerciseName, setGuideExerciseName] = useState<string | null>(null);
 
   const coachInputs = useMemo(
     () =>
@@ -95,9 +97,14 @@ export function WorkoutExerciseDetailList({
               {stationLabel ?? String(index + 1)}
             </AppText>
             <View style={styles.content}>
-              <AppText variant="bodyBold">
-                {stationLabel ? `${stationLabel} · ${exercise.name}` : exercise.name}
-              </AppText>
+              <Pressable onPress={() => setGuideExerciseName(exercise.name)} hitSlop={8}>
+                <AppText variant="bodyBold">
+                  {stationLabel ? `${stationLabel} · ${exercise.name}` : exercise.name}
+                </AppText>
+                <AppText variant="caption" color="accent">
+                  Tap for form guide
+                </AppText>
+              </Pressable>
               <AppText variant="footnote" color="textSecondary">
                 {prescription
                   ? `${prescription.targets.sets} sets · ${prescription.targets.repRange} reps · Rest ${formatRest(prescription.targets.restSeconds)}`
@@ -125,6 +132,11 @@ export function WorkoutExerciseDetailList({
           </View>
         );
       })}
+      <ExerciseGuideSheet
+        visible={guideExerciseName != null}
+        exerciseName={guideExerciseName ?? undefined}
+        onClose={() => setGuideExerciseName(null)}
+      />
     </Card>
   );
 }

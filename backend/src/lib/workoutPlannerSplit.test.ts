@@ -3,6 +3,8 @@ import test from 'node:test';
 
 import {
     BODY_PART_DAY_PLANS,
+    exerciseMeetsEquipment,
+    expandAvailableEquipment,
     isCoreFocusedExercise,
     resolveDayFocusPlan,
     selectFocusedSplitExercises,
@@ -132,6 +134,41 @@ test('leg day fills 10 exercises with squat and lunge variety', () => {
   assert.ok(slugs.some((slug) => slug.includes('rdl') || slug.includes('curl') || slug.includes('thrust') || slug.includes('bridge')));
   assert.ok(slugs.some((slug) => slug.includes('calf')));
   assert.ok(slugs.some((slug) => slug.includes('plank') || slug.includes('leg-raise')));
+});
+
+test('dumbbell-only profile excludes kettlebell and cable catalog rows', () => {
+  const dumbbellsOnly = expandAvailableEquipment(['dumbbells', 'bodyweight', 'resistance_bands']);
+  const kbCurl: ExerciseRecord = {
+    id: 'kb-curl',
+    name: 'Kettlebell Curl',
+    slug: 'kettlebell-curl',
+    category: 'pull',
+    equipment: 'kettlebell',
+    muscle_groups: ['biceps'],
+    metadata: { movement_family: 'biceps', requires: ['dumbbells'] },
+  };
+  const cableCurl: ExerciseRecord = {
+    id: 'cable-curl',
+    name: 'Cable Curl',
+    slug: 'cable-curl',
+    category: 'pull',
+    equipment: 'cable',
+    muscle_groups: ['biceps'],
+    metadata: { movement_family: 'biceps', requires: ['machines'] },
+  };
+  const dbCurl: ExerciseRecord = {
+    id: 'db-curl',
+    name: 'Dumbbell Curl',
+    slug: 'dumbbell-curl',
+    category: 'pull',
+    equipment: 'dumbbell',
+    muscle_groups: ['biceps'],
+    metadata: { movement_family: 'biceps', requires: ['dumbbells'] },
+  };
+
+  assert.equal(exerciseMeetsEquipment(kbCurl, dumbbellsOnly), false);
+  assert.equal(exerciseMeetsEquipment(cableCurl, dumbbellsOnly), false);
+  assert.equal(exerciseMeetsEquipment(dbCurl, dumbbellsOnly), true);
 });
 
 console.log('workoutPlannerSplit.test.ts — all assertions passed');

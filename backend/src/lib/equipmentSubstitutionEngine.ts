@@ -62,6 +62,31 @@ export function findEquipmentSubstitute(
   }
 
   const key = normalizeName(exerciseName);
+  if (/\bkettlebell\b|\bkb\b/.test(key)) {
+    for (const candidateName of ['Dumbbell Curl', 'Hammer Curl', 'Dumbbell Row', 'Goblet Squat', 'Dumbbell Shoulder Press']) {
+      const candidate = findExerciseByName(pool, candidateName);
+      if (candidate && exerciseMeetsEquipment(candidate, available)) {
+        return {
+          from: exerciseName,
+          to: candidate.name,
+          reason: `Swapped to ${candidate.name} for your available equipment`,
+        };
+      }
+    }
+  }
+  if (/\bcable\b/.test(key)) {
+    for (const candidateName of ['Dumbbell Row', 'Band Row', 'Dumbbell Curl', 'Push-Up', 'Band Chest Press']) {
+      const candidate = findExerciseByName(pool, candidateName);
+      if (candidate && exerciseMeetsEquipment(candidate, available)) {
+        return {
+          from: exerciseName,
+          to: candidate.name,
+          reason: `Swapped to ${candidate.name} for your available equipment`,
+        };
+      }
+    }
+  }
+
   for (const [pattern, candidates] of Object.entries(NAMED_SUBSTITUTIONS)) {
     if (key === pattern || key.includes(pattern)) {
       for (const candidateName of candidates) {
