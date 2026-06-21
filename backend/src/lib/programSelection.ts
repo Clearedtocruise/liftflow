@@ -11,16 +11,18 @@ export type ProgramSelectionInput = {
 export function inferProgramType(input: ProgramSelectionInput): ProgramType {
   const goals = input.fitnessGoals ?? [];
   const primary = input.primaryGoal ?? goals[0] ?? 'general_fitness';
+  const days = input.daysPerWeek ?? 4;
 
   if (primary === 'strength' || goals.includes('strength')) return 'strength';
-  if (goals.length >= 3) return 'body_part_split';
-
-  const days = input.daysPerWeek ?? 4;
   if (days <= 3) return 'body_part_split';
+  if (primary === 'muscle_gain' || primary === 'hypertrophy' || goals.includes('muscle_gain')) {
+    return 'body_part_split';
+  }
+  if (goals.length >= 2) return 'body_part_split';
+  if (days >= 4 && days <= 6) return 'body_part_split';
   if (primary === 'fat_loss' || primary === 'weight_loss') return 'upper_lower';
-  if (primary === 'muscle_gain' || primary === 'hypertrophy') return 'body_part_split';
 
-  return days >= 5 ? 'body_part_split' : 'upper_lower';
+  return 'body_part_split';
 }
 
 export function inferProgramFrequency(input: ProgramSelectionInput): ProgramFrequency {

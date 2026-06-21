@@ -73,8 +73,73 @@ const MUSCLE_TO_FAMILIES: Record<string, string[]> = {
   calves: ['calves'],
   biceps: ['biceps'],
   triceps: ['triceps'],
+  lower_back: ['hinge_pattern', 'horizontal_pull'],
   unilateral: ['lunge_pattern'],
 };
+
+export type DayFocusPlan = {
+  key: string;
+  quotas: Array<{ muscles: string[]; min: number }>;
+  excludePrimaryMuscles: string[];
+};
+
+export const BODY_PART_DAY_PLANS: Record<string, DayFocusPlan> = {
+  back_biceps_core: {
+    key: 'back_biceps_core',
+    quotas: [
+      { muscles: ['back'], min: 4 },
+      { muscles: ['biceps'], min: 2 },
+      { muscles: ['core'], min: 2 },
+    ],
+    excludePrimaryMuscles: ['chest', 'triceps', 'shoulders'],
+  },
+  chest_shoulders_triceps: {
+    key: 'chest_shoulders_triceps',
+    quotas: [
+      { muscles: ['chest'], min: 3 },
+      { muscles: ['shoulders'], min: 2 },
+      { muscles: ['triceps'], min: 2 },
+      { muscles: ['core'], min: 1 },
+    ],
+    excludePrimaryMuscles: ['back', 'biceps'],
+  },
+  legs_core: {
+    key: 'legs_core',
+    quotas: [
+      { muscles: ['quads', 'legs'], min: 3 },
+      { muscles: ['hamstrings'], min: 2 },
+      { muscles: ['glutes'], min: 2 },
+      { muscles: ['calves'], min: 1 },
+      { muscles: ['core'], min: 2 },
+    ],
+    excludePrimaryMuscles: ['chest', 'back', 'shoulders', 'biceps', 'triceps'],
+  },
+};
+
+export function resolveDayFocusPlan(slotLabel: string): DayFocusPlan | null {
+  const key = slotLabel.toLowerCase();
+  if (key.includes('back') && key.includes('biceps')) return BODY_PART_DAY_PLANS.back_biceps_core;
+  if (key.includes('chest') && key.includes('shoulder')) return BODY_PART_DAY_PLANS.chest_shoulders_triceps;
+  if (key.includes('leg')) return BODY_PART_DAY_PLANS.legs_core;
+  return null;
+}
+
+function exerciseHitsMuscle(exercise: ExerciseRecord, muscle: string): boolean {
+  const groups = (exercise.muscle_groups ?? []).map((group) => group.toLowerCase());
+  if (groups.includes(muscle)) return true;
+  if (muscle === 'legs') {
+    return groups.some((group) => ['quads', 'hamstrings', 'glutes', 'calves', 'legs'].includes(group));
+  }
+  return false;
+}
+
+function isExcludedForDayFocus(exercise: ExerciseRecord, excludePrimaryMuscles: string[]): boolean {
+  if (excludePrimaryMuscles.length === 0) return false;
+  const groups = (exercise.muscle_groups ?? []).map((group) => group.toLowerCase());
+  if (groups.length === 0) return false;
+  const primary = groups[0]!;
+  return excludePrimaryMuscles.includes(primary);
+}
 
 const GOAL_PRESETS: Record<
   TrainingGoal,
@@ -329,6 +394,7 @@ function scoreExercise(
   recentSlugs: Map<string, Date>,
   lastWeekSlugs: Set<string>,
   rotationSeed = 0,
+  programRecentSlugs?: Set<string>,
 ): number {
   let score = 10;
   const lastUsed = recentSlugs.get(exercise.slug);
@@ -341,11 +407,14 @@ function scoreExercise(
   if (lastWeekSlugs.has(exercise.slug)) {
     score -= 25;
   }
+  if (programRecentSlugs?.has(exercise.slug)) {
+    score -= 40;
+  }
   if (exercise.metadata?.movement_family === family) {
     score += 5;
   }
   const slugHash = exercise.slug.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
-  score += ((slugHash + rotationSeed * 17) % 11) * 0.4;
+  score += ((slugHash + rotationSeed * 31) % 17) * 1.5;
   return score;
 }
 
@@ -382,12 +451,118 @@ function suggestWeightLbs(
   return Math.round((base * factor) / 5) * 5;
 }
 
+export function selectFocusedSplitExercises(
+  pool: ExerciseRecord[],
+  plan: DayFocusPlan,
+  recentSlugs: Map<string, Date>,
+  count: number,
+  rotationSeed = 0,
+  programRecentSlugs?: Set<string>,
+): ExerciseRecord[] {
+  const weekAgo = new Date();
+  weekAgo.setDate(weekAgo.getDate() - 7);
+  const lastWeekSlugs = new Set(
+    [...recentSlugs.entries()].filter(([, date]) => date >= weekAgo).map(([slug]) => slug),
+  );
+
+  const eligible = pool.filter((exercise) => !isExcludedForDayFocus(exercise, plan.excludePrimaryMuscles));
+  const selected: ExerciseRecord[] = [];
+  const usedSlugs = new Set<string>();
+  const usedPatternGroups = new Set<string>();
+
+  function registerPick(exercise: ExerciseRecord): void {
+    selected.push(exercise);
+    usedSlugs.add(exercise.slug);
+    const patternGroup = patternExclusionGroupId(exercise.slug);
+    if (patternGroup) usedPatternGroups.add(patternGroup);
+  }
+
+  function rankCandidates(candidates: ExerciseRecord[], seedOffset: number) {
+    return candidates
+      .map((exercise) => ({
+        exercise,
+        score: scoreExercise(
+          exercise,
+          exercise.metadata?.movement_family ?? '',
+          recentSlugs,
+          lastWeekSlugs,
+          rotationSeed + seedOffset,
+          programRecentSlugs,
+        ),
+      }))
+      .sort((a, b) => b.score - a.score);
+  }
+
+  function canPick(exercise: ExerciseRecord, allowProgramReuse = false): boolean {
+    if (usedSlugs.has(exercise.slug)) return false;
+    if (!allowProgramReuse && programRecentSlugs?.has(exercise.slug)) return false;
+    const patternGroup = patternExclusionGroupId(exercise.slug);
+    if (patternGroup && usedPatternGroups.has(patternGroup)) return false;
+    return true;
+  }
+
+  function pickForQuota(quota: DayFocusPlan['quotas'][number], allowProgramReuse: boolean): number {
+    let pickedForQuota = 0;
+    while (pickedForQuota < quota.min && selected.length < count) {
+      const candidates = rankCandidates(
+        eligible.filter(
+          (exercise) =>
+            canPick(exercise, allowProgramReuse) &&
+            quota.muscles.some((muscle) => exerciseHitsMuscle(exercise, muscle)),
+        ),
+        pickedForQuota * 17 + selected.length,
+      );
+      const pick = candidates[0]?.exercise;
+      if (!pick) break;
+      registerPick(pick);
+      pickedForQuota += 1;
+    }
+    return pickedForQuota;
+  }
+
+  for (const quota of plan.quotas) {
+    const strictCount = pickForQuota(quota, false);
+    if (strictCount < quota.min) {
+      pickForQuota(quota, true);
+    }
+  }
+
+  const allowedMuscles = new Set(plan.quotas.flatMap((quota) => quota.muscles));
+  while (selected.length < count) {
+    const candidates = rankCandidates(
+      eligible.filter(
+        (exercise) =>
+          canPick(exercise, false) &&
+          [...allowedMuscles].some((muscle) => exerciseHitsMuscle(exercise, muscle)),
+      ),
+      selected.length * 23,
+    );
+    let pick = candidates[0]?.exercise;
+    if (!pick) {
+      const relaxed = rankCandidates(
+        eligible.filter(
+          (exercise) =>
+            canPick(exercise, true) &&
+            [...allowedMuscles].some((muscle) => exerciseHitsMuscle(exercise, muscle)),
+        ),
+        selected.length * 29,
+      );
+      pick = relaxed[0]?.exercise;
+    }
+    if (!pick) break;
+    registerPick(pick);
+  }
+
+  return selected.slice(0, count);
+}
+
 export function selectRotatedExercises(
   pool: ExerciseRecord[],
   targetMuscles: string[],
   recentSlugs: Map<string, Date>,
   count: number,
   rotationSeed = 0,
+  programRecentSlugs?: Set<string>,
 ): ExerciseRecord[] {
   const familiesNeeded = new Set<string>();
   for (const muscle of targetMuscles) {
@@ -427,7 +602,7 @@ export function selectRotatedExercises(
   for (const family of familiesNeeded) {
     const candidates = pool
       .filter((e) => e.metadata?.movement_family === family && canPick(e))
-      .map((e) => ({ exercise: e, score: scoreExercise(e, family, recentSlugs, lastWeekSlugs, rotationSeed) }))
+      .map((e) => ({ exercise: e, score: scoreExercise(e, family, recentSlugs, lastWeekSlugs, rotationSeed, programRecentSlugs) }))
       .sort((a, b) => b.score - a.score);
 
     const pick = candidates[0]?.exercise;
@@ -445,7 +620,7 @@ export function selectRotatedExercises(
       if (selected.length >= count) break;
       const candidates = pool
         .filter((e) => e.metadata?.movement_family === family && canPick(e))
-        .map((e) => ({ exercise: e, score: scoreExercise(e, family, recentSlugs, lastWeekSlugs, rotationSeed) }))
+        .map((e) => ({ exercise: e, score: scoreExercise(e, family, recentSlugs, lastWeekSlugs, rotationSeed, programRecentSlugs) }))
         .sort((a, b) => b.score - a.score);
 
       const pick = candidates[0]?.exercise;
@@ -465,7 +640,7 @@ export function selectRotatedExercises(
       .filter((e) => (e.muscle_groups ?? []).some((mg) => targetSet.has(mg.toLowerCase())))
       .map((e) => ({
         exercise: e,
-        score: scoreExercise(e, e.metadata?.movement_family ?? '', recentSlugs, lastWeekSlugs),
+        score: scoreExercise(e, e.metadata?.movement_family ?? '', recentSlugs, lastWeekSlugs, rotationSeed, programRecentSlugs),
       }))
       .sort((a, b) => b.score - a.score);
 
@@ -478,7 +653,7 @@ export function selectRotatedExercises(
   if (selected.length < count) {
     const fillers = pool
       .filter((e) => canPick(e))
-      .map((e) => ({ exercise: e, score: scoreExercise(e, e.metadata?.movement_family ?? '', recentSlugs, lastWeekSlugs) }))
+      .map((e) => ({ exercise: e, score: scoreExercise(e, e.metadata?.movement_family ?? '', recentSlugs, lastWeekSlugs, rotationSeed, programRecentSlugs) }))
       .sort((a, b) => b.score - a.score);
     for (const { exercise } of fillers) {
       if (selected.length >= count) break;
@@ -497,8 +672,12 @@ export type BuildWorkoutPlanOptions = {
   minimumSets?: number;
   /** Slugs already assigned earlier in this program generation — avoids duplicate days. */
   programRecentSlugs?: Map<string, Date>;
-  /** Per-calendar-day seed so repeated split labels (e.g. two Push days) pick different exercises. */
+  /** Per-calendar-day seed so repeated split labels pick different exercises. */
   rotationSeed?: number;
+  /** Which time this split label appears in the week (0 = first Back day, 1 = second, …). */
+  splitOccurrenceIndex?: number;
+  /** Day label from the program schedule (e.g. "Back, Biceps & Core"). */
+  slotLabel?: string;
 };
 
 export function normalizeTargetMuscleGroups(muscles: string[]): string[] {
@@ -548,6 +727,12 @@ export async function buildAdaptiveWorkoutPlan(
     }
   }
   const rotationSeed = options?.rotationSeed ?? 0;
+  const splitOccurrenceIndex = options?.splitOccurrenceIndex ?? 0;
+  const effectiveRotationSeed = rotationSeed + splitOccurrenceIndex * 997;
+  const programRecentSet = options?.programRecentSlugs
+    ? new Set(options.programRecentSlugs.keys())
+    : undefined;
+  const focusPlan = options?.slotLabel ? resolveDayFocusPlan(options.slotLabel) : null;
   const performance = await getLastPerformanceBySlug(userId);
   const limitations = await loadActiveLimitations(userId);
   const recoveryMods = await loadRecoveryModifiers(userId);
@@ -583,7 +768,23 @@ export async function buildAdaptiveWorkoutPlan(
     };
   }
 
-  let picked = selectRotatedExercises(pool, normalizedMuscles, recentSlugs, adjustedPreset.exerciseCount, rotationSeed);
+  let picked = focusPlan
+    ? selectFocusedSplitExercises(
+        pool,
+        focusPlan,
+        recentSlugs,
+        adjustedPreset.exerciseCount,
+        effectiveRotationSeed,
+        programRecentSet,
+      )
+    : selectRotatedExercises(
+        pool,
+        normalizedMuscles,
+        recentSlugs,
+        adjustedPreset.exerciseCount,
+        effectiveRotationSeed,
+        programRecentSet,
+      );
 
   if (options?.programRecentSlugs) {
     const now = new Date();
