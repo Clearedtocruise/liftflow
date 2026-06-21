@@ -53,7 +53,7 @@ export type CreateProgramInput = {
 };
 
 /** Bump when workout planning rules change so existing programs can be regenerated. */
-export const PLAN_RULES_VERSION = 5;
+export const PLAN_RULES_VERSION = 6;
 
 const MIN_ACCEPTABLE_EXERCISES_PER_SESSION = 8;
 
@@ -239,8 +239,12 @@ export async function generateTrainingProgram(input: CreateProgramInput) {
         continue;
       }
 
-      const cacheKey = `${slot.label}-${phaseSpec.sprintPhase}-week-${week}-day-${slot.dayIndex}`;
-      const rotationSeed = (week - 1) * 7 + slot.dayIndex;
+      const splitOccurrenceIndex = schedule.filter(
+        (day) => !day.isRest && day.label === slot.label && day.dayIndex < slot.dayIndex,
+      ).length;
+
+      const cacheKey = `${slot.label}-occ${splitOccurrenceIndex}-${phaseSpec.sprintPhase}-week-${week}`;
+      const rotationSeed = (week - 1) * 7 + slot.dayIndex + splitOccurrenceIndex * 100;
 
       let templateId = templateCache.get(cacheKey);
       if (!templateId) {
@@ -256,6 +260,8 @@ export async function generateTrainingProgram(input: CreateProgramInput) {
             minimumSets: WORKOUT_MIN_SETS,
             programRecentSlugs,
             rotationSeed,
+            splitOccurrenceIndex,
+            slotLabel: slot.label,
           },
         );
 

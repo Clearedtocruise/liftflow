@@ -24,7 +24,7 @@ assert.equal(countLiftingDaysInPattern(ppl3), 3);
 const bodyPart3 = getWeeklyLiftingPattern('body_part_split', 3);
 assert.equal(
   formatWeeklyPattern(bodyPart3),
-  'Back & Biceps & Core · Chest & Shoulders & Triceps · Legs & Lower Back & Core · Rest · Rest · Rest · Rest',
+  'Back, Biceps & Core · Chest, Shoulders & Triceps · Legs & Core · Rest · Rest · Rest · Rest',
 );
 assert.equal(countLiftingDaysInPattern(bodyPart3), 3);
 
@@ -55,7 +55,7 @@ const schedule = buildWeeklySchedule('body_part_split', 3);
 assert.equal(schedule.filter((day) => !day.isRest).length, 3);
 assert.deepEqual(schedule[0]?.muscleGroups, ['back', 'biceps', 'core']);
 assert.deepEqual(schedule[1]?.muscleGroups, ['chest', 'shoulders', 'triceps', 'core']);
-assert.deepEqual(schedule[2]?.muscleGroups, ['legs', 'glutes', 'hamstrings', 'lower_back', 'core']);
+assert.deepEqual(schedule[2]?.muscleGroups, ['quads', 'hamstrings', 'glutes', 'calves', 'core']);
 
 const pplSchedule = buildWeeklySchedule('push_pull_legs', 6);
 assert.equal(pplSchedule.filter((day) => !day.isRest && day.sessionKind === 'strength').length, 6);

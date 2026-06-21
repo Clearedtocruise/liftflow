@@ -42,10 +42,10 @@ const WEEKLY_LIFTING_PATTERNS: Record<
     6: ['Full Body', 'Full Body', 'Full Body', 'Full Body', 'Full Body', 'Full Body', 'Rest'],
   },
   body_part_split: {
-    3: ['Back & Biceps & Core', 'Chest & Shoulders & Triceps', 'Legs & Lower Back & Core', 'Rest', 'Rest', 'Rest', 'Rest'],
-    4: ['Back & Biceps & Core', 'Chest & Shoulders & Triceps', 'Legs & Lower Back & Core', 'Back & Biceps & Core', 'Rest', 'Rest', 'Rest'],
-    5: ['Back & Biceps & Core', 'Chest & Shoulders & Triceps', 'Legs & Lower Back & Core', 'Back & Biceps & Core', 'Chest & Shoulders & Triceps', 'Rest', 'Rest'],
-    6: ['Back & Biceps & Core', 'Chest & Shoulders & Triceps', 'Legs & Lower Back & Core', 'Back & Biceps & Core', 'Chest & Shoulders & Triceps', 'Legs & Lower Back & Core', 'Rest'],
+    3: ['Back, Biceps & Core', 'Chest, Shoulders & Triceps', 'Legs & Core', 'Rest', 'Rest', 'Rest', 'Rest'],
+    4: ['Back, Biceps & Core', 'Chest, Shoulders & Triceps', 'Legs & Core', 'Back, Biceps & Core', 'Rest', 'Rest', 'Rest'],
+    5: ['Back, Biceps & Core', 'Chest, Shoulders & Triceps', 'Legs & Core', 'Back, Biceps & Core', 'Chest, Shoulders & Triceps', 'Rest', 'Rest'],
+    6: ['Back, Biceps & Core', 'Chest, Shoulders & Triceps', 'Legs & Core', 'Back, Biceps & Core', 'Chest, Shoulders & Triceps', 'Legs & Core', 'Rest'],
   },
   strength: {
     3: ['Squat Day', 'Bench Day', 'Deadlift Day', 'Rest', 'Rest', 'Rest', 'Rest'],

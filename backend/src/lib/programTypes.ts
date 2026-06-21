@@ -37,14 +37,23 @@ export function dayLabel(index: number): string {
 export function muscleGroupsForWorkout(label: string): string[] {
   const key = label.toLowerCase();
   if (key.includes('condition')) return ['core', 'legs'];
-  if (key.includes('back & biceps & core')) {
+  if (key.includes('back') && key.includes('biceps')) {
     return ['back', 'biceps', 'core'];
   }
-  if (key.includes('chest & shoulders & triceps')) {
+  if (key.includes('chest') && key.includes('shoulder') && key.includes('triceps')) {
     return ['chest', 'shoulders', 'triceps', 'core'];
   }
-  if (key.includes('legs & lower back & core')) {
-    return ['legs', 'glutes', 'hamstrings', 'lower_back', 'core'];
+  if (key.includes('legs') && key.includes('core')) {
+    return ['quads', 'hamstrings', 'glutes', 'calves', 'core'];
+  }
+  if (key.includes('back & biceps & core') || key.includes('back, biceps & core')) {
+    return ['back', 'biceps', 'core'];
+  }
+  if (key.includes('chest & shoulders & triceps') || key.includes('chest, shoulders & triceps')) {
+    return ['chest', 'shoulders', 'triceps', 'core'];
+  }
+  if (key.includes('legs & lower back & core') || key.includes('legs & core')) {
+    return ['quads', 'hamstrings', 'glutes', 'calves', 'core'];
   }
   if (key.includes('back & biceps') || (key.includes('back') && key.includes('biceps') && key.includes('shoulder'))) {
     return ['back', 'biceps', 'core'];
