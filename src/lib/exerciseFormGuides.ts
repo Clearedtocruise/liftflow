@@ -509,6 +509,22 @@ const GENERIC_BY_CATEGORY: Partial<Record<MovementCategory, ExerciseFormGuide>> 
       'Cool down gradually rather than stopping abruptly.',
     ],
   },
+  carry: {
+    steps: [
+      'Pick up the load with a tall posture and braced core.',
+      'Take short, controlled steps without leaning or twisting.',
+      'Keep shoulders level and ribs stacked over pelvis.',
+      'Walk the prescribed distance or time, then lower safely.',
+    ],
+  },
+  other: {
+    steps: [
+      'Set a stable base with feet planted and core braced.',
+      'Move through the full range with control.',
+      'Keep tension on the working muscles throughout.',
+      'Return to the start position slowly before the next rep.',
+    ],
+  },
 };
 
 function lookupBySlug(slug: string | undefined): ExerciseFormGuide | null {
@@ -516,11 +532,24 @@ function lookupBySlug(slug: string | undefined): ExerciseFormGuide | null {
   return GUIDES_BY_SLUG[slug] ?? GENERATED_EXERCISE_FORM_GUIDES[slug] ?? null;
 }
 
+function lookupGeneratedByName(name: string | undefined): ExerciseFormGuide | null {
+  const key = normalizeKey(name);
+  if (!key) return null;
+  if (GENERATED_EXERCISE_FORM_GUIDES[key]) return GENERATED_EXERCISE_FORM_GUIDES[key];
+  const prefix = Object.keys(GENERATED_EXERCISE_FORM_GUIDES).find(
+    (slug) => slug.startsWith(`${key}-`) || slug.startsWith(`${key}_`),
+  );
+  return prefix ? GENERATED_EXERCISE_FORM_GUIDES[prefix] ?? null : null;
+}
+
 function lookupByName(name: string | undefined): ExerciseFormGuide | null {
   const key = normalizeKey(name);
   if (!key) return null;
   if (GUIDES_BY_SLUG[key]) return GUIDES_BY_SLUG[key];
   if (GENERATED_EXERCISE_FORM_GUIDES[key]) return GENERATED_EXERCISE_FORM_GUIDES[key];
+
+  const generated = lookupGeneratedByName(name);
+  if (generated) return generated;
 
   const catalog = catalogExerciseBySlug(key);
   if (catalog) return GUIDES_BY_SLUG[catalog.slug] ?? null;
@@ -540,7 +569,13 @@ export function resolveExerciseFormGuide(
     if (fromDb) return fromDb;
   }
 
-  return lookupBySlug(slug) ?? lookupByName(name) ?? GENERIC_BY_CATEGORY[exercise?.category ?? 'other'] ?? null;
+  return (
+    lookupBySlug(slug) ??
+    lookupByName(name) ??
+    GENERIC_BY_CATEGORY[exercise?.category ?? 'other'] ??
+    GENERIC_BY_CATEGORY.other ??
+    null
+  );
 }
 
 export function hasExerciseFormGuide(exercise?: Exercise | null, nameFallback?: string): boolean {

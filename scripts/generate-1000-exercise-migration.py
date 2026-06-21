@@ -18,7 +18,7 @@ EQUIP = {
     "BW0": ("bodyweight", ["bodyweight"]),
     "BW1": ("bodyweight", ["bodyweight"]),
     "DB1": ("dumbbell", ["dumbbells"]),
-    "KB1": ("kettlebell", ["dumbbells"]),
+    "KB1": ("kettlebell", ["kettlebells"]),
     "BB1": ("barbell", ["barbell", "rack"]),
     "CB1": ("cable", ["machines"]),
     "MC1": ("machine", ["machines"]),

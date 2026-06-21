@@ -25,7 +25,7 @@ export const EQUIPMENT_CATALOG: EquipmentItem[] = [
   // Free weights
   { id: 'barbell', label: 'Barbell', category: 'free_weights', satisfies: ['barbell'] },
   { id: 'dumbbells', label: 'Dumbbells', category: 'free_weights', satisfies: ['dumbbells'] },
-  { id: 'kettlebells', label: 'Kettlebells', category: 'free_weights', satisfies: ['dumbbells'] },
+  { id: 'kettlebells', label: 'Kettlebells', category: 'free_weights', satisfies: ['kettlebells'] },
   { id: 'ez_curl_bar', label: 'EZ curl bar', category: 'free_weights', satisfies: ['barbell'] },
   { id: 'trap_bar', label: 'Trap / hex bar', category: 'free_weights', satisfies: ['barbell'] },
   { id: 'weight_plates', label: 'Weight plates', category: 'free_weights', satisfies: ['barbell'] },
@@ -83,6 +83,7 @@ export function expandEquipmentRequirements(selected: string[]): Set<string> {
       'bodyweight',
       'bands',
       'dumbbells',
+      'kettlebells',
       'bench',
       'pull_up_bar',
       'barbell',

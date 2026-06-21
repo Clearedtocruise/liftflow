@@ -247,9 +247,34 @@ export function expandAvailableEquipment(raw: string[]): Set<string> {
   return expandEquipmentRequirements(raw);
 }
 
+/** Requirement keys implied by the exercises.equipment column (authoritative for catalog rows). */
+const EQUIPMENT_FIELD_REQUIREMENTS: Record<string, string[]> = {
+  dumbbell: ['dumbbells'],
+  kettlebell: ['kettlebells'],
+  cable: ['machines'],
+  machine: ['machines'],
+  barbell: ['barbell'],
+  bands: ['bands'],
+  bodyweight: ['bodyweight'],
+  rower: ['machines'],
+};
+
+export function resolveExerciseRequirements(exercise: ExerciseRecord): string[] {
+  const field = EQUIPMENT_FIELD_REQUIREMENTS[exercise.equipment];
+  const meta = exercise.metadata?.requires ?? [];
+
+  if (exercise.equipment === 'barbell') {
+    const needs = new Set<string>(['barbell']);
+    if (meta.includes('rack')) needs.add('rack');
+    return [...needs];
+  }
+  if (field) return field;
+  if (meta.length > 0) return meta;
+  return [legacyEquipmentToRequirement(exercise.equipment)];
+}
+
 export function exerciseMeetsEquipment(exercise: ExerciseRecord, available: Set<string>): boolean {
-  const requires = exercise.metadata?.requires ?? [legacyEquipmentToRequirement(exercise.equipment)];
-  return requires.every((req) => available.has(req));
+  return resolveExerciseRequirements(exercise).every((req) => available.has(req));
 }
 
 function legacyEquipmentToRequirement(equipment: string): string {
@@ -359,7 +384,7 @@ export async function loadAvailableExercises(
     .filter((exercise) => exerciseMeetsEquipment(exercise, available));
 
   if (filtered.length < WORKOUT_TARGET_EXERCISES) {
-    const expanded = expandAvailableEquipment([...equipment, 'bodyweight', 'bands', 'dumbbells']);
+    const expanded = expandAvailableEquipment([...equipment, 'bodyweight', 'bands']);
     const supplemental = (data ?? [])
       .map((row) => ({
         ...row,
@@ -482,6 +507,7 @@ function scoreExercise(
   lastWeekSlugs: Set<string>,
   rotationSeed = 0,
   programRecentSlugs?: Set<string>,
+  available?: Set<string>,
 ): number {
   let score = 10;
   const lastUsed = recentSlugs.get(exercise.slug);
@@ -499,6 +525,18 @@ function scoreExercise(
   }
   if (exercise.metadata?.movement_family === family) {
     score += 5;
+  }
+  if (available) {
+    const fieldReq = EQUIPMENT_FIELD_REQUIREMENTS[exercise.equipment]?.[0];
+    if (fieldReq && available.has(fieldReq)) {
+      score += 15;
+    }
+    if (exercise.equipment === 'dumbbell' && available.has('dumbbells')) {
+      score += 8;
+    }
+    if (exercise.equipment === 'bodyweight' && available.has('bodyweight')) {
+      score += 6;
+    }
   }
   const slugHash = exercise.slug.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
   score += ((slugHash + rotationSeed * 31) % 17) * 1.5;
@@ -545,6 +583,7 @@ export function selectFocusedSplitExercises(
   count: number,
   rotationSeed = 0,
   programRecentSlugs?: Set<string>,
+  available?: Set<string>,
 ): ExerciseRecord[] {
   const weekAgo = new Date();
   weekAgo.setDate(weekAgo.getDate() - 7);
@@ -577,6 +616,7 @@ export function selectFocusedSplitExercises(
           lastWeekSlugs,
           rotationSeed + seedOffset,
           programRecentSlugs,
+          available,
         ),
       }))
       .sort((a, b) => b.score - a.score);
@@ -674,6 +714,7 @@ export function selectRotatedExercises(
   count: number,
   rotationSeed = 0,
   programRecentSlugs?: Set<string>,
+  available?: Set<string>,
 ): ExerciseRecord[] {
   const familiesNeeded = new Set<string>();
   for (const muscle of targetMuscles) {
@@ -713,7 +754,7 @@ export function selectRotatedExercises(
   for (const family of familiesNeeded) {
     const candidates = pool
       .filter((e) => e.metadata?.movement_family === family && canPick(e))
-      .map((e) => ({ exercise: e, score: scoreExercise(e, family, recentSlugs, lastWeekSlugs, rotationSeed, programRecentSlugs) }))
+      .map((e) => ({ exercise: e, score: scoreExercise(e, family, recentSlugs, lastWeekSlugs, rotationSeed, programRecentSlugs, available) }))
       .sort((a, b) => b.score - a.score);
 
     const pick = candidates[0]?.exercise;
@@ -731,7 +772,7 @@ export function selectRotatedExercises(
       if (selected.length >= count) break;
       const candidates = pool
         .filter((e) => e.metadata?.movement_family === family && canPick(e))
-        .map((e) => ({ exercise: e, score: scoreExercise(e, family, recentSlugs, lastWeekSlugs, rotationSeed, programRecentSlugs) }))
+        .map((e) => ({ exercise: e, score: scoreExercise(e, family, recentSlugs, lastWeekSlugs, rotationSeed, programRecentSlugs, available) }))
         .sort((a, b) => b.score - a.score);
 
       const pick = candidates[0]?.exercise;
@@ -751,7 +792,7 @@ export function selectRotatedExercises(
       .filter((e) => (e.muscle_groups ?? []).some((mg) => targetSet.has(mg.toLowerCase())))
       .map((e) => ({
         exercise: e,
-        score: scoreExercise(e, e.metadata?.movement_family ?? '', recentSlugs, lastWeekSlugs, rotationSeed, programRecentSlugs),
+        score: scoreExercise(e, e.metadata?.movement_family ?? '', recentSlugs, lastWeekSlugs, rotationSeed, programRecentSlugs, available),
       }))
       .sort((a, b) => b.score - a.score);
 
@@ -828,6 +869,10 @@ export async function buildAdaptiveWorkoutPlan(
     profile.fitnessGoals,
   );
   const pool = await loadAvailableExercises(userId, options?.equipmentOverride);
+  const equipmentList = options?.equipmentOverride?.length
+    ? options.equipmentOverride
+    : profile.availableEquipment;
+  const available = expandAvailableEquipment(equipmentList);
   const recentSlugs = await getRecentExerciseSlugs(userId);
   if (options?.programRecentSlugs) {
     for (const [slug, usedAt] of options.programRecentSlugs) {
@@ -887,6 +932,7 @@ export async function buildAdaptiveWorkoutPlan(
         adjustedPreset.exerciseCount,
         effectiveRotationSeed,
         programRecentSet,
+        available,
       )
     : selectRotatedExercises(
         pool,
@@ -895,6 +941,7 @@ export async function buildAdaptiveWorkoutPlan(
         adjustedPreset.exerciseCount,
         effectiveRotationSeed,
         programRecentSet,
+        available,
       );
 
   if (options?.programRecentSlugs) {

@@ -5,7 +5,7 @@
 const SATISFIES: Record<string, string[]> = {
   barbell: ['barbell'],
   dumbbells: ['dumbbells'],
-  kettlebells: ['dumbbells'],
+  kettlebells: ['kettlebells'],
   ez_curl_bar: ['barbell'],
   trap_bar: ['barbell'],
   weight_plates: ['barbell'],
@@ -43,6 +43,7 @@ const ALL_REQUIREMENTS = [
   'bodyweight',
   'bands',
   'dumbbells',
+  'kettlebells',
   'bench',
   'pull_up_bar',
   'barbell',
@@ -52,7 +53,7 @@ const ALL_REQUIREMENTS = [
 
 export function expandEquipmentRequirements(selected: string[]): Set<string> {
   if (selected.includes('full_gym')) {
-    return new Set(ALL_REQUIREMENTS);
+    return new Set<string>(ALL_REQUIREMENTS);
   }
 
   const out = new Set<string>();
