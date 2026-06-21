@@ -24,6 +24,10 @@ type WorkoutSessionState = {
   isListening: boolean;
   isLoading: boolean;
   lastLoggedSet: WorkoutSet | null;
+  /** Reps dictated from Apple Watch — survives tab switches and session refresh. */
+  watchDraftReps: number | null;
+  /** Weight (kg) dictated from Apple Watch. */
+  watchDraftWeightKg: number | null;
 };
 
 type WorkoutSessionActions = {
@@ -48,6 +52,8 @@ type WorkoutSessionActions = {
   resumeRestTimer: () => void;
   skipRestTimer: () => Promise<void>;
   endRestTimer: () => Promise<void>;
+  setWatchDraftReps: (reps: number | null) => void;
+  setWatchDraftWeightKg: (weightKg: number | null) => void;
 };
 
 type WorkoutSessionContextValue = WorkoutSessionState & WorkoutSessionActions;
@@ -70,37 +76,81 @@ export function WorkoutSessionProvider({
   const [isListening, setIsListening] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [lastLoggedSet, setLastLoggedSet] = useState<WorkoutSet | null>(null);
+  const [watchDraftReps, setWatchDraftReps] = useState<number | null>(null);
+  const [watchDraftWeightKg, setWatchDraftWeightKg] = useState<number | null>(null);
   const restEndAtRef = useRef<number | null>(null);
   const hapticFiredRef = useRef(false);
   const pausedRemainingRef = useRef<number | null>(null);
+  /** Bumped on cancel/end/start so in-flight hydrates cannot restore stale sessions. */
+  const sessionEpochRef = useRef(0);
+  const trackedSessionIdRef = useRef<string | null>(null);
+  const dismissedSessionIdsRef = useRef<Set<string>>(new Set());
+  const clearLocalSessionState = useCallback(() => {
+    trackedSessionIdRef.current = null;
+    setActiveSession(null);
+    setActiveRestPeriod(null);
+    setRestSecondsRemaining(null);
+    setWatchDraftReps(null);
+    setWatchDraftWeightKg(null);
+    restEndAtRef.current = null;
+    pausedRemainingRef.current = null;
+  }, []);
 
   const refreshSession = useCallback(async () => {
-    if (!activeSession?.id) return;
-    const result = await workoutService.getSession(activeSession.id);
-    if (result.success) setActiveSession(result.data);
-  }, [activeSession?.id]);
+    const sessionId = trackedSessionIdRef.current;
+    if (!sessionId) return;
+    const epoch = sessionEpochRef.current;
+    const result = await workoutService.getSession(sessionId);
+    if (epoch !== sessionEpochRef.current || trackedSessionIdRef.current !== sessionId) return;
+    if (!result.success) return;
+    if (result.data.status === 'cancelled' || result.data.status === 'completed') {
+      trackedSessionIdRef.current = null;
+      setActiveSession(null);
+      return;
+    }
+    setActiveSession(result.data);
+  }, []);
 
   const hydrate = useCallback(async () => {
     if (!userId) {
-      setActiveSession(null);
+      clearLocalSessionState();
       setIsLoading(false);
       return;
     }
+    const epoch = sessionEpochRef.current;
     setIsLoading(true);
     try {
       const result = await workoutService.getActiveSession(userId);
-      if (result.success && result.data && isStaleWorkoutSession(result.data.startedAt)) {
+      if (epoch !== sessionEpochRef.current) return;
+
+      if (result.success && result.data && dismissedSessionIdsRef.current.has(result.data.id)) {
         await workoutService.cancelSession(result.data.id);
-        setActiveSession(null);
-      } else if (result.success) {
+        clearLocalSessionState();
+        return;
+      }
+
+      if (result.success && result.data && isStaleWorkoutSession(result.data.startedAt)) {
+        dismissedSessionIdsRef.current.add(result.data.id);
+        await workoutService.cancelSession(result.data.id);
+        clearLocalSessionState();
+      } else if (result.success && result.data) {
+        trackedSessionIdRef.current = result.data.id;
         setActiveSession(result.data);
+      } else if (result.success) {
+        clearLocalSessionState();
       }
     } catch (error) {
       console.warn('[workoutSession] hydrate failed', error);
     } finally {
-      setIsLoading(false);
+      if (epoch === sessionEpochRef.current) {
+        setIsLoading(false);
+      }
     }
-  }, [userId]);
+  }, [clearLocalSessionState, userId]);
+
+  useEffect(() => {
+    setActiveExerciseIndex(0);
+  }, [activeSession?.id]);
 
   useEffect(() => {
     setActiveExerciseIndex(0);
@@ -166,6 +216,8 @@ export function WorkoutSessionProvider({
       const result = await workoutService.startSession(userId, payload);
       setIsLoading(false);
       if (result.success) {
+        sessionEpochRef.current += 1;
+        trackedSessionIdRef.current = result.data.id;
         setActiveSession(result.data);
         return result.data;
       }
@@ -181,6 +233,8 @@ export function WorkoutSessionProvider({
       const result = await workoutService.startSessionFromPlanned(userId, plannedWorkoutId, payload);
       setIsLoading(false);
       if (result.success) {
+        sessionEpochRef.current += 1;
+        trackedSessionIdRef.current = result.data.id;
         setActiveSession(result.data);
         return result.data;
       }
@@ -191,18 +245,17 @@ export function WorkoutSessionProvider({
 
   const endSession = useCallback(async () => {
     if (!activeSession) return null;
+    const sessionId = activeSession.id;
+    sessionEpochRef.current += 1;
+    clearLocalSessionState();
     setIsLoading(true);
-    const result = await workoutService.endSession(activeSession.id);
+    const result = await workoutService.endSession(sessionId);
     setIsLoading(false);
     if (result.success) {
-      setActiveSession(null);
-      setActiveRestPeriod(null);
-      setRestSecondsRemaining(null);
-      restEndAtRef.current = null;
       return result.data;
     }
     return null;
-  }, [activeSession]);
+  }, [activeSession, clearLocalSessionState]);
 
   const pauseSession = useCallback(async () => {
     if (!activeSession) return;
@@ -218,14 +271,16 @@ export function WorkoutSessionProvider({
 
   const cancelSession = useCallback(async () => {
     if (!activeSession) return;
-    const result = await workoutService.cancelSession(activeSession.id);
-    if (result.success) {
-      setActiveSession(null);
-      setActiveRestPeriod(null);
-      setRestSecondsRemaining(null);
-      restEndAtRef.current = null;
+    const sessionId = activeSession.id;
+    dismissedSessionIdsRef.current.add(sessionId);
+    sessionEpochRef.current += 1;
+    clearLocalSessionState();
+
+    const result = await workoutService.cancelSession(sessionId);
+    if (!result.success) {
+      console.warn('[workoutSession] cancel failed', result.error);
     }
-  }, [activeSession]);
+  }, [activeSession, clearLocalSessionState]);
 
   const logSet = useCallback(
     async (payload: CreateSetPayload) => {
@@ -384,6 +439,8 @@ export function WorkoutSessionProvider({
       isListening,
       isLoading,
       lastLoggedSet,
+      watchDraftReps,
+      watchDraftWeightKg,
       hydrate,
       refreshSession,
       setActiveExerciseIndex,
@@ -405,6 +462,8 @@ export function WorkoutSessionProvider({
       resumeRestTimer,
       skipRestTimer,
       endRestTimer,
+      setWatchDraftReps,
+      setWatchDraftWeightKg,
     }),
     [
       activeSession,
@@ -414,6 +473,8 @@ export function WorkoutSessionProvider({
       isListening,
       isLoading,
       lastLoggedSet,
+      watchDraftReps,
+      watchDraftWeightKg,
       hydrate,
       refreshSession,
       setActiveExerciseIndex,

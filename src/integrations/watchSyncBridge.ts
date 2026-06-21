@@ -99,6 +99,12 @@ export function parseWatchWorkoutMessage(raw: Record<string, unknown>): WatchWor
       };
     case 'skip_rest':
       return { type: 'skip_rest', workoutSessionId: raw.workoutSessionId as string | undefined };
+    case 'set_weight':
+      return {
+        type: 'set_weight',
+        weightLbs: Number(raw.weightLbs ?? 0),
+        workoutSessionId: raw.workoutSessionId as string | undefined,
+      };
     case 'next_set':
       return { type: 'next_set', workoutSessionId: raw.workoutSessionId as string | undefined };
     case 'workout_sync':
@@ -265,8 +271,10 @@ export function isWorkoutAssistantMessage(message: Record<string, unknown>): boo
     t === 'rep_correction' ||
     t === 'confirm_reps' ||
     t === 'skip_rest' ||
+    t === 'set_weight' ||
     t === 'next_set' ||
     t === 'start_workout' ||
+    t === 'cancel_workout' ||
     t === 'workout_state'
   );
 }

@@ -9,7 +9,7 @@ import {
     type WatchWorkoutMessage,
 } from '@/integrations/watch';
 import { fail, fromError, ok } from '@/lib/serviceResult';
-import { workoutService } from '@/services/workoutService';
+import { watchPhoneBridge } from '@/state/WatchPhoneBridge';
 import { supabase } from '@/supabase/client';
 import type { WorkoutSession } from '@/types';
 import type { ServiceResult } from '@/types/common';
@@ -22,6 +22,14 @@ function parseSuggestedReps(value?: string): number | undefined {
   if (!match) return undefined;
   const parsed = Number(match[0]);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+function extractRepCountFromTranscript(transcript: string): number | null {
+  const text = transcript.trim().toLowerCase();
+  const match = text.match(/^(\d+)$/) ?? text.match(/(\d+)\s+reps?/);
+  if (!match?.[1]) return null;
+  const parsed = Number.parseInt(match[1], 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
 function getAssistant(userId: string): WatchWorkoutAssistant {
@@ -183,7 +191,7 @@ export const watchWorkoutService = {
         exerciseId: activeExercise.exerciseId,
         exerciseName,
         setNumber,
-        targetSets: profile?.targetSetsDefault,
+        targetSets: watchPhoneBridge.getTargetSets(),
         targetReps,
         weightLbs: suggested.weightLbs ?? last.weightLbs,
       });
@@ -295,19 +303,32 @@ export const watchWorkoutService = {
         progressionLine: enriched.progressionLine,
       });
 
-      if (result.intent === 'next_set' || result.intent === 'skip_rest') {
-        assistant.advanceToNextSet();
-      }
-
       if (result.shouldLogSet && assistant.getState().activeSet) {
         const logResult = await this.completeSet(userId);
         if (logResult.success) {
           return ok({
             state: logResult.data.state,
-            spokenResponse: `${result.spokenResponse} Set logged.`,
+            spokenResponse: `${result.spokenResponse} Set logged on iPhone.`,
             shouldLogSet: true,
           });
         }
+      }
+
+      if (result.intent === 'set_reps') {
+        const repCount =
+          result.state?.currentRepCount ??
+          extractRepCountFromTranscript(transcript);
+        if (repCount != null) {
+          watchPhoneBridge.applyReps(repCount);
+          return ok({
+            state: assistant.getState(),
+            spokenResponse: `${repCount} reps on iPhone.`,
+          });
+        }
+      }
+
+      if (result.intent === 'next_set' || result.intent === 'skip_rest') {
+        // Phone workout screen handles rest/advance — do not mutate watch-only state.
       }
 
       return ok({
@@ -322,24 +343,14 @@ export const watchWorkoutService = {
 
   async completeSet(userId: string): Promise<ServiceResult<{ state: WatchWorkoutAssistantState; setId?: string }>> {
     try {
-      const assistant = getAssistant(userId);
-      const set = assistant.getState().activeSet;
-      if (!set) return fail('No active set');
+      const bridgeResult = await watchPhoneBridge.logCurrentSet();
+      if (!bridgeResult.ok) {
+        return fail(bridgeResult.error);
+      }
 
-      const reps = set.currentRepCount > 0 ? set.currentRepCount : set.targetReps;
-      const logResult = await workoutService.logSet({
-        workoutExerciseId: set.workoutExerciseId,
-        weight: set.weightLbs,
-        reps,
-      });
-
-      if (!logResult.success) return fail(logResult.error);
-
-      await persistRepEvent(userId, logResult.data.id, reps, set.motionConfidence, reps, true);
-
-      assistant.startRest(90);
-
-      return ok({ state: assistant.getState(), setId: logResult.data.id });
+      const sync = await this.syncActiveSession(userId);
+      if (!sync.success) return fail(sync.error);
+      return ok({ state: sync.data });
     } catch (e) {
       return fromError(e);
     }
@@ -401,14 +412,19 @@ export const watchWorkoutService = {
           return r.success ? ok(r.data) : fail(r.error);
         }
         case 'skip_rest': {
-          await workoutService.skipActiveRestTimer(userId);
+          await watchPhoneBridge.skipRest();
+          const state = this.updateRestTimer(userId, 0);
+          return ok(state);
+        }
+        case 'set_weight': {
+          watchPhoneBridge.applyWeightLbs(message.weightLbs);
           const assistant = getAssistant(userId);
           const set = assistant.getState().activeSet;
           if (set) {
             assistant.loadState({
               ...assistant.getState(),
-              activeSet: { ...set, phase: 'active_set', restSecondsRemaining: 0 },
-              lastSpokenResponse: 'Rest skipped.',
+              activeSet: { ...set, weightLbs: message.weightLbs },
+              lastSpokenResponse: `${message.weightLbs} lb on iPhone.`,
               updatedAt: new Date().toISOString(),
             });
           }
@@ -419,9 +435,7 @@ export const watchWorkoutService = {
           return r.success ? ok(r.data.state) : fail(r.error);
         }
         case 'next_set': {
-          const assistant = getAssistant(userId);
-          assistant.advanceToNextSet();
-          return ok(assistant.getState());
+          return fail('Advance sets on your iPhone — Watch mirrors your phone workout.');
         }
         case 'start_workout':
           return fail('start_workout is handled by watchCompanionService');

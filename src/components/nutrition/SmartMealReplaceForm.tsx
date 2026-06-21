@@ -6,6 +6,7 @@ import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import { nutritionAdvisoryService } from '@/services/nutritionAdvisoryService';
+import { sumMealMacros } from '@/services/nutritionService';
 import type { FoodMacroEstimate, MealReplacementScope } from '@/types/nutrition';
 
 type SmartMealReplaceFormProps = {
@@ -38,6 +39,8 @@ export function SmartMealReplaceForm({ replacingLabel, onConfirm }: SmartMealRep
     setMacros(null);
     const result = await nutritionAdvisoryService.estimateFoodMacros(foodName.trim(), servingSize.trim());
     if (result.success) {
+      const results = [{ macros: result.data }];
+      sumMealMacros(results.map((item) => item.macros));
       setMacros(result.data);
       setReasoning(result.data.reasoning ?? null);
     }

@@ -15,6 +15,20 @@ type WorkoutChallengeModalProps = {
   onComplete: (loggedValue?: string) => void;
 };
 
+function challengeContextLine(
+  trigger: WorkoutChallengeTrigger,
+  exerciseName?: string,
+): string {
+  if (!exerciseName) {
+    return trigger === 'between_exercises'
+      ? 'Applies to your next exercise'
+      : 'Applies to your current exercise';
+  }
+  return trigger === 'between_exercises'
+    ? `For your next exercise: ${exerciseName}`
+    : `For ${exerciseName} — next set`;
+}
+
 export function WorkoutChallengeModal({
   visible,
   challenge,
@@ -57,6 +71,8 @@ export function WorkoutChallengeModal({
     setLoggedValue('');
   }
 
+  const contextLine = challengeContextLine(trigger, exerciseName);
+
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>
       <View style={styles.backdrop}>
@@ -72,6 +88,18 @@ export function WorkoutChallengeModal({
             </AppText>
           </View>
 
+          <View style={styles.exerciseBlock}>
+            <AppText variant="label" color="textSecondary">
+              Exercise
+            </AppText>
+            <AppText variant="headline" style={styles.exerciseName}>
+              {exerciseName ?? 'Current exercise'}
+            </AppText>
+            <AppText variant="footnote" color="textTertiary">
+              {contextLine}
+            </AppText>
+          </View>
+
           <AppText variant="title" style={styles.title}>
             {challenge.title}
           </AppText>
@@ -79,12 +107,6 @@ export function WorkoutChallengeModal({
           <AppText variant="body" color="textSecondary">
             {challenge.prompt}
           </AppText>
-
-          {exerciseName ? (
-            <AppText variant="footnote" color="textTertiary">
-              {trigger === 'between_exercises' ? 'Before' : 'During'} {exerciseName}
-            </AppText>
-          ) : null}
 
           {phase === 'prompt' ? (
             <View style={styles.actions}>
@@ -147,6 +169,17 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 200, 87, 0.12)',
     borderWidth: 1,
     borderColor: 'rgba(255, 200, 87, 0.35)',
+  },
+  exerciseBlock: {
+    gap: Spacing.xs,
+    padding: Spacing.md,
+    borderRadius: Radius.md,
+    backgroundColor: LiftFlowColors.backgroundSecondary,
+    borderWidth: 1,
+    borderColor: LiftFlowColors.border,
+  },
+  exerciseName: {
+    letterSpacing: 0.5,
   },
   title: {
     fontSize: 24,

@@ -26,6 +26,7 @@ type HomeNextUpCardProps = {
     recoveryScore?: number | null;
   } | null;
   onLogMeal: () => void;
+  onGenerateMealPlan?: () => void;
   onQuickLogMeal?: () => void;
   onStartWorkout: () => void;
   onViewWorkout?: () => void;
@@ -46,6 +47,7 @@ export function HomeNextUpCard({
   mealsTotal,
   workout,
   onLogMeal,
+  onGenerateMealPlan,
   onQuickLogMeal,
   onStartWorkout,
   onViewWorkout,
@@ -104,8 +106,15 @@ export function HomeNextUpCard({
                 onPress={mealsTotal > 0 ? onLogMeal : (onQuickLogMeal ?? onLogMeal)}
                 variant="secondary"
               />
-              {mealsTotal === 0 && onLogMeal !== onQuickLogMeal ? (
-                <PrimaryButton label="Generate Meal Plan" variant="ghost" onPress={onLogMeal} />
+              {mealsTotal === 0 && onGenerateMealPlan ? (
+                <PrimaryButton label="Generate Meal Plan" variant="ghost" onPress={onGenerateMealPlan} />
+              ) : null}
+              {mealsTotal === 0 && !onGenerateMealPlan && onLogMeal !== onQuickLogMeal ? (
+                <PrimaryButton
+                  label="Generate Meal Plan"
+                  variant="ghost"
+                  onPress={onLogMeal}
+                />
               ) : null}
             </View>
           )}

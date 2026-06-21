@@ -1,23 +1,24 @@
-import { router, useLocalSearchParams } from 'expo-router';
+import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
 import { AuthFormContainer } from '@/components/auth/AuthFormContainer';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { TextField } from '@/components/layout/TextField';
 import { AppText, textStyles } from '@/components/ui/AppText';
-import { Brand, Spacing } from '@/constants/theme';
+import { Brand, LiftFlowColors, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 import { mapAuthError } from '@/lib/authErrors';
 
 export default function LoginScreen() {
-  const { signIn } = useAuth();
+  const { signIn, isAuthenticated, user, isProfileReady } = useAuth();
   const params = useLocalSearchParams<{ verified?: string; authError?: string }>();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [banner, setBanner] = useState<string | null>(null);
+  const [signedInProfile, setSignedInProfile] = useState<Awaited<ReturnType<typeof signIn>> | null>(null);
 
   useEffect(() => {
     if (params.verified === '1') {
@@ -27,6 +28,13 @@ export default function LoginScreen() {
       setError(String(params.authError));
     }
   }, [params.authError, params.verified]);
+
+  const authedProfile = signedInProfile ?? (isAuthenticated && isProfileReady ? user : null);
+  const redirectTarget = authedProfile
+    ? authedProfile.onboardingCompleted
+      ? '/(tabs)/dashboard'
+      : '/(onboarding)/legal'
+    : null;
 
   async function handleLogin() {
     if (loading) return;
@@ -41,12 +49,27 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       const profile = await signIn({ email, password });
-      router.replace(profile.onboardingCompleted ? '/(tabs)/dashboard' : '/(onboarding)/legal');
+      setSignedInProfile(profile);
     } catch (err) {
       setError(mapAuthError(err, 'login'));
     } finally {
       setLoading(false);
     }
+  }
+
+  if (loading) {
+    return (
+      <View style={styles.redirecting}>
+        <ActivityIndicator size="large" color={LiftFlowColors.accent} />
+        <AppText variant="body" color="textSecondary">
+          Signing in…
+        </AppText>
+      </View>
+    );
+  }
+
+  if (redirectTarget) {
+    return <Redirect href={redirectTarget} />;
   }
 
   return (
@@ -107,6 +130,13 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
+  redirecting: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.lg,
+    backgroundColor: LiftFlowColors.background,
+  },
   banner: {
     lineHeight: 20,
   },

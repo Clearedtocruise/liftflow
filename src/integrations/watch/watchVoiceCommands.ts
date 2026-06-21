@@ -181,6 +181,17 @@ export function parseWatchVoiceCommand(transcript: string, ctx: WatchVoiceContex
     };
   }
 
+  const bareReps = matchInt(text, [/^(\d+)$/, /^(\d+)\s+reps?$/]);
+  if (bareReps !== null) {
+    return {
+      intent: 'set_reps',
+      spokenResponse: set
+        ? `${bareReps} reps. Say log set when ready.`
+        : `${bareReps} reps saved. Open workout on iPhone to log.`,
+      state: set ? { currentRepCount: bareReps } : undefined,
+    };
+  }
+
   const logReps = matchInt(text, [/(\d+)\s+reps?/, /for\s+(\d+)/]);
   const logWeight = matchInt(text, [/(\d+)\s*(?:lbs?|pounds?)/]);
   if (logReps !== null && (logWeight !== null || /bench|press|curl|squat|row/.test(text))) {

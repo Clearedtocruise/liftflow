@@ -37,8 +37,17 @@ export function dayLabel(index: number): string {
 export function muscleGroupsForWorkout(label: string): string[] {
   const key = label.toLowerCase();
   if (key.includes('condition')) return ['core', 'legs'];
+  if (key.includes('back & biceps & core')) {
+    return ['back', 'biceps', 'core'];
+  }
+  if (key.includes('chest & shoulders & triceps')) {
+    return ['chest', 'shoulders', 'triceps', 'core'];
+  }
+  if (key.includes('legs & lower back & core')) {
+    return ['legs', 'glutes', 'hamstrings', 'lower_back', 'core'];
+  }
   if (key.includes('back & biceps') || (key.includes('back') && key.includes('biceps') && key.includes('shoulder'))) {
-    return ['shoulders', 'back', 'biceps', 'core'];
+    return ['back', 'biceps', 'core'];
   }
   if (key.includes('chest & triceps') || (key.includes('chest') && key.includes('triceps'))) {
     return ['chest', 'triceps', 'core'];

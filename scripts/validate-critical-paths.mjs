@@ -50,7 +50,7 @@ const REQUIRED = [
   {
     file: 'targets/watch/content.swift',
     label: 'Watch Phase 2 UI',
-    patterns: ['Log Set', 'Skip Rest', 'Start Today\'s Workout', 'MotionCapture', 'sendVoiceCommand'],
+    patterns: ['Log Set', 'Skip Rest', 'Start Today\'s Workout', 'requestPhoneSync', 'Say Weight'],
   },
   {
     file: 'targets/watch/MotionCapture.swift',
@@ -136,6 +136,31 @@ const REQUIRED = [
     file: 'src/components/auth/AuthFormContainer.tsx',
     label: 'Auth hero stacked brand',
     patterns: ['styles.brandBlock', 'HeroImages.welcome', 'alignItems: \'center\''],
+  },
+  {
+    file: 'src/services/watchCompanionService.ts',
+    label: 'Watch skip rest lightweight',
+    patterns: ['LIGHTWEIGHT_INBOUND', 'skip_rest', 'set_weight'],
+  },
+  {
+    file: 'src/hooks/useWatchCompanionSync.ts',
+    label: 'Watch voice reps bridge',
+    patterns: [
+      'setWatchDraftReps',
+      'watchPhoneBridge.setRepsHandler',
+      'setWatchDraftWeightKg',
+      'exerciseIndexRef',
+      'WATCH_COMMANDS_WITHOUT_SESSION_REFRESH',
+    ],
+  },
+  {
+    file: 'src/app/(auth)/login.tsx',
+    label: 'Login hooks before redirect',
+    patterns: [
+      'useEffect(() => {',
+      'Redirect href={redirectTarget}',
+      'const authedProfile =',
+    ],
   },
 ];
 
