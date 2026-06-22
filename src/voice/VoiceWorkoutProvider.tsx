@@ -18,7 +18,7 @@ import {
     loadPorcupineModule,
     resolveHeyOneMoreKeywordPath,
     wakeWordSetupHint,
-    type PorcupineModule,
+    type PorcupineManagerStub,
 } from './porcupineWakeWord';
 import {
     attachSpeechListeners,
@@ -75,7 +75,7 @@ export function VoiceWorkoutProvider({
   initialWakePhraseEnabled = false,
   initialVoiceFeedback = true,
 }: ProviderProps) {
-  const porcupineRef = useRef<InstanceType<PorcupineModule['PorcupineManager']> | null>(null);
+  const porcupineRef = useRef<PorcupineManagerStub | null>(null);
   const handlersRef = useRef<VoiceWorkoutHandlers | null>(null);
   const handlingTranscriptRef = useRef(false);
   const commandListeningRef = useRef(false);
