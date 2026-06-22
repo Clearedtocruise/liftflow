@@ -28,6 +28,7 @@ import { adsRouter, notificationsRouter, subscriptionsRouter } from './routes/pl
 import { trainingRouter } from './routes/training.js';
 import { userRouter } from './routes/user.js';
 import { voiceRouter } from './routes/voice.js';
+import { voiceWorkoutRouter } from './routes/voiceWorkout.js';
 import { watchRouter } from './routes/watch.js';
 import { weeklyRouter } from './routes/weekly.js';
 import { workoutsRouter } from './routes/workouts.js';
@@ -54,6 +55,7 @@ app.use('/api/voice', voiceRouter);
 app.use('/api/watch', watchRouter);
 app.use('/api/ai', aiRouter);
 app.use('/api/workouts', workoutsRouter);
+app.use('/api/workouts', voiceWorkoutRouter);
 app.use('/api/training', trainingRouter);
 app.use('/api/weekly', weeklyRouter);
 app.use('/api/nutrition', nutritionRouter);

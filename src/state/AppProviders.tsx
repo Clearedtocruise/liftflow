@@ -7,13 +7,18 @@ import { SubscriptionProvider } from '@/contexts/SubscriptionContext';
 import { WatchCompanionBridge } from '@/state/WatchCompanionBridge';
 import { WorkoutPlanDraftProvider } from '@/state/workout/WorkoutPlanDraftContext';
 import { WorkoutSessionProvider } from '@/state/workout/WorkoutSessionContext';
+import { VoiceWorkoutProvider } from '@/voice/VoiceWorkoutProvider';
+import { VoiceWorkoutSettingsBridge } from '@/voice/VoiceWorkoutSettingsBridge';
 
 function WorkoutSessionBridge({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   return (
     <WorkoutSessionProvider userId={user?.id}>
       <WorkoutPlanDraftProvider>
-        <WatchCompanionBridge userId={user?.id}>{children}</WatchCompanionBridge>
+        <VoiceWorkoutProvider>
+          <VoiceWorkoutSettingsBridge userId={user?.id} />
+          <WatchCompanionBridge userId={user?.id}>{children}</WatchCompanionBridge>
+        </VoiceWorkoutProvider>
       </WorkoutPlanDraftProvider>
     </WorkoutSessionProvider>
   );

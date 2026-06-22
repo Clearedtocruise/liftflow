@@ -161,4 +161,5 @@ export type StartSessionPayload = {
   gymName?: string;
   trainingLocation?: string;
   workoutLocationId?: string;
+  exercisePlan?: import('./workoutExecution').EditableWorkoutExercise[];
 };

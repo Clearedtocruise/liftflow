@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { Card } from '@/components/layout/Card';
@@ -9,30 +9,72 @@ import { AppText } from '@/components/ui/AppText';
 import { MANUAL_CARDIO_OPTIONS, SPORTS_ACTIVITIES } from '@/constants/activityOptions';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
-import { parseDistanceToKm } from '@/lib/unitConversion';
+import { useUnits } from '@/hooks/useUnits';
+import { estimateActivityCalories, formatCalorieEstimate } from '@/lib/activityCalories';
 import { cardioService } from '@/services/cardioService';
 import type { CardioType } from '@/types/common';
 
 export default function LogActivityScreen() {
-  const { kind = 'cardio' } = useLocalSearchParams<{ kind?: string }>();
+  const { kind = 'cardio', activity: activityParam } = useLocalSearchParams<{
+    kind?: string;
+    activity?: string;
+  }>();
   const { user } = useAuth();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const units = useUnits();
+  const [selectedId, setSelectedId] = useState<string | null>(activityParam ?? null);
   const [durationMinutes, setDurationMinutes] = useState('30');
   const [distance, setDistance] = useState('');
-  const [calories, setCalories] = useState('');
   const [heartRate, setHeartRate] = useState('');
   const [notes, setNotes] = useState('');
   const [logging, setLogging] = useState(false);
 
+  useEffect(() => {
+    if (kind === 'walk') {
+      router.replace('/(features)/cardio-tracking?activity=walk');
+    }
+  }, [kind]);
+
+  useEffect(() => {
+    if (activityParam) {
+      setSelectedId(activityParam);
+    }
+  }, [activityParam]);
+
   const isSport = kind === 'sport';
   const options = isSport ? SPORTS_ACTIVITIES : MANUAL_CARDIO_OPTIONS;
+  const preselected = Boolean(activityParam) || kind === 'mobility';
+  const selectedOption = options.find((option) => option.id === selectedId);
+  const screenTitle = selectedOption ? `Log ${selectedOption.label}` : isSport ? 'Log Sport' : 'Log Activity';
+
+  const durationSeconds = Math.max(1, Math.round(Number.parseFloat(durationMinutes) * 60));
+  const distanceKm = distance.trim() ? units.parseDistance(distance) : undefined;
+  const distanceMeters = distanceKm != null ? Math.round(distanceKm * 1000) : undefined;
+
+  const calorieEstimate = useMemo(() => {
+    if (!selectedId || !Number.isFinite(durationSeconds)) return null;
+    if (isSport) {
+      const sport = SPORTS_ACTIVITIES.find((s) => s.id === selectedId);
+      return estimateActivityCalories({
+        durationSeconds,
+        weightKg: user?.weightKg,
+        sportId: selectedId,
+        intensity: sport?.intensity,
+      });
+    }
+    const cardio = MANUAL_CARDIO_OPTIONS.find((c) => c.id === selectedId);
+    return estimateActivityCalories({
+      durationSeconds,
+      weightKg: user?.weightKg,
+      cardioType: cardio?.cardioType ?? 'other',
+      distanceMeters,
+    });
+  }, [selectedId, durationSeconds, distanceMeters, isSport, user?.weightKg]);
 
   async function handleLog() {
     if (!user || !selectedId) {
       Alert.alert('Select activity', 'Choose an activity type first.');
       return;
     }
-    const durationSeconds = Math.max(1, Math.round(Number.parseFloat(durationMinutes) * 60));
     if (!Number.isFinite(durationSeconds)) {
       Alert.alert('Invalid duration', 'Enter duration in minutes.');
       return;
@@ -52,57 +94,77 @@ export default function LogActivityScreen() {
     } else {
       const cardio = MANUAL_CARDIO_OPTIONS.find((c) => c.id === selectedId);
       cardioType = cardio?.cardioType ?? 'other';
-      if (kind === 'walk') activityKind = 'walk';
       if (kind === 'mobility') activityKind = 'mobility';
     }
 
-    const distanceKm = distance.trim() ? parseDistanceToKm(distance, 'mi') : undefined;
+    const estimate = calorieEstimate ?? estimateActivityCalories({ durationSeconds, weightKg: user.weightKg });
 
     const result = await cardioService.logSession({
       userId: user.id,
       cardioType,
       durationSeconds,
-      distanceMeters: distanceKm != null ? Math.round(distanceKm * 1000) : undefined,
-      caloriesBurned: calories.trim() ? Number.parseInt(calories, 10) : undefined,
+      distanceMeters,
+      caloriesBurned: estimate.calories,
       avgHeartRate: heartRate.trim() ? Number.parseInt(heartRate, 10) : undefined,
-      notes: notes.trim() || undefined,
+      notes: notes.trim() || selectedOption?.label,
       activityKind,
       sportId,
       intensity,
+      metadata: {
+        met: estimate.met,
+        estimatedCalories: true,
+        weightKgUsed: estimate.weightKg,
+      },
     });
 
     setLogging(false);
     if (result.success) {
-      Alert.alert('Activity logged', 'Recovery and weekly summaries will include this session.');
+      Alert.alert(
+        'Activity logged',
+        `${formatCalorieEstimate(estimate.calories, !user.weightKg)} · saved to your week.`,
+      );
       router.back();
     } else {
       Alert.alert('Error', result.error);
     }
   }
 
+  if (kind === 'walk') {
+    return null;
+  }
+
   return (
     <ScreenContainer>
       <ScrollView contentContainerStyle={styles.content}>
-        <AppText variant="headline">{isSport ? 'Log Sport' : 'Log Activity'}</AppText>
+        <AppText variant="headline">{screenTitle}</AppText>
         <AppText variant="body" color="textSecondary">
-          Duration, distance, and intensity count toward recovery load.
+          Duration counts toward recovery load. Calories are estimated from your weight and activity type.
         </AppText>
 
-        <Card style={styles.section}>
-          <AppText variant="label" color="textSecondary">
-            Activity
-          </AppText>
-          <View style={styles.chips}>
-            {options.map((option) => (
-              <PrimaryButton
-                key={option.id}
-                label={'label' in option ? option.label : option.id}
-                variant={selectedId === option.id ? 'primary' : 'secondary'}
-                onPress={() => setSelectedId(option.id)}
-              />
-            ))}
-          </View>
-        </Card>
+        {!preselected ? (
+          <Card style={styles.section}>
+            <AppText variant="label" color="textSecondary">
+              Activity
+            </AppText>
+            <View style={styles.chips}>
+              {options.map((option) => (
+                <PrimaryButton
+                  key={option.id}
+                  label={option.label}
+                  variant={selectedId === option.id ? 'primary' : 'secondary'}
+                  onPress={() => setSelectedId(option.id)}
+                />
+              ))}
+            </View>
+          </Card>
+        ) : selectedOption ? (
+          <Card style={styles.section}>
+            <AppText variant="label" color="textSecondary">
+              Activity
+            </AppText>
+            <AppText variant="bodyBold">{selectedOption.label}</AppText>
+          </Card>
+        ) : null}
 
         <Card style={styles.section}>
           <AppText variant="label" color="textSecondary">
@@ -115,26 +177,25 @@ export default function LogActivityScreen() {
             keyboardType="decimal-pad"
             placeholderTextColor={LiftFlowColors.textTertiary}
           />
-          <AppText variant="label" color="textSecondary">
-            Distance (mi, optional)
-          </AppText>
-          <TextInput
-            style={styles.input}
-            value={distance}
-            onChangeText={setDistance}
-            keyboardType="decimal-pad"
-            placeholderTextColor={LiftFlowColors.textTertiary}
-          />
-          <AppText variant="label" color="textSecondary">
-            Calories (optional)
-          </AppText>
-          <TextInput
-            style={styles.input}
-            value={calories}
-            onChangeText={setCalories}
-            keyboardType="number-pad"
-            placeholderTextColor={LiftFlowColors.textTertiary}
-          />
+          {!isSport ? (
+            <>
+              <AppText variant="label" color="textSecondary">
+                Distance ({units.preferredDistanceUnit}, optional)
+              </AppText>
+              <TextInput
+                style={styles.input}
+                value={distance}
+                onChangeText={setDistance}
+                keyboardType="decimal-pad"
+                placeholderTextColor={LiftFlowColors.textTertiary}
+              />
+            </>
+          ) : null}
+          {calorieEstimate ? (
+            <AppText variant="body" color="accent">
+              {formatCalorieEstimate(calorieEstimate.calories, !user?.weightKg)}
+            </AppText>
+          ) : null}
           <AppText variant="label" color="textSecondary">
             Avg heart rate (optional)
           </AppText>

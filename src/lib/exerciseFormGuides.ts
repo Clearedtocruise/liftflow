@@ -1,12 +1,12 @@
 import { catalogExerciseBySlug } from '@/constants/exerciseDatabase';
-import { GENERATED_EXERCISE_FORM_GUIDES } from '@/lib/generatedExerciseFormGuides';
+import { buildExerciseGuide, enrichLegacyGuide as enrichStepsToGuide } from '@/lib/exerciseGuideBuilder';
+import type { ExerciseFormGuide } from '@/lib/exerciseGuideTypes';
+import { STRUCTURED_EXERCISE_GUIDES } from '@/lib/exerciseStructuredGuides';
 import type { Exercise } from '@/types';
 import type { MovementCategory } from '@/types/common';
 
-export type ExerciseFormGuide = {
-  steps: string[];
-  tips?: string[];
-};
+export { guideHasStructure, guideSections } from '@/lib/exerciseGuideTypes';
+export type { ExerciseFormGuide, GuideSection } from '@/lib/exerciseGuideTypes';
 
 const REP_RANGE_PATTERN = /^\d+(-\d+)?$/;
 const TIMED_REP_RANGE_PATTERN = /\d+\s*(s|sec|secs|second|seconds|min|mins|minute|minutes)\b/i;
@@ -37,16 +37,22 @@ function guideFromInstructions(text: string): ExerciseFormGuide | null {
   return { steps: lines };
 }
 
-const GUIDES_BY_SLUG: Record<string, ExerciseFormGuide> = {
-  'bench-press': {
-    steps: [
-      'Lie on the bench with eyes under the bar, feet flat, and shoulder blades pulled back.',
-      'Grip slightly wider than shoulder width and unrack with straight wrists.',
-      'Lower the bar to mid-chest with elbows at roughly 45°.',
-      'Press up in a slight arc until arms are extended without locking elbows hard.',
-    ],
-    tips: ['Keep glutes and upper back pinned to the bench.', 'Drive through your legs for stability.'],
-  },
+function guideContext(exercise: Exercise | null | undefined, name: string) {
+  const slug = exercise?.slug ?? normalizeKey(name);
+  const catalog = catalogExerciseBySlug(slug);
+  return {
+    name: exercise?.name ?? name,
+    slug,
+    category: (exercise?.category ?? catalog?.movementCategory ?? 'other') as MovementCategory,
+    equipment: exercise?.equipment ?? catalog?.equipment ?? 'bodyweight',
+    muscleGroups: exercise?.muscleGroups ?? catalog?.muscleGroups ?? [],
+    family: catalog?.metadata?.movement_family,
+    requires: catalog?.metadata?.requires,
+  };
+}
+
+/** Legacy step-only guides — enriched at resolve time */
+const LEGACY_STEPS_BY_SLUG: Record<string, ExerciseFormGuide> = {
   'incline-bench-press': {
     steps: [
       'Set the bench to 30–45° and sit with feet planted.',
@@ -55,62 +61,12 @@ const GUIDES_BY_SLUG: Record<string, ExerciseFormGuide> = {
       'Press up and slightly back to the start position.',
     ],
   },
-  'overhead-press': {
-    steps: [
-      'Stand with the bar at collarbone height, grip just outside shoulders.',
-      'Brace your core and squeeze glutes.',
-      'Press the bar straight up, moving your head back slightly to clear the path.',
-      'Lock out overhead with biceps near ears, then return under control.',
-    ],
-  },
-  squat: {
-    steps: [
-      'Set the bar on your upper back, feet shoulder-width, toes slightly out.',
-      'Brace your core, take a breath, and break at hips and knees together.',
-      'Descend until thighs are at least parallel while keeping chest up.',
-      'Drive through mid-foot to stand, keeping knees tracking over toes.',
-    ],
-    tips: ['Keep heels down and avoid collapsing forward.', 'Think “spread the floor” with your feet.'],
-  },
   'front-squat': {
     steps: [
       'Rest the bar on front delts with elbows high and fingers under the bar.',
       'Stand tall, brace, and sit straight down between your hips.',
       'Keep torso upright as you descend to parallel or below.',
       'Drive up through mid-foot while keeping elbows from dropping.',
-    ],
-  },
-  deadlift: {
-    steps: [
-      'Stand with mid-foot under the bar, feet hip-width.',
-      'Hinge and grip just outside your legs with a flat back.',
-      'Pull slack out of the bar, brace, and push the floor away.',
-      'Stand tall with hips and shoulders rising together; reverse under control.',
-    ],
-    tips: ['Keep the bar close to your shins and thighs.', 'Do not round your lower back.'],
-  },
-  'romanian-deadlift': {
-    steps: [
-      'Hold the bar at hip height with a soft knee bend.',
-      'Push hips back while keeping the bar close to your legs.',
-      'Stop when you feel a strong hamstring stretch with a flat back.',
-      'Drive hips forward to return to standing.',
-    ],
-  },
-  'barbell-row': {
-    steps: [
-      'Hinge forward with a flat back, bar hanging at arm’s length.',
-      'Pull the bar to your lower ribs by driving elbows back.',
-      'Squeeze shoulder blades together at the top.',
-      'Lower with control without losing your hinge position.',
-    ],
-  },
-  'lat-pulldown': {
-    steps: [
-      'Sit with thighs secured, grip the bar slightly wider than shoulders.',
-      'Start with arms extended and chest lifted.',
-      'Pull the bar to upper chest by driving elbows down and back.',
-      'Return slowly until arms are extended without shrugging.',
     ],
   },
   'dumbbell-curl': {
@@ -135,14 +91,6 @@ const GUIDES_BY_SLUG: Record<string, ExerciseFormGuide> = {
       'Start with forearms roughly parallel to the floor.',
       'Extend elbows to push the handle down.',
       'Return with control without letting elbows drift forward.',
-    ],
-  },
-  'leg-press': {
-    steps: [
-      'Sit with back and hips flat against the pad, feet shoulder-width on the platform.',
-      'Unlock the sled and lower until knees reach about 90° without butt lifting.',
-      'Press through mid-foot to extend legs without locking knees hard.',
-      'Keep knees tracking over toes throughout.',
     ],
   },
   'leg-curl': {
@@ -175,22 +123,6 @@ const GUIDES_BY_SLUG: Record<string, ExerciseFormGuide> = {
       'Brace core and press straight up.',
       'Stop just before elbows lock out overhead.',
       'Lower under control to shoulder level.',
-    ],
-  },
-  'dumbbell-row': {
-    steps: [
-      'Place one hand and knee on a bench, other foot on the floor.',
-      'Let the dumbbell hang straight down with a flat back.',
-      'Row to your hip, driving elbow back.',
-      'Lower fully without twisting your torso.',
-    ],
-  },
-  'goblet-squat': {
-    steps: [
-      'Hold a dumbbell or kettlebell at chest height with elbows in.',
-      'Feet shoulder-width, toes slightly out.',
-      'Squat between your hips keeping chest tall.',
-      'Drive up through mid-foot to stand.',
     ],
   },
   'dumbbell-rdl': {
@@ -233,28 +165,12 @@ const GUIDES_BY_SLUG: Record<string, ExerciseFormGuide> = {
       'Push off the bent leg to return to center and switch sides.',
     ],
   },
-  'bulgarian-split-squat': {
-    steps: [
-      'Place rear foot on a bench, front foot far enough forward to lunge comfortably.',
-      'Lower straight down until front thigh is parallel.',
-      'Keep torso slightly forward and front knee stable.',
-      'Drive through the front foot to stand.',
-    ],
-  },
   'step-up': {
     steps: [
       'Place one foot fully on a box or bench.',
       'Drive through that heel to stand on top without pushing off the back foot.',
       'Step down under control.',
       'Complete all reps on one side or alternate as programmed.',
-    ],
-  },
-  'hip-thrust': {
-    steps: [
-      'Upper back on a bench, bar over hips with padding.',
-      'Feet flat, knees bent ~90° at the top.',
-      'Drive hips up until torso and thighs form a straight line.',
-      'Squeeze glutes at the top, then lower without losing tension.',
     ],
   },
   'glute-bridge': {
@@ -273,15 +189,6 @@ const GUIDES_BY_SLUG: Record<string, ExerciseFormGuide> = {
       'Return to standing by driving hips forward.',
     ],
   },
-  'pull-up': {
-    steps: [
-      'Hang from the bar with hands slightly wider than shoulders, palms away.',
-      'Depress shoulder blades and brace core.',
-      'Pull chest toward the bar by driving elbows down.',
-      'Lower with control to a full hang.',
-    ],
-    tips: ['Avoid kipping unless programmed.', 'Think “pull elbows to pockets.”'],
-  },
   'chin-up': {
     steps: [
       'Hang with palms facing you, shoulder-width grip.',
@@ -296,14 +203,6 @@ const GUIDES_BY_SLUG: Record<string, ExerciseFormGuide> = {
       'Lower by bending elbows until upper arms are about parallel to the floor.',
       'Keep shoulders down and torso slightly forward for chest emphasis.',
       'Press back up without locking elbows aggressively.',
-    ],
-  },
-  'push-up': {
-    steps: [
-      'Hands slightly wider than shoulders, body in a straight line from head to heels.',
-      'Lower chest toward the floor with elbows at ~45°.',
-      'Touch or come close without sagging hips.',
-      'Press back up while maintaining a rigid plank.',
     ],
   },
   'bodyweight-squat': {
@@ -322,7 +221,7 @@ const GUIDES_BY_SLUG: Record<string, ExerciseFormGuide> = {
       'Drive up to standing without losing balance.',
     ],
   },
-  'plank': {
+  plank: {
     steps: [
       'Forearms on the floor, elbows under shoulders.',
       'Extend legs and brace core, glutes, and quads.',
@@ -344,14 +243,6 @@ const GUIDES_BY_SLUG: Record<string, ExerciseFormGuide> = {
       'Brace core and raise legs with control.',
       'Lift until thighs pass parallel or as high as mobility allows.',
       'Lower slowly without swinging.',
-    ],
-  },
-  'face-pull': {
-    steps: [
-      'Set cable at face height with a rope attachment.',
-      'Pull toward your face with elbows high and wide.',
-      'Externally rotate at the end so hands end near ears.',
-      'Return with control, keeping shoulders down.',
     ],
   },
   'cable-fly': {
@@ -460,100 +351,16 @@ const GUIDES_BY_SLUG: Record<string, ExerciseFormGuide> = {
   },
 };
 
-const GENERIC_BY_CATEGORY: Partial<Record<MovementCategory, ExerciseFormGuide>> = {
-  push: {
-    steps: [
-      'Set your base: stable feet, braced core, shoulders down and back.',
-      'Move through the full range with control—no bouncing or jerking.',
-      'Keep tension on the target muscles throughout the rep.',
-      'Return to the start position slowly before the next rep.',
-    ],
-  },
-  pull: {
-    steps: [
-      'Start with shoulders set down and back, core braced.',
-      'Initiate the pull by driving elbows toward your hips or ribs.',
-      'Squeeze the target muscles at the end range.',
-      'Lower the weight under control to full extension.',
-    ],
-  },
-  squat: {
-    steps: [
-      'Feet planted, core braced, chest up.',
-      'Sit hips down and back while knees track over toes.',
-      'Descend to comfortable depth with a neutral spine.',
-      'Drive through mid-foot to stand tall.',
-    ],
-  },
-  hinge: {
-    steps: [
-      'Soft knee bend, hips back, flat back.',
-      'Keep the load close to your body as you hinge.',
-      'Stop when you feel hamstrings/glutes load—not lower back strain.',
-      'Drive hips forward to return upright.',
-    ],
-  },
-  core: {
-    steps: [
-      'Brace your core as if preparing for a light punch to the stomach.',
-      'Move slowly and stay in a neutral spine unless the drill says otherwise.',
-      'Breathe steadily—don’t hold your breath the entire rep.',
-      'Stop if form breaks; quality beats duration or reps.',
-    ],
-  },
-  cardio: {
-    steps: [
-      'Start easy and build rhythm before increasing intensity.',
-      'Maintain upright posture and relaxed shoulders.',
-      'Use steady breathing matched to your effort level.',
-      'Cool down gradually rather than stopping abruptly.',
-    ],
-  },
-  carry: {
-    steps: [
-      'Pick up the load with a tall posture and braced core.',
-      'Take short, controlled steps without leaning or twisting.',
-      'Keep shoulders level and ribs stacked over pelvis.',
-      'Walk the prescribed distance or time, then lower safely.',
-    ],
-  },
-  other: {
-    steps: [
-      'Set a stable base with feet planted and core braced.',
-      'Move through the full range with control.',
-      'Keep tension on the working muscles throughout.',
-      'Return to the start position slowly before the next rep.',
-    ],
-  },
-};
-
-function lookupBySlug(slug: string | undefined): ExerciseFormGuide | null {
-  if (!slug) return null;
-  return GUIDES_BY_SLUG[slug] ?? GENERATED_EXERCISE_FORM_GUIDES[slug] ?? null;
-}
-
-function lookupGeneratedByName(name: string | undefined): ExerciseFormGuide | null {
+function lookupBySlug(
+  map: Record<string, ExerciseFormGuide>,
+  slug: string | undefined,
+  name: string | undefined,
+): ExerciseFormGuide | null {
+  if (slug && map[slug]) return map[slug];
   const key = normalizeKey(name);
-  if (!key) return null;
-  if (GENERATED_EXERCISE_FORM_GUIDES[key]) return GENERATED_EXERCISE_FORM_GUIDES[key];
-  const prefix = Object.keys(GENERATED_EXERCISE_FORM_GUIDES).find(
-    (slug) => slug.startsWith(`${key}-`) || slug.startsWith(`${key}_`),
-  );
-  return prefix ? GENERATED_EXERCISE_FORM_GUIDES[prefix] ?? null : null;
-}
-
-function lookupByName(name: string | undefined): ExerciseFormGuide | null {
-  const key = normalizeKey(name);
-  if (!key) return null;
-  if (GUIDES_BY_SLUG[key]) return GUIDES_BY_SLUG[key];
-  if (GENERATED_EXERCISE_FORM_GUIDES[key]) return GENERATED_EXERCISE_FORM_GUIDES[key];
-
-  const generated = lookupGeneratedByName(name);
-  if (generated) return generated;
-
+  if (key && map[key]) return map[key];
   const catalog = catalogExerciseBySlug(key);
-  if (catalog) return GUIDES_BY_SLUG[catalog.slug] ?? null;
-
+  if (catalog && map[catalog.slug]) return map[catalog.slug];
   return null;
 }
 
@@ -561,21 +368,26 @@ export function resolveExerciseFormGuide(
   exercise?: Exercise | null,
   nameFallback?: string,
 ): ExerciseFormGuide | null {
-  const name = exercise?.name ?? nameFallback;
+  const name = exercise?.name ?? nameFallback ?? 'Exercise';
   const slug = exercise?.slug ?? normalizeKey(name);
 
   if (exercise?.instructions) {
     const fromDb = guideFromInstructions(exercise.instructions);
+    if (fromDb?.steps?.length) {
+      return enrichStepsToGuide(fromDb.steps, guideContext(exercise, name), fromDb.tips);
+    }
     if (fromDb) return fromDb;
   }
 
-  return (
-    lookupBySlug(slug) ??
-    lookupByName(name) ??
-    GENERIC_BY_CATEGORY[exercise?.category ?? 'other'] ??
-    GENERIC_BY_CATEGORY.other ??
-    null
-  );
+  const structured = lookupBySlug(STRUCTURED_EXERCISE_GUIDES, slug, name);
+  if (structured) return structured;
+
+  const legacy = lookupBySlug(LEGACY_STEPS_BY_SLUG, slug, name);
+  if (legacy?.steps?.length) {
+    return enrichStepsToGuide(legacy.steps, guideContext(exercise, name), legacy.tips);
+  }
+
+  return buildExerciseGuide(exercise, name);
 }
 
 export function hasExerciseFormGuide(exercise?: Exercise | null, nameFallback?: string): boolean {

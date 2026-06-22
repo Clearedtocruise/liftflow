@@ -2,7 +2,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, InteractionManager, Pressable, RefreshControl, StyleSheet, View, type ViewStyle } from 'react-native';
+import { Alert, InteractionManager, Pressable, RefreshControl, StyleSheet, View, type AlertButton, type ViewStyle } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { HomeNextUpCard } from '@/components/dashboard/HomeNextUpCard';
@@ -334,14 +334,12 @@ export default function DashboardScreen() {
   }, [user, showWeeklyReview]);
 
   function handleLogActivity() {
-    Alert.alert(
-      'Log Activity',
-      'Choose activity type',
-      HOME_ACTIVITY_OPTIONS.map((option) => ({
-        text: option.label,
-        onPress: () => router.push(option.route as never),
-      })).concat([{ text: 'Cancel', style: 'cancel' }]),
-    );
+    const buttons: AlertButton[] = HOME_ACTIVITY_OPTIONS.map((option) => ({
+      text: option.label,
+      onPress: () => router.push(option.route as never),
+    }));
+    buttons.push({ text: 'Cancel', style: 'cancel' });
+    Alert.alert('Log Activity', 'Choose activity type', buttons);
   }
 
   async function handleAcceptWeeklyPlan() {

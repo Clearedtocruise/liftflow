@@ -22,6 +22,7 @@ export const SPORTS_ACTIVITIES: SportActivity[] = [
   { id: 'surfing', label: 'Surfing', intensity: 'moderate' },
   { id: 'skateboarding', label: 'Skateboarding', intensity: 'moderate' },
   { id: 'hiking', label: 'Hiking', intensity: 'moderate' },
+  { id: 'equestrian', label: 'Equestrian', intensity: 'moderate' },
   { id: 'other-sport', label: 'Other Sport', intensity: 'moderate' },
 ];
 
@@ -36,7 +37,15 @@ export const MANUAL_CARDIO_OPTIONS = [
   { id: 'other-cardio', label: 'Other', cardioType: 'other' as const },
 ];
 
-export type ActivityLogKind = 'workout' | 'cardio' | 'sport' | 'conditioning' | 'mobility' | 'recovery' | 'walk';
+export type ActivityLogKind =
+  | 'workout'
+  | 'cardio'
+  | 'sport'
+  | 'conditioning'
+  | 'mobility'
+  | 'recovery'
+  | 'walk'
+  | 'equestrian';
 
 export const HOME_ACTIVITY_OPTIONS: Array<{ id: ActivityLogKind; label: string; route: string }> = [
   { id: 'workout', label: 'Workout', route: '/(tabs)/workout/manual-log' },
@@ -45,5 +54,6 @@ export const HOME_ACTIVITY_OPTIONS: Array<{ id: ActivityLogKind; label: string; 
   { id: 'conditioning', label: 'Conditioning', route: '/(features)/cardio-tracking' },
   { id: 'mobility', label: 'Mobility', route: '/(features)/log-activity?kind=mobility' },
   { id: 'recovery', label: 'Recovery', route: '/(features)/recovery-check-in' },
-  { id: 'walk', label: 'Walk', route: '/(features)/log-activity?kind=walk' },
+  { id: 'walk', label: 'Walk', route: '/(features)/cardio-tracking?activity=walk' },
+  { id: 'equestrian', label: 'Equestrian', route: '/(features)/log-activity?kind=sport&activity=equestrian' },
 ];

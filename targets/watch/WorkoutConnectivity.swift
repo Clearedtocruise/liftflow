@@ -31,6 +31,7 @@ final class WorkoutConnectivity: NSObject, ObservableObject, WCSessionDelegate {
   private var restEndDate: Date?
   private var restTimer: Timer?
   private var calorieTimer: Timer?
+  private var workoutRuntimeSession: WKExtendedRuntimeSession?
   private var lastHrSampleAt: Date?
   private var restingHeartRate = 65
 
@@ -120,10 +121,11 @@ final class WorkoutConnectivity: NSObject, ObservableObject, WCSessionDelegate {
     guard let type = message["type"] as? String else { return }
 
     if type == "workout_state" {
+      let shouldPresent = message["presentWorkout"] as? Bool ?? false
       if let state = message["state"] as? [String: Any] {
-        applyWorkoutState(state)
+        applyWorkoutState(state, shouldPresent: shouldPresent)
       } else if let state = message["state"] as? NSDictionary {
-        applyWorkoutState(state as? [String: Any] ?? [:])
+        applyWorkoutState(state as? [String: Any] ?? [:], shouldPresent: shouldPresent)
       }
       return
     }
@@ -133,7 +135,20 @@ final class WorkoutConnectivity: NSObject, ObservableObject, WCSessionDelegate {
     }
   }
 
-  private func applyWorkoutState(_ state: [String: Any]) {
+  private func beginWorkoutRuntime() {
+    guard workoutRuntimeSession == nil else { return }
+    let session = WKExtendedRuntimeSession()
+    session.start()
+    workoutRuntimeSession = session
+  }
+
+  private func endWorkoutRuntime() {
+    workoutRuntimeSession?.invalidate()
+    workoutRuntimeSession = nil
+  }
+
+  private func applyWorkoutState(_ state: [String: Any], shouldPresent: Bool = false) {
+    let previousSessionId = workoutSessionId
     recoveryScore = state["recoveryScore"] as? Int
     recoveryLabel = state["recoveryLabel"] as? String ?? ""
     workoutRecommendation = state["workoutRecommendation"] as? String ?? ""
@@ -165,6 +180,14 @@ final class WorkoutConnectivity: NSObject, ObservableObject, WCSessionDelegate {
       } else if phase != "rest" {
         clearRestCountdown()
       }
+
+      if previousSessionId == nil, workoutSessionId != nil {
+        beginWorkoutRuntime()
+        if shouldPresent {
+          WKInterfaceDevice.current().play(.start)
+          lastSpokenResponse = "Workout started on iPhone"
+        }
+      }
     } else {
       if !workoutRecommendation.isEmpty {
         let parts = workoutRecommendation.components(separatedBy: " · ")
@@ -192,6 +215,9 @@ final class WorkoutConnectivity: NSObject, ObservableObject, WCSessionDelegate {
       stopCalorieTimer()
       sessionCalories = 0
       activeCalories = 0
+      if previousSessionId != nil {
+        endWorkoutRuntime()
+      }
     }
 
     if let health = state["healthSnapshot"] as? [String: Any] {

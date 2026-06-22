@@ -24,6 +24,11 @@ import { useAuth } from '@/hooks/useAuth';
 import { useSubscription } from '@/hooks/useSubscription';
 import { useUnits } from '@/hooks/useUnits';
 import { loadRolloverValidationState, type RolloverValidationState } from '@/lib/rolloverDebug';
+import {
+    isTabataModeEnabled,
+    TABATA_MODE_PREF_KEY,
+    tabataModeSummary,
+} from '@/lib/trainingPreferences';
 import { resolveDaysPerWeek, summarizeTrainingSchedule } from '@/lib/trainingSchedule';
 import { resolveUnitPreferences } from '@/lib/unitConversion';
 import { coachingPrefsPatch } from '@/lib/voice/voicePreferences';
@@ -35,6 +40,8 @@ import { userService } from '@/services/userService';
 import { useWorkoutSession } from '@/state/workout/WorkoutSessionContext';
 import type { ConfirmationMode } from '@/types/common';
 import type { VoiceInputMode } from '@/types/voice';
+import { useGymModeVoiceScope } from '@/voice/useGymModeVoiceScope';
+import { useVoiceWorkout } from '@/voice/useVoiceWorkout';
 
 export default function SettingsScreen() {
   const { user, signOut, refreshProfile, deleteAccount } = useAuth();
@@ -46,6 +53,10 @@ export default function SettingsScreen() {
   const [voiceAutoLog, setVoiceAutoLog] = useState(true);
   const [voiceFeedback, setVoiceFeedback] = useState(true);
   const [voiceInputMode, setVoiceInputMode] = useState<VoiceInputMode>('push_to_talk');
+  const [heyOneMoreEnabled, setHeyOneMoreEnabled] = useState(false);
+  const [gymModeEnabled, setGymModeEnabled] = useState(false);
+  const { setWakePhraseSettingEnabled, setGymModeActive } = useVoiceWorkout();
+  useGymModeVoiceScope(gymModeEnabled);
   const [exporting, setExporting] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [locationDetection, setLocationDetection] = useState(true);
@@ -80,6 +91,10 @@ export default function SettingsScreen() {
         if (mode === 'tap_toggle' || mode === 'continuous' || mode === 'push_to_talk') {
           setVoiceInputMode(mode);
         }
+        setHeyOneMoreEnabled(coaching.wakePhraseEnabled === true);
+        setGymModeEnabled(coaching.gymModeEnabled === true);
+        setWakePhraseSettingEnabled(coaching.wakePhraseEnabled === true);
+        setGymModeActive(coaching.gymModeEnabled === true);
         setTabataMode(isTabataModeEnabled(result.data));
       }
     });
@@ -304,7 +319,36 @@ export default function SettingsScreen() {
             ]);
           }}
         />
-        <SettingsRow label="Wake phrase" value="Coming soon" />
+        <SettingsRow
+          label="Enable Hey OneMore"
+          value={heyOneMoreEnabled ? 'On' : 'Off'}
+          onPress={async () => {
+            if (!user) return;
+            const next = !heyOneMoreEnabled;
+            setHeyOneMoreEnabled(next);
+            setWakePhraseSettingEnabled(next);
+            const prefs = await userService.getPreferences(user.id);
+            const coaching = prefs.success ? prefs.data.coachingPreferences ?? {} : {};
+            await userService.updatePreferences(user.id, {
+              coachingPreferences: { ...coaching, ...coachingPrefsPatch({ wakePhraseEnabled: next }) },
+            });
+          }}
+        />
+        <SettingsRow
+          label="Gym Mode (wake word outside workout)"
+          value={gymModeEnabled ? 'On' : 'Off'}
+          onPress={async () => {
+            if (!user) return;
+            const next = !gymModeEnabled;
+            setGymModeEnabled(next);
+            setGymModeActive(next);
+            const prefs = await userService.getPreferences(user.id);
+            const coaching = prefs.success ? prefs.data.coachingPreferences ?? {} : {};
+            await userService.updatePreferences(user.id, {
+              coachingPreferences: { ...coaching, ...coachingPrefsPatch({ gymModeEnabled: next }) },
+            });
+          }}
+        />
       </Card>
 
       <View style={styles.sectionGap}>

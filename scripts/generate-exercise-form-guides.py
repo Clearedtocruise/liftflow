@@ -96,7 +96,20 @@ def pick_template(name: str, category: str, family: str) -> tuple[list[str], lis
             None,
         )
 
-    if any(k in n for k in ("pushdown", "skull crusher", "extension", "kickback", "dip", "jm press")) or "tricep" in n:
+    if any(k in n for k in ("back extension", "hyperextension", "reverse hyper")):
+        return (
+            [
+                f"Position hips on the pad for {name} with feet anchored.",
+                "Start with torso hanging — neutral spine, not rounded.",
+                "Raise torso by extending hips and lower back to a straight line with legs.",
+                "Squeeze glutes and erectors at the top; lower with control.",
+            ],
+            ["This is a back/hip extension — not a tricep exercise."],
+        )
+
+    if any(k in n for k in ("pushdown", "skull crusher", "kickback", "dip", "jm press")) or "tricep" in n or (
+        "extension" in n and "back" not in n and "leg" not in n
+    ):
         return (
             [
                 f"Set up for {name} with elbows tucked and upper arms mostly still.",

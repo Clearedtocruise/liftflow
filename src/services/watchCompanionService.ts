@@ -92,6 +92,8 @@ export const watchCompanionService = {
       activeExerciseIndex?: number;
       /** When true, never re-fetch an active session from the database. */
       forceClear?: boolean;
+      /** Wake the Watch app and show the active workout UI. */
+      presentWorkout?: boolean;
     },
   ): Promise<void> {
     const exerciseIndex = params.activeExerciseIndex ?? watchPhoneBridge.getExerciseIndex();
@@ -99,20 +101,28 @@ export const watchCompanionService = {
 
     const session = params.forceClear ? null : params.session;
 
+    const presentWorkout = params.presentWorkout === true;
+
     if (!session) {
       const cleared = watchWorkoutService.getState(userId);
       const enriched = await this.enrichState(userId, { ...cleared, activeSet: null });
       watchWorkoutService.loadState(userId, enriched);
-      await pushWorkoutStateToWatch(enriched);
+      await pushWorkoutStateToWatch(enriched, { presentWorkout });
       return;
     }
 
-    const sync = await watchWorkoutService.syncActiveSession(userId, session, {
+    let sync = await watchWorkoutService.syncActiveSession(userId, session, {
       exerciseIndex,
     });
+    if (!sync.success && sync.error?.includes('no exercises')) {
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      sync = await watchWorkoutService.syncActiveSession(userId, session, {
+        exerciseIndex,
+      });
+    }
     if (!sync.success) {
       const feedback = await this.buildFeedbackState(userId, sync.error ?? 'Could not sync workout to Watch.');
-      await pushWorkoutStateToWatch(feedback);
+      await pushWorkoutStateToWatch(feedback, { presentWorkout });
       return;
     }
 
@@ -125,7 +135,17 @@ export const watchCompanionService = {
 
     const enriched = await this.enrichState(userId, state);
     watchWorkoutService.loadState(userId, enriched);
-    await pushWorkoutStateToWatch(enriched);
+    await pushWorkoutStateToWatch(enriched, { presentWorkout });
+  },
+
+  /** Push active workout to Watch immediately after phone start — opens workout UI on Watch when reachable. */
+  async notifyWatchWorkoutStarted(userId: string, session: WorkoutSession): Promise<void> {
+    await this.pushPhoneWorkoutState(userId, {
+      session,
+      restSecondsRemaining: null,
+      activeExerciseIndex: 0,
+      presentWorkout: true,
+    });
   },
 
   /** Rest tick only — avoids re-syncing exercise/set state every second. */

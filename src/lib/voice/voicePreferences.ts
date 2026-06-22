@@ -5,6 +5,7 @@ export const VOICE_PREF_KEYS = {
   inputMode: 'voiceInputMode',
   autoLog: 'voiceAutoLog',
   wakePhraseEnabled: 'wakePhraseEnabled',
+  gymModeEnabled: 'gymModeEnabled',
 } as const;
 
 function parseInputMode(value: unknown): VoiceInputMode {
@@ -23,6 +24,7 @@ export function voiceSettingsFromUser(
     voiceFeedback: preferences?.voiceFeedback ?? DEFAULT_VOICE_SETTINGS.voiceFeedback,
     inputMode: parseInputMode(coaching[VOICE_PREF_KEYS.inputMode]),
     wakePhraseEnabled: coaching[VOICE_PREF_KEYS.wakePhraseEnabled] === true,
+    gymModeEnabled: coaching[VOICE_PREF_KEYS.gymModeEnabled] === true,
   };
 }
 
@@ -32,6 +34,9 @@ export function coachingPrefsPatch(settings: Partial<VoiceSettings>): Record<str
   if (settings.autoLog !== undefined) patch[VOICE_PREF_KEYS.autoLog] = settings.autoLog;
   if (settings.wakePhraseEnabled !== undefined) {
     patch[VOICE_PREF_KEYS.wakePhraseEnabled] = settings.wakePhraseEnabled;
+  }
+  if (settings.gymModeEnabled !== undefined) {
+    patch[VOICE_PREF_KEYS.gymModeEnabled] = settings.gymModeEnabled;
   }
   return patch;
 }

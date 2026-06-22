@@ -99,6 +99,14 @@ const config: ExpoConfig = {
     ],
     // expo-notifications plugin omitted — package autolinks; strip push entitlement below.
     './plugins/withLocalNotificationsOnly.js',
+    [
+      'expo-speech-recognition',
+      {
+        microphonePermission: 'ONE MORE uses the microphone for voice workout logging and AI coaching.',
+        speechRecognitionPermission: 'ONE MORE converts speech to workout sets and coaching questions.',
+        androidSpeechServicePackages: ['com.google.android.googlequicksearchbox'],
+      },
+    ],
     ...(process.env.INCLUDE_WATCH_TARGET !== '0' ? (['@bacons/apple-targets'] as const) : []),
     [
       'expo-splash-screen',

@@ -171,6 +171,26 @@ const REQUIRED = [
       'navigateAfterAuth',
     ],
   },
+  {
+    file: 'src/lib/exerciseGuideTypes.ts',
+    label: 'Structured exercise form guides',
+    patterns: ['equipment?:', 'setup?:', 'muscleFocus?:', 'guideSections'],
+  },
+  {
+    file: 'src/components/cardio/CardioSessionPanel.tsx',
+    label: 'Cardio session save on complete',
+    patterns: ['cardioService.logSession', 'ActivitySessionSaveCard', 'estimateActivityCalories'],
+  },
+  {
+    file: 'src/constants/activityOptions.ts',
+    label: 'Home activity equestrian and walk route',
+    patterns: ["id: 'equestrian'", 'cardio-tracking?activity=walk'],
+  },
+  {
+    file: 'src/app/(tabs)/settings.tsx',
+    label: 'Settings tabata preference imports',
+    patterns: ['isTabataModeEnabled', 'TABATA_MODE_PREF_KEY', 'tabataModeSummary'],
+  },
 ];
 
 let fail = 0;

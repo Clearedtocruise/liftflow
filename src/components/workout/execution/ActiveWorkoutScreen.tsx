@@ -75,6 +75,10 @@ import type {
 } from '@/types/workoutChallenge';
 import type { EditableWorkoutExercise, ExerciseHistorySet } from '@/types/workoutExecution';
 import type { WorkoutExecutionMode } from '@/types/workoutExecutionMode';
+import { useActiveWorkoutVoiceHandlers } from '@/voice/useActiveWorkoutVoiceHandlers';
+import { useVoiceWorkoutActivation } from '@/voice/useVoiceWorkoutActivation';
+import { VoiceDebugPanel } from '@/voice/VoiceDebugPanel';
+import { VoiceMicButton } from '@/voice/VoiceMicButton';
 
 /** Brief pause on exercise complete before auto-advancing (hands-free flow). */
 const AUTO_ADVANCE_EXERCISE_MS = 1800;
@@ -144,6 +148,8 @@ export function ActiveWorkoutScreen({
     deleteSet,
     addExerciseByName,
     setActiveExerciseIndex,
+    lastLoggedSet,
+    startRestTimer,
     watchDraftReps,
     setWatchDraftReps,
     watchDraftWeightKg,
@@ -244,6 +250,75 @@ export function ActiveWorkoutScreen({
     loggingMode === 'any' ? undefined : (loggingMode as Exclude<typeof loggingMode, 'any'>);
   const nextSetNumber = completedSets.length + 1;
   const remainingSets = Math.max(effectiveTargetSets - completedSets.length, 0);
+
+  const logSetFromVoice = useCallback(
+    async (input: {
+      workoutExerciseId: string;
+      weightKg?: number;
+      reps: number;
+      restSeconds: number;
+    }) => {
+      if (isPaused) return false;
+      const logged =
+        input.weightKg == null
+          ? await logSet({
+              workoutExerciseId: input.workoutExerciseId,
+              reps: input.reps,
+              restSeconds: input.restSeconds,
+            })
+          : await logSet({
+              workoutExerciseId: input.workoutExerciseId,
+              weight: input.weightKg,
+              reps: input.reps,
+              restSeconds: input.restSeconds,
+            });
+      if (logged) {
+        await refreshSession();
+      }
+      return logged != null;
+    },
+    [isPaused, logSet, refreshSession],
+  );
+
+  const startRestSeconds = useCallback(
+    async (seconds: number) => {
+      if (lastLoggedSet?.id) {
+        await startRestTimer(lastLoggedSet.id, seconds);
+        return;
+      }
+      setRestTimer(seconds);
+    },
+    [lastLoggedSet?.id, startRestTimer, setRestTimer],
+  );
+
+  const voiceHandlers = useActiveWorkoutVoiceHandlers({
+    session,
+    sortedExerciseIds: sortedExercises.map((exercise) => exercise.id),
+    currentExerciseId: currentExercise?.id,
+    currentExerciseName: currentExercise?.exercise?.name,
+    completedSetCount: completedSets.length,
+    targetSetCount: effectiveTargetSets,
+    restTargetSeconds,
+    preferredWeightUnit: units.preferredWeightUnit,
+    isPaused,
+    logSetFromVoice,
+    goToExerciseIndex: setCurrentIndex,
+    startRestSeconds,
+    finishWorkout: onFinish,
+  });
+
+  useVoiceWorkoutActivation({
+    active: true,
+    userId: user?.id,
+    sessionId: session.id,
+    activeExerciseName: currentExercise?.exercise?.name,
+    activeExerciseId: currentExercise?.id,
+    setNumber: nextSetNumber,
+    lastWeight: completedSets[completedSets.length - 1]?.weight,
+    lastReps: completedSets[completedSets.length - 1]?.reps,
+    preferredWeightUnit: units.preferredWeightUnit,
+    handlers: voiceHandlers,
+  });
   const supersetGroup = getSupersetGroupForIndex(currentIndex, planExercises);
   const stationLabel = planMeta
     ? formatExerciseStationLabel(planMeta, currentIndex, planExercises)
@@ -1268,6 +1343,8 @@ export function ActiveWorkoutScreen({
                     disabled={isPaused}
                     onPress={handleLogSet}
                   />
+                  <VoiceMicButton disabled={isPaused || logging} />
+                  <VoiceDebugPanel />
                   <View style={styles.extraActions}>
                     <PrimaryButton label="+ Add Set" variant="secondary" onPress={handleAddSet} disabled={isPaused} />
                     <PrimaryButton

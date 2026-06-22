@@ -8,10 +8,10 @@ export function VoiceComingSoonBanner() {
   return (
     <Card style={styles.card}>
       <AppText variant="bodyBold" style={styles.title}>
-        Voice Logging Coming Soon
+        Voice Logging
       </AppText>
       <AppText variant="footnote" color="textSecondary">
-        Use manual entry for now. Voice logging will return in a future update.
+        Voice logging is available during an active workout — tap “Tap to Voice Log” or say “Hey OneMore” when enabled in Settings.
       </AppText>
     </Card>
   );

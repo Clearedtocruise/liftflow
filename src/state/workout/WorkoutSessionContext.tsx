@@ -13,6 +13,7 @@ import { AppState, Vibration } from 'react-native';
 import { DEFAULT_REST_SECONDS } from '@/constants/workout';
 import { isStaleWorkoutSession } from '@/lib/staleWorkoutSession';
 import { peakMusicService } from '@/services/peakMusicService';
+import { watchCompanionService } from '@/services/watchCompanionService';
 import { workoutService } from '@/services/workoutService';
 import type { CreateSetPayload, RestPeriod, StartSessionPayload, UpdateSetPayload, WorkoutSession, WorkoutSet } from '@/types';
 
@@ -215,6 +216,7 @@ export function WorkoutSessionProvider({
         sessionEpochRef.current += 1;
         trackedSessionIdRef.current = result.data.id;
         setActiveSession(result.data);
+        void watchCompanionService.notifyWatchWorkoutStarted(userId, result.data);
         return result.data;
       }
       return null;
@@ -232,6 +234,7 @@ export function WorkoutSessionProvider({
         sessionEpochRef.current += 1;
         trackedSessionIdRef.current = result.data.id;
         setActiveSession(result.data);
+        void watchCompanionService.notifyWatchWorkoutStarted(userId, result.data);
         return result.data;
       }
       return null;

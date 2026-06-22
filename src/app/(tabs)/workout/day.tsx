@@ -2,8 +2,8 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
-import { ErrorStateCard } from '@/components/layout/StateCard';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
+import { ErrorStateCard } from '@/components/layout/StateCard';
 import { WorkoutDayOverviewScreen } from '@/components/workout/execution/WorkoutDayOverviewScreen';
 import { LiftFlowColors } from '@/constants/theme';
 import { pickDefaultLocation } from '@/constants/trainingProfile';
@@ -15,7 +15,6 @@ import { getWeekRange, isConditioningWorkout } from '@/lib/weekPlan';
 import { exercisesForSessionStart, exercisesFromPlannedWorkout } from '@/lib/workoutPlan';
 import type { ExerciseAlternativeOption } from '@/services/exerciseAdvisoryService';
 import { trainingService } from '@/services/trainingService';
-import { workoutService } from '@/services/workoutService';
 import { useWorkoutPlanDraft } from '@/state/workout/WorkoutPlanDraftContext';
 import { useWorkoutSession } from '@/state/workout/WorkoutSessionContext';
 import type { PlannedWorkout } from '@/types/training';
@@ -70,20 +69,20 @@ export default function WorkoutDayScreen() {
   const handleStart = useCallback(async () => {
     if (!user || !workout) return;
     const location = pickDefaultLocation(locations, selectedId);
+    const sessionExercises = exercisesForSessionStart(
+      workout,
+      tabataModeEnabled && !isConditioningWorkout(workout),
+    );
     setStarting(true);
     const started = await startSessionFromPlanned(workout.id, {
       name: workout.name,
       gymName: location?.name ?? user.primaryGymName ?? undefined,
       trainingLocation: location?.locationType ?? user.trainingLocation,
       workoutLocationId: location?.id,
+      exercisePlan: sessionExercises,
     });
     if (started) {
-      const sessionExercises = exercisesForSessionStart(
-        workout,
-        tabataModeEnabled && !isConditioningWorkout(workout),
-      );
       setExercises(sessionExercises);
-      await workoutService.applySessionExercisePlan(started.id, user.id, sessionExercises);
       await refreshSession();
       router.replace('/(tabs)/workout');
     }

@@ -13,6 +13,8 @@ export type LogCardioPayload = {
   activityKind?: 'cardio' | 'sport' | 'conditioning' | 'mobility' | 'walk';
   sportId?: string;
   intensity?: 'low' | 'moderate' | 'high';
+  startedAt?: string;
+  metadata?: Record<string, unknown>;
 };
 
 export type CardioSessionRecord = {
@@ -39,8 +41,10 @@ function fail(message: string): ServiceResult<never> {
 export const cardioService = {
   async logSession(payload: LogCardioPayload): Promise<ServiceResult<CardioSessionRecord>> {
     try {
-      const startedAt = new Date().toISOString();
-      const endedAt = new Date(Date.now() + payload.durationSeconds * 1000).toISOString();
+      const endedAt = new Date().toISOString();
+      const startedAt =
+        payload.startedAt ??
+        new Date(Date.now() - payload.durationSeconds * 1000).toISOString();
       const { data, error } = await supabase
         .from('cardio_sessions')
         .insert({
@@ -58,6 +62,7 @@ export const cardioService = {
             activityKind: payload.activityKind ?? 'cardio',
             sportId: payload.sportId,
             intensity: payload.intensity,
+            ...payload.metadata,
           },
         })
         .select('*')

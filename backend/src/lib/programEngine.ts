@@ -1,5 +1,5 @@
-import { applySubstitutionsToExercises, type LimitationContext } from './exerciseSubstitution.js';
 import { applyEquipmentSubstitutionsToExercises } from './equipmentSubstitutionEngine.js';
+import { applySubstitutionsToExercises, type LimitationContext } from './exerciseSubstitution.js';
 import { applyWeeklyProgression, totalPlannedVolume } from './programProgression.js';
 import { inferProgramFrequency, inferProgramType, resolveDaysPerWeekFromProfile } from './programSelection.js';
 import {

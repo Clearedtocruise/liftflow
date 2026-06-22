@@ -238,8 +238,18 @@ export function subscribeToWatchMessages(
   };
 }
 
-export async function pushWorkoutStateToWatch(state: WatchWorkoutAssistantState): Promise<{ sent: boolean; error?: string }> {
-  return sendToWatch({ type: 'workout_state', state: serializeWatchStateForNative(state) });
+export async function pushWorkoutStateToWatch(
+  state: WatchWorkoutAssistantState,
+  options?: { presentWorkout?: boolean },
+): Promise<{ sent: boolean; error?: string }> {
+  const payload: Record<string, unknown> = {
+    type: 'workout_state',
+    state: serializeWatchStateForNative(state),
+  };
+  if (options?.presentWorkout) {
+    payload.presentWorkout = true;
+  }
+  return sendToWatch(payload);
 }
 
 export async function requestWatchSync(): Promise<{ queued: boolean; error?: string }> {

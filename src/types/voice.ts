@@ -65,8 +65,10 @@ export type VoiceSettings = {
   voiceFeedback: boolean;
   /** Default push-to-talk for battery savings */
   inputMode: VoiceInputMode;
-  /** Future: "Hey ONE MORE" wake phrase */
+  /** "Hey OneMore" wake phrase via Porcupine */
   wakePhraseEnabled: boolean;
+  /** Keep wake-word active outside the workout screen */
+  gymModeEnabled: boolean;
 };
 
 export const DEFAULT_VOICE_SETTINGS: VoiceSettings = {
@@ -75,6 +77,7 @@ export const DEFAULT_VOICE_SETTINGS: VoiceSettings = {
   voiceFeedback: true,
   inputMode: 'push_to_talk',
   wakePhraseEnabled: false,
+  gymModeEnabled: false,
 };
 
 export type VoiceRecognitionState = {
