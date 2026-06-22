@@ -100,6 +100,14 @@ const config: ExpoConfig = {
     // expo-notifications plugin omitted — package autolinks; strip push entitlement below.
     './plugins/withLocalNotificationsOnly.js',
     [
+      'expo-build-properties',
+      {
+        ios: {
+          deploymentTarget: '16.0',
+        },
+      },
+    ],
+    [
       'expo-speech-recognition',
       {
         microphonePermission: 'ONE MORE uses the microphone for voice workout logging and AI coaching.',
