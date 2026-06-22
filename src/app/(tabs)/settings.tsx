@@ -104,7 +104,7 @@ export default function SettingsScreen() {
       );
     });
     if (user.confirmationMode) setConfirmationMode(user.confirmationMode);
-  }, [user]);
+  }, [user, setGymModeActive, setWakePhraseSettingEnabled]);
 
   const toggleLocationDetection = useCallback(async () => {
     if (!user) return;

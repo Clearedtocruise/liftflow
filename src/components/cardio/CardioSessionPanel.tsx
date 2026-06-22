@@ -97,7 +97,7 @@ export function CardioSessionPanel({ activity, activityKind }: CardioSessionPane
   }
 
   if (completed && elapsed > 0) {
-    const { calories, weightKg } = estimateActivityCalories({
+    const { calories } = estimateActivityCalories({
       durationSeconds: elapsed,
       weightKg: user?.weightKg,
       cardioType: activity.type,

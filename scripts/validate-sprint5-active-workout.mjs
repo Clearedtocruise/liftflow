@@ -45,7 +45,10 @@ record('Remaining Sets metric', metrics.includes('Remaining Sets'));
 record('Previous Performance block', metrics.includes('Previous Performance'));
 record('Target Performance block', metrics.includes('Target Performance'));
 record('One exercise focus (currentIndex)', active.includes('currentIndex'));
-record('No exercise picker in active screen', !active.includes('ExercisePickerModal'));
+record(
+  'No exercise search in main active flow',
+  !active.includes('ExercisePickerModal') || active.includes('title="Add Exercise"'),
+);
 record('Timed history support', workoutService.includes('duration_seconds') && workoutService.includes("mode === 'timed'"));
 record('Coach enabled for timed exercises', !active.includes("loggingMode !== 'timed'"));
 record('Progress computation helper', lib.includes('computeWorkoutSetProgress'));

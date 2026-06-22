@@ -261,7 +261,7 @@ export function VoiceWorkoutProvider({
         commandListeningRef.current = false;
       }
     },
-    [parseTranscript, speak, stopCommandListening, voiceFeedbackEnabled],
+    [parseTranscript, speak, stopCommandListening],
   );
 
   const startCommandListening = useCallback(async () => {
