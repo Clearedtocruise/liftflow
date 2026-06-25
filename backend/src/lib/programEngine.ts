@@ -54,7 +54,7 @@ export type CreateProgramInput = {
 };
 
 /** Bump when workout planning rules change so existing programs can be regenerated. */
-export const PLAN_RULES_VERSION = 12;
+export const PLAN_RULES_VERSION = 13;
 
 const MIN_ACCEPTABLE_EXERCISES_PER_SESSION = 8;
 

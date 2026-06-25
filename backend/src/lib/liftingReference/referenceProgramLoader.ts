@@ -1,4 +1,4 @@
-import { applyEquipmentSubstitutionsToExercises } from '../equipmentSubstitutionEngine.js';
+import { applyEquipmentSubstitutionsToExercises, findEquipmentSubstitute } from '../equipmentSubstitutionEngine.js';
 import { applySubstitutionsToExercises, type LimitationContext } from '../exerciseSubstitution.js';
 import { applyWeeklyProgression } from '../programProgression.js';
 import {
@@ -42,11 +42,83 @@ function findExerciseInPool(
   slug: string,
   pool: ExerciseRecord[],
 ): ExerciseRecord | undefined {
-  const bySlug = pool.find((exercise) => exercise.slug === slug);
-  if (bySlug) return bySlug;
+  const byExactSlug = pool.find((exercise) => exercise.slug === slug);
+  if (byExactSlug) return byExactSlug;
 
   const target = normalizeName(name);
-  return pool.find((exercise) => normalizeName(exercise.name) === target);
+  const matches = pool.filter((exercise) => normalizeName(exercise.name) === target);
+  if (matches.length === 0) return undefined;
+
+  return (
+    matches.find((exercise) => !/-(?:qd|ba|la|ch)\d+$/i.test(exercise.slug)) ?? matches[0]
+  );
+}
+
+function resolveBlockExercise(
+  block: Month1ExerciseBlock,
+  blockIndex: number,
+  pool: ExerciseRecord[],
+  available: Set<string>,
+  equipmentList: string[],
+  options: {
+    useExactPrescription: boolean;
+    rotationSeed: number;
+    recentSlugs: Set<string>;
+    usedSlugs: Set<string>;
+  },
+): { catalogExercise: ExerciseRecord | null; swapNote?: string } {
+  const blueprintSlug = resolveSlugForName(block.name);
+
+  let catalogExercise: ExerciseRecord | undefined;
+
+  if (options.useExactPrescription) {
+    catalogExercise = findExerciseInPool(block.name, blueprintSlug, pool);
+    if (!catalogExercise) {
+      const fallbackSlug = blueprintSlug.replace(/-ba\d+$/, '').replace(/-la\d+$/, '');
+      catalogExercise = findExerciseInPool(block.name, fallbackSlug, pool);
+    }
+  } else {
+    catalogExercise =
+      pickRotatedExerciseForBlock(
+        block,
+        blockIndex,
+        pool,
+        options.rotationSeed,
+        options.recentSlugs,
+        options.usedSlugs,
+        blueprintSlug,
+      ) ?? findExerciseInPool(block.name, blueprintSlug, pool);
+  }
+
+  if (catalogExercise && exerciseMeetsEquipment(catalogExercise, available)) {
+    return { catalogExercise };
+  }
+
+  const swap = findEquipmentSubstitute(block.name, equipmentList, pool);
+  if (swap) {
+    const swapped = findExerciseInPool(swap.to, resolveSlugForName(swap.to), pool);
+    if (swapped && exerciseMeetsEquipment(swapped, available)) {
+      return { catalogExercise: swapped, swapNote: swap.reason };
+    }
+  }
+
+  const rotated = pickRotatedExerciseForBlock(
+    block,
+    blockIndex,
+    pool,
+    options.rotationSeed + blockIndex * 41,
+    options.recentSlugs,
+    options.usedSlugs,
+    blueprintSlug,
+  );
+  if (rotated && exerciseMeetsEquipment(rotated, available)) {
+    return {
+      catalogExercise: rotated,
+      swapNote: `Substituted for ${block.name} based on your equipment`,
+    };
+  }
+
+  return { catalogExercise: null };
 }
 
 function formatExerciseNotes(block: Month1ExerciseBlock, workoutNotes?: string, phaseLabel?: string): string {
@@ -139,33 +211,27 @@ export async function buildReferenceStyleWorkoutPlan(
 
   for (let blockIndex = 0; blockIndex < reference.exercises.length; blockIndex++) {
     const block = reference.exercises[blockIndex];
-    const blueprintSlug = resolveSlugForName(block.name);
-    let catalogExercise: ExerciseRecord | undefined;
+    const { catalogExercise, swapNote } = resolveBlockExercise(
+      block,
+      blockIndex,
+      pool,
+      available,
+      equipmentList,
+      {
+        useExactPrescription,
+        rotationSeed,
+        recentSlugs,
+        usedSlugs,
+      },
+    );
 
-    if (useExactPrescription) {
-      catalogExercise = findExerciseInPool(block.name, blueprintSlug, pool);
-      if (!catalogExercise) {
-        const fallbackSlug = blueprintSlug.replace(/-ba\d+$/, '').replace(/-la\d+$/, '');
-        catalogExercise = findExerciseInPool(block.name, fallbackSlug, pool);
-      }
-    } else {
-      catalogExercise =
-        pickRotatedExerciseForBlock(
-          block,
-          blockIndex,
-          pool,
-          rotationSeed,
-          recentSlugs,
-          usedSlugs,
-          blueprintSlug,
-        ) ?? findExerciseInPool(block.name, blueprintSlug, pool);
+    if (!catalogExercise) {
+      continue;
     }
 
-    const resolvedName = catalogExercise?.name ?? block.name;
-    const resolvedSlug = catalogExercise?.slug ?? blueprintSlug;
-    if (catalogExercise) usedSlugs.add(catalogExercise.slug);
-
-    const meetsEquipment = catalogExercise ? exerciseMeetsEquipment(catalogExercise, available) : false;
+    const resolvedName = catalogExercise.name;
+    const resolvedSlug = catalogExercise.slug;
+    usedSlugs.add(catalogExercise.slug);
 
     let sets = block.sets;
     if (recoveryMods.volumeMultiplier < 1) {
@@ -173,10 +239,12 @@ export async function buildReferenceStyleWorkoutPlan(
     }
 
     const history = performance.get(resolvedSlug);
-    let weightLbs =
-      catalogExercise && meetsEquipment
-        ? suggestWeightLbs(catalogExercise, profile.primaryTrainingGoal, history, profile.weightKg)
-        : undefined;
+    let weightLbs = suggestWeightLbs(
+      catalogExercise,
+      profile.primaryTrainingGoal,
+      history,
+      profile.weightKg,
+    );
 
     if (weightLbs && recoveryMods.intensityMultiplier < 1) {
       weightLbs = Math.round((weightLbs * recoveryMods.intensityMultiplier) / 5) * 5;
@@ -186,6 +254,10 @@ export async function buildReferenceStyleWorkoutPlan(
       ? undefined
       : `Month 1 style · Week ${options.weekNumber}`;
 
+    const notes = [formatExerciseNotes(block, reference.workoutNotes, phaseLabel), swapNote]
+      .filter(Boolean)
+      .join(' · ');
+
     draft.push({
       name: resolvedName,
       slug: resolvedSlug,
@@ -194,8 +266,8 @@ export async function buildReferenceStyleWorkoutPlan(
       reps: recoveryMods.recoveryModeActive ? adjustRepsForRecovery(block.reps) : block.reps,
       restSeconds: block.restSeconds,
       weightLbs,
-      metadata: catalogExercise?.metadata,
-      notes: formatExerciseNotes(block, reference.workoutNotes, phaseLabel),
+      metadata: catalogExercise.metadata,
+      notes,
     });
   }
 

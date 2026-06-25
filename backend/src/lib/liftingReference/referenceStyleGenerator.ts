@@ -18,9 +18,15 @@ function normalizeToken(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
-/** Parse "Quads/Glutes", "Back/Biceps", "Triceps/Chest" into muscle keys. */
-export function parsePrimaryFocusMuscles(focus: string): string[] {
-  const key = normalizeToken(focus);
+/** Parse "Quads/Glutes", "Back/Biceps", or block name into muscle keys. */
+export function parsePrimaryFocusMuscles(focus: string, blockName?: string): string[] {
+  const cleaned = normalizeToken(focus)
+    .replace(/after\s+[a-z]\d?\s+/gi, '')
+    .replace(/\d-\d-\d/g, '')
+    .replace(/\bcontrolled\b/g, '')
+    .replace(/\bhold\b/g, '')
+    .trim();
+  const key = cleaned.length > 0 ? cleaned : normalizeToken(blockName ?? '');
   const muscles = new Set<string>();
 
   if (key.includes('chest')) muscles.add('chest');
@@ -34,6 +40,22 @@ export function parsePrimaryFocusMuscles(focus: string): string[] {
   if (key.includes('calf') || key.includes('calves')) muscles.add('calves');
   if (key.includes('core') || key.includes('abs') || key.includes('oblique')) muscles.add('core');
   if (key.includes('forearm')) muscles.add('biceps');
+  if (key.includes('leg extension')) muscles.add('quads');
+  if (key.includes('leg curl') || key.includes('hamstring curl') || key.includes('nordic')) {
+    muscles.add('hamstrings');
+  }
+  if (key.includes('wood chop') || key.includes('russian twist') || key.includes('crunch') || key.includes('plank') || key.includes('dead bug') || key.includes('ab wheel')) {
+    muscles.add('core');
+  }
+  if (key.includes('row') || key.includes('pulldown') || key.includes('pull-up') || key.includes('pull up') || key.includes('chin-up')) {
+    muscles.add('back');
+  }
+  if (key.includes('lateral raise') || key.includes('overhead press') || key.includes('shoulder press') || key.includes('arnold press')) {
+    muscles.add('shoulders');
+  }
+  if (key.includes('calf raise')) muscles.add('calves');
+  if (key.includes('hip thrust') || key.includes('glute bridge') || key.includes('kickback')) muscles.add('glutes');
+  if (key.includes('lunge') || key.includes('squat') || key.includes('step-up')) muscles.add('quads');
 
   return [...muscles];
 }
@@ -62,7 +84,7 @@ function scoreRotatedCandidate(
   blueprintSlug?: string,
 ): number {
   let score = 10;
-  const focusMuscles = parsePrimaryFocusMuscles(block.primaryFocus);
+  const focusMuscles = parsePrimaryFocusMuscles(block.primaryFocus, block.name);
   if (focusMuscles.length === 0) return -100;
 
   const matchesFocus = focusMuscles.some((muscle) => exerciseMatchesQuotaMuscle(exercise, muscle));
@@ -137,7 +159,7 @@ export function exerciseAllowedForBlockFocus(
   exercise: ExerciseRecord,
   block: Month1ExerciseBlock,
 ): boolean {
-  const focusMuscles = parsePrimaryFocusMuscles(block.primaryFocus);
+  const focusMuscles = parsePrimaryFocusMuscles(block.primaryFocus, block.name);
   if (focusMuscles.length === 0) return true;
   if (focusMuscles.includes('core')) return isCoreFocusedExercise(exercise);
   return focusMuscles.some((muscle) => exerciseMatchesQuotaMuscle(exercise, muscle));
