@@ -1,7 +1,9 @@
 import { catalogExerciseBySlug } from '@/constants/exerciseDatabase';
-import { buildExerciseGuide, enrichLegacyGuide as enrichStepsToGuide } from '@/lib/exerciseGuideBuilder';
+import { buildExerciseEducation } from '@/lib/exerciseEducation/buildExerciseEducation';
+import { enrichLegacyGuide as enrichStepsToGuide } from '@/lib/exerciseGuideBuilder';
 import type { ExerciseFormGuide } from '@/lib/exerciseGuideTypes';
 import { STRUCTURED_EXERCISE_GUIDES } from '@/lib/exerciseStructuredGuides';
+import { month1GuideFromEncyclopedia } from '@/lib/liftingReference/month1ExerciseEncyclopedia';
 import type { Exercise } from '@/types';
 import type { MovementCategory } from '@/types/common';
 
@@ -380,14 +382,53 @@ export function resolveExerciseFormGuide(
   }
 
   const structured = lookupBySlug(STRUCTURED_EXERCISE_GUIDES, slug, name);
-  if (structured) return structured;
+  if (structured) {
+    const enriched = buildExerciseEducation(exercise, name);
+    return {
+      ...enriched,
+      ...structured,
+      feelShould: structured.feelShould ?? enriched.feelShould,
+      feelShouldNot: structured.feelShouldNot ?? enriched.feelShouldNot,
+      musclesWorked: structured.musclesWorked ?? enriched.musclesWorked,
+      illustratedSteps: structured.illustratedSteps ?? enriched.illustratedSteps,
+    };
+  }
 
   const legacy = lookupBySlug(LEGACY_STEPS_BY_SLUG, slug, name);
   if (legacy?.steps?.length) {
-    return enrichStepsToGuide(legacy.steps, guideContext(exercise, name), legacy.tips);
+    const enriched = buildExerciseEducation(exercise, name);
+    const legacyGuide = enrichStepsToGuide(legacy.steps, guideContext(exercise, name), legacy.tips);
+    return {
+      ...enriched,
+      ...legacyGuide,
+      summary: enriched.summary,
+      musclesWorked: enriched.musclesWorked,
+      equipmentRequired: enriched.equipmentRequired,
+      feelShould: enriched.feelShould,
+      feelShouldNot: enriched.feelShouldNot,
+      coachingCues: enriched.coachingCues,
+      commonMistakes: legacy.tips ?? enriched.commonMistakes,
+      illustratedSteps: enriched.illustratedSteps,
+    };
   }
 
-  return buildExerciseGuide(exercise, name);
+  const month1Guide = month1GuideFromEncyclopedia(name);
+  if (month1Guide) {
+    const enriched = buildExerciseEducation(exercise, name);
+    return {
+      ...enriched,
+      feelShould: month1Guide.feelLike ? [month1Guide.feelLike] : enriched.feelShould,
+      setupSteps: month1Guide.setup?.length ? month1Guide.setup : enriched.setupSteps,
+      executionSteps: month1Guide.execution?.length ? month1Guide.execution : enriched.executionSteps,
+      breathing: month1Guide.breathing ?? enriched.breathing,
+      coachingCues: month1Guide.cues?.length ? month1Guide.cues : enriched.coachingCues,
+      commonMistakes: month1Guide.commonMistakes?.length ? month1Guide.commonMistakes : enriched.commonMistakes,
+      regressions: month1Guide.regressions?.length ? month1Guide.regressions : enriched.regressions,
+      progressions: month1Guide.progressions?.length ? month1Guide.progressions : enriched.progressions,
+    };
+  }
+
+  return buildExerciseEducation(exercise, name);
 }
 
 export function hasExerciseFormGuide(exercise?: Exercise | null, nameFallback?: string): boolean {

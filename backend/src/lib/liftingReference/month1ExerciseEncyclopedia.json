@@ -1,0 +1,1618 @@
+[
+  {
+    "id": 1,
+    "name": "Barbell Bench Press",
+    "category": "Chest / pressing",
+    "muscles": "Chest; secondary triceps and front delts",
+    "howTo": "Set shoulder blades back and down, keep ribs controlled, and place hands so wrists stack over elbows. Lower under control until you reach a safe full range, then press or squeeze back while keeping tension on the chest. Inhale during the lowering/stretch phase and exhale as you press or bring the arms together. Avoid bouncing, shrugging, flaring elbows excessively, or letting the shoulders roll forward. Regress by reducing load, using incline push-ups, or using a machine. Progress by adding load, slowing tempo, pausing, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 2,
+    "name": "Incline Dumbbell Press",
+    "category": "Strength",
+    "muscles": "Target muscle listed in the workout table",
+    "howTo": "Set up with stable posture, neutral joints, and the target muscle loaded. Move through a controlled full range of motion, breathe with the effort, and stop when technique breaks down. Avoid momentum and poor joint alignment. Regress by reducing load or range. Progress by increasing load, reps, tempo control, or range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 3,
+    "name": "Dumbbell Lateral Raise",
+    "category": "Shoulders",
+    "muscles": "Deltoids; secondary triceps, traps, rotator cuff",
+    "howTo": "Brace your core, keep the ribs down, and start with the shoulders set without shrugging. Press or raise the weight through a controlled path while keeping the neck relaxed and wrists neutral. Lower slowly and stop before losing shoulder position. Exhale on the lift and inhale on the return. Avoid using momentum, arching the low back, or turning raises into a swing. Regress by lowering weight or using a machine. Progress by adding load, using slower eccentrics, adding pauses, or using unilateral versions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 4,
+    "name": "Cable Fly",
+    "category": "Chest / pressing",
+    "muscles": "Chest; secondary triceps and front delts",
+    "howTo": "Set shoulder blades back and down, keep ribs controlled, and place hands so wrists stack over elbows. Lower under control until you reach a safe full range, then press or squeeze back while keeping tension on the chest. Inhale during the lowering/stretch phase and exhale as you press or bring the arms together. Avoid bouncing, shrugging, flaring elbows excessively, or letting the shoulders roll forward. Regress by reducing load, using incline push-ups, or using a machine. Progress by adding load, slowing tempo, pausing, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 5,
+    "name": "Rope Triceps Pushdown",
+    "category": "Triceps",
+    "muscles": "Triceps; secondary chest and shoulders depending on variation",
+    "howTo": "Set the upper arm position first, brace the torso, and move mostly at the elbow. Lower until the triceps stretch without shoulder pain, then extend the elbows hard without losing control. Exhale as you extend and inhale as you bend. Avoid flaring, swinging, letting elbows drift wildly, or shortening the range. Regress by reducing load or using cables. Progress by adding load, slower tempo, or longer-range overhead versions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 6,
+    "name": "Standing Barbell Overhead Press",
+    "category": "Shoulders",
+    "muscles": "Deltoids; secondary triceps, traps, rotator cuff",
+    "howTo": "Brace your core, keep the ribs down, and start with the shoulders set without shrugging. Press or raise the weight through a controlled path while keeping the neck relaxed and wrists neutral. Lower slowly and stop before losing shoulder position. Exhale on the lift and inhale on the return. Avoid using momentum, arching the low back, or turning raises into a swing. Regress by lowering weight or using a machine. Progress by adding load, using slower eccentrics, adding pauses, or using unilateral versions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 7,
+    "name": "Seated Dumbbell Shoulder Press",
+    "category": "Shoulders",
+    "muscles": "Deltoids; secondary triceps, traps, rotator cuff",
+    "howTo": "Brace your core, keep the ribs down, and start with the shoulders set without shrugging. Press or raise the weight through a controlled path while keeping the neck relaxed and wrists neutral. Lower slowly and stop before losing shoulder position. Exhale on the lift and inhale on the return. Avoid using momentum, arching the low back, or turning raises into a swing. Regress by lowering weight or using a machine. Progress by adding load, using slower eccentrics, adding pauses, or using unilateral versions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 8,
+    "name": "Overhead Rope Triceps Extension",
+    "category": "Triceps",
+    "muscles": "Triceps; secondary chest and shoulders depending on variation",
+    "howTo": "Set the upper arm position first, brace the torso, and move mostly at the elbow. Lower until the triceps stretch without shoulder pain, then extend the elbows hard without losing control. Exhale as you extend and inhale as you bend. Avoid flaring, swinging, letting elbows drift wildly, or shortening the range. Regress by reducing load or using cables. Progress by adding load, slower tempo, or longer-range overhead versions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 9,
+    "name": "Reverse Pec Deck",
+    "category": "Strength",
+    "muscles": "Target muscle listed in the workout table",
+    "howTo": "Set up with stable posture, neutral joints, and the target muscle loaded. Move through a controlled full range of motion, breathe with the effort, and stop when technique breaks down. Avoid momentum and poor joint alignment. Regress by reducing load or range. Progress by increasing load, reps, tempo control, or range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 10,
+    "name": "Bench Dip",
+    "category": "Chest / pressing",
+    "muscles": "Chest; secondary triceps and front delts",
+    "howTo": "Set shoulder blades back and down, keep ribs controlled, and place hands so wrists stack over elbows. Lower under control until you reach a safe full range, then press or squeeze back while keeping tension on the chest. Inhale during the lowering/stretch phase and exhale as you press or bring the arms together. Avoid bouncing, shrugging, flaring elbows excessively, or letting the shoulders roll forward. Regress by reducing load, using incline push-ups, or using a machine. Progress by adding load, slowing tempo, pausing, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 11,
+    "name": "Close-Grip Push-Up",
+    "category": "Chest / pressing",
+    "muscles": "Chest; secondary triceps and front delts",
+    "howTo": "Set shoulder blades back and down, keep ribs controlled, and place hands so wrists stack over elbows. Lower under control until you reach a safe full range, then press or squeeze back while keeping tension on the chest. Inhale during the lowering/stretch phase and exhale as you press or bring the arms together. Avoid bouncing, shrugging, flaring elbows excessively, or letting the shoulders roll forward. Regress by reducing load, using incline push-ups, or using a machine. Progress by adding load, slowing tempo, pausing, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 12,
+    "name": "Weighted Pull-Up",
+    "category": "Back / lats",
+    "muscles": "Lats, upper back, mid back; secondary biceps and forearms",
+    "howTo": "Start with a braced torso and shoulders pulled away from the ears. Initiate by driving elbows down or back, not by yanking with the hands. Pull to the intended finish position, squeeze briefly, then return under control until the back stretches. Exhale as you pull and inhale as you return. Avoid jerking, excessive leaning, shrugging, or cutting the range short. Regress by using assistance, lighter loads, or chest support. Progress by adding weight, using pauses, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 13,
+    "name": "Chest-Supported Dumbbell Row",
+    "category": "Back / lats",
+    "muscles": "Lats, upper back, mid back; secondary biceps and forearms",
+    "howTo": "Start with a braced torso and shoulders pulled away from the ears. Initiate by driving elbows down or back, not by yanking with the hands. Pull to the intended finish position, squeeze briefly, then return under control until the back stretches. Exhale as you pull and inhale as you return. Avoid jerking, excessive leaning, shrugging, or cutting the range short. Regress by using assistance, lighter loads, or chest support. Progress by adding weight, using pauses, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 14,
+    "name": "Incline Dumbbell Curl",
+    "category": "Biceps",
+    "muscles": "Biceps, brachialis, forearms depending on grip",
+    "howTo": "Stand or sit tall with the torso still and elbows controlled. Curl the weight by bending the elbow while keeping the shoulder from swinging forward. Squeeze at the top, then lower slowly to a full stretch. Exhale as you curl and inhale as you lower. Avoid swinging, leaning back, shortening the bottom range, or letting wrists collapse. Regress with lighter weight or cables. Progress with slower eccentrics, incline versions, or stricter pauses. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 15,
+    "name": "Lat Pulldown",
+    "category": "Back / lats",
+    "muscles": "Lats, upper back, mid back; secondary biceps and forearms",
+    "howTo": "Start with a braced torso and shoulders pulled away from the ears. Initiate by driving elbows down or back, not by yanking with the hands. Pull to the intended finish position, squeeze briefly, then return under control until the back stretches. Exhale as you pull and inhale as you return. Avoid jerking, excessive leaning, shrugging, or cutting the range short. Regress by using assistance, lighter loads, or chest support. Progress by adding weight, using pauses, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 16,
+    "name": "Hammer Curl",
+    "category": "Biceps",
+    "muscles": "Biceps, brachialis, forearms depending on grip",
+    "howTo": "Stand or sit tall with the torso still and elbows controlled. Curl the weight by bending the elbow while keeping the shoulder from swinging forward. Squeeze at the top, then lower slowly to a full stretch. Exhale as you curl and inhale as you lower. Avoid swinging, leaning back, shortening the bottom range, or letting wrists collapse. Regress with lighter weight or cables. Progress with slower eccentrics, incline versions, or stricter pauses. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 17,
+    "name": "Seated Cable Row",
+    "category": "Back / lats",
+    "muscles": "Lats, upper back, mid back; secondary biceps and forearms",
+    "howTo": "Start with a braced torso and shoulders pulled away from the ears. Initiate by driving elbows down or back, not by yanking with the hands. Pull to the intended finish position, squeeze briefly, then return under control until the back stretches. Exhale as you pull and inhale as you return. Avoid jerking, excessive leaning, shrugging, or cutting the range short. Regress by using assistance, lighter loads, or chest support. Progress by adding weight, using pauses, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 18,
+    "name": "Cable Curl",
+    "category": "Biceps",
+    "muscles": "Biceps, brachialis, forearms depending on grip",
+    "howTo": "Stand or sit tall with the torso still and elbows controlled. Curl the weight by bending the elbow while keeping the shoulder from swinging forward. Squeeze at the top, then lower slowly to a full stretch. Exhale as you curl and inhale as you lower. Avoid swinging, leaning back, shortening the bottom range, or letting wrists collapse. Regress with lighter weight or cables. Progress with slower eccentrics, incline versions, or stricter pauses. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 19,
+    "name": "Hanging Leg Raise",
+    "category": "Core",
+    "muscles": "Abs, obliques, deep core; secondary hip flexors depending on movement",
+    "howTo": "Brace as if preparing for a punch and keep the ribs stacked over the pelvis. Move slowly through the assigned pattern or hold the position without losing spinal control. Breathe behind the brace without letting the low back arch. Avoid momentum, neck pulling, hip sagging, or rushing reps. Regress by shortening the lever, reducing load, or using bent knees. Progress by adding load, longer holds, slower tempo, or harder lever positions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 20,
+    "name": "Pallof Press",
+    "category": "Core",
+    "muscles": "Abs, obliques, deep core; secondary hip flexors depending on movement",
+    "howTo": "Brace as if preparing for a punch and keep the ribs stacked over the pelvis. Move slowly through the assigned pattern or hold the position without losing spinal control. Breathe behind the brace without letting the low back arch. Avoid momentum, neck pulling, hip sagging, or rushing reps. Regress by shortening the lever, reducing load, or using bent knees. Progress by adding load, longer holds, slower tempo, or harder lever positions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 21,
+    "name": "Plank",
+    "category": "Core",
+    "muscles": "Abs, obliques, deep core; secondary hip flexors depending on movement",
+    "howTo": "Brace as if preparing for a punch and keep the ribs stacked over the pelvis. Move slowly through the assigned pattern or hold the position without losing spinal control. Breathe behind the brace without letting the low back arch. Avoid momentum, neck pulling, hip sagging, or rushing reps. Regress by shortening the lever, reducing load, or using bent knees. Progress by adding load, longer holds, slower tempo, or harder lever positions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 22,
+    "name": "Back Squat",
+    "category": "Quads / legs",
+    "muscles": "Quads; secondary glutes, hamstrings, core",
+    "howTo": "Set feet firmly, brace the core, and keep knees tracking in line with toes. Lower under control to the programmed depth while maintaining balance and posture, then drive through the midfoot to stand. Exhale as you stand and inhale as you lower. Avoid knees collapsing inward, bouncing, rounding the back, or shifting weight only to the toes. Regress with goblet or machine versions. Progress by adding load, pauses, deeper range, or single-leg variations. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 23,
+    "name": "Romanian Deadlift",
+    "category": "Back / lats",
+    "muscles": "Lats, upper back, mid back; secondary biceps and forearms",
+    "howTo": "Start with a braced torso and shoulders pulled away from the ears. Initiate by driving elbows down or back, not by yanking with the hands. Pull to the intended finish position, squeeze briefly, then return under control until the back stretches. Exhale as you pull and inhale as you return. Avoid jerking, excessive leaning, shrugging, or cutting the range short. Regress by using assistance, lighter loads, or chest support. Progress by adding weight, using pauses, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 24,
+    "name": "Walking Lunge",
+    "category": "Quads / legs",
+    "muscles": "Quads; secondary glutes, hamstrings, core",
+    "howTo": "Set feet firmly, brace the core, and keep knees tracking in line with toes. Lower under control to the programmed depth while maintaining balance and posture, then drive through the midfoot to stand. Exhale as you stand and inhale as you lower. Avoid knees collapsing inward, bouncing, rounding the back, or shifting weight only to the toes. Regress with goblet or machine versions. Progress by adding load, pauses, deeper range, or single-leg variations. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 25,
+    "name": "Leg Extension",
+    "category": "Quads / legs",
+    "muscles": "Quads; secondary glutes, hamstrings, core",
+    "howTo": "Set feet firmly, brace the core, and keep knees tracking in line with toes. Lower under control to the programmed depth while maintaining balance and posture, then drive through the midfoot to stand. Exhale as you stand and inhale as you lower. Avoid knees collapsing inward, bouncing, rounding the back, or shifting weight only to the toes. Regress with goblet or machine versions. Progress by adding load, pauses, deeper range, or single-leg variations. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 26,
+    "name": "Seated Leg Curl",
+    "category": "Biceps",
+    "muscles": "Biceps, brachialis, forearms depending on grip",
+    "howTo": "Stand or sit tall with the torso still and elbows controlled. Curl the weight by bending the elbow while keeping the shoulder from swinging forward. Squeeze at the top, then lower slowly to a full stretch. Exhale as you curl and inhale as you lower. Avoid swinging, leaning back, shortening the bottom range, or letting wrists collapse. Regress with lighter weight or cables. Progress with slower eccentrics, incline versions, or stricter pauses. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 27,
+    "name": "Barbell Hip Thrust",
+    "category": "Glutes",
+    "muscles": "Glutes; secondary hamstrings and core",
+    "howTo": "Set the ribs down, brace the core, and position feet so the glutes do the work. Drive through the heels or midfoot and extend the hips until the body reaches a strong lockout without over-arching the low back. Pause and squeeze the glutes, then lower under control. Exhale as you lift and inhale as you lower. Avoid pushing through the toes, hyperextending the back, or cutting the lockout short. Regress with bodyweight bridges. Progress with load, pauses, bands, or single-leg versions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 28,
+    "name": "Standing Calf Raise",
+    "category": "Calves",
+    "muscles": "Gastrocnemius and soleus",
+    "howTo": "Place the balls of the feet securely on the platform and keep ankles aligned. Lower into a full calf stretch, pause briefly, then rise as high as possible onto the toes. Control every rep and avoid bouncing. Exhale as you raise and inhale as you lower. Regress with bodyweight calf raises. Progress with load, single-leg work, or longer pauses at the stretch and top. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 29,
+    "name": "Ab Wheel Rollout",
+    "category": "Core",
+    "muscles": "Abs, obliques, deep core; secondary hip flexors depending on movement",
+    "howTo": "Brace as if preparing for a punch and keep the ribs stacked over the pelvis. Move slowly through the assigned pattern or hold the position without losing spinal control. Breathe behind the brace without letting the low back arch. Avoid momentum, neck pulling, hip sagging, or rushing reps. Regress by shortening the lever, reducing load, or using bent knees. Progress by adding load, longer holds, slower tempo, or harder lever positions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 30,
+    "name": "Cable Wood Chop",
+    "category": "Core",
+    "muscles": "Abs, obliques, deep core; secondary hip flexors depending on movement",
+    "howTo": "Brace as if preparing for a punch and keep the ribs stacked over the pelvis. Move slowly through the assigned pattern or hold the position without losing spinal control. Breathe behind the brace without letting the low back arch. Avoid momentum, neck pulling, hip sagging, or rushing reps. Regress by shortening the lever, reducing load, or using bent knees. Progress by adding load, longer holds, slower tempo, or harder lever positions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 31,
+    "name": "Reverse Crunch",
+    "category": "Core",
+    "muscles": "Abs, obliques, deep core; secondary hip flexors depending on movement",
+    "howTo": "Brace as if preparing for a punch and keep the ribs stacked over the pelvis. Move slowly through the assigned pattern or hold the position without losing spinal control. Breathe behind the brace without letting the low back arch. Avoid momentum, neck pulling, hip sagging, or rushing reps. Regress by shortening the lever, reducing load, or using bent knees. Progress by adding load, longer holds, slower tempo, or harder lever positions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 32,
+    "name": "Incline Barbell Bench Press",
+    "category": "Chest / pressing",
+    "muscles": "Chest; secondary triceps and front delts",
+    "howTo": "Set shoulder blades back and down, keep ribs controlled, and place hands so wrists stack over elbows. Lower under control until you reach a safe full range, then press or squeeze back while keeping tension on the chest. Inhale during the lowering/stretch phase and exhale as you press or bring the arms together. Avoid bouncing, shrugging, flaring elbows excessively, or letting the shoulders roll forward. Regress by reducing load, using incline push-ups, or using a machine. Progress by adding load, slowing tempo, pausing, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 33,
+    "name": "Flat Dumbbell Bench Press",
+    "category": "Chest / pressing",
+    "muscles": "Chest; secondary triceps and front delts",
+    "howTo": "Set shoulder blades back and down, keep ribs controlled, and place hands so wrists stack over elbows. Lower under control until you reach a safe full range, then press or squeeze back while keeping tension on the chest. Inhale during the lowering/stretch phase and exhale as you press or bring the arms together. Avoid bouncing, shrugging, flaring elbows excessively, or letting the shoulders roll forward. Regress by reducing load, using incline push-ups, or using a machine. Progress by adding load, slowing tempo, pausing, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 34,
+    "name": "Cable Lateral Raise",
+    "category": "Shoulders",
+    "muscles": "Deltoids; secondary triceps, traps, rotator cuff",
+    "howTo": "Brace your core, keep the ribs down, and start with the shoulders set without shrugging. Press or raise the weight through a controlled path while keeping the neck relaxed and wrists neutral. Lower slowly and stop before losing shoulder position. Exhale on the lift and inhale on the return. Avoid using momentum, arching the low back, or turning raises into a swing. Regress by lowering weight or using a machine. Progress by adding load, using slower eccentrics, adding pauses, or using unilateral versions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 35,
+    "name": "Pec Deck Fly",
+    "category": "Chest / pressing",
+    "muscles": "Chest; secondary triceps and front delts",
+    "howTo": "Set shoulder blades back and down, keep ribs controlled, and place hands so wrists stack over elbows. Lower under control until you reach a safe full range, then press or squeeze back while keeping tension on the chest. Inhale during the lowering/stretch phase and exhale as you press or bring the arms together. Avoid bouncing, shrugging, flaring elbows excessively, or letting the shoulders roll forward. Regress by reducing load, using incline push-ups, or using a machine. Progress by adding load, slowing tempo, pausing, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 36,
+    "name": "Close-Grip Bench Press",
+    "category": "Chest / pressing",
+    "muscles": "Chest; secondary triceps and front delts",
+    "howTo": "Set shoulder blades back and down, keep ribs controlled, and place hands so wrists stack over elbows. Lower under control until you reach a safe full range, then press or squeeze back while keeping tension on the chest. Inhale during the lowering/stretch phase and exhale as you press or bring the arms together. Avoid bouncing, shrugging, flaring elbows excessively, or letting the shoulders roll forward. Regress by reducing load, using incline push-ups, or using a machine. Progress by adding load, slowing tempo, pausing, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 37,
+    "name": "Machine Shoulder Press",
+    "category": "Shoulders",
+    "muscles": "Deltoids; secondary triceps, traps, rotator cuff",
+    "howTo": "Brace your core, keep the ribs down, and start with the shoulders set without shrugging. Press or raise the weight through a controlled path while keeping the neck relaxed and wrists neutral. Lower slowly and stop before losing shoulder position. Exhale on the lift and inhale on the return. Avoid using momentum, arching the low back, or turning raises into a swing. Regress by lowering weight or using a machine. Progress by adding load, using slower eccentrics, adding pauses, or using unilateral versions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 38,
+    "name": "Face Pull",
+    "category": "Shoulders",
+    "muscles": "Deltoids; secondary triceps, traps, rotator cuff",
+    "howTo": "Brace your core, keep the ribs down, and start with the shoulders set without shrugging. Press or raise the weight through a controlled path while keeping the neck relaxed and wrists neutral. Lower slowly and stop before losing shoulder position. Exhale on the lift and inhale on the return. Avoid using momentum, arching the low back, or turning raises into a swing. Regress by lowering weight or using a machine. Progress by adding load, using slower eccentrics, adding pauses, or using unilateral versions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 39,
+    "name": "Single-Arm Cable Triceps Extension",
+    "category": "Triceps",
+    "muscles": "Triceps; secondary chest and shoulders depending on variation",
+    "howTo": "Set the upper arm position first, brace the torso, and move mostly at the elbow. Lower until the triceps stretch without shoulder pain, then extend the elbows hard without losing control. Exhale as you extend and inhale as you bend. Avoid flaring, swinging, letting elbows drift wildly, or shortening the range. Regress by reducing load or using cables. Progress by adding load, slower tempo, or longer-range overhead versions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 40,
+    "name": "Dumbbell Overhead Triceps Extension",
+    "category": "Triceps",
+    "muscles": "Triceps; secondary chest and shoulders depending on variation",
+    "howTo": "Set the upper arm position first, brace the torso, and move mostly at the elbow. Lower until the triceps stretch without shoulder pain, then extend the elbows hard without losing control. Exhale as you extend and inhale as you bend. Avoid flaring, swinging, letting elbows drift wildly, or shortening the range. Regress by reducing load or using cables. Progress by adding load, slower tempo, or longer-range overhead versions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 41,
+    "name": "Barbell Row",
+    "category": "Back / lats",
+    "muscles": "Lats, upper back, mid back; secondary biceps and forearms",
+    "howTo": "Start with a braced torso and shoulders pulled away from the ears. Initiate by driving elbows down or back, not by yanking with the hands. Pull to the intended finish position, squeeze briefly, then return under control until the back stretches. Exhale as you pull and inhale as you return. Avoid jerking, excessive leaning, shrugging, or cutting the range short. Regress by using assistance, lighter loads, or chest support. Progress by adding weight, using pauses, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 42,
+    "name": "Neutral-Grip Pulldown",
+    "category": "Back / lats",
+    "muscles": "Lats, upper back, mid back; secondary biceps and forearms",
+    "howTo": "Start with a braced torso and shoulders pulled away from the ears. Initiate by driving elbows down or back, not by yanking with the hands. Pull to the intended finish position, squeeze briefly, then return under control until the back stretches. Exhale as you pull and inhale as you return. Avoid jerking, excessive leaning, shrugging, or cutting the range short. Regress by using assistance, lighter loads, or chest support. Progress by adding weight, using pauses, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 43,
+    "name": "EZ-Bar Curl",
+    "category": "Biceps",
+    "muscles": "Biceps, brachialis, forearms depending on grip",
+    "howTo": "Stand or sit tall with the torso still and elbows controlled. Curl the weight by bending the elbow while keeping the shoulder from swinging forward. Squeeze at the top, then lower slowly to a full stretch. Exhale as you curl and inhale as you lower. Avoid swinging, leaning back, shortening the bottom range, or letting wrists collapse. Regress with lighter weight or cables. Progress with slower eccentrics, incline versions, or stricter pauses. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 44,
+    "name": "Single-Arm Dumbbell Row",
+    "category": "Back / lats",
+    "muscles": "Lats, upper back, mid back; secondary biceps and forearms",
+    "howTo": "Start with a braced torso and shoulders pulled away from the ears. Initiate by driving elbows down or back, not by yanking with the hands. Pull to the intended finish position, squeeze briefly, then return under control until the back stretches. Exhale as you pull and inhale as you return. Avoid jerking, excessive leaning, shrugging, or cutting the range short. Regress by using assistance, lighter loads, or chest support. Progress by adding weight, using pauses, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 45,
+    "name": "Preacher Curl",
+    "category": "Biceps",
+    "muscles": "Biceps, brachialis, forearms depending on grip",
+    "howTo": "Stand or sit tall with the torso still and elbows controlled. Curl the weight by bending the elbow while keeping the shoulder from swinging forward. Squeeze at the top, then lower slowly to a full stretch. Exhale as you curl and inhale as you lower. Avoid swinging, leaning back, shortening the bottom range, or letting wrists collapse. Regress with lighter weight or cables. Progress with slower eccentrics, incline versions, or stricter pauses. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 46,
+    "name": "Straight-Arm Pulldown",
+    "category": "Back / lats",
+    "muscles": "Lats, upper back, mid back; secondary biceps and forearms",
+    "howTo": "Start with a braced torso and shoulders pulled away from the ears. Initiate by driving elbows down or back, not by yanking with the hands. Pull to the intended finish position, squeeze briefly, then return under control until the back stretches. Exhale as you pull and inhale as you return. Avoid jerking, excessive leaning, shrugging, or cutting the range short. Regress by using assistance, lighter loads, or chest support. Progress by adding weight, using pauses, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 47,
+    "name": "Reverse Curl",
+    "category": "Biceps",
+    "muscles": "Biceps, brachialis, forearms depending on grip",
+    "howTo": "Stand or sit tall with the torso still and elbows controlled. Curl the weight by bending the elbow while keeping the shoulder from swinging forward. Squeeze at the top, then lower slowly to a full stretch. Exhale as you curl and inhale as you lower. Avoid swinging, leaning back, shortening the bottom range, or letting wrists collapse. Regress with lighter weight or cables. Progress with slower eccentrics, incline versions, or stricter pauses. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 48,
+    "name": "Cable Crunch",
+    "category": "Core",
+    "muscles": "Abs, obliques, deep core; secondary hip flexors depending on movement",
+    "howTo": "Brace as if preparing for a punch and keep the ribs stacked over the pelvis. Move slowly through the assigned pattern or hold the position without losing spinal control. Breathe behind the brace without letting the low back arch. Avoid momentum, neck pulling, hip sagging, or rushing reps. Regress by shortening the lever, reducing load, or using bent knees. Progress by adding load, longer holds, slower tempo, or harder lever positions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 49,
+    "name": "Side Plank",
+    "category": "Core",
+    "muscles": "Abs, obliques, deep core; secondary hip flexors depending on movement",
+    "howTo": "Brace as if preparing for a punch and keep the ribs stacked over the pelvis. Move slowly through the assigned pattern or hold the position without losing spinal control. Breathe behind the brace without letting the low back arch. Avoid momentum, neck pulling, hip sagging, or rushing reps. Regress by shortening the lever, reducing load, or using bent knees. Progress by adding load, longer holds, slower tempo, or harder lever positions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 50,
+    "name": "Dead Bug",
+    "category": "Core",
+    "muscles": "Abs, obliques, deep core; secondary hip flexors depending on movement",
+    "howTo": "Brace as if preparing for a punch and keep the ribs stacked over the pelvis. Move slowly through the assigned pattern or hold the position without losing spinal control. Breathe behind the brace without letting the low back arch. Avoid momentum, neck pulling, hip sagging, or rushing reps. Regress by shortening the lever, reducing load, or using bent knees. Progress by adding load, longer holds, slower tempo, or harder lever positions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 51,
+    "name": "Front Squat",
+    "category": "Quads / legs",
+    "muscles": "Quads; secondary glutes, hamstrings, core",
+    "howTo": "Set feet firmly, brace the core, and keep knees tracking in line with toes. Lower under control to the programmed depth while maintaining balance and posture, then drive through the midfoot to stand. Exhale as you stand and inhale as you lower. Avoid knees collapsing inward, bouncing, rounding the back, or shifting weight only to the toes. Regress with goblet or machine versions. Progress by adding load, pauses, deeper range, or single-leg variations. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 52,
+    "name": "Dumbbell Romanian Deadlift",
+    "category": "Back / lats",
+    "muscles": "Lats, upper back, mid back; secondary biceps and forearms",
+    "howTo": "Start with a braced torso and shoulders pulled away from the ears. Initiate by driving elbows down or back, not by yanking with the hands. Pull to the intended finish position, squeeze briefly, then return under control until the back stretches. Exhale as you pull and inhale as you return. Avoid jerking, excessive leaning, shrugging, or cutting the range short. Regress by using assistance, lighter loads, or chest support. Progress by adding weight, using pauses, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 53,
+    "name": "Bulgarian Split Squat",
+    "category": "Quads / legs",
+    "muscles": "Quads; secondary glutes, hamstrings, core",
+    "howTo": "Set feet firmly, brace the core, and keep knees tracking in line with toes. Lower under control to the programmed depth while maintaining balance and posture, then drive through the midfoot to stand. Exhale as you stand and inhale as you lower. Avoid knees collapsing inward, bouncing, rounding the back, or shifting weight only to the toes. Regress with goblet or machine versions. Progress by adding load, pauses, deeper range, or single-leg variations. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 54,
+    "name": "Leg Press",
+    "category": "Quads / legs",
+    "muscles": "Quads; secondary glutes, hamstrings, core",
+    "howTo": "Set feet firmly, brace the core, and keep knees tracking in line with toes. Lower under control to the programmed depth while maintaining balance and posture, then drive through the midfoot to stand. Exhale as you stand and inhale as you lower. Avoid knees collapsing inward, bouncing, rounding the back, or shifting weight only to the toes. Regress with goblet or machine versions. Progress by adding load, pauses, deeper range, or single-leg variations. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 55,
+    "name": "Lying Leg Curl",
+    "category": "Biceps",
+    "muscles": "Biceps, brachialis, forearms depending on grip",
+    "howTo": "Stand or sit tall with the torso still and elbows controlled. Curl the weight by bending the elbow while keeping the shoulder from swinging forward. Squeeze at the top, then lower slowly to a full stretch. Exhale as you curl and inhale as you lower. Avoid swinging, leaning back, shortening the bottom range, or letting wrists collapse. Regress with lighter weight or cables. Progress with slower eccentrics, incline versions, or stricter pauses. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 56,
+    "name": "Cable Glute Kickback",
+    "category": "Glutes",
+    "muscles": "Glutes; secondary hamstrings and core",
+    "howTo": "Set the ribs down, brace the core, and position feet so the glutes do the work. Drive through the heels or midfoot and extend the hips until the body reaches a strong lockout without over-arching the low back. Pause and squeeze the glutes, then lower under control. Exhale as you lift and inhale as you lower. Avoid pushing through the toes, hyperextending the back, or cutting the lockout short. Regress with bodyweight bridges. Progress with load, pauses, bands, or single-leg versions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 57,
+    "name": "Seated Calf Raise",
+    "category": "Calves",
+    "muscles": "Gastrocnemius and soleus",
+    "howTo": "Place the balls of the feet securely on the platform and keep ankles aligned. Lower into a full calf stretch, pause briefly, then rise as high as possible onto the toes. Control every rep and avoid bouncing. Exhale as you raise and inhale as you lower. Regress with bodyweight calf raises. Progress with load, single-leg work, or longer pauses at the stretch and top. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 58,
+    "name": "Hanging Knee Raise",
+    "category": "Core",
+    "muscles": "Abs, obliques, deep core; secondary hip flexors depending on movement",
+    "howTo": "Brace as if preparing for a punch and keep the ribs stacked over the pelvis. Move slowly through the assigned pattern or hold the position without losing spinal control. Breathe behind the brace without letting the low back arch. Avoid momentum, neck pulling, hip sagging, or rushing reps. Regress by shortening the lever, reducing load, or using bent knees. Progress by adding load, longer holds, slower tempo, or harder lever positions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 59,
+    "name": "Russian Twist",
+    "category": "Core",
+    "muscles": "Abs, obliques, deep core; secondary hip flexors depending on movement",
+    "howTo": "Brace as if preparing for a punch and keep the ribs stacked over the pelvis. Move slowly through the assigned pattern or hold the position without losing spinal control. Breathe behind the brace without letting the low back arch. Avoid momentum, neck pulling, hip sagging, or rushing reps. Regress by shortening the lever, reducing load, or using bent knees. Progress by adding load, longer holds, slower tempo, or harder lever positions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 60,
+    "name": "Stability Ball Crunch",
+    "category": "Core",
+    "muscles": "Abs, obliques, deep core; secondary hip flexors depending on movement",
+    "howTo": "Brace as if preparing for a punch and keep the ribs stacked over the pelvis. Move slowly through the assigned pattern or hold the position without losing spinal control. Breathe behind the brace without letting the low back arch. Avoid momentum, neck pulling, hip sagging, or rushing reps. Regress by shortening the lever, reducing load, or using bent knees. Progress by adding load, longer holds, slower tempo, or harder lever positions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 61,
+    "name": "Dumbbell Bench Press",
+    "category": "Chest / pressing",
+    "muscles": "Chest; secondary triceps and front delts",
+    "howTo": "Set shoulder blades back and down, keep ribs controlled, and place hands so wrists stack over elbows. Lower under control until you reach a safe full range, then press or squeeze back while keeping tension on the chest. Inhale during the lowering/stretch phase and exhale as you press or bring the arms together. Avoid bouncing, shrugging, flaring elbows excessively, or letting the shoulders roll forward. Regress by reducing load, using incline push-ups, or using a machine. Progress by adding load, slowing tempo, pausing, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 62,
+    "name": "Low-to-High Cable Fly",
+    "category": "Chest / pressing",
+    "muscles": "Chest; secondary triceps and front delts",
+    "howTo": "Set shoulder blades back and down, keep ribs controlled, and place hands so wrists stack over elbows. Lower under control until you reach a safe full range, then press or squeeze back while keeping tension on the chest. Inhale during the lowering/stretch phase and exhale as you press or bring the arms together. Avoid bouncing, shrugging, flaring elbows excessively, or letting the shoulders roll forward. Regress by reducing load, using incline push-ups, or using a machine. Progress by adding load, slowing tempo, pausing, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 63,
+    "name": "Arnold Press",
+    "category": "Shoulders",
+    "muscles": "Deltoids; secondary triceps, traps, rotator cuff",
+    "howTo": "Brace your core, keep the ribs down, and start with the shoulders set without shrugging. Press or raise the weight through a controlled path while keeping the neck relaxed and wrists neutral. Lower slowly and stop before losing shoulder position. Exhale on the lift and inhale on the return. Avoid using momentum, arching the low back, or turning raises into a swing. Regress by lowering weight or using a machine. Progress by adding load, using slower eccentrics, adding pauses, or using unilateral versions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 64,
+    "name": "Weighted Dip",
+    "category": "Chest / pressing",
+    "muscles": "Chest; secondary triceps and front delts",
+    "howTo": "Set shoulder blades back and down, keep ribs controlled, and place hands so wrists stack over elbows. Lower under control until you reach a safe full range, then press or squeeze back while keeping tension on the chest. Inhale during the lowering/stretch phase and exhale as you press or bring the arms together. Avoid bouncing, shrugging, flaring elbows excessively, or letting the shoulders roll forward. Regress by reducing load, using incline push-ups, or using a machine. Progress by adding load, slowing tempo, pausing, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 65,
+    "name": "Dumbbell Rear Delt Fly",
+    "category": "Chest / pressing",
+    "muscles": "Chest; secondary triceps and front delts",
+    "howTo": "Set shoulder blades back and down, keep ribs controlled, and place hands so wrists stack over elbows. Lower under control until you reach a safe full range, then press or squeeze back while keeping tension on the chest. Inhale during the lowering/stretch phase and exhale as you press or bring the arms together. Avoid bouncing, shrugging, flaring elbows excessively, or letting the shoulders roll forward. Regress by reducing load, using incline push-ups, or using a machine. Progress by adding load, slowing tempo, pausing, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 66,
+    "name": "Smith Machine Shoulder Press",
+    "category": "Shoulders",
+    "muscles": "Deltoids; secondary triceps, traps, rotator cuff",
+    "howTo": "Brace your core, keep the ribs down, and start with the shoulders set without shrugging. Press or raise the weight through a controlled path while keeping the neck relaxed and wrists neutral. Lower slowly and stop before losing shoulder position. Exhale on the lift and inhale on the return. Avoid using momentum, arching the low back, or turning raises into a swing. Regress by lowering weight or using a machine. Progress by adding load, using slower eccentrics, adding pauses, or using unilateral versions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 67,
+    "name": "Skull Crusher",
+    "category": "Triceps",
+    "muscles": "Triceps; secondary chest and shoulders depending on variation",
+    "howTo": "Set the upper arm position first, brace the torso, and move mostly at the elbow. Lower until the triceps stretch without shoulder pain, then extend the elbows hard without losing control. Exhale as you extend and inhale as you bend. Avoid flaring, swinging, letting elbows drift wildly, or shortening the range. Regress by reducing load or using cables. Progress by adding load, slower tempo, or longer-range overhead versions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 68,
+    "name": "Push-Up",
+    "category": "Chest / pressing",
+    "muscles": "Chest; secondary triceps and front delts",
+    "howTo": "Set shoulder blades back and down, keep ribs controlled, and place hands so wrists stack over elbows. Lower under control until you reach a safe full range, then press or squeeze back while keeping tension on the chest. Inhale during the lowering/stretch phase and exhale as you press or bring the arms together. Avoid bouncing, shrugging, flaring elbows excessively, or letting the shoulders roll forward. Regress by reducing load, using incline push-ups, or using a machine. Progress by adding load, slowing tempo, pausing, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 69,
+    "name": "Cable Triceps Kickback",
+    "category": "Triceps",
+    "muscles": "Triceps; secondary chest and shoulders depending on variation",
+    "howTo": "Set the upper arm position first, brace the torso, and move mostly at the elbow. Lower until the triceps stretch without shoulder pain, then extend the elbows hard without losing control. Exhale as you extend and inhale as you bend. Avoid flaring, swinging, letting elbows drift wildly, or shortening the range. Regress by reducing load or using cables. Progress by adding load, slower tempo, or longer-range overhead versions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 70,
+    "name": "Chin-Up",
+    "category": "Back / lats",
+    "muscles": "Lats, upper back, mid back; secondary biceps and forearms",
+    "howTo": "Start with a braced torso and shoulders pulled away from the ears. Initiate by driving elbows down or back, not by yanking with the hands. Pull to the intended finish position, squeeze briefly, then return under control until the back stretches. Exhale as you pull and inhale as you return. Avoid jerking, excessive leaning, shrugging, or cutting the range short. Regress by using assistance, lighter loads, or chest support. Progress by adding weight, using pauses, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 71,
+    "name": "T-Bar Row",
+    "category": "Back / lats",
+    "muscles": "Lats, upper back, mid back; secondary biceps and forearms",
+    "howTo": "Start with a braced torso and shoulders pulled away from the ears. Initiate by driving elbows down or back, not by yanking with the hands. Pull to the intended finish position, squeeze briefly, then return under control until the back stretches. Exhale as you pull and inhale as you return. Avoid jerking, excessive leaning, shrugging, or cutting the range short. Regress by using assistance, lighter loads, or chest support. Progress by adding weight, using pauses, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 72,
+    "name": "Spider Curl",
+    "category": "Biceps",
+    "muscles": "Biceps, brachialis, forearms depending on grip",
+    "howTo": "Stand or sit tall with the torso still and elbows controlled. Curl the weight by bending the elbow while keeping the shoulder from swinging forward. Squeeze at the top, then lower slowly to a full stretch. Exhale as you curl and inhale as you lower. Avoid swinging, leaning back, shortening the bottom range, or letting wrists collapse. Regress with lighter weight or cables. Progress with slower eccentrics, incline versions, or stricter pauses. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 73,
+    "name": "Wide-Grip Lat Pulldown",
+    "category": "Back / lats",
+    "muscles": "Lats, upper back, mid back; secondary biceps and forearms",
+    "howTo": "Start with a braced torso and shoulders pulled away from the ears. Initiate by driving elbows down or back, not by yanking with the hands. Pull to the intended finish position, squeeze briefly, then return under control until the back stretches. Exhale as you pull and inhale as you return. Avoid jerking, excessive leaning, shrugging, or cutting the range short. Regress by using assistance, lighter loads, or chest support. Progress by adding weight, using pauses, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 74,
+    "name": "Dumbbell Concentration Curl",
+    "category": "Biceps",
+    "muscles": "Biceps, brachialis, forearms depending on grip",
+    "howTo": "Stand or sit tall with the torso still and elbows controlled. Curl the weight by bending the elbow while keeping the shoulder from swinging forward. Squeeze at the top, then lower slowly to a full stretch. Exhale as you curl and inhale as you lower. Avoid swinging, leaning back, shortening the bottom range, or letting wrists collapse. Regress with lighter weight or cables. Progress with slower eccentrics, incline versions, or stricter pauses. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 75,
+    "name": "Machine Row",
+    "category": "Back / lats",
+    "muscles": "Lats, upper back, mid back; secondary biceps and forearms",
+    "howTo": "Start with a braced torso and shoulders pulled away from the ears. Initiate by driving elbows down or back, not by yanking with the hands. Pull to the intended finish position, squeeze briefly, then return under control until the back stretches. Exhale as you pull and inhale as you return. Avoid jerking, excessive leaning, shrugging, or cutting the range short. Regress by using assistance, lighter loads, or chest support. Progress by adding weight, using pauses, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 76,
+    "name": "Rope Hammer Curl",
+    "category": "Biceps",
+    "muscles": "Biceps, brachialis, forearms depending on grip",
+    "howTo": "Stand or sit tall with the torso still and elbows controlled. Curl the weight by bending the elbow while keeping the shoulder from swinging forward. Squeeze at the top, then lower slowly to a full stretch. Exhale as you curl and inhale as you lower. Avoid swinging, leaning back, shortening the bottom range, or letting wrists collapse. Regress with lighter weight or cables. Progress with slower eccentrics, incline versions, or stricter pauses. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 77,
+    "name": "Captain Chair Knee Raise",
+    "category": "Core",
+    "muscles": "Abs, obliques, deep core; secondary hip flexors depending on movement",
+    "howTo": "Brace as if preparing for a punch and keep the ribs stacked over the pelvis. Move slowly through the assigned pattern or hold the position without losing spinal control. Breathe behind the brace without letting the low back arch. Avoid momentum, neck pulling, hip sagging, or rushing reps. Regress by shortening the lever, reducing load, or using bent knees. Progress by adding load, longer holds, slower tempo, or harder lever positions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 78,
+    "name": "Cable Anti-Rotation Hold",
+    "category": "Core",
+    "muscles": "Abs, obliques, deep core; secondary hip flexors depending on movement",
+    "howTo": "Brace as if preparing for a punch and keep the ribs stacked over the pelvis. Move slowly through the assigned pattern or hold the position without losing spinal control. Breathe behind the brace without letting the low back arch. Avoid momentum, neck pulling, hip sagging, or rushing reps. Regress by shortening the lever, reducing load, or using bent knees. Progress by adding load, longer holds, slower tempo, or harder lever positions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 79,
+    "name": "Bicycle Crunch",
+    "category": "Core",
+    "muscles": "Abs, obliques, deep core; secondary hip flexors depending on movement",
+    "howTo": "Brace as if preparing for a punch and keep the ribs stacked over the pelvis. Move slowly through the assigned pattern or hold the position without losing spinal control. Breathe behind the brace without letting the low back arch. Avoid momentum, neck pulling, hip sagging, or rushing reps. Regress by shortening the lever, reducing load, or using bent knees. Progress by adding load, longer holds, slower tempo, or harder lever positions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 80,
+    "name": "Hack Squat",
+    "category": "Quads / legs",
+    "muscles": "Quads; secondary glutes, hamstrings, core",
+    "howTo": "Set feet firmly, brace the core, and keep knees tracking in line with toes. Lower under control to the programmed depth while maintaining balance and posture, then drive through the midfoot to stand. Exhale as you stand and inhale as you lower. Avoid knees collapsing inward, bouncing, rounding the back, or shifting weight only to the toes. Regress with goblet or machine versions. Progress by adding load, pauses, deeper range, or single-leg variations. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 81,
+    "name": "Good Morning",
+    "category": "Hamstrings / posterior chain",
+    "muscles": "Hamstrings; secondary glutes and lower back",
+    "howTo": "Brace the trunk and keep a neutral spine. Hinge or curl through the intended joint path while feeling tension in the hamstrings. Move slowly on the lowering phase and return without jerking. Exhale on the effort and inhale during the stretch. Avoid rounding the back, turning hinges into squats, rushing the eccentric, or losing hip position. Regress by using lighter load or shorter range. Progress by adding load, slower eccentrics, or unilateral work. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 82,
+    "name": "Reverse Lunge",
+    "category": "Quads / legs",
+    "muscles": "Quads; secondary glutes, hamstrings, core",
+    "howTo": "Set feet firmly, brace the core, and keep knees tracking in line with toes. Lower under control to the programmed depth while maintaining balance and posture, then drive through the midfoot to stand. Exhale as you stand and inhale as you lower. Avoid knees collapsing inward, bouncing, rounding the back, or shifting weight only to the toes. Regress with goblet or machine versions. Progress by adding load, pauses, deeper range, or single-leg variations. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 83,
+    "name": "Goblet Squat",
+    "category": "Quads / legs",
+    "muscles": "Quads; secondary glutes, hamstrings, core",
+    "howTo": "Set feet firmly, brace the core, and keep knees tracking in line with toes. Lower under control to the programmed depth while maintaining balance and posture, then drive through the midfoot to stand. Exhale as you stand and inhale as you lower. Avoid knees collapsing inward, bouncing, rounding the back, or shifting weight only to the toes. Regress with goblet or machine versions. Progress by adding load, pauses, deeper range, or single-leg variations. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 84,
+    "name": "Nordic Hamstring Curl",
+    "category": "Biceps",
+    "muscles": "Biceps, brachialis, forearms depending on grip",
+    "howTo": "Stand or sit tall with the torso still and elbows controlled. Curl the weight by bending the elbow while keeping the shoulder from swinging forward. Squeeze at the top, then lower slowly to a full stretch. Exhale as you curl and inhale as you lower. Avoid swinging, leaning back, shortening the bottom range, or letting wrists collapse. Regress with lighter weight or cables. Progress with slower eccentrics, incline versions, or stricter pauses. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 85,
+    "name": "Dumbbell Step-Up",
+    "category": "Quads / legs",
+    "muscles": "Quads; secondary glutes, hamstrings, core",
+    "howTo": "Set feet firmly, brace the core, and keep knees tracking in line with toes. Lower under control to the programmed depth while maintaining balance and posture, then drive through the midfoot to stand. Exhale as you stand and inhale as you lower. Avoid knees collapsing inward, bouncing, rounding the back, or shifting weight only to the toes. Regress with goblet or machine versions. Progress by adding load, pauses, deeper range, or single-leg variations. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 86,
+    "name": "Donkey Calf Raise",
+    "category": "Calves",
+    "muscles": "Gastrocnemius and soleus",
+    "howTo": "Place the balls of the feet securely on the platform and keep ankles aligned. Lower into a full calf stretch, pause briefly, then rise as high as possible onto the toes. Control every rep and avoid bouncing. Exhale as you raise and inhale as you lower. Regress with bodyweight calf raises. Progress with load, single-leg work, or longer pauses at the stretch and top. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 87,
+    "name": "Weighted Crunch",
+    "category": "Core",
+    "muscles": "Abs, obliques, deep core; secondary hip flexors depending on movement",
+    "howTo": "Brace as if preparing for a punch and keep the ribs stacked over the pelvis. Move slowly through the assigned pattern or hold the position without losing spinal control. Breathe behind the brace without letting the low back arch. Avoid momentum, neck pulling, hip sagging, or rushing reps. Regress by shortening the lever, reducing load, or using bent knees. Progress by adding load, longer holds, slower tempo, or harder lever positions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 88,
+    "name": "Suitcase Carry",
+    "category": "Core",
+    "muscles": "Abs, obliques, deep core; secondary hip flexors depending on movement",
+    "howTo": "Brace as if preparing for a punch and keep the ribs stacked over the pelvis. Move slowly through the assigned pattern or hold the position without losing spinal control. Breathe behind the brace without letting the low back arch. Avoid momentum, neck pulling, hip sagging, or rushing reps. Regress by shortening the lever, reducing load, or using bent knees. Progress by adding load, longer holds, slower tempo, or harder lever positions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 89,
+    "name": "Mountain Climber",
+    "category": "Core",
+    "muscles": "Abs, obliques, deep core; secondary hip flexors depending on movement",
+    "howTo": "Brace as if preparing for a punch and keep the ribs stacked over the pelvis. Move slowly through the assigned pattern or hold the position without losing spinal control. Breathe behind the brace without letting the low back arch. Avoid momentum, neck pulling, hip sagging, or rushing reps. Regress by shortening the lever, reducing load, or using bent knees. Progress by adding load, longer holds, slower tempo, or harder lever positions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 90,
+    "name": "Decline Barbell Bench Press",
+    "category": "Chest / pressing",
+    "muscles": "Chest; secondary triceps and front delts",
+    "howTo": "Set shoulder blades back and down, keep ribs controlled, and place hands so wrists stack over elbows. Lower under control until you reach a safe full range, then press or squeeze back while keeping tension on the chest. Inhale during the lowering/stretch phase and exhale as you press or bring the arms together. Avoid bouncing, shrugging, flaring elbows excessively, or letting the shoulders roll forward. Regress by reducing load, using incline push-ups, or using a machine. Progress by adding load, slowing tempo, pausing, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 91,
+    "name": "Incline Machine Chest Press",
+    "category": "Chest / pressing",
+    "muscles": "Chest; secondary triceps and front delts",
+    "howTo": "Set shoulder blades back and down, keep ribs controlled, and place hands so wrists stack over elbows. Lower under control until you reach a safe full range, then press or squeeze back while keeping tension on the chest. Inhale during the lowering/stretch phase and exhale as you press or bring the arms together. Avoid bouncing, shrugging, flaring elbows excessively, or letting the shoulders roll forward. Regress by reducing load, using incline push-ups, or using a machine. Progress by adding load, slowing tempo, pausing, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 92,
+    "name": "Lean-Away Cable Lateral Raise",
+    "category": "Shoulders",
+    "muscles": "Deltoids; secondary triceps, traps, rotator cuff",
+    "howTo": "Brace your core, keep the ribs down, and start with the shoulders set without shrugging. Press or raise the weight through a controlled path while keeping the neck relaxed and wrists neutral. Lower slowly and stop before losing shoulder position. Exhale on the lift and inhale on the return. Avoid using momentum, arching the low back, or turning raises into a swing. Regress by lowering weight or using a machine. Progress by adding load, using slower eccentrics, adding pauses, or using unilateral versions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 93,
+    "name": "Dumbbell Fly",
+    "category": "Chest / pressing",
+    "muscles": "Chest; secondary triceps and front delts",
+    "howTo": "Set shoulder blades back and down, keep ribs controlled, and place hands so wrists stack over elbows. Lower under control until you reach a safe full range, then press or squeeze back while keeping tension on the chest. Inhale during the lowering/stretch phase and exhale as you press or bring the arms together. Avoid bouncing, shrugging, flaring elbows excessively, or letting the shoulders roll forward. Regress by reducing load, using incline push-ups, or using a machine. Progress by adding load, slowing tempo, pausing, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 94,
+    "name": "Dip Machine",
+    "category": "Chest / pressing",
+    "muscles": "Chest; secondary triceps and front delts",
+    "howTo": "Set shoulder blades back and down, keep ribs controlled, and place hands so wrists stack over elbows. Lower under control until you reach a safe full range, then press or squeeze back while keeping tension on the chest. Inhale during the lowering/stretch phase and exhale as you press or bring the arms together. Avoid bouncing, shrugging, flaring elbows excessively, or letting the shoulders roll forward. Regress by reducing load, using incline push-ups, or using a machine. Progress by adding load, slowing tempo, pausing, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 95,
+    "name": "Landmine Press",
+    "category": "Strength",
+    "muscles": "Target muscle listed in the workout table",
+    "howTo": "Set up with stable posture, neutral joints, and the target muscle loaded. Move through a controlled full range of motion, breathe with the effort, and stop when technique breaks down. Avoid momentum and poor joint alignment. Regress by reducing load or range. Progress by increasing load, reps, tempo control, or range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 96,
+    "name": "High Cable Fly",
+    "category": "Chest / pressing",
+    "muscles": "Chest; secondary triceps and front delts",
+    "howTo": "Set shoulder blades back and down, keep ribs controlled, and place hands so wrists stack over elbows. Lower under control until you reach a safe full range, then press or squeeze back while keeping tension on the chest. Inhale during the lowering/stretch phase and exhale as you press or bring the arms together. Avoid bouncing, shrugging, flaring elbows excessively, or letting the shoulders roll forward. Regress by reducing load, using incline push-ups, or using a machine. Progress by adding load, slowing tempo, pausing, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 97,
+    "name": "Reverse-Grip Triceps Pushdown",
+    "category": "Triceps",
+    "muscles": "Triceps; secondary chest and shoulders depending on variation",
+    "howTo": "Set the upper arm position first, brace the torso, and move mostly at the elbow. Lower until the triceps stretch without shoulder pain, then extend the elbows hard without losing control. Exhale as you extend and inhale as you bend. Avoid flaring, swinging, letting elbows drift wildly, or shortening the range. Regress by reducing load or using cables. Progress by adding load, slower tempo, or longer-range overhead versions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 98,
+    "name": "Upright Row",
+    "category": "Shoulders",
+    "muscles": "Deltoids; secondary triceps, traps, rotator cuff",
+    "howTo": "Brace your core, keep the ribs down, and start with the shoulders set without shrugging. Press or raise the weight through a controlled path while keeping the neck relaxed and wrists neutral. Lower slowly and stop before losing shoulder position. Exhale on the lift and inhale on the return. Avoid using momentum, arching the low back, or turning raises into a swing. Regress by lowering weight or using a machine. Progress by adding load, using slower eccentrics, adding pauses, or using unilateral versions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 99,
+    "name": "Rack Pull",
+    "category": "Back / lats",
+    "muscles": "Lats, upper back, mid back; secondary biceps and forearms",
+    "howTo": "Start with a braced torso and shoulders pulled away from the ears. Initiate by driving elbows down or back, not by yanking with the hands. Pull to the intended finish position, squeeze briefly, then return under control until the back stretches. Exhale as you pull and inhale as you return. Avoid jerking, excessive leaning, shrugging, or cutting the range short. Regress by using assistance, lighter loads, or chest support. Progress by adding weight, using pauses, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 100,
+    "name": "Meadows Row",
+    "category": "Back / lats",
+    "muscles": "Lats, upper back, mid back; secondary biceps and forearms",
+    "howTo": "Start with a braced torso and shoulders pulled away from the ears. Initiate by driving elbows down or back, not by yanking with the hands. Pull to the intended finish position, squeeze briefly, then return under control until the back stretches. Exhale as you pull and inhale as you return. Avoid jerking, excessive leaning, shrugging, or cutting the range short. Regress by using assistance, lighter loads, or chest support. Progress by adding weight, using pauses, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 101,
+    "name": "Bayesian Cable Curl",
+    "category": "Biceps",
+    "muscles": "Biceps, brachialis, forearms depending on grip",
+    "howTo": "Stand or sit tall with the torso still and elbows controlled. Curl the weight by bending the elbow while keeping the shoulder from swinging forward. Squeeze at the top, then lower slowly to a full stretch. Exhale as you curl and inhale as you lower. Avoid swinging, leaning back, shortening the bottom range, or letting wrists collapse. Regress with lighter weight or cables. Progress with slower eccentrics, incline versions, or stricter pauses. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 102,
+    "name": "Assisted Pull-Up",
+    "category": "Back / lats",
+    "muscles": "Lats, upper back, mid back; secondary biceps and forearms",
+    "howTo": "Start with a braced torso and shoulders pulled away from the ears. Initiate by driving elbows down or back, not by yanking with the hands. Pull to the intended finish position, squeeze briefly, then return under control until the back stretches. Exhale as you pull and inhale as you return. Avoid jerking, excessive leaning, shrugging, or cutting the range short. Regress by using assistance, lighter loads, or chest support. Progress by adding weight, using pauses, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 103,
+    "name": "Zottman Curl",
+    "category": "Biceps",
+    "muscles": "Biceps, brachialis, forearms depending on grip",
+    "howTo": "Stand or sit tall with the torso still and elbows controlled. Curl the weight by bending the elbow while keeping the shoulder from swinging forward. Squeeze at the top, then lower slowly to a full stretch. Exhale as you curl and inhale as you lower. Avoid swinging, leaning back, shortening the bottom range, or letting wrists collapse. Regress with lighter weight or cables. Progress with slower eccentrics, incline versions, or stricter pauses. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 104,
+    "name": "One-Arm Cable Row",
+    "category": "Back / lats",
+    "muscles": "Lats, upper back, mid back; secondary biceps and forearms",
+    "howTo": "Start with a braced torso and shoulders pulled away from the ears. Initiate by driving elbows down or back, not by yanking with the hands. Pull to the intended finish position, squeeze briefly, then return under control until the back stretches. Exhale as you pull and inhale as you return. Avoid jerking, excessive leaning, shrugging, or cutting the range short. Regress by using assistance, lighter loads, or chest support. Progress by adding weight, using pauses, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 105,
+    "name": "Machine Curl",
+    "category": "Biceps",
+    "muscles": "Biceps, brachialis, forearms depending on grip",
+    "howTo": "Stand or sit tall with the torso still and elbows controlled. Curl the weight by bending the elbow while keeping the shoulder from swinging forward. Squeeze at the top, then lower slowly to a full stretch. Exhale as you curl and inhale as you lower. Avoid swinging, leaning back, shortening the bottom range, or letting wrists collapse. Regress with lighter weight or cables. Progress with slower eccentrics, incline versions, or stricter pauses. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 106,
+    "name": "Toes-to-Bar",
+    "category": "Strength",
+    "muscles": "Target muscle listed in the workout table",
+    "howTo": "Set up with stable posture, neutral joints, and the target muscle loaded. Move through a controlled full range of motion, breathe with the effort, and stop when technique breaks down. Avoid momentum and poor joint alignment. Regress by reducing load or range. Progress by increasing load, reps, tempo control, or range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 107,
+    "name": "Cable Lift",
+    "category": "Strength",
+    "muscles": "Target muscle listed in the workout table",
+    "howTo": "Set up with stable posture, neutral joints, and the target muscle loaded. Move through a controlled full range of motion, breathe with the effort, and stop when technique breaks down. Avoid momentum and poor joint alignment. Regress by reducing load or range. Progress by increasing load, reps, tempo control, or range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 108,
+    "name": "Hollow Body Hold",
+    "category": "Core",
+    "muscles": "Abs, obliques, deep core; secondary hip flexors depending on movement",
+    "howTo": "Brace as if preparing for a punch and keep the ribs stacked over the pelvis. Move slowly through the assigned pattern or hold the position without losing spinal control. Breathe behind the brace without letting the low back arch. Avoid momentum, neck pulling, hip sagging, or rushing reps. Regress by shortening the lever, reducing load, or using bent knees. Progress by adding load, longer holds, slower tempo, or harder lever positions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 109,
+    "name": "Sumo Deadlift",
+    "category": "Back / lats",
+    "muscles": "Lats, upper back, mid back; secondary biceps and forearms",
+    "howTo": "Start with a braced torso and shoulders pulled away from the ears. Initiate by driving elbows down or back, not by yanking with the hands. Pull to the intended finish position, squeeze briefly, then return under control until the back stretches. Exhale as you pull and inhale as you return. Avoid jerking, excessive leaning, shrugging, or cutting the range short. Regress by using assistance, lighter loads, or chest support. Progress by adding weight, using pauses, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 110,
+    "name": "Smith Machine Squat",
+    "category": "Quads / legs",
+    "muscles": "Quads; secondary glutes, hamstrings, core",
+    "howTo": "Set feet firmly, brace the core, and keep knees tracking in line with toes. Lower under control to the programmed depth while maintaining balance and posture, then drive through the midfoot to stand. Exhale as you stand and inhale as you lower. Avoid knees collapsing inward, bouncing, rounding the back, or shifting weight only to the toes. Regress with goblet or machine versions. Progress by adding load, pauses, deeper range, or single-leg variations. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 111,
+    "name": "Single-Leg Romanian Deadlift",
+    "category": "Back / lats",
+    "muscles": "Lats, upper back, mid back; secondary biceps and forearms",
+    "howTo": "Start with a braced torso and shoulders pulled away from the ears. Initiate by driving elbows down or back, not by yanking with the hands. Pull to the intended finish position, squeeze briefly, then return under control until the back stretches. Exhale as you pull and inhale as you return. Avoid jerking, excessive leaning, shrugging, or cutting the range short. Regress by using assistance, lighter loads, or chest support. Progress by adding weight, using pauses, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 112,
+    "name": "Sissy Squat",
+    "category": "Quads / legs",
+    "muscles": "Quads; secondary glutes, hamstrings, core",
+    "howTo": "Set feet firmly, brace the core, and keep knees tracking in line with toes. Lower under control to the programmed depth while maintaining balance and posture, then drive through the midfoot to stand. Exhale as you stand and inhale as you lower. Avoid knees collapsing inward, bouncing, rounding the back, or shifting weight only to the toes. Regress with goblet or machine versions. Progress by adding load, pauses, deeper range, or single-leg variations. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 113,
+    "name": "Standing Single-Leg Curl",
+    "category": "Biceps",
+    "muscles": "Biceps, brachialis, forearms depending on grip",
+    "howTo": "Stand or sit tall with the torso still and elbows controlled. Curl the weight by bending the elbow while keeping the shoulder from swinging forward. Squeeze at the top, then lower slowly to a full stretch. Exhale as you curl and inhale as you lower. Avoid swinging, leaning back, shortening the bottom range, or letting wrists collapse. Regress with lighter weight or cables. Progress with slower eccentrics, incline versions, or stricter pauses. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 114,
+    "name": "Glute Bridge",
+    "category": "Glutes",
+    "muscles": "Glutes; secondary hamstrings and core",
+    "howTo": "Set the ribs down, brace the core, and position feet so the glutes do the work. Drive through the heels or midfoot and extend the hips until the body reaches a strong lockout without over-arching the low back. Pause and squeeze the glutes, then lower under control. Exhale as you lift and inhale as you lower. Avoid pushing through the toes, hyperextending the back, or cutting the lockout short. Regress with bodyweight bridges. Progress with load, pauses, bands, or single-leg versions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 115,
+    "name": "Leg Press Calf Raise",
+    "category": "Quads / legs",
+    "muscles": "Quads; secondary glutes, hamstrings, core",
+    "howTo": "Set feet firmly, brace the core, and keep knees tracking in line with toes. Lower under control to the programmed depth while maintaining balance and posture, then drive through the midfoot to stand. Exhale as you stand and inhale as you lower. Avoid knees collapsing inward, bouncing, rounding the back, or shifting weight only to the toes. Regress with goblet or machine versions. Progress by adding load, pauses, deeper range, or single-leg variations. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 116,
+    "name": "Decline Sit-Up",
+    "category": "Core",
+    "muscles": "Abs, obliques, deep core; secondary hip flexors depending on movement",
+    "howTo": "Brace as if preparing for a punch and keep the ribs stacked over the pelvis. Move slowly through the assigned pattern or hold the position without losing spinal control. Breathe behind the brace without letting the low back arch. Avoid momentum, neck pulling, hip sagging, or rushing reps. Regress by shortening the lever, reducing load, or using bent knees. Progress by adding load, longer holds, slower tempo, or harder lever positions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 117,
+    "name": "Side Plank Reach-Through",
+    "category": "Core",
+    "muscles": "Abs, obliques, deep core; secondary hip flexors depending on movement",
+    "howTo": "Brace as if preparing for a punch and keep the ribs stacked over the pelvis. Move slowly through the assigned pattern or hold the position without losing spinal control. Breathe behind the brace without letting the low back arch. Avoid momentum, neck pulling, hip sagging, or rushing reps. Regress by shortening the lever, reducing load, or using bent knees. Progress by adding load, longer holds, slower tempo, or harder lever positions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 118,
+    "name": "Cable Reverse Crunch",
+    "category": "Core",
+    "muscles": "Abs, obliques, deep core; secondary hip flexors depending on movement",
+    "howTo": "Brace as if preparing for a punch and keep the ribs stacked over the pelvis. Move slowly through the assigned pattern or hold the position without losing spinal control. Breathe behind the brace without letting the low back arch. Avoid momentum, neck pulling, hip sagging, or rushing reps. Regress by shortening the lever, reducing load, or using bent knees. Progress by adding load, longer holds, slower tempo, or harder lever positions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 119,
+    "name": "Paused Barbell Bench Press",
+    "category": "Chest / pressing",
+    "muscles": "Chest; secondary triceps and front delts",
+    "howTo": "Set shoulder blades back and down, keep ribs controlled, and place hands so wrists stack over elbows. Lower under control until you reach a safe full range, then press or squeeze back while keeping tension on the chest. Inhale during the lowering/stretch phase and exhale as you press or bring the arms together. Avoid bouncing, shrugging, flaring elbows excessively, or letting the shoulders roll forward. Regress by reducing load, using incline push-ups, or using a machine. Progress by adding load, slowing tempo, pausing, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 120,
+    "name": "Incline Cable Press",
+    "category": "Chest / pressing",
+    "muscles": "Chest; secondary triceps and front delts",
+    "howTo": "Set shoulder blades back and down, keep ribs controlled, and place hands so wrists stack over elbows. Lower under control until you reach a safe full range, then press or squeeze back while keeping tension on the chest. Inhale during the lowering/stretch phase and exhale as you press or bring the arms together. Avoid bouncing, shrugging, flaring elbows excessively, or letting the shoulders roll forward. Regress by reducing load, using incline push-ups, or using a machine. Progress by adding load, slowing tempo, pausing, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 121,
+    "name": "Machine Lateral Raise",
+    "category": "Shoulders",
+    "muscles": "Deltoids; secondary triceps, traps, rotator cuff",
+    "howTo": "Brace your core, keep the ribs down, and start with the shoulders set without shrugging. Press or raise the weight through a controlled path while keeping the neck relaxed and wrists neutral. Lower slowly and stop before losing shoulder position. Exhale on the lift and inhale on the return. Avoid using momentum, arching the low back, or turning raises into a swing. Regress by lowering weight or using a machine. Progress by adding load, using slower eccentrics, adding pauses, or using unilateral versions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 122,
+    "name": "Deficit Push-Up",
+    "category": "Chest / pressing",
+    "muscles": "Chest; secondary triceps and front delts",
+    "howTo": "Set shoulder blades back and down, keep ribs controlled, and place hands so wrists stack over elbows. Lower under control until you reach a safe full range, then press or squeeze back while keeping tension on the chest. Inhale during the lowering/stretch phase and exhale as you press or bring the arms together. Avoid bouncing, shrugging, flaring elbows excessively, or letting the shoulders roll forward. Regress by reducing load, using incline push-ups, or using a machine. Progress by adding load, slowing tempo, pausing, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 123,
+    "name": "EZ-Bar Skull Crusher",
+    "category": "Triceps",
+    "muscles": "Triceps; secondary chest and shoulders depending on variation",
+    "howTo": "Set the upper arm position first, brace the torso, and move mostly at the elbow. Lower until the triceps stretch without shoulder pain, then extend the elbows hard without losing control. Exhale as you extend and inhale as you bend. Avoid flaring, swinging, letting elbows drift wildly, or shortening the range. Regress by reducing load or using cables. Progress by adding load, slower tempo, or longer-range overhead versions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 124,
+    "name": "Seated Barbell Overhead Press",
+    "category": "Shoulders",
+    "muscles": "Deltoids; secondary triceps, traps, rotator cuff",
+    "howTo": "Brace your core, keep the ribs down, and start with the shoulders set without shrugging. Press or raise the weight through a controlled path while keeping the neck relaxed and wrists neutral. Lower slowly and stop before losing shoulder position. Exhale on the lift and inhale on the return. Avoid using momentum, arching the low back, or turning raises into a swing. Regress by lowering weight or using a machine. Progress by adding load, using slower eccentrics, adding pauses, or using unilateral versions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 125,
+    "name": "Cable Y-Raise",
+    "category": "Shoulders",
+    "muscles": "Deltoids; secondary triceps, traps, rotator cuff",
+    "howTo": "Brace your core, keep the ribs down, and start with the shoulders set without shrugging. Press or raise the weight through a controlled path while keeping the neck relaxed and wrists neutral. Lower slowly and stop before losing shoulder position. Exhale on the lift and inhale on the return. Avoid using momentum, arching the low back, or turning raises into a swing. Regress by lowering weight or using a machine. Progress by adding load, using slower eccentrics, adding pauses, or using unilateral versions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 126,
+    "name": "Cross-Body Cable Triceps Extension",
+    "category": "Triceps",
+    "muscles": "Triceps; secondary chest and shoulders depending on variation",
+    "howTo": "Set the upper arm position first, brace the torso, and move mostly at the elbow. Lower until the triceps stretch without shoulder pain, then extend the elbows hard without losing control. Exhale as you extend and inhale as you bend. Avoid flaring, swinging, letting elbows drift wildly, or shortening the range. Regress by reducing load or using cables. Progress by adding load, slower tempo, or longer-range overhead versions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 127,
+    "name": "Diamond Push-Up",
+    "category": "Chest / pressing",
+    "muscles": "Chest; secondary triceps and front delts",
+    "howTo": "Set shoulder blades back and down, keep ribs controlled, and place hands so wrists stack over elbows. Lower under control until you reach a safe full range, then press or squeeze back while keeping tension on the chest. Inhale during the lowering/stretch phase and exhale as you press or bring the arms together. Avoid bouncing, shrugging, flaring elbows excessively, or letting the shoulders roll forward. Regress by reducing load, using incline push-ups, or using a machine. Progress by adding load, slowing tempo, pausing, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 128,
+    "name": "Neutral-Grip Pull-Up",
+    "category": "Back / lats",
+    "muscles": "Lats, upper back, mid back; secondary biceps and forearms",
+    "howTo": "Start with a braced torso and shoulders pulled away from the ears. Initiate by driving elbows down or back, not by yanking with the hands. Pull to the intended finish position, squeeze briefly, then return under control until the back stretches. Exhale as you pull and inhale as you return. Avoid jerking, excessive leaning, shrugging, or cutting the range short. Regress by using assistance, lighter loads, or chest support. Progress by adding weight, using pauses, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 129,
+    "name": "Seal Row",
+    "category": "Back / lats",
+    "muscles": "Lats, upper back, mid back; secondary biceps and forearms",
+    "howTo": "Start with a braced torso and shoulders pulled away from the ears. Initiate by driving elbows down or back, not by yanking with the hands. Pull to the intended finish position, squeeze briefly, then return under control until the back stretches. Exhale as you pull and inhale as you return. Avoid jerking, excessive leaning, shrugging, or cutting the range short. Regress by using assistance, lighter loads, or chest support. Progress by adding weight, using pauses, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 130,
+    "name": "Alternating Dumbbell Curl",
+    "category": "Biceps",
+    "muscles": "Biceps, brachialis, forearms depending on grip",
+    "howTo": "Stand or sit tall with the torso still and elbows controlled. Curl the weight by bending the elbow while keeping the shoulder from swinging forward. Squeeze at the top, then lower slowly to a full stretch. Exhale as you curl and inhale as you lower. Avoid swinging, leaning back, shortening the bottom range, or letting wrists collapse. Regress with lighter weight or cables. Progress with slower eccentrics, incline versions, or stricter pauses. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 131,
+    "name": "Close-Grip Pulldown",
+    "category": "Triceps",
+    "muscles": "Triceps; secondary chest and shoulders depending on variation",
+    "howTo": "Set the upper arm position first, brace the torso, and move mostly at the elbow. Lower until the triceps stretch without shoulder pain, then extend the elbows hard without losing control. Exhale as you extend and inhale as you bend. Avoid flaring, swinging, letting elbows drift wildly, or shortening the range. Regress by reducing load or using cables. Progress by adding load, slower tempo, or longer-range overhead versions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 132,
+    "name": "Cable Rope Curl",
+    "category": "Biceps",
+    "muscles": "Biceps, brachialis, forearms depending on grip",
+    "howTo": "Stand or sit tall with the torso still and elbows controlled. Curl the weight by bending the elbow while keeping the shoulder from swinging forward. Squeeze at the top, then lower slowly to a full stretch. Exhale as you curl and inhale as you lower. Avoid swinging, leaning back, shortening the bottom range, or letting wrists collapse. Regress with lighter weight or cables. Progress with slower eccentrics, incline versions, or stricter pauses. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 133,
+    "name": "Inverted Row",
+    "category": "Back / lats",
+    "muscles": "Lats, upper back, mid back; secondary biceps and forearms",
+    "howTo": "Start with a braced torso and shoulders pulled away from the ears. Initiate by driving elbows down or back, not by yanking with the hands. Pull to the intended finish position, squeeze briefly, then return under control until the back stretches. Exhale as you pull and inhale as you return. Avoid jerking, excessive leaning, shrugging, or cutting the range short. Regress by using assistance, lighter loads, or chest support. Progress by adding weight, using pauses, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 134,
+    "name": "Incline Hammer Curl",
+    "category": "Biceps",
+    "muscles": "Biceps, brachialis, forearms depending on grip",
+    "howTo": "Stand or sit tall with the torso still and elbows controlled. Curl the weight by bending the elbow while keeping the shoulder from swinging forward. Squeeze at the top, then lower slowly to a full stretch. Exhale as you curl and inhale as you lower. Avoid swinging, leaning back, shortening the bottom range, or letting wrists collapse. Regress with lighter weight or cables. Progress with slower eccentrics, incline versions, or stricter pauses. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 135,
+    "name": "Dragon Flag Regression",
+    "category": "Biceps",
+    "muscles": "Biceps, brachialis, forearms depending on grip",
+    "howTo": "Stand or sit tall with the torso still and elbows controlled. Curl the weight by bending the elbow while keeping the shoulder from swinging forward. Squeeze at the top, then lower slowly to a full stretch. Exhale as you curl and inhale as you lower. Avoid swinging, leaning back, shortening the bottom range, or letting wrists collapse. Regress with lighter weight or cables. Progress with slower eccentrics, incline versions, or stricter pauses. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 136,
+    "name": "Half-Kneeling Pallof Press",
+    "category": "Core",
+    "muscles": "Abs, obliques, deep core; secondary hip flexors depending on movement",
+    "howTo": "Brace as if preparing for a punch and keep the ribs stacked over the pelvis. Move slowly through the assigned pattern or hold the position without losing spinal control. Breathe behind the brace without letting the low back arch. Avoid momentum, neck pulling, hip sagging, or rushing reps. Regress by shortening the lever, reducing load, or using bent knees. Progress by adding load, longer holds, slower tempo, or harder lever positions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 137,
+    "name": "Long-Lever Plank",
+    "category": "Core",
+    "muscles": "Abs, obliques, deep core; secondary hip flexors depending on movement",
+    "howTo": "Brace as if preparing for a punch and keep the ribs stacked over the pelvis. Move slowly through the assigned pattern or hold the position without losing spinal control. Breathe behind the brace without letting the low back arch. Avoid momentum, neck pulling, hip sagging, or rushing reps. Regress by shortening the lever, reducing load, or using bent knees. Progress by adding load, longer holds, slower tempo, or harder lever positions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 138,
+    "name": "Paused Front Squat",
+    "category": "Quads / legs",
+    "muscles": "Quads; secondary glutes, hamstrings, core",
+    "howTo": "Set feet firmly, brace the core, and keep knees tracking in line with toes. Lower under control to the programmed depth while maintaining balance and posture, then drive through the midfoot to stand. Exhale as you stand and inhale as you lower. Avoid knees collapsing inward, bouncing, rounding the back, or shifting weight only to the toes. Regress with goblet or machine versions. Progress by adding load, pauses, deeper range, or single-leg variations. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 139,
+    "name": "Trap Bar Deadlift",
+    "category": "Back / lats",
+    "muscles": "Lats, upper back, mid back; secondary biceps and forearms",
+    "howTo": "Start with a braced torso and shoulders pulled away from the ears. Initiate by driving elbows down or back, not by yanking with the hands. Pull to the intended finish position, squeeze briefly, then return under control until the back stretches. Exhale as you pull and inhale as you return. Avoid jerking, excessive leaning, shrugging, or cutting the range short. Regress by using assistance, lighter loads, or chest support. Progress by adding weight, using pauses, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 140,
+    "name": "Front-Foot Elevated Split Squat",
+    "category": "Quads / legs",
+    "muscles": "Quads; secondary glutes, hamstrings, core",
+    "howTo": "Set feet firmly, brace the core, and keep knees tracking in line with toes. Lower under control to the programmed depth while maintaining balance and posture, then drive through the midfoot to stand. Exhale as you stand and inhale as you lower. Avoid knees collapsing inward, bouncing, rounding the back, or shifting weight only to the toes. Regress with goblet or machine versions. Progress by adding load, pauses, deeper range, or single-leg variations. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 141,
+    "name": "Belt Squat",
+    "category": "Quads / legs",
+    "muscles": "Quads; secondary glutes, hamstrings, core",
+    "howTo": "Set feet firmly, brace the core, and keep knees tracking in line with toes. Lower under control to the programmed depth while maintaining balance and posture, then drive through the midfoot to stand. Exhale as you stand and inhale as you lower. Avoid knees collapsing inward, bouncing, rounding the back, or shifting weight only to the toes. Regress with goblet or machine versions. Progress by adding load, pauses, deeper range, or single-leg variations. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 142,
+    "name": "Cable Pull-Through",
+    "category": "Hamstrings / posterior chain",
+    "muscles": "Hamstrings; secondary glutes and lower back",
+    "howTo": "Brace the trunk and keep a neutral spine. Hinge or curl through the intended joint path while feeling tension in the hamstrings. Move slowly on the lowering phase and return without jerking. Exhale on the effort and inhale during the stretch. Avoid rounding the back, turning hinges into squats, rushing the eccentric, or losing hip position. Regress by using lighter load or shorter range. Progress by adding load, slower eccentrics, or unilateral work. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 143,
+    "name": "Frog Pump",
+    "category": "Glutes",
+    "muscles": "Glutes; secondary hamstrings and core",
+    "howTo": "Set the ribs down, brace the core, and position feet so the glutes do the work. Drive through the heels or midfoot and extend the hips until the body reaches a strong lockout without over-arching the low back. Pause and squeeze the glutes, then lower under control. Exhale as you lift and inhale as you lower. Avoid pushing through the toes, hyperextending the back, or cutting the lockout short. Regress with bodyweight bridges. Progress with load, pauses, bands, or single-leg versions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 144,
+    "name": "Smith Machine Calf Raise",
+    "category": "Calves",
+    "muscles": "Gastrocnemius and soleus",
+    "howTo": "Place the balls of the feet securely on the platform and keep ankles aligned. Lower into a full calf stretch, pause briefly, then rise as high as possible onto the toes. Control every rep and avoid bouncing. Exhale as you raise and inhale as you lower. Regress with bodyweight calf raises. Progress with load, single-leg work, or longer pauses at the stretch and top. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 145,
+    "name": "Weighted Plank",
+    "category": "Core",
+    "muscles": "Abs, obliques, deep core; secondary hip flexors depending on movement",
+    "howTo": "Brace as if preparing for a punch and keep the ribs stacked over the pelvis. Move slowly through the assigned pattern or hold the position without losing spinal control. Breathe behind the brace without letting the low back arch. Avoid momentum, neck pulling, hip sagging, or rushing reps. Regress by shortening the lever, reducing load, or using bent knees. Progress by adding load, longer holds, slower tempo, or harder lever positions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 146,
+    "name": "Landmine Rotation",
+    "category": "Core",
+    "muscles": "Abs, obliques, deep core; secondary hip flexors depending on movement",
+    "howTo": "Brace as if preparing for a punch and keep the ribs stacked over the pelvis. Move slowly through the assigned pattern or hold the position without losing spinal control. Breathe behind the brace without letting the low back arch. Avoid momentum, neck pulling, hip sagging, or rushing reps. Regress by shortening the lever, reducing load, or using bent knees. Progress by adding load, longer holds, slower tempo, or harder lever positions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 147,
+    "name": "Toe Touch Crunch",
+    "category": "Core",
+    "muscles": "Abs, obliques, deep core; secondary hip flexors depending on movement",
+    "howTo": "Brace as if preparing for a punch and keep the ribs stacked over the pelvis. Move slowly through the assigned pattern or hold the position without losing spinal control. Breathe behind the brace without letting the low back arch. Avoid momentum, neck pulling, hip sagging, or rushing reps. Regress by shortening the lever, reducing load, or using bent knees. Progress by adding load, longer holds, slower tempo, or harder lever positions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 148,
+    "name": "Weighted Ring Push-Up",
+    "category": "Chest / pressing",
+    "muscles": "Chest; secondary triceps and front delts",
+    "howTo": "Set shoulder blades back and down, keep ribs controlled, and place hands so wrists stack over elbows. Lower under control until you reach a safe full range, then press or squeeze back while keeping tension on the chest. Inhale during the lowering/stretch phase and exhale as you press or bring the arms together. Avoid bouncing, shrugging, flaring elbows excessively, or letting the shoulders roll forward. Regress by reducing load, using incline push-ups, or using a machine. Progress by adding load, slowing tempo, pausing, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 149,
+    "name": "Hammer Strength Chest Press",
+    "category": "Chest / pressing",
+    "muscles": "Chest; secondary triceps and front delts",
+    "howTo": "Set shoulder blades back and down, keep ribs controlled, and place hands so wrists stack over elbows. Lower under control until you reach a safe full range, then press or squeeze back while keeping tension on the chest. Inhale during the lowering/stretch phase and exhale as you press or bring the arms together. Avoid bouncing, shrugging, flaring elbows excessively, or letting the shoulders roll forward. Regress by reducing load, using incline push-ups, or using a machine. Progress by adding load, slowing tempo, pausing, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 150,
+    "name": "Single-Arm Dumbbell Lateral Raise",
+    "category": "Shoulders",
+    "muscles": "Deltoids; secondary triceps, traps, rotator cuff",
+    "howTo": "Brace your core, keep the ribs down, and start with the shoulders set without shrugging. Press or raise the weight through a controlled path while keeping the neck relaxed and wrists neutral. Lower slowly and stop before losing shoulder position. Exhale on the lift and inhale on the return. Avoid using momentum, arching the low back, or turning raises into a swing. Regress by lowering weight or using a machine. Progress by adding load, using slower eccentrics, adding pauses, or using unilateral versions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 151,
+    "name": "Single-Arm Cable Press",
+    "category": "Chest / pressing",
+    "muscles": "Chest; secondary triceps and front delts",
+    "howTo": "Set shoulder blades back and down, keep ribs controlled, and place hands so wrists stack over elbows. Lower under control until you reach a safe full range, then press or squeeze back while keeping tension on the chest. Inhale during the lowering/stretch phase and exhale as you press or bring the arms together. Avoid bouncing, shrugging, flaring elbows excessively, or letting the shoulders roll forward. Regress by reducing load, using incline push-ups, or using a machine. Progress by adding load, slowing tempo, pausing, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 152,
+    "name": "JM Press",
+    "category": "Triceps",
+    "muscles": "Triceps; secondary chest and shoulders depending on variation",
+    "howTo": "Set the upper arm position first, brace the torso, and move mostly at the elbow. Lower until the triceps stretch without shoulder pain, then extend the elbows hard without losing control. Exhale as you extend and inhale as you bend. Avoid flaring, swinging, letting elbows drift wildly, or shortening the range. Regress by reducing load or using cables. Progress by adding load, slower tempo, or longer-range overhead versions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 153,
+    "name": "Dumbbell Push Press",
+    "category": "Shoulders",
+    "muscles": "Deltoids; secondary triceps, traps, rotator cuff",
+    "howTo": "Brace your core, keep the ribs down, and start with the shoulders set without shrugging. Press or raise the weight through a controlled path while keeping the neck relaxed and wrists neutral. Lower slowly and stop before losing shoulder position. Exhale on the lift and inhale on the return. Avoid using momentum, arching the low back, or turning raises into a swing. Regress by lowering weight or using a machine. Progress by adding load, using slower eccentrics, adding pauses, or using unilateral versions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 154,
+    "name": "Rear Delt Cable Fly",
+    "category": "Chest / pressing",
+    "muscles": "Chest; secondary triceps and front delts",
+    "howTo": "Set shoulder blades back and down, keep ribs controlled, and place hands so wrists stack over elbows. Lower under control until you reach a safe full range, then press or squeeze back while keeping tension on the chest. Inhale during the lowering/stretch phase and exhale as you press or bring the arms together. Avoid bouncing, shrugging, flaring elbows excessively, or letting the shoulders roll forward. Regress by reducing load, using incline push-ups, or using a machine. Progress by adding load, slowing tempo, pausing, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 155,
+    "name": "Lying Dumbbell Triceps Extension",
+    "category": "Triceps",
+    "muscles": "Triceps; secondary chest and shoulders depending on variation",
+    "howTo": "Set the upper arm position first, brace the torso, and move mostly at the elbow. Lower until the triceps stretch without shoulder pain, then extend the elbows hard without losing control. Exhale as you extend and inhale as you bend. Avoid flaring, swinging, letting elbows drift wildly, or shortening the range. Regress by reducing load or using cables. Progress by adding load, slower tempo, or longer-range overhead versions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 156,
+    "name": "Rope Overhead Triceps Extension",
+    "category": "Triceps",
+    "muscles": "Triceps; secondary chest and shoulders depending on variation",
+    "howTo": "Set the upper arm position first, brace the torso, and move mostly at the elbow. Lower until the triceps stretch without shoulder pain, then extend the elbows hard without losing control. Exhale as you extend and inhale as you bend. Avoid flaring, swinging, letting elbows drift wildly, or shortening the range. Regress by reducing load or using cables. Progress by adding load, slower tempo, or longer-range overhead versions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 157,
+    "name": "Pendlay Row",
+    "category": "Back / lats",
+    "muscles": "Lats, upper back, mid back; secondary biceps and forearms",
+    "howTo": "Start with a braced torso and shoulders pulled away from the ears. Initiate by driving elbows down or back, not by yanking with the hands. Pull to the intended finish position, squeeze briefly, then return under control until the back stretches. Exhale as you pull and inhale as you return. Avoid jerking, excessive leaning, shrugging, or cutting the range short. Regress by using assistance, lighter loads, or chest support. Progress by adding weight, using pauses, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 158,
+    "name": "Underhand Lat Pulldown",
+    "category": "Back / lats",
+    "muscles": "Lats, upper back, mid back; secondary biceps and forearms",
+    "howTo": "Start with a braced torso and shoulders pulled away from the ears. Initiate by driving elbows down or back, not by yanking with the hands. Pull to the intended finish position, squeeze briefly, then return under control until the back stretches. Exhale as you pull and inhale as you return. Avoid jerking, excessive leaning, shrugging, or cutting the range short. Regress by using assistance, lighter loads, or chest support. Progress by adding weight, using pauses, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 159,
+    "name": "Drag Curl",
+    "category": "Biceps",
+    "muscles": "Biceps, brachialis, forearms depending on grip",
+    "howTo": "Stand or sit tall with the torso still and elbows controlled. Curl the weight by bending the elbow while keeping the shoulder from swinging forward. Squeeze at the top, then lower slowly to a full stretch. Exhale as you curl and inhale as you lower. Avoid swinging, leaning back, shortening the bottom range, or letting wrists collapse. Regress with lighter weight or cables. Progress with slower eccentrics, incline versions, or stricter pauses. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 160,
+    "name": "Dumbbell Pullover",
+    "category": "Back / lats",
+    "muscles": "Lats, upper back, mid back; secondary biceps and forearms",
+    "howTo": "Start with a braced torso and shoulders pulled away from the ears. Initiate by driving elbows down or back, not by yanking with the hands. Pull to the intended finish position, squeeze briefly, then return under control until the back stretches. Exhale as you pull and inhale as you return. Avoid jerking, excessive leaning, shrugging, or cutting the range short. Regress by using assistance, lighter loads, or chest support. Progress by adding weight, using pauses, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 161,
+    "name": "High Cable Curl",
+    "category": "Biceps",
+    "muscles": "Biceps, brachialis, forearms depending on grip",
+    "howTo": "Stand or sit tall with the torso still and elbows controlled. Curl the weight by bending the elbow while keeping the shoulder from swinging forward. Squeeze at the top, then lower slowly to a full stretch. Exhale as you curl and inhale as you lower. Avoid swinging, leaning back, shortening the bottom range, or letting wrists collapse. Regress with lighter weight or cables. Progress with slower eccentrics, incline versions, or stricter pauses. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 162,
+    "name": "Cable Face Pull Row",
+    "category": "Shoulders",
+    "muscles": "Deltoids; secondary triceps, traps, rotator cuff",
+    "howTo": "Brace your core, keep the ribs down, and start with the shoulders set without shrugging. Press or raise the weight through a controlled path while keeping the neck relaxed and wrists neutral. Lower slowly and stop before losing shoulder position. Exhale on the lift and inhale on the return. Avoid using momentum, arching the low back, or turning raises into a swing. Regress by lowering weight or using a machine. Progress by adding load, using slower eccentrics, adding pauses, or using unilateral versions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 163,
+    "name": "Cross-Body Hammer Curl",
+    "category": "Biceps",
+    "muscles": "Biceps, brachialis, forearms depending on grip",
+    "howTo": "Stand or sit tall with the torso still and elbows controlled. Curl the weight by bending the elbow while keeping the shoulder from swinging forward. Squeeze at the top, then lower slowly to a full stretch. Exhale as you curl and inhale as you lower. Avoid swinging, leaning back, shortening the bottom range, or letting wrists collapse. Regress with lighter weight or cables. Progress with slower eccentrics, incline versions, or stricter pauses. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 164,
+    "name": "Stir-the-Pot",
+    "category": "Core",
+    "muscles": "Abs, obliques, deep core; secondary hip flexors depending on movement",
+    "howTo": "Brace as if preparing for a punch and keep the ribs stacked over the pelvis. Move slowly through the assigned pattern or hold the position without losing spinal control. Breathe behind the brace without letting the low back arch. Avoid momentum, neck pulling, hip sagging, or rushing reps. Regress by shortening the lever, reducing load, or using bent knees. Progress by adding load, longer holds, slower tempo, or harder lever positions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 165,
+    "name": "Standing Cable Crunch",
+    "category": "Core",
+    "muscles": "Abs, obliques, deep core; secondary hip flexors depending on movement",
+    "howTo": "Brace as if preparing for a punch and keep the ribs stacked over the pelvis. Move slowly through the assigned pattern or hold the position without losing spinal control. Breathe behind the brace without letting the low back arch. Avoid momentum, neck pulling, hip sagging, or rushing reps. Regress by shortening the lever, reducing load, or using bent knees. Progress by adding load, longer holds, slower tempo, or harder lever positions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 166,
+    "name": "Bear Crawl Hold",
+    "category": "Core",
+    "muscles": "Abs, obliques, deep core; secondary hip flexors depending on movement",
+    "howTo": "Brace as if preparing for a punch and keep the ribs stacked over the pelvis. Move slowly through the assigned pattern or hold the position without losing spinal control. Breathe behind the brace without letting the low back arch. Avoid momentum, neck pulling, hip sagging, or rushing reps. Regress by shortening the lever, reducing load, or using bent knees. Progress by adding load, longer holds, slower tempo, or harder lever positions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 167,
+    "name": "Zercher Squat",
+    "category": "Quads / legs",
+    "muscles": "Quads; secondary glutes, hamstrings, core",
+    "howTo": "Set feet firmly, brace the core, and keep knees tracking in line with toes. Lower under control to the programmed depth while maintaining balance and posture, then drive through the midfoot to stand. Exhale as you stand and inhale as you lower. Avoid knees collapsing inward, bouncing, rounding the back, or shifting weight only to the toes. Regress with goblet or machine versions. Progress by adding load, pauses, deeper range, or single-leg variations. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 168,
+    "name": "Glute-Ham Raise",
+    "category": "Hamstrings / posterior chain",
+    "muscles": "Hamstrings; secondary glutes and lower back",
+    "howTo": "Brace the trunk and keep a neutral spine. Hinge or curl through the intended joint path while feeling tension in the hamstrings. Move slowly on the lowering phase and return without jerking. Exhale on the effort and inhale during the stretch. Avoid rounding the back, turning hinges into squats, rushing the eccentric, or losing hip position. Regress by using lighter load or shorter range. Progress by adding load, slower eccentrics, or unilateral work. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 169,
+    "name": "Dumbbell Walking Lunge",
+    "category": "Quads / legs",
+    "muscles": "Quads; secondary glutes, hamstrings, core",
+    "howTo": "Set feet firmly, brace the core, and keep knees tracking in line with toes. Lower under control to the programmed depth while maintaining balance and posture, then drive through the midfoot to stand. Exhale as you stand and inhale as you lower. Avoid knees collapsing inward, bouncing, rounding the back, or shifting weight only to the toes. Regress with goblet or machine versions. Progress by adding load, pauses, deeper range, or single-leg variations. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 170,
+    "name": "Cable Hip Abduction",
+    "category": "Glutes",
+    "muscles": "Glutes; secondary hamstrings and core",
+    "howTo": "Set the ribs down, brace the core, and position feet so the glutes do the work. Drive through the heels or midfoot and extend the hips until the body reaches a strong lockout without over-arching the low back. Pause and squeeze the glutes, then lower under control. Exhale as you lift and inhale as you lower. Avoid pushing through the toes, hyperextending the back, or cutting the lockout short. Regress with bodyweight bridges. Progress with load, pauses, bands, or single-leg versions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 171,
+    "name": "Single-Leg Standing Calf Raise",
+    "category": "Calves",
+    "muscles": "Gastrocnemius and soleus",
+    "howTo": "Place the balls of the feet securely on the platform and keep ankles aligned. Lower into a full calf stretch, pause briefly, then rise as high as possible onto the toes. Control every rep and avoid bouncing. Exhale as you raise and inhale as you lower. Regress with bodyweight calf raises. Progress with load, single-leg work, or longer pauses at the stretch and top. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 172,
+    "name": "Farmer Carry",
+    "category": "Core",
+    "muscles": "Abs, obliques, deep core; secondary hip flexors depending on movement",
+    "howTo": "Brace as if preparing for a punch and keep the ribs stacked over the pelvis. Move slowly through the assigned pattern or hold the position without losing spinal control. Breathe behind the brace without letting the low back arch. Avoid momentum, neck pulling, hip sagging, or rushing reps. Regress by shortening the lever, reducing load, or using bent knees. Progress by adding load, longer holds, slower tempo, or harder lever positions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 173,
+    "name": "Incline Dumbbell Bench Press",
+    "category": "Chest / pressing",
+    "muscles": "Chest; secondary triceps and front delts",
+    "howTo": "Set shoulder blades back and down, keep ribs controlled, and place hands so wrists stack over elbows. Lower under control until you reach a safe full range, then press or squeeze back while keeping tension on the chest. Inhale during the lowering/stretch phase and exhale as you press or bring the arms together. Avoid bouncing, shrugging, flaring elbows excessively, or letting the shoulders roll forward. Regress by reducing load, using incline push-ups, or using a machine. Progress by adding load, slowing tempo, pausing, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 174,
+    "name": "Flat Barbell Bench Press",
+    "category": "Chest / pressing",
+    "muscles": "Chest; secondary triceps and front delts",
+    "howTo": "Set shoulder blades back and down, keep ribs controlled, and place hands so wrists stack over elbows. Lower under control until you reach a safe full range, then press or squeeze back while keeping tension on the chest. Inhale during the lowering/stretch phase and exhale as you press or bring the arms together. Avoid bouncing, shrugging, flaring elbows excessively, or letting the shoulders roll forward. Regress by reducing load, using incline push-ups, or using a machine. Progress by adding load, slowing tempo, pausing, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 175,
+    "name": "Cable Crossover",
+    "category": "Chest / pressing",
+    "muscles": "Chest; secondary triceps and front delts",
+    "howTo": "Set shoulder blades back and down, keep ribs controlled, and place hands so wrists stack over elbows. Lower under control until you reach a safe full range, then press or squeeze back while keeping tension on the chest. Inhale during the lowering/stretch phase and exhale as you press or bring the arms together. Avoid bouncing, shrugging, flaring elbows excessively, or letting the shoulders roll forward. Regress by reducing load, using incline push-ups, or using a machine. Progress by adding load, slowing tempo, pausing, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 176,
+    "name": "Weighted Bench Dip",
+    "category": "Chest / pressing",
+    "muscles": "Chest; secondary triceps and front delts",
+    "howTo": "Set shoulder blades back and down, keep ribs controlled, and place hands so wrists stack over elbows. Lower under control until you reach a safe full range, then press or squeeze back while keeping tension on the chest. Inhale during the lowering/stretch phase and exhale as you press or bring the arms together. Avoid bouncing, shrugging, flaring elbows excessively, or letting the shoulders roll forward. Regress by reducing load, using incline push-ups, or using a machine. Progress by adding load, slowing tempo, pausing, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 177,
+    "name": "Single-Arm Overhead Dumbbell Extension",
+    "category": "Strength",
+    "muscles": "Target muscle listed in the workout table",
+    "howTo": "Set up with stable posture, neutral joints, and the target muscle loaded. Move through a controlled full range of motion, breathe with the effort, and stop when technique breaks down. Avoid momentum and poor joint alignment. Regress by reducing load or range. Progress by increasing load, reps, tempo control, or range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 178,
+    "name": "Weighted Chin-Up",
+    "category": "Back / lats",
+    "muscles": "Lats, upper back, mid back; secondary biceps and forearms",
+    "howTo": "Start with a braced torso and shoulders pulled away from the ears. Initiate by driving elbows down or back, not by yanking with the hands. Pull to the intended finish position, squeeze briefly, then return under control until the back stretches. Exhale as you pull and inhale as you return. Avoid jerking, excessive leaning, shrugging, or cutting the range short. Regress by using assistance, lighter loads, or chest support. Progress by adding weight, using pauses, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 179,
+    "name": "Chest-Supported Machine Row",
+    "category": "Back / lats",
+    "muscles": "Lats, upper back, mid back; secondary biceps and forearms",
+    "howTo": "Start with a braced torso and shoulders pulled away from the ears. Initiate by driving elbows down or back, not by yanking with the hands. Pull to the intended finish position, squeeze briefly, then return under control until the back stretches. Exhale as you pull and inhale as you return. Avoid jerking, excessive leaning, shrugging, or cutting the range short. Regress by using assistance, lighter loads, or chest support. Progress by adding weight, using pauses, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 180,
+    "name": "Barbell Curl",
+    "category": "Biceps",
+    "muscles": "Biceps, brachialis, forearms depending on grip",
+    "howTo": "Stand or sit tall with the torso still and elbows controlled. Curl the weight by bending the elbow while keeping the shoulder from swinging forward. Squeeze at the top, then lower slowly to a full stretch. Exhale as you curl and inhale as you lower. Avoid swinging, leaning back, shortening the bottom range, or letting wrists collapse. Regress with lighter weight or cables. Progress with slower eccentrics, incline versions, or stricter pauses. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 181,
+    "name": "Single-Arm Lat Pulldown",
+    "category": "Back / lats",
+    "muscles": "Lats, upper back, mid back; secondary biceps and forearms",
+    "howTo": "Start with a braced torso and shoulders pulled away from the ears. Initiate by driving elbows down or back, not by yanking with the hands. Pull to the intended finish position, squeeze briefly, then return under control until the back stretches. Exhale as you pull and inhale as you return. Avoid jerking, excessive leaning, shrugging, or cutting the range short. Regress by using assistance, lighter loads, or chest support. Progress by adding weight, using pauses, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 182,
+    "name": "Straight-Arm Rope Pulldown",
+    "category": "Back / lats",
+    "muscles": "Lats, upper back, mid back; secondary biceps and forearms",
+    "howTo": "Start with a braced torso and shoulders pulled away from the ears. Initiate by driving elbows down or back, not by yanking with the hands. Pull to the intended finish position, squeeze briefly, then return under control until the back stretches. Exhale as you pull and inhale as you return. Avoid jerking, excessive leaning, shrugging, or cutting the range short. Regress by using assistance, lighter loads, or chest support. Progress by adding weight, using pauses, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 183,
+    "name": "Cable Hammer Curl",
+    "category": "Biceps",
+    "muscles": "Biceps, brachialis, forearms depending on grip",
+    "howTo": "Stand or sit tall with the torso still and elbows controlled. Curl the weight by bending the elbow while keeping the shoulder from swinging forward. Squeeze at the top, then lower slowly to a full stretch. Exhale as you curl and inhale as you lower. Avoid swinging, leaning back, shortening the bottom range, or letting wrists collapse. Regress with lighter weight or cables. Progress with slower eccentrics, incline versions, or stricter pauses. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 184,
+    "name": "Weighted Dead Bug",
+    "category": "Core",
+    "muscles": "Abs, obliques, deep core; secondary hip flexors depending on movement",
+    "howTo": "Brace as if preparing for a punch and keep the ribs stacked over the pelvis. Move slowly through the assigned pattern or hold the position without losing spinal control. Breathe behind the brace without letting the low back arch. Avoid momentum, neck pulling, hip sagging, or rushing reps. Regress by shortening the lever, reducing load, or using bent knees. Progress by adding load, longer holds, slower tempo, or harder lever positions. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 185,
+    "name": "Barbell Romanian Deadlift",
+    "category": "Back / lats",
+    "muscles": "Lats, upper back, mid back; secondary biceps and forearms",
+    "howTo": "Start with a braced torso and shoulders pulled away from the ears. Initiate by driving elbows down or back, not by yanking with the hands. Pull to the intended finish position, squeeze briefly, then return under control until the back stretches. Exhale as you pull and inhale as you return. Avoid jerking, excessive leaning, shrugging, or cutting the range short. Regress by using assistance, lighter loads, or chest support. Progress by adding weight, using pauses, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 186,
+    "name": "Dumbbell Reverse Lunge",
+    "category": "Quads / legs",
+    "muscles": "Quads; secondary glutes, hamstrings, core",
+    "howTo": "Set feet firmly, brace the core, and keep knees tracking in line with toes. Lower under control to the programmed depth while maintaining balance and posture, then drive through the midfoot to stand. Exhale as you stand and inhale as you lower. Avoid knees collapsing inward, bouncing, rounding the back, or shifting weight only to the toes. Regress with goblet or machine versions. Progress by adding load, pauses, deeper range, or single-leg variations. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 187,
+    "name": "Machine Chest Press",
+    "category": "Chest / pressing",
+    "muscles": "Chest; secondary triceps and front delts",
+    "howTo": "Set shoulder blades back and down, keep ribs controlled, and place hands so wrists stack over elbows. Lower under control until you reach a safe full range, then press or squeeze back while keeping tension on the chest. Inhale during the lowering/stretch phase and exhale as you press or bring the arms together. Avoid bouncing, shrugging, flaring elbows excessively, or letting the shoulders roll forward. Regress by reducing load, using incline push-ups, or using a machine. Progress by adding load, slowing tempo, pausing, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 188,
+    "name": "Decline Dumbbell Bench Press",
+    "category": "Chest / pressing",
+    "muscles": "Chest; secondary triceps and front delts",
+    "howTo": "Set shoulder blades back and down, keep ribs controlled, and place hands so wrists stack over elbows. Lower under control until you reach a safe full range, then press or squeeze back while keeping tension on the chest. Inhale during the lowering/stretch phase and exhale as you press or bring the arms together. Avoid bouncing, shrugging, flaring elbows excessively, or letting the shoulders roll forward. Regress by reducing load, using incline push-ups, or using a machine. Progress by adding load, slowing tempo, pausing, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 189,
+    "name": "Deadlift",
+    "category": "Back / lats",
+    "muscles": "Lats, upper back, mid back; secondary biceps and forearms",
+    "howTo": "Start with a braced torso and shoulders pulled away from the ears. Initiate by driving elbows down or back, not by yanking with the hands. Pull to the intended finish position, squeeze briefly, then return under control until the back stretches. Exhale as you pull and inhale as you return. Avoid jerking, excessive leaning, shrugging, or cutting the range short. Regress by using assistance, lighter loads, or chest support. Progress by adding weight, using pauses, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 190,
+    "name": "Wide-Grip Cable Row",
+    "category": "Back / lats",
+    "muscles": "Lats, upper back, mid back; secondary biceps and forearms",
+    "howTo": "Start with a braced torso and shoulders pulled away from the ears. Initiate by driving elbows down or back, not by yanking with the hands. Pull to the intended finish position, squeeze briefly, then return under control until the back stretches. Exhale as you pull and inhale as you return. Avoid jerking, excessive leaning, shrugging, or cutting the range short. Regress by using assistance, lighter loads, or chest support. Progress by adding weight, using pauses, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 191,
+    "name": "Pull-Up",
+    "category": "Back / lats",
+    "muscles": "Lats, upper back, mid back; secondary biceps and forearms",
+    "howTo": "Start with a braced torso and shoulders pulled away from the ears. Initiate by driving elbows down or back, not by yanking with the hands. Pull to the intended finish position, squeeze briefly, then return under control until the back stretches. Exhale as you pull and inhale as you return. Avoid jerking, excessive leaning, shrugging, or cutting the range short. Regress by using assistance, lighter loads, or chest support. Progress by adding weight, using pauses, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 192,
+    "name": "Machine High Row",
+    "category": "Back / lats",
+    "muscles": "Lats, upper back, mid back; secondary biceps and forearms",
+    "howTo": "Start with a braced torso and shoulders pulled away from the ears. Initiate by driving elbows down or back, not by yanking with the hands. Pull to the intended finish position, squeeze briefly, then return under control until the back stretches. Exhale as you pull and inhale as you return. Avoid jerking, excessive leaning, shrugging, or cutting the range short. Regress by using assistance, lighter loads, or chest support. Progress by adding weight, using pauses, or increasing range of motion. detail screen.",
+    "displayFormat": ""
+  },
+  {
+    "id": 193,
+    "name": "Hip Thrust Machine",
+    "category": "Glutes",
+    "muscles": "Glutes; secondary hamstrings and core",
+    "howTo": "Set the ribs down, brace the core, and position feet so the glutes do the work. Drive through the heels or midfoot and extend the hips until the body reaches a strong lockout without over-arching the low back. Pause and squeeze the glutes, then lower under control. Exhale as you lift and inhale as you lower. Avoid pushing through the toes, hyperextending the back, or cutting the lockout short. Regress with bodyweight bridges. Progress with load, pauses, bands, or single-leg versions. detail screen. Reusable OpenAI Workout Generation Template for ONE MORE System behavior for future ONE MORE lifting generation: You are the ONE MORE lifting coach. Generate resistance-training workouts that follow the Month 1 reference standard. Preserve split focus. Do not turn split days into generic full-body circuits. Program by working sets, not by exercise count. Prioritize compound lifts first, then secondary compounds, then accessories and isolation. Use supersets for accessories where appropriate but never pair two heavy compound lifts. Inputs expected: - User goal: strength, hypertrophy, fat loss, general fitness, athletic performance. - Experience: beginner, intermediate, advanced. - Available equipment. - Split day: Chest/Triceps/Shoulders, Back/Biceps/Core, Legs/Core, Full Body, or another selected mode. - Recovery level and soreness. - Previous workouts. Output required: - Workout title. - Muscle-group focus. - Exercise blocks A, B1/B2, C1/C2, etc. - Sets, reps, rest, tempo. - Superset explanation. - Exercise instructions from the exercise reference guide. - Substitutions for unavailable equipment. - Progression target for next time. Quality checklist before returning a workout:",
+    "displayFormat": ""
+  },
+  {
+    "id": 1,
+    "name": "Does the workout primarily train the selected split?",
+    "category": "",
+    "muscles": "",
+    "howTo": "",
+    "displayFormat": ""
+  },
+  {
+    "id": 2,
+    "name": "Are the target working set totals met?",
+    "category": "",
+    "muscles": "",
+    "howTo": "",
+    "displayFormat": ""
+  },
+  {
+    "id": 3,
+    "name": "Are heavy compounds first?",
+    "category": "",
+    "muscles": "",
+    "howTo": "",
+    "displayFormat": ""
+  },
+  {
+    "id": 4,
+    "name": "Are supersets safe and logical?",
+    "category": "",
+    "muscles": "",
+    "howTo": "",
+    "displayFormat": ""
+  },
+  {
+    "id": 5,
+    "name": "Is equipment respected?",
+    "category": "",
+    "muscles": "",
+    "howTo": "",
+    "displayFormat": ""
+  },
+  {
+    "id": 6,
+    "name": "Is the workout different from recent sessions?",
+    "category": "",
+    "muscles": "",
+    "howTo": "",
+    "displayFormat": ""
+  },
+  {
+    "id": 7,
+    "name": "Are exercise instructions present?",
+    "category": "",
+    "muscles": "",
+    "howTo": "",
+    "displayFormat": ""
+  },
+  {
+    "id": 8,
+    "name": "Are substitutions available?",
+    "category": "",
+    "muscles": "",
+    "howTo": "",
+    "displayFormat": ""
+  },
+  {
+    "id": 9,
+    "name": "Is the workout practical for a real user to complete?",
+    "category": "",
+    "muscles": "",
+    "howTo": "",
+    "displayFormat": ""
+  }
+]

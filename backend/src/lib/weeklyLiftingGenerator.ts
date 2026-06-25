@@ -48,8 +48,9 @@ const WEEKLY_LIFTING_PATTERNS: Record<
     3: ['Back, Biceps & Core', 'Chest, Shoulders & Triceps', 'Legs & Core', 'Rest', 'Rest', 'Rest', 'Rest'],
     4: ['Back, Biceps & Core', 'Chest, Shoulders & Triceps', 'Legs & Core', 'Back, Biceps & Core', 'Rest', 'Rest', 'Rest'],
     5: ['Back, Biceps & Core', 'Chest, Shoulders & Triceps', 'Legs & Core', 'Back, Biceps & Core', 'Chest, Shoulders & Triceps', 'Rest', 'Rest'],
-    6: ['Back, Biceps & Core', 'Chest, Shoulders & Triceps', 'Legs & Core', 'Back, Biceps & Core', 'Chest, Shoulders & Triceps', 'Legs & Core', 'Rest'],
-    7: ['Back, Biceps & Core', 'Chest, Shoulders & Triceps', 'Legs & Core', 'Back, Biceps & Core', 'Chest, Shoulders & Triceps', 'Legs & Core', 'Back, Biceps & Core'],
+    // Month 1 reference order: Mon Chest → Tue Back → Wed Legs (×2 per week), Sun recovery.
+    6: ['Chest, Shoulders & Triceps', 'Back, Biceps & Core', 'Legs & Core', 'Chest, Shoulders & Triceps', 'Back, Biceps & Core', 'Legs & Core', 'Rest'],
+    7: ['Chest, Shoulders & Triceps', 'Back, Biceps & Core', 'Legs & Core', 'Chest, Shoulders & Triceps', 'Back, Biceps & Core', 'Legs & Core', 'Back, Biceps & Core'],
   },
   strength: {
     3: ['Squat Day', 'Bench Day', 'Deadlift Day', 'Rest', 'Rest', 'Rest', 'Rest'],

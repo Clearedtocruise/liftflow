@@ -1,4 +1,5 @@
 import { answerSmartCoachQuestion, loadCoachContext } from './coachContext.js';
+import { buildReferenceStyleWorkoutPlan, LIFTING_AI_SYSTEM_PROMPT, SPLIT_VOLUME_TARGETS, splitKeyFromLabel } from './liftingReference/index.js';
 import { loadRecoveryIntelligence } from './loadRecoveryIntelligence.js';
 import { localDateString, weekStartFromDateString } from './localDate.js';
 import { generateWeeklyMealPlanMeals } from './mealPlanTemplates.js';
@@ -262,6 +263,7 @@ export async function generateWorkoutPlan(userId: string): Promise<GeneratedWork
 
   const allowedNames = new Set(availableExercises.map((e) => e.name.toLowerCase()));
   const exerciseList = filterExerciseLibraryForPrompt(availableExercises);
+  const volumeHint = inferVolumeHint(muscles.primaryGroups, heuristicPlan);
 
   const openai = getOpenAI()!;
   const completion = await openai.chat.completions.create({
@@ -269,12 +271,13 @@ export async function generateWorkoutPlan(userId: string): Promise<GeneratedWork
     messages: [
       {
         role: 'system',
-        content: `You are an expert strength coach. Return JSON: { "name": string, "rationale": string, "muscleGroups": string[], "estimatedMinutes": number, "exercises": [{ "name": string, "sets": number, "reps": string, "weightLbs": number, "restSeconds": number, "notes": string }] }. CRITICAL: Use ONLY exercise names from the provided library (exact names). Respect equipment constraints. Prefer exercises NOT repeated from last week when alternatives exist. Primary goal: ${profile.primaryTrainingGoal}. All goals (priority order): ${profile.fitnessGoals.join(', ')}. Experience: ${profile.trainingExperience ?? 'beginner'}.`,
+        content: `${LIFTING_AI_SYSTEM_PROMPT}\n\nReturn JSON: { "name": string, "rationale": string, "muscleGroups": string[], "estimatedMinutes": number, "exercises": [{ "name": string, "sets": number, "reps": string, "weightLbs": number, "restSeconds": number, "notes": string, "supersetGroupId": string }] }. CRITICAL: Use ONLY exercise names from the provided library (exact names). Primary goal: ${profile.primaryTrainingGoal}. Experience: ${profile.trainingExperience ?? 'intermediate'}.`,
       },
       {
         role: 'user',
         content: JSON.stringify({
           targetMuscles: muscles.primaryGroups,
+          volumeTargets: volumeHint,
           recovery: recovery.status,
           recoveryAdvice: recovery.aiAnalysis,
           trainingGoal: profile.primaryTrainingGoal,
@@ -334,4 +337,20 @@ export async function synthesizeSpeech(text: string): Promise<Buffer | null> {
     input: trimmed,
   });
   return Buffer.from(await mp3.arrayBuffer());
+}
+
+function inferVolumeHint(primaryGroups: string[], heuristicPlan: GeneratedWorkoutPlan): Record<string, number> | null {
+  const slotLabel = heuristicPlan.name ?? '';
+  const splitKey =
+    splitKeyFromLabel(slotLabel) ??
+    (primaryGroups.includes('chest') && primaryGroups.includes('shoulders')
+      ? 'chest_shoulders_triceps'
+      : primaryGroups.includes('back') && primaryGroups.includes('biceps')
+        ? 'back_biceps_core'
+        : primaryGroups.some((g) => ['quads', 'hamstrings', 'glutes'].includes(g))
+          ? 'legs_core'
+          : null);
+
+  if (!splitKey) return null;
+  return { ...SPLIT_VOLUME_TARGETS[splitKey] };
 }
