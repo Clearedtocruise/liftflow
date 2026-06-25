@@ -211,7 +211,59 @@ export function exerciseMatchesQuotaMuscle(exercise: ExerciseRecord, muscle: str
   return primary === muscle;
 }
 
+const UPPER_DAY_PULL_FAMILIES = new Set(['horizontal_pull', 'vertical_pull']);
+const LOWER_DAY_PUSH_FAMILIES = new Set(['horizontal_press', 'vertical_press', 'triceps']);
+
+function exerciseNameLooksLikeGluteIsolation(name: string): boolean {
+  const key = name.toLowerCase();
+  if (/\btriceps kickback\b|\bcable triceps kickback\b/.test(key)) return false;
+  return (
+    /\bglute kickback\b|\bcable glute kickback\b|\bdonkey kick\b|\bfire hydrant\b|\bhip abduction\b/.test(
+      key,
+    ) || (/\bkickback\b/.test(key) && /\bglute\b/.test(key))
+  );
+}
+
+function exerciseNameLooksLikeBandExercise(name: string, slug: string): boolean {
+  const key = `${name} ${slug}`.toLowerCase();
+  return /\bband row\b|\bband pull\b|\bband curl\b|\bseated band row\b/.test(key) || slug.startsWith('band-');
+}
+
+/** Hard guards against catalog metadata mistakes (e.g. glute kickback tagged as triceps). */
+export function isIncompatibleWithDayFocus(exercise: ExerciseRecord, plan: DayFocusPlan): boolean {
+  const primary = primaryMuscleGroup(exercise);
+  const family = exercise.metadata?.movement_family ?? '';
+  const slug = exercise.slug.toLowerCase();
+  const name = exercise.name.toLowerCase();
+
+  if (plan.key === 'chest_shoulders_triceps') {
+    if (exerciseNameLooksLikeGluteIsolation(exercise.name)) return true;
+    if (exerciseNameLooksLikeBandExercise(exercise.name, exercise.slug)) return true;
+    if (UPPER_DAY_PULL_FAMILIES.has(family)) return true;
+    if (slug.includes('row') || slug.includes('pulldown') || slug.includes('pull-up') || slug.includes('pullup')) {
+      return true;
+    }
+    if (['glutes', 'quads', 'hamstrings', 'calves', 'legs'].includes(primary)) return true;
+  }
+
+  if (plan.key === 'back_biceps_core') {
+    if (exerciseNameLooksLikeGluteIsolation(exercise.name)) return true;
+    if (LOWER_DAY_PUSH_FAMILIES.has(family) && !['rear_delt'].includes(family)) return true;
+    if (['chest', 'quads', 'hamstrings', 'glutes', 'calves'].includes(primary)) return true;
+  }
+
+  if (plan.key === 'legs_core') {
+    if (['chest', 'back', 'shoulders', 'biceps', 'triceps'].includes(primary)) return true;
+    if (family === 'biceps' || family === 'triceps') return true;
+  }
+
+  if (exerciseNameLooksLikeGluteIsolation(name) && plan.key !== 'legs_core') return true;
+
+  return false;
+}
+
 export function isAllowedOnDayFocus(exercise: ExerciseRecord, plan: DayFocusPlan): boolean {
+  if (isIncompatibleWithDayFocus(exercise, plan)) return false;
   if (isExcludedForDayFocus(exercise, plan.excludePrimaryMuscles)) return false;
 
   const primary = primaryMuscleGroup(exercise);
@@ -383,7 +435,7 @@ export async function loadAvailableExercises(
     .filter((exercise) => exerciseMeetsEquipment(exercise, available));
 
   if (filtered.length < WORKOUT_TARGET_EXERCISES) {
-    const expanded = expandAvailableEquipment([...equipment, 'bodyweight', 'bands']);
+    const expanded = expandAvailableEquipment([...equipment, 'bodyweight']);
     const supplemental = (data ?? [])
       .map((row) => ({
         ...row,

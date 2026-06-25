@@ -5,6 +5,7 @@ import {
     BODY_PART_DAY_PLANS,
     exerciseMeetsEquipment,
     expandAvailableEquipment,
+    isAllowedOnDayFocus,
     isCoreFocusedExercise,
     resolveDayFocusPlan,
     selectFocusedSplitExercises,
@@ -73,6 +74,31 @@ test('resolveDayFocusPlan maps split labels', () => {
   assert.equal(resolveDayFocusPlan('Back, Biceps & Core')?.key, 'back_biceps_core');
   assert.equal(resolveDayFocusPlan('Chest, Shoulders & Triceps')?.key, 'chest_shoulders_triceps');
   assert.equal(resolveDayFocusPlan('Legs & Core')?.key, 'legs_core');
+});
+
+test('push day rejects glute kickback and band row even with bad catalog metadata', () => {
+  const plan = BODY_PART_DAY_PLANS.chest_shoulders_triceps;
+  const gluteKickback: ExerciseRecord = {
+    id: 'glute-kickback',
+    name: 'Glute Kickback',
+    slug: 'glute-kickback',
+    category: 'other',
+    equipment: 'dumbbell',
+    muscle_groups: ['triceps'],
+    metadata: { movement_family: 'general_movement', requires: ['dumbbells'] },
+  };
+  const bandRow: ExerciseRecord = {
+    id: 'band-row',
+    name: 'Band Row',
+    slug: 'band-row',
+    category: 'pull',
+    equipment: 'bands',
+    muscle_groups: ['lats'],
+    metadata: { movement_family: 'horizontal_pull', requires: ['bands'] },
+  };
+
+  assert.equal(isAllowedOnDayFocus(gluteKickback, plan), false);
+  assert.equal(isAllowedOnDayFocus(bandRow, plan), false);
 });
 
 test('back day prioritizes back and biceps over chest', () => {
