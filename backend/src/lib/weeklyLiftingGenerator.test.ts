@@ -30,6 +30,7 @@ assert.equal(countLiftingDaysInPattern(bodyPart3), 3);
 
 const bodyPart6 = getWeeklyLiftingPattern('body_part_split', 6);
 assert.equal(countLiftingDaysInPattern(bodyPart6), 6);
+assert.equal(formatWeeklyPattern(bodyPart6).startsWith('Chest, Shoulders & Triceps'), true);
 
 const hypertrophySplit = inferWeeklyLiftingSplit({
   primaryGoal: 'muscle_gain',

@@ -1,5 +1,6 @@
 import { catalogExerciseBySlug } from '@/constants/exerciseDatabase';
 import { GENERATED_EXERCISE_FORM_GUIDES } from '@/lib/generatedExerciseFormGuides';
+import { month1GuideFromEncyclopedia } from '@/lib/liftingReference/month1ExerciseEncyclopedia';
 import type { Exercise } from '@/types';
 import type { MovementCategory } from '@/types/common';
 
@@ -567,6 +568,17 @@ export function resolveExerciseFormGuide(
   if (exercise?.instructions) {
     const fromDb = guideFromInstructions(exercise.instructions);
     if (fromDb) return fromDb;
+  }
+
+  const month1Guide = month1GuideFromEncyclopedia(name ?? '');
+  if (month1Guide?.execution?.length) {
+    return {
+      steps: [...(month1Guide.setup ?? []), ...month1Guide.execution],
+      tips: [
+        ...(month1Guide.cues ?? []),
+        ...(month1Guide.commonMistakes ?? []),
+      ].filter(Boolean),
+    };
   }
 
   return (

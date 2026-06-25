@@ -88,29 +88,28 @@ export const BODY_PART_DAY_PLANS: Record<string, DayFocusPlan> = {
     key: 'back_biceps_core',
     quotas: [
       { muscles: ['back'], min: 4 },
-      { muscles: ['biceps'], min: 2 },
+      { muscles: ['biceps'], min: 3 },
       { muscles: ['core'], min: 3 },
     ],
-    excludePrimaryMuscles: ['chest', 'triceps', 'shoulders'],
+    excludePrimaryMuscles: ['chest', 'triceps', 'shoulders', 'quads', 'hamstrings', 'glutes', 'calves'],
   },
   chest_shoulders_triceps: {
     key: 'chest_shoulders_triceps',
     quotas: [
       { muscles: ['chest'], min: 3 },
-      { muscles: ['shoulders'], min: 2 },
-      { muscles: ['triceps'], min: 2 },
-      { muscles: ['core'], min: 1 },
+      { muscles: ['shoulders'], min: 3 },
+      { muscles: ['triceps'], min: 3 },
     ],
-    excludePrimaryMuscles: ['back', 'biceps'],
+    excludePrimaryMuscles: ['back', 'biceps', 'quads', 'hamstrings', 'glutes', 'calves'],
   },
   legs_core: {
     key: 'legs_core',
     quotas: [
       { muscles: ['quads'], min: 3 },
-      { muscles: ['glutes'], min: 2 },
-      { muscles: ['hamstrings'], min: 2 },
-      { muscles: ['calves'], min: 1 },
-      { muscles: ['core'], min: 2 },
+      { muscles: ['hamstrings'], min: 3 },
+      { muscles: ['glutes'], min: 3 },
+      { muscles: ['calves'], min: 2 },
+      { muscles: ['core'], min: 3 },
     ],
     excludePrimaryMuscles: ['chest', 'back', 'shoulders', 'biceps', 'triceps'],
   },
@@ -543,7 +542,7 @@ function scoreExercise(
   return score;
 }
 
-function suggestWeightLbs(
+export function suggestWeightLbs(
   exercise: ExerciseRecord,
   goal: TrainingGoal,
   history: SetHistory | undefined,

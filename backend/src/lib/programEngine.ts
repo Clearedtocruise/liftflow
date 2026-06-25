@@ -1,5 +1,10 @@
-import { applySubstitutionsToExercises, type LimitationContext } from './exerciseSubstitution.js';
 import { applyEquipmentSubstitutionsToExercises } from './equipmentSubstitutionEngine.js';
+import { applySubstitutionsToExercises, type LimitationContext } from './exerciseSubstitution.js';
+import {
+    buildReferenceStyleWorkoutPlan,
+    enrichWithSmartSupersetGroups,
+    shouldUseReferenceLiftingProgram,
+} from './liftingReference/index.js';
 import { applyWeeklyProgression, totalPlannedVolume } from './programProgression.js';
 import { inferProgramFrequency, inferProgramType, resolveDaysPerWeekFromProfile } from './programSelection.js';
 import {
@@ -32,13 +37,7 @@ function enrichExercisesWithSupersetGroups<T extends Record<string, unknown>>(
   exercises: T[],
 ): Array<T & { supersetGroupId?: string }> {
   if (exercises.length < 2) return exercises;
-  const result = exercises.map((exercise) => ({ ...exercise }));
-  for (let i = 0; i + 1 < result.length; i += 2) {
-    const groupId = `ss-${Math.floor(i / 2) + 1}`;
-    result[i] = { ...result[i], supersetGroupId: groupId };
-    result[i + 1] = { ...result[i + 1], supersetGroupId: groupId };
-  }
-  return result;
+  return enrichWithSmartSupersetGroups(exercises) as Array<T & { supersetGroupId?: string }>;
 }
 
 export type CreateProgramInput = {
@@ -55,7 +54,7 @@ export type CreateProgramInput = {
 };
 
 /** Bump when workout planning rules change so existing programs can be regenerated. */
-export const PLAN_RULES_VERSION = 10;
+export const PLAN_RULES_VERSION = 12;
 
 const MIN_ACCEPTABLE_EXERCISES_PER_SESSION = 8;
 
@@ -172,6 +171,15 @@ export async function generateTrainingProgram(input: CreateProgramInput) {
 
   await db.from('training_programs').update({ is_active: false }).eq('user_id', input.userId);
 
+  const endDate = addDays(startDate, durationWeeks * 7 - 1);
+  await db
+    .from('planned_workouts')
+    .update({ status: 'cancelled' })
+    .eq('user_id', input.userId)
+    .eq('status', 'planned')
+    .gte('scheduled_date', startDate)
+    .lte('scheduled_date', endDate);
+
   const programName = `${programTypeLabel(input.programType)} — ${input.frequency === 'custom' ? 'Custom' : `${input.frequency}x/week`}`;
 
   const { data: program, error: programError } = await db
@@ -250,25 +258,45 @@ export async function generateTrainingProgram(input: CreateProgramInput) {
 
       let templateId = templateCache.get(cacheKey);
       if (!templateId) {
-        const plan = await buildAdaptiveWorkoutPlan(
-          input.userId,
-          slot.muscleGroups,
-          `${programTypeLabel(input.programType)} ${slot.label} — ${phaseSpec.sprintPhase}`,
-          {
-            ...(equipment?.length ? { equipmentOverride: equipment } : {}),
-            includeCore: shouldIncludeCore(slot),
-            targetExerciseCount: WORKOUT_TARGET_EXERCISES,
-            minimumExercises: WORKOUT_MIN_EXERCISES,
-            minimumSets: WORKOUT_MIN_SETS,
-            programRecentSlugs,
-            rotationSeed,
-            splitOccurrenceIndex,
-            slotLabel: slot.label,
-          },
-        );
+        const useReferenceLifting =
+          shouldUseReferenceLiftingProgram(input.programType, input.frequency) &&
+          slot.dayIndex <= 5;
 
-        let exercises = scaleExercises(plan.exercises, phaseSpec.volumeMultiplier, phaseSpec.repRangeAdjust);
-        if (equipment?.length) {
+        const referencePlan = useReferenceLifting
+          ? await buildReferenceStyleWorkoutPlan(input.userId, slot.muscleGroups, {
+              ...(equipment?.length ? { equipmentOverride: equipment } : {}),
+              weekNumber: week,
+              dayIndex: slot.dayIndex,
+              slotLabel: slot.label,
+              rotationSeed,
+              splitOccurrenceIndex,
+              rationalePrefix: `${dayLabel(slot.dayIndex)} · ${week <= 4 ? 'Month 1' : 'Reference program'}`,
+            })
+          : null;
+
+        const plan =
+          referencePlan ??
+          (await buildAdaptiveWorkoutPlan(
+            input.userId,
+            slot.muscleGroups,
+            `${programTypeLabel(input.programType)} ${slot.label} — ${phaseSpec.sprintPhase}`,
+            {
+              ...(equipment?.length ? { equipmentOverride: equipment } : {}),
+              includeCore: shouldIncludeCore(slot),
+              targetExerciseCount: WORKOUT_TARGET_EXERCISES,
+              minimumExercises: WORKOUT_MIN_EXERCISES,
+              minimumSets: WORKOUT_MIN_SETS,
+              programRecentSlugs,
+              rotationSeed,
+              splitOccurrenceIndex,
+              slotLabel: slot.label,
+            },
+          ));
+
+        let exercises = referencePlan
+          ? plan.exercises
+          : scaleExercises(plan.exercises, phaseSpec.volumeMultiplier, phaseSpec.repRangeAdjust);
+        if (equipment?.length && !referencePlan) {
           const exercisePool = await loadAvailableExercises(input.userId, equipment);
           const swapped = applyEquipmentSubstitutionsToExercises(exercises, equipment, exercisePool);
           exercises = swapped.exercises;
@@ -280,7 +308,9 @@ export async function generateTrainingProgram(input: CreateProgramInput) {
           recoveryMods.volumeMultiplier,
         );
         exercises = applySubstitutionsToExercises(exercises, limitations as LimitationContext[]);
-        exercises = enrichExercisesWithSupersetGroups(exercises);
+        exercises = referencePlan
+          ? exercises
+          : enrichExercisesWithSupersetGroups(exercises);
 
         const { data: template, error: templateError } = await db
           .from('workout_templates')
@@ -311,14 +341,17 @@ export async function generateTrainingProgram(input: CreateProgramInput) {
         .single();
 
       const exercises = (templateRow?.exercises ?? []) as GeneratedWorkoutExercise[];
-      const progressed = enrichExercisesWithSupersetGroups(
-        applyWeeklyProgression(
-          exercises,
-          performance,
-          phaseSpec.intensityMultiplier,
-          recoveryMods.volumeMultiplier,
-        ),
-      );
+      const isMonth1Reference = exercises.some((exercise) => exercise.notes?.includes('Block '));
+      const progressed = isMonth1Reference
+        ? exercises
+        : enrichExercisesWithSupersetGroups(
+            applyWeeklyProgression(
+              exercises,
+              performance,
+              phaseSpec.intensityMultiplier,
+              recoveryMods.volumeMultiplier,
+            ),
+          );
 
       await db.from('planned_workouts').insert({
         user_id: input.userId,
@@ -540,6 +573,28 @@ const PLANNED_ROW_STATUS_RANK: Record<string, number> = {
 };
 
 /** Keep one row per scheduled_date when duplicate planner rows exist. */
+function isPreferredPlannedRow(candidate: Record<string, unknown>, incumbent: Record<string, unknown>): boolean {
+  const candidateMeta = (candidate.metadata ?? {}) as { rescheduledAt?: string };
+  const incumbentMeta = (incumbent.metadata ?? {}) as { rescheduledAt?: string };
+  const candidateRescheduled = candidateMeta.rescheduledAt ?? '';
+  const incumbentRescheduled = incumbentMeta.rescheduledAt ?? '';
+  if (candidateRescheduled !== incumbentRescheduled) {
+    if (candidateRescheduled && !incumbentRescheduled) return true;
+    if (!candidateRescheduled && incumbentRescheduled) return false;
+    return candidateRescheduled > incumbentRescheduled;
+  }
+
+  const candidateCreated = String(candidate.created_at ?? '');
+  const incumbentCreated = String(incumbent.created_at ?? '');
+  if (candidateCreated !== incumbentCreated) {
+    return candidateCreated > incumbentCreated;
+  }
+
+  const candidateExercises = ((candidate.metadata as { exercises?: unknown[] })?.exercises ?? []).length;
+  const incumbentExercises = ((incumbent.metadata as { exercises?: unknown[] })?.exercises ?? []).length;
+  return candidateExercises > incumbentExercises;
+}
+
 function dedupePlannedRowsByDate(rows: Record<string, unknown>[]): Record<string, unknown>[] {
   const byDate = new Map<string, Record<string, unknown>>();
 
@@ -560,9 +615,7 @@ function dedupePlannedRowsByDate(rows: Record<string, unknown>[]): Record<string
     }
     if (nextRank < existingRank) continue;
 
-    const existingExercises = ((existing.metadata as { exercises?: unknown[] })?.exercises ?? []).length;
-    const nextExercises = ((row.metadata as { exercises?: unknown[] })?.exercises ?? []).length;
-    if (nextExercises > existingExercises) {
+    if (isPreferredPlannedRow(row, existing)) {
       byDate.set(date, row);
     }
   }
