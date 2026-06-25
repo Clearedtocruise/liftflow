@@ -27,6 +27,14 @@ const NAMED_SUBSTITUTIONS: Record<string, string[]> = {
   'tricep pushdown': ['Push-Up', 'Dumbbell Bench Press'],
   'leg press': ['Goblet Squat', 'Bodyweight Squat', 'Walking Lunge'],
   'hack squat': ['Goblet Squat', 'Bodyweight Squat'],
+  'leg extension': ['Goblet Squat', 'Bodyweight Squat', 'Walking Lunge', 'Bulgarian Split Squat'],
+  'seated leg curl': ['Romanian Deadlift', 'Dumbbell Romanian Deadlift', 'Glute Bridge'],
+  'lying leg curl': ['Romanian Deadlift', 'Dumbbell Romanian Deadlift', 'Glute Bridge'],
+  'leg curl': ['Romanian Deadlift', 'Dumbbell Romanian Deadlift', 'Glute Bridge'],
+  'pec deck': ['Dumbbell Fly', 'Push-Up', 'Band Chest Press'],
+  'cable wood chop': ['Russian Twist', 'Dead Bug', 'Plank'],
+  'cable crunch': ['Crunch', 'Dead Bug', 'Plank'],
+  'ab wheel rollout': ['Plank', 'Dead Bug', 'Crunch'],
   'bench press': ['Dumbbell Bench Press', 'Push-Up', 'Band Chest Press'],
   'barbell row': ['Dumbbell Row', 'Band Row'],
   'overhead press': ['Dumbbell Shoulder Press', 'Push-Up'],
@@ -75,7 +83,12 @@ export function findEquipmentSubstitute(
     }
   }
   if (/\bcable\b/.test(key)) {
-    for (const candidateName of ['Dumbbell Row', 'Band Row', 'Dumbbell Curl', 'Push-Up', 'Band Chest Press']) {
+    const coreCable =
+      /\bwood chop\b|\bcrunch\b|\bpallof\b|\banti-rotation\b|\blift\b/i.test(key);
+    const candidates = coreCable
+      ? ['Russian Twist', 'Dead Bug', 'Plank', 'Crunch']
+      : ['Band Row', 'Push-Up', 'Band Chest Press'];
+    for (const candidateName of candidates) {
       const candidate = findExerciseByName(pool, candidateName);
       if (candidate && exerciseMeetsEquipment(candidate, available)) {
         return {
@@ -103,7 +116,9 @@ export function findEquipmentSubstitute(
   }
 
   const family = current?.metadata?.movement_family;
-  if (family) {
+  const backPullFamilies = new Set(['horizontal_pull', 'vertical_pull', 'biceps']);
+  const isLegExercise = /\bleg\b|\bquad\b|\bhamstring\b|\bglute\b|\bcalf\b|\blunge\b|\bsquat\b|\bdeadlift\b|\bhip thrust\b/i.test(key);
+  if (family && !(isLegExercise && backPullFamilies.has(family))) {
     const matches = pool.filter(
       (exercise) =>
         exercise.metadata?.movement_family === family &&
