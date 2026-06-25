@@ -9,7 +9,7 @@ export const MOVEMENT_PATTERN_EXCLUSION_GROUPS: string[][] = [
   ['hip-thrust', 'glute-bridge'],
   ['pull-up', 'chin-up', 'lat-pulldown'],
   ['barbell-row', 'dumbbell-row', 'band-row', 'seated-cable-row'],
-  ['overhead-press', 'dumbbell-shoulder-press'],
+  ['overhead-press', 'dumbbell-shoulder-press', 'seated-dumbbell-shoulder-press'],
   ['bench-press', 'incline-bench-press', 'dumbbell-bench-press', 'push-up', 'band-chest-press', 'cable-fly'],
   ['plank'],
   ['side-plank'],
@@ -58,7 +58,7 @@ export function maxPatternUsesForDayFocus(dayFocusKey: string | undefined, patte
     if (patternGroupId === 'dumbbell-curl' || patternGroupId === 'hammer-curl') return 2;
   }
   if (dayFocusKey === 'chest_shoulders_triceps') {
-    if (patternGroupId === 'bench-press' || patternGroupId === 'overhead-press') return 2;
+    if (patternGroupId === 'bench-press' || patternGroupId === 'overhead-press') return 1;
   }
   return 1;
 }

@@ -1,7 +1,7 @@
 import {
-  exerciseMatchesQuotaMuscle,
-  isCoreFocusedExercise,
-  type ExerciseRecord,
+    exerciseMatchesQuotaMuscle,
+    isCoreFocusedExercise,
+    type ExerciseRecord,
 } from '../workoutPlanner.js';
 import type { Month1ExerciseBlock } from './types.js';
 
@@ -54,7 +54,9 @@ export function parsePrimaryFocusMuscles(focus: string, blockName?: string): str
     muscles.add('shoulders');
   }
   if (key.includes('calf raise')) muscles.add('calves');
-  if (key.includes('hip thrust') || key.includes('glute bridge') || key.includes('kickback')) muscles.add('glutes');
+  if (key.includes('hip thrust') || key.includes('glute bridge')) muscles.add('glutes');
+  if (/\bglute kickback\b|\bcable glute kickback\b|\bdonkey kick\b/.test(key)) muscles.add('glutes');
+  if (/\btriceps kickback\b|\bcable triceps kickback\b/.test(key)) muscles.add('triceps');
   if (key.includes('lunge') || key.includes('squat') || key.includes('step-up')) muscles.add('quads');
 
   return [...muscles];

@@ -45,3 +45,46 @@ test('cable wood chop swaps to core movement not dumbbell row', () => {
   assert.notEqual(swap!.to.toLowerCase(), 'dumbbell row');
   assert.match(swap!.to.toLowerCase(), /twist|plank|dead bug/);
 });
+
+const GYM_NO_CABLE_POOL: ExerciseRecord[] = [
+  mock('Dumbbell Fly', 'dumbbell-fly', 'dumbbell', ['dumbbells'], 'horizontal_press', ['chest']),
+  mock('Incline Dumbbell Press', 'incline-dumbbell-press', 'dumbbell', ['dumbbells', 'bench'], 'horizontal_press', ['chest']),
+  mock('Push-Up', 'push-up', 'bodyweight', ['bodyweight'], 'horizontal_press', ['chest']),
+  mock('EZ-Bar Skull Crusher', 'skull-crusher', 'barbell', ['barbell', 'bench'], 'triceps', ['triceps']),
+  mock('Dumbbell Overhead Triceps Extension', 'overhead-triceps-extension', 'dumbbell', ['dumbbells'], 'triceps', ['triceps']),
+  mock('Dumbbell Row', 'dumbbell-row', 'dumbbell', ['dumbbells'], 'horizontal_pull', ['back']),
+  mock('Band Row', 'band-row', 'bands', ['bands'], 'horizontal_pull', ['back']),
+];
+
+const GYM_EQUIPMENT = ['barbell', 'dumbbells', 'bench', 'rack', 'bodyweight'];
+
+test('cable fly swaps to chest movement not row without cable', () => {
+  const swap = findEquipmentSubstitute('Cable Fly', GYM_EQUIPMENT, GYM_NO_CABLE_POOL);
+  assert.ok(swap);
+  assert.notEqual(swap!.to.toLowerCase(), 'dumbbell row');
+  assert.notEqual(swap!.to.toLowerCase(), 'band row');
+  assert.match(swap!.to.toLowerCase(), /fly|press|push-up/);
+});
+
+test('rope triceps pushdown swaps to dumbbell or EZ bar without cable', () => {
+  const swap = findEquipmentSubstitute('Rope Triceps Pushdown', GYM_EQUIPMENT, GYM_NO_CABLE_POOL);
+  assert.ok(swap);
+  assert.match(swap!.to.toLowerCase(), /skull|triceps|extension/);
+});
+
+test('overhead rope triceps extension swaps to dumbbell or EZ bar without cable', () => {
+  const swap = findEquipmentSubstitute('Overhead Rope Triceps Extension', GYM_EQUIPMENT, GYM_NO_CABLE_POOL);
+  assert.ok(swap);
+  assert.match(swap!.to.toLowerCase(), /skull|triceps|extension/);
+});
+
+test('band row is not suggested when bands are unavailable', () => {
+  const pool: ExerciseRecord[] = [
+    mock('Band Row', 'band-row', 'bands', ['bands'], 'horizontal_pull', ['back']),
+    mock('Dumbbell Row', 'dumbbell-row', 'dumbbell', ['dumbbells'], 'horizontal_pull', ['back']),
+    mock('Pull Up', 'pull-up', 'bodyweight', ['bodyweight'], 'vertical_pull', ['back']),
+  ];
+  const swap = findEquipmentSubstitute('Lat Pulldown', ['barbell', 'dumbbells', 'bodyweight'], pool);
+  assert.ok(swap);
+  assert.notEqual(swap!.to.toLowerCase(), 'band row');
+});

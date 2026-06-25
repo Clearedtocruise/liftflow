@@ -1,26 +1,30 @@
 import { applyEquipmentSubstitutionsToExercises, findEquipmentSubstitute } from '../equipmentSubstitutionEngine.js';
 import { applySubstitutionsToExercises, type LimitationContext } from '../exerciseSubstitution.js';
+import { maxPatternUsesForDayFocus, patternExclusionGroupId } from '../movementPatternExclusion.js';
 import { applyWeeklyProgression } from '../programProgression.js';
 import {
-  exerciseMeetsEquipment,
-  expandAvailableEquipment,
-  getLastPerformanceBySlug,
-  loadActiveLimitations,
-  loadAvailableExercises,
-  loadRecoveryModifiers,
-  loadUserTrainingProfile,
-  suggestWeightLbs,
-  type ExerciseRecord,
-  type GeneratedWorkoutExercise,
-  type GeneratedWorkoutPlan,
+    exerciseMeetsEquipment,
+    expandAvailableEquipment,
+    getLastPerformanceBySlug,
+    isAllowedOnDayFocus,
+    loadActiveLimitations,
+    loadAvailableExercises,
+    loadRecoveryModifiers,
+    loadUserTrainingProfile,
+    resolveDayFocusPlan,
+    suggestWeightLbs,
+    type DayFocusPlan,
+    type ExerciseRecord,
+    type GeneratedWorkoutExercise,
+    type GeneratedWorkoutPlan,
 } from '../workoutPlanner.js';
 import { applyBlockSupersets } from './applyReferenceSupersets.js';
 import { MONTH1_EXERCISE_SLUG_MAP } from './month1ExerciseSlugMap.js';
 import { MONTH1_WORKOUTS } from './month1Workouts.js';
 import {
-  isExactMonth1PrescriptionWeek,
-  pickRotatedExerciseForBlock,
-  resolveBlueprintWeek,
+    isExactMonth1PrescriptionWeek,
+    pickRotatedExerciseForBlock,
+    resolveBlueprintWeek,
 } from './referenceStyleGenerator.js';
 import type { Month1ExerciseBlock, Month1Workout } from './types.js';
 
@@ -65,9 +69,37 @@ function resolveBlockExercise(
     rotationSeed: number;
     recentSlugs: Set<string>;
     usedSlugs: Set<string>;
+    dayFocusPlan: DayFocusPlan | null;
+    patternGroupUses: Map<string, number>;
   },
 ): { catalogExercise: ExerciseRecord | null; swapNote?: string } {
   const blueprintSlug = resolveSlugForName(block.name);
+
+  function isAccepted(exercise: ExerciseRecord | null | undefined): exercise is ExerciseRecord {
+    if (!exercise || !exerciseMeetsEquipment(exercise, available)) return false;
+    if (options.dayFocusPlan && !isAllowedOnDayFocus(exercise, options.dayFocusPlan)) return false;
+    const groupId = patternExclusionGroupId(exercise.slug);
+    if (groupId && options.dayFocusPlan) {
+      const max = maxPatternUsesForDayFocus(options.dayFocusPlan.key, groupId);
+      const used = options.patternGroupUses.get(groupId) ?? 0;
+      if (used >= max) return false;
+    }
+    return true;
+  }
+
+  function registerPatternUse(exercise: ExerciseRecord): void {
+    const groupId = patternExclusionGroupId(exercise.slug);
+    if (groupId) {
+      options.patternGroupUses.set(groupId, (options.patternGroupUses.get(groupId) ?? 0) + 1);
+    }
+  }
+
+  function pickFromPool(candidates: ExerciseRecord[]): ExerciseRecord | null {
+    for (const candidate of candidates) {
+      if (isAccepted(candidate)) return candidate;
+    }
+    return null;
+  }
 
   let catalogExercise: ExerciseRecord | undefined;
 
@@ -90,14 +122,25 @@ function resolveBlockExercise(
       ) ?? findExerciseInPool(block.name, blueprintSlug, pool);
   }
 
-  if (catalogExercise && exerciseMeetsEquipment(catalogExercise, available)) {
+  if (isAccepted(catalogExercise)) {
+    registerPatternUse(catalogExercise);
     return { catalogExercise };
+  }
+
+  const patternAlternate = pickPatternAlternate(block, pool, options, isAccepted);
+  if (patternAlternate) {
+    registerPatternUse(patternAlternate);
+    return {
+      catalogExercise: patternAlternate,
+      swapNote: `Substituted for ${block.name} to avoid repeating the same movement pattern`,
+    };
   }
 
   const swap = findEquipmentSubstitute(block.name, equipmentList, pool);
   if (swap) {
     const swapped = findExerciseInPool(swap.to, resolveSlugForName(swap.to), pool);
-    if (swapped && exerciseMeetsEquipment(swapped, available)) {
+    if (isAccepted(swapped)) {
+      registerPatternUse(swapped);
       return { catalogExercise: swapped, swapNote: swap.reason };
     }
   }
@@ -111,14 +154,74 @@ function resolveBlockExercise(
     options.usedSlugs,
     blueprintSlug,
   );
-  if (rotated && exerciseMeetsEquipment(rotated, available)) {
+  if (isAccepted(rotated)) {
+    registerPatternUse(rotated);
     return {
       catalogExercise: rotated,
       swapNote: `Substituted for ${block.name} based on your equipment`,
     };
   }
 
+  const focusFallback = pool.filter(
+    (exercise) =>
+      !options.usedSlugs.has(exercise.slug) &&
+      isAccepted(exercise) &&
+      (block.primaryFocus
+        ? exercise.metadata?.movement_family &&
+          parseBlockFocusFamilies(block).some((family) => exercise.metadata?.movement_family === family)
+        : true),
+  );
+  const fallback = pickFromPool(focusFallback);
+  if (fallback) {
+    registerPatternUse(fallback);
+    return {
+      catalogExercise: fallback,
+      swapNote: `Substituted for ${block.name} to match split focus and equipment`,
+    };
+  }
+
   return { catalogExercise: null };
+}
+
+function parseBlockFocusFamilies(block: Month1ExerciseBlock): string[] {
+  const focus = block.primaryFocus.toLowerCase();
+  if (focus.includes('triceps') || focus.includes('tricep')) return ['triceps'];
+  if (focus.includes('shoulder') || focus.includes('delt')) return ['vertical_press', 'rear_delt'];
+  if (focus.includes('chest')) return ['horizontal_press'];
+  if (focus.includes('back') || focus.includes('lat')) return ['horizontal_pull', 'vertical_pull'];
+  if (focus.includes('biceps') || focus.includes('bicep')) return ['biceps'];
+  if (focus.includes('core')) return ['core', 'core_rotation', 'core_anti_extension', 'core_flexion'];
+  return [];
+}
+
+function pickPatternAlternate(
+  block: Month1ExerciseBlock,
+  pool: ExerciseRecord[],
+  options: { usedSlugs: Set<string> },
+  isAccepted: (exercise: ExerciseRecord | null | undefined) => exercise is ExerciseRecord,
+): ExerciseRecord | null {
+  const focus = block.primaryFocus.toLowerCase();
+  const alternateFamilies: string[] = [];
+
+  if (focus.includes('shoulder') || focus.includes('delt')) {
+    alternateFamilies.push('rear_delt', 'triceps', 'horizontal_press');
+  } else if (focus.includes('triceps') || focus.includes('tricep')) {
+    alternateFamilies.push('triceps', 'horizontal_press');
+  } else if (focus.includes('chest')) {
+    alternateFamilies.push('horizontal_press', 'triceps', 'rear_delt');
+  }
+
+  for (const family of alternateFamilies) {
+    const match = pool.find(
+      (exercise) =>
+        !options.usedSlugs.has(exercise.slug) &&
+        exercise.metadata?.movement_family === family &&
+        isAccepted(exercise),
+    );
+    if (match) return match;
+  }
+
+  return null;
 }
 
 function formatExerciseNotes(block: Month1ExerciseBlock, workoutNotes?: string, phaseLabel?: string): string {
@@ -190,7 +293,11 @@ export async function buildReferenceStyleWorkoutPlan(
   const rotationSeed = options.rotationSeed ?? options.weekNumber * 17 + options.dayIndex;
 
   const profile = await loadUserTrainingProfile(userId);
-  const pool = await loadAvailableExercises(userId, options.equipmentOverride);
+  const fullPool = await loadAvailableExercises(userId, options.equipmentOverride);
+  const dayFocusPlan = resolveDayFocusPlan(options.slotLabel);
+  const pool = dayFocusPlan
+    ? fullPool.filter((exercise) => isAllowedOnDayFocus(exercise, dayFocusPlan))
+    : fullPool;
   const equipmentList = options.equipmentOverride?.length
     ? options.equipmentOverride
     : profile.availableEquipment;
@@ -204,6 +311,7 @@ export async function buildReferenceStyleWorkoutPlan(
     if (history.sessions?.length) recentSlugs.add(slug);
   }
   const usedSlugs = new Set<string>();
+  const patternGroupUses = new Map<string, number>();
 
   const draft: Array<
     GeneratedWorkoutExercise & { block?: string; slug?: string; metadata?: ExerciseRecord['metadata'] }
@@ -222,6 +330,8 @@ export async function buildReferenceStyleWorkoutPlan(
         rotationSeed,
         recentSlugs,
         usedSlugs,
+        dayFocusPlan,
+        patternGroupUses,
       },
     );
 
@@ -278,7 +388,23 @@ export async function buildReferenceStyleWorkoutPlan(
 
   if (equipmentList.length) {
     const swapped = applyEquipmentSubstitutionsToExercises(exercises, equipmentList, pool);
-    exercises = swapped.exercises;
+    exercises = swapped.exercises.map((exercise) => {
+      const catalog = findExerciseInPool(exercise.name, resolveSlugForName(exercise.name), pool);
+      if (catalog && (!dayFocusPlan || isAllowedOnDayFocus(catalog, dayFocusPlan))) {
+        return exercise;
+      }
+      const reswap = findEquipmentSubstitute(exercise.name, equipmentList, pool);
+      if (!reswap) return exercise;
+      const replacement = findExerciseInPool(reswap.to, resolveSlugForName(reswap.to), pool);
+      if (!replacement || (dayFocusPlan && !isAllowedOnDayFocus(replacement, dayFocusPlan))) {
+        return exercise;
+      }
+      return {
+        ...exercise,
+        name: reswap.to,
+        notes: [exercise.notes, reswap.reason].filter(Boolean).join(' · '),
+      };
+    });
   }
 
   exercises = applyWeeklyProgression(
