@@ -81,6 +81,24 @@ export type WatchHealthSnapshot = {
   syncedAt?: string;
 };
 
+/** Live cardio session mirrored to Apple Watch during phone-led cardio. */
+export type WatchCardioState = {
+  sessionId: string;
+  activityLabel: string;
+  activityType: string;
+  running: boolean;
+  elapsedSeconds: number;
+  sessionStartedAt?: string;
+  pausedTotalMs?: number;
+  distanceMeters?: number;
+  paceLabel?: string | null;
+  speedLabel?: string | null;
+  calories?: number;
+  heartRateBpm?: number;
+  phaseLabel?: string;
+  updatedAt: string;
+};
+
 export type WatchVoiceCommandResult = {
   intent: string;
   spokenResponse: string;
@@ -101,4 +119,9 @@ export type WatchWorkoutMessage =
   | { type: 'start_workout'; workoutSessionId?: string }
   | { type: 'cancel_workout'; workoutSessionId?: string }
   | { type: 'set_weight'; weightLbs: number; workoutSessionId?: string }
-  | { type: 'workout_sync'; [key: string]: unknown };
+  | { type: 'workout_sync'; [key: string]: unknown }
+  | { type: 'cardio_state'; state: WatchCardioState; presentWorkout?: boolean }
+  | { type: 'cardio_pause' }
+  | { type: 'cardio_resume' }
+  | { type: 'cardio_finish' }
+  | { type: 'heart_rate_sample'; bpm: number; recordedAt: string };

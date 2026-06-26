@@ -23,14 +23,15 @@ export async function executeWorkoutVoiceCommand(
 
     case 'LOG_SET':
     case 'LOG_BODYWEIGHT_SET': {
-      if (!command.reps) {
+      const reps = command.reps ?? (command.intent === 'LOG_BODYWEIGHT_SET' ? 1 : undefined);
+      if (!reps) {
         return { success: false, message: 'Missing rep count.' };
       }
       const result = await handlers.logSet({
         exerciseName: command.exerciseName,
         weight: command.weight,
         weightUnit: command.unit === 'kg' ? 'kg' : command.unit === 'lb' ? 'lb' : undefined,
-        reps: command.reps,
+        reps,
         bodyweight: command.intent === 'LOG_BODYWEIGHT_SET' || command.unit === 'bodyweight',
       });
       return {
@@ -63,6 +64,11 @@ export async function executeWorkoutVoiceCommand(
 
     case 'ASK_STATUS': {
       const result = await handlers.askStatus();
+      return { success: result.ok, message: result.message };
+    }
+
+    case 'UNDO_LAST_SET': {
+      const result = await handlers.undoLastSet();
       return { success: result.ok, message: result.message };
     }
 

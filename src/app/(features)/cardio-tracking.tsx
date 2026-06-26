@@ -30,7 +30,9 @@ export default function CardioTrackingScreen() {
       <AppText variant="headline">{isFocused ? active.label : 'Cardio & HIIT'}</AppText>
       <AppText variant="body" color="textSecondary">
         {isFocused
-          ? 'Start the timer when you begin. Calories are estimated from your profile weight and pace.'
+          ? active.mode === 'steady' && (active.type === 'walk' || active.type === 'run' || active.type === 'cycle')
+            ? 'Live distance, pace, speed, and active calories update as you go. GPS tracks outdoors; you can override distance before saving.'
+            : 'Start the timer when you begin. Calories are estimated from your profile weight and pace.'
           : 'Choose a conditioning session for cardio days, recovery work, or Tabata intervals.'}
       </AppText>
 

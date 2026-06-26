@@ -106,6 +106,12 @@ export type WorkoutHistoryItem = {
   totalVolume: number;
   prCount?: number;
   status: SessionStatus;
+  sessionKind?: 'strength' | 'cardio';
+  cardioType?: string;
+  distanceMeters?: number;
+  caloriesBurned?: number;
+  avgHeartRate?: number;
+  notes?: string;
 };
 
 export type ParsedVoiceCommand = {

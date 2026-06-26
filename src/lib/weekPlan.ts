@@ -36,6 +36,27 @@ const PLANNED_STATUS_PRIORITY: Record<string, number> = {
   cancelled: 0,
 };
 
+/** When two planned rows share a date, pick the more authoritative one. */
+function isPreferredPlannedWorkout(candidate: PlannedWorkout, incumbent: PlannedWorkout): boolean {
+  const candidateRescheduled = candidate.metadata?.rescheduledAt ?? '';
+  const incumbentRescheduled = incumbent.metadata?.rescheduledAt ?? '';
+  if (candidateRescheduled !== incumbentRescheduled) {
+    if (candidateRescheduled && !incumbentRescheduled) return true;
+    if (!candidateRescheduled && incumbentRescheduled) return false;
+    return candidateRescheduled > incumbentRescheduled;
+  }
+
+  const candidateCreated = candidate.createdAt ?? '';
+  const incumbentCreated = incumbent.createdAt ?? '';
+  if (candidateCreated !== incumbentCreated) {
+    return candidateCreated > incumbentCreated;
+  }
+
+  const candidateExercises = candidate.metadata?.exercises?.length ?? 0;
+  const incumbentExercises = incumbent.metadata?.exercises?.length ?? 0;
+  return candidateExercises > incumbentExercises;
+}
+
 /** One canonical planned workout per calendar day (handles duplicate DB rows). */
 export function dedupePlannedWorkoutsByDate(
   plannedWorkouts: PlannedWorkout[],
@@ -63,14 +84,92 @@ export function dedupePlannedWorkoutsByDate(
     }
     if (nextRank < existingRank) continue;
 
-    const existingExercises = existing.metadata?.exercises?.length ?? 0;
-    const nextExercises = workout.metadata?.exercises?.length ?? 0;
-    if (nextExercises > existingExercises) {
+    if (isPreferredPlannedWorkout(workout, existing)) {
       byDate.set(workout.scheduledDate, workout);
     }
   }
 
   return dates.map((date) => byDate.get(date)).filter((workout): workout is PlannedWorkout => workout != null);
+}
+
+function rescheduleStamp(workout: PlannedWorkout): string {
+  return workout.metadata?.rescheduledAt ?? workout.updatedAt ?? workout.createdAt ?? '';
+}
+
+/** Keep optimistic local patches when a background refetch returns stale schedule rows. */
+export function mergePlannedWorkoutsPreferringReschedule(
+  local: PlannedWorkout[],
+  remote: PlannedWorkout[],
+  reference = new Date(),
+  timeZone?: string | null,
+): PlannedWorkout[] {
+  const byId = new Map(remote.map((workout) => [workout.id, workout]));
+
+  for (const workout of local) {
+    const existing = byId.get(workout.id);
+    if (!existing) {
+      byId.set(workout.id, workout);
+      continue;
+    }
+    if (rescheduleStamp(workout) >= rescheduleStamp(existing)) {
+      byId.set(workout.id, workout);
+    }
+  }
+
+  return dedupePlannedWorkoutsByDate([...byId.values()], reference, timeZone);
+}
+
+/** Apply a schedule change to the in-memory week list (instant UI before network confirm). */
+export function patchPlannedWorkoutsForChange(
+  workouts: PlannedWorkout[],
+  change: import('@/types/planAdaptation').ScheduleChange,
+): PlannedWorkout[] {
+  const stamp = new Date().toISOString();
+
+  const withReschedule = (workout: PlannedWorkout, scheduledDate: string, fromDate: string): PlannedWorkout => ({
+    ...workout,
+    scheduledDate,
+    metadata: {
+      ...workout.metadata,
+      rescheduledFrom: fromDate,
+      rescheduledAt: stamp,
+    },
+  });
+
+  switch (change.type) {
+    case 'swap': {
+      const a = workouts.find((w) => w.id === change.workoutIdA);
+      const b = workouts.find((w) => w.id === change.workoutIdB);
+      if (!a || !b) return workouts;
+      const dateA = a.scheduledDate;
+      const dateB = b.scheduledDate;
+      return workouts.map((w) => {
+        if (w.id === a.id) return withReschedule(w, dateB, dateA);
+        if (w.id === b.id) return withReschedule(w, dateA, dateB);
+        return w;
+      });
+    }
+    case 'move': {
+      const moving = workouts.find((w) => w.id === change.workoutId);
+      if (!moving) return workouts;
+      const fromDate = moving.scheduledDate;
+      const toDate = change.toDate;
+      const occupant = workouts.find(
+        (w) => w.scheduledDate === toDate && w.status === 'planned' && w.id !== moving.id,
+      );
+      return workouts.map((w) => {
+        if (w.id === moving.id) return withReschedule(w, toDate, fromDate);
+        if (occupant && w.id === occupant.id) return withReschedule(w, fromDate, toDate);
+        return w;
+      });
+    }
+    case 'skip':
+      return workouts.map((w) =>
+        w.id === change.workoutId ? { ...w, status: 'cancelled' as const } : w,
+      );
+    default:
+      return workouts;
+  }
 }
 
 export function workoutScheduleTitle(workout: PlannedWorkout): string {

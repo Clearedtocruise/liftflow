@@ -8,11 +8,13 @@ import {
     useState,
     type ReactNode,
 } from 'react';
-import { AppState, Vibration } from 'react-native';
+import { AppState } from 'react-native';
 
 import { DEFAULT_REST_SECONDS } from '@/constants/workout';
+import { cueRestTimerComplete } from '@/lib/restTimerFeedback';
 import { isStaleWorkoutSession } from '@/lib/staleWorkoutSession';
 import { peakMusicService } from '@/services/peakMusicService';
+import { userService } from '@/services/userService';
 import { watchCompanionService } from '@/services/watchCompanionService';
 import { workoutService } from '@/services/workoutService';
 import type { CreateSetPayload, RestPeriod, StartSessionPayload, UpdateSetPayload, WorkoutSession, WorkoutSet } from '@/types';
@@ -22,6 +24,8 @@ type WorkoutSessionState = {
   activeExerciseIndex: number;
   activeRestPeriod: RestPeriod | null;
   restSecondsRemaining: number | null;
+  restTimerPaused: boolean;
+  restTimerHaptics: boolean;
   isListening: boolean;
   isLoading: boolean;
   lastLoggedSet: WorkoutSet | null;
@@ -64,23 +68,25 @@ const WorkoutSessionContext = createContext<WorkoutSessionContextValue | null>(n
 export function WorkoutSessionProvider({
   children,
   userId,
-  restTimerHaptics = true,
 }: {
   children: ReactNode;
   userId?: string;
-  restTimerHaptics?: boolean;
 }) {
   const [activeSession, setActiveSession] = useState<WorkoutSession | null>(null);
   const [activeExerciseIndex, setActiveExerciseIndex] = useState(0);
   const [activeRestPeriod, setActiveRestPeriod] = useState<RestPeriod | null>(null);
   const [restSecondsRemaining, setRestSecondsRemaining] = useState<number | null>(null);
+  const [restTimerPaused, setRestTimerPaused] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [lastLoggedSet, setLastLoggedSet] = useState<WorkoutSet | null>(null);
   const [watchDraftReps, setWatchDraftReps] = useState<number | null>(null);
   const [watchDraftWeightKg, setWatchDraftWeightKg] = useState<number | null>(null);
+  const [restTimerSound, setRestTimerSound] = useState(true);
+  const [restTimerHaptics, setRestTimerHaptics] = useState(true);
   const restEndAtRef = useRef<number | null>(null);
   const hapticFiredRef = useRef(false);
+  const suppressWatchRestCompleteRef = useRef(false);
   const pausedRemainingRef = useRef<number | null>(null);
   /** Bumped on cancel/end/start so in-flight hydrates cannot restore stale sessions. */
   const sessionEpochRef = useRef(0);
@@ -91,6 +97,7 @@ export function WorkoutSessionProvider({
     setActiveSession(null);
     setActiveRestPeriod(null);
     setRestSecondsRemaining(null);
+    setRestTimerPaused(false);
     setWatchDraftReps(null);
     setWatchDraftWeightKg(null);
     restEndAtRef.current = null;
@@ -158,6 +165,19 @@ export function WorkoutSessionProvider({
   }, [hydrate]);
 
   useEffect(() => {
+    if (!userId) {
+      setRestTimerSound(true);
+      setRestTimerHaptics(true);
+      return;
+    }
+    void userService.getPreferences(userId).then((result) => {
+      if (!result.success) return;
+      setRestTimerSound(result.data.restTimerSound);
+      setRestTimerHaptics(result.data.restTimerHaptics);
+    });
+  }, [userId]);
+
+  useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => {
       if (state !== 'active') return;
 
@@ -177,10 +197,17 @@ export function WorkoutSessionProvider({
   useEffect(() => {
     if (restSecondsRemaining === null || restSecondsRemaining > 0) return;
 
-    if (restTimerHaptics && !hapticFiredRef.current) {
-      Vibration.vibrate([0, 200, 100, 200]);
-      hapticFiredRef.current = true;
+    if (restTimerHaptics || restTimerSound) {
+      if (!hapticFiredRef.current) {
+        cueRestTimerComplete({ sound: restTimerSound, haptics: restTimerHaptics });
+        hapticFiredRef.current = true;
+      }
     }
+
+    if (userId && restTimerHaptics && !suppressWatchRestCompleteRef.current) {
+      void watchCompanionService.notifyWatchRestComplete(userId);
+    }
+    suppressWatchRestCompleteRef.current = false;
 
     const finish = async () => {
       if (!activeRestPeriod) return;
@@ -188,11 +215,12 @@ export function WorkoutSessionProvider({
       await workoutService.endRestTimer(activeRestPeriod.id, recommended, false);
       setActiveRestPeriod(null);
       setRestSecondsRemaining(null);
+      setRestTimerPaused(false);
       restEndAtRef.current = null;
     };
 
     finish();
-  }, [restSecondsRemaining, activeRestPeriod, restTimerHaptics]);
+  }, [restSecondsRemaining, activeRestPeriod, restTimerHaptics, restTimerSound, userId]);
 
   useEffect(() => {
     if (restSecondsRemaining === null) return;
@@ -298,6 +326,7 @@ export function WorkoutSessionProvider({
         );
         if (restResult.success) {
           hapticFiredRef.current = false;
+          setRestTimerPaused(false);
           setActiveRestPeriod(restResult.data);
           const seconds = restResult.data.recommendedSeconds ?? DEFAULT_REST_SECONDS;
           restEndAtRef.current = Date.now() + seconds * 1000;
@@ -330,6 +359,7 @@ export function WorkoutSessionProvider({
     async (setId: string) => {
       const result = await workoutService.deleteSet(setId);
       if (!result.success) return false;
+      setLastLoggedSet((current) => (current?.id === setId ? null : current));
       await refreshSession();
       return true;
     },
@@ -361,6 +391,7 @@ export function WorkoutSessionProvider({
       const result = await workoutService.startRestTimer(activeSession.id, setId, seconds);
       if (result.success) {
         hapticFiredRef.current = false;
+        setRestTimerPaused(false);
         setActiveRestPeriod(result.data);
         restEndAtRef.current = Date.now() + seconds * 1000;
         setRestSecondsRemaining(seconds);
@@ -399,21 +430,25 @@ export function WorkoutSessionProvider({
     pausedRemainingRef.current = Math.max(0, Math.ceil((restEndAtRef.current - Date.now()) / 1000));
     restEndAtRef.current = null;
     setRestSecondsRemaining(pausedRemainingRef.current);
+    setRestTimerPaused(true);
   }, []);
 
   const resumeRestTimer = useCallback(() => {
     if (pausedRemainingRef.current == null) return;
     restEndAtRef.current = Date.now() + pausedRemainingRef.current * 1000;
     pausedRemainingRef.current = null;
+    setRestTimerPaused(false);
   }, []);
 
   const skipRestTimer = useCallback(async () => {
     if (!activeRestPeriod) return;
+    suppressWatchRestCompleteRef.current = true;
     const elapsed = Math.floor((Date.now() - new Date(activeRestPeriod.startedAt).getTime()) / 1000);
     await workoutService.endRestTimer(activeRestPeriod.id, elapsed, true);
     if (userId) void peakMusicService.onSetCompleted(userId);
     setActiveRestPeriod(null);
     setRestSecondsRemaining(0);
+    setRestTimerPaused(false);
     restEndAtRef.current = null;
     pausedRemainingRef.current = null;
   }, [activeRestPeriod, userId]);
@@ -425,6 +460,7 @@ export function WorkoutSessionProvider({
     if (userId) void peakMusicService.onSetCompleted(userId);
     setActiveRestPeriod(null);
     setRestSecondsRemaining(null);
+    setRestTimerPaused(false);
     restEndAtRef.current = null;
     pausedRemainingRef.current = null;
   }, [activeRestPeriod, userId]);
@@ -435,6 +471,8 @@ export function WorkoutSessionProvider({
       activeExerciseIndex,
       activeRestPeriod,
       restSecondsRemaining,
+      restTimerPaused,
+      restTimerHaptics,
       isListening,
       isLoading,
       lastLoggedSet,
@@ -469,6 +507,8 @@ export function WorkoutSessionProvider({
       activeExerciseIndex,
       activeRestPeriod,
       restSecondsRemaining,
+      restTimerPaused,
+      restTimerHaptics,
       isListening,
       isLoading,
       lastLoggedSet,

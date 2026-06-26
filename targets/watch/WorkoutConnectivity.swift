@@ -27,7 +27,24 @@ final class WorkoutConnectivity: NSObject, ObservableObject, WCSessionDelegate {
   @Published var sessionCalories = 0
   @Published var activeCalories = 0
 
+  @Published var isCardioMode = false
+  @Published var cardioActivityLabel = ""
+  @Published var cardioElapsedSeconds = 0
+  @Published var cardioDistanceLabel = ""
+  @Published var cardioPaceLabel = ""
+  @Published var cardioRunning = false
+  @Published var cardioPhaseLabel = ""
+
   private(set) var workoutSessionId: String?
+  private var cardioSessionId: String?
+  private var cardioSessionStartedAt: Date?
+  private var cardioElapsedTimer: Timer?
+  private var lastHeartRateSentAt: Date?
+  private var previousPhase = "idle"
+  private var didPlayRestWarning = false
+  private var didPlayRestCompleteHaptic = false
+  private var isRestCountdownActive = false
+  private var suppressRestCompleteHaptic = false
   private var restEndDate: Date?
   private var restTimer: Timer?
   private var calorieTimer: Timer?
@@ -82,6 +99,148 @@ final class WorkoutConnectivity: NSObject, ObservableObject, WCSessionDelegate {
     if calorieTimer == nil {
       startCalorieTimer()
     }
+    sendHeartRateSampleIfNeeded(bpm: bpm, at: now)
+  }
+
+  private func sendHeartRateSampleIfNeeded(bpm: Int, at: Date) {
+    guard isCardioMode, cardioRunning else { return }
+    if let lastSent = lastHeartRateSentAt, at.timeIntervalSince(lastSent) < 3 {
+      return
+    }
+    lastHeartRateSentAt = at
+    sendToPhone(type: "heart_rate_sample", extra: [
+      "bpm": bpm,
+      "recordedAt": ISO8601DateFormatter().string(from: at),
+    ])
+  }
+
+  private func applyCardioState(_ state: [String: Any], shouldPresent: Bool = false) {
+    let previousSession = cardioSessionId
+    isCardioMode = true
+    workoutSessionId = nil
+    phase = "cardio"
+    cardioSessionId = state["sessionId"] as? String
+    cardioActivityLabel = state["activityLabel"] as? String ?? "Cardio"
+    cardioRunning = state["running"] as? Bool ?? false
+    cardioPhaseLabel = state["phaseLabel"] as? String ?? ""
+
+    if let startedAt = state["sessionStartedAt"] as? String {
+      cardioSessionStartedAt = ISO8601DateFormatter().date(from: startedAt)
+    } else if cardioSessionStartedAt == nil, cardioRunning {
+      cardioSessionStartedAt = Date().addingTimeInterval(-Double(state["elapsedSeconds"] as? Int ?? 0))
+    }
+
+    if cardioRunning {
+      startCardioElapsedTimer()
+      cardioElapsedSeconds = computeCardioElapsed()
+    } else {
+      cardioElapsedSeconds = state["elapsedSeconds"] as? Int ?? computeCardioElapsed()
+      stopCardioElapsedTimer()
+    }
+
+    exerciseName = cardioActivityLabel
+    setLabel = formatCardioElapsed(cardioElapsedSeconds)
+    statusLine = cardioPhaseLabel.isEmpty ? (cardioRunning ? "In progress" : "Paused") : cardioPhaseLabel
+
+    if let pace = state["paceLabel"] as? String, !pace.isEmpty {
+      cardioPaceLabel = pace
+    } else {
+      cardioPaceLabel = ""
+    }
+
+    if let distanceMeters = state["distanceMeters"] as? Double, distanceMeters > 0 {
+      let km = distanceMeters / 1000.0
+      cardioDistanceLabel = String(format: "%.2f km", km)
+    } else if let distanceMeters = state["distanceMeters"] as? Int, distanceMeters > 0 {
+      let km = Double(distanceMeters) / 1000.0
+      cardioDistanceLabel = String(format: "%.2f km", km)
+    } else {
+      cardioDistanceLabel = ""
+    }
+
+    if let calories = state["calories"] as? Int {
+      sessionCalories = calories
+      activeCalories = calories
+    }
+
+    if let hr = state["heartRateBpm"] as? Int {
+      heartRateBpm = hr
+    }
+
+    if previousSession == nil, cardioSessionId != nil {
+      beginWorkoutRuntime()
+      if shouldPresent {
+        WKInterfaceDevice.current().play(.start)
+        lastSpokenResponse = "Cardio started on iPhone"
+      }
+    }
+
+    if cardioRunning {
+      if calorieTimer == nil {
+        startCalorieTimer()
+      }
+    } else if !cardioRunning, cardioElapsedSeconds == 0, previousSession != nil, cardioSessionId == nil {
+      clearCardioState()
+    }
+  }
+
+  private func clearCardioState() {
+    isCardioMode = false
+    cardioSessionId = nil
+    cardioSessionStartedAt = nil
+    stopCardioElapsedTimer()
+    cardioActivityLabel = ""
+    cardioElapsedSeconds = 0
+    cardioDistanceLabel = ""
+    cardioPaceLabel = ""
+    cardioRunning = false
+    cardioPhaseLabel = ""
+    lastHeartRateSentAt = nil
+    phase = "idle"
+    exerciseName = "Start on iPhone"
+    setLabel = "Open ONE MORE on iPhone"
+    statusLine = ""
+    stopCalorieTimer()
+    sessionCalories = 0
+    activeCalories = 0
+    endWorkoutRuntime()
+  }
+
+  private func formatCardioElapsed(_ seconds: Int) -> String {
+    let m = seconds / 60
+    let s = seconds % 60
+    return String(format: "%d:%02d", m, s)
+  }
+
+  private func computeCardioElapsed() -> Int {
+    guard let started = cardioSessionStartedAt else { return cardioElapsedSeconds }
+    return max(0, Int(Date().timeIntervalSince(started)))
+  }
+
+  private func startCardioElapsedTimer() {
+    cardioElapsedTimer?.invalidate()
+    cardioElapsedTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+      guard let self, self.isCardioMode, self.cardioRunning else { return }
+      self.cardioElapsedSeconds = self.computeCardioElapsed()
+      self.setLabel = self.formatCardioElapsed(self.cardioElapsedSeconds)
+    }
+  }
+
+  private func stopCardioElapsedTimer() {
+    cardioElapsedTimer?.invalidate()
+    cardioElapsedTimer = nil
+  }
+
+  func pauseCardio() {
+    sendToPhone(type: "cardio_pause")
+  }
+
+  func resumeCardio() {
+    sendToPhone(type: "cardio_resume")
+  }
+
+  func finishCardio() {
+    sendToPhone(type: "cardio_finish")
   }
 
   private func startCalorieTimer() {
@@ -130,8 +289,26 @@ final class WorkoutConnectivity: NSObject, ObservableObject, WCSessionDelegate {
       return
     }
 
+    if type == "cardio_state" {
+      let shouldPresent = message["presentWorkout"] as? Bool ?? false
+      if let state = message["state"] as? [String: Any] {
+        applyCardioState(state, shouldPresent: shouldPresent)
+      } else if let state = message["state"] as? NSDictionary {
+        applyCardioState(state as? [String: Any] ?? [:], shouldPresent: shouldPresent)
+      } else if message["state"] == nil || message["state"] is NSNull {
+        clearCardioState()
+      }
+      return
+    }
+
     if type == "error", let messageText = message["message"] as? String {
       lastSpokenResponse = messageText
+      return
+    }
+
+    if type == "rest_complete" {
+      playRestCompleteHaptic()
+      return
     }
   }
 
@@ -148,7 +325,10 @@ final class WorkoutConnectivity: NSObject, ObservableObject, WCSessionDelegate {
   }
 
   private func applyWorkoutState(_ state: [String: Any], shouldPresent: Bool = false) {
+    isCardioMode = false
+    cardioSessionId = nil
     let previousSessionId = workoutSessionId
+    let previousStatePhase = phase
     recoveryScore = state["recoveryScore"] as? Int
     recoveryLabel = state["recoveryLabel"] as? String ?? ""
     workoutRecommendation = state["workoutRecommendation"] as? String ?? ""
@@ -174,11 +354,12 @@ final class WorkoutConnectivity: NSObject, ObservableObject, WCSessionDelegate {
         statusLine = "Set \(setNumber)/\(targetSets)"
       }
       phase = activeSet["phase"] as? String ?? "active_set"
+      playPhaseTransitionCue(from: previousStatePhase, to: phase)
 
       if let rest = activeSet["restSecondsRemaining"] as? Int, rest > 0 {
         startRestCountdown(seconds: rest)
       } else if phase != "rest" {
-        clearRestCountdown()
+        clearRestCountdown(announceComplete: false)
       }
 
       if previousSessionId == nil, workoutSessionId != nil {
@@ -203,6 +384,8 @@ final class WorkoutConnectivity: NSObject, ObservableObject, WCSessionDelegate {
         setLabel = "Open ONE MORE on iPhone"
       }
       phase = "idle"
+      previousPhase = "idle"
+      didPlayRestWarning = false
       currentRepCount = 0
       targetReps = 0
       motionTrackingEnabled = false
@@ -211,7 +394,7 @@ final class WorkoutConnectivity: NSObject, ObservableObject, WCSessionDelegate {
       stationLabel = ""
       statusLine = ""
       supersetHint = ""
-      clearRestCountdown()
+      clearRestCountdown(announceComplete: false)
       stopCalorieTimer()
       sessionCalories = 0
       activeCalories = 0
@@ -236,26 +419,67 @@ final class WorkoutConnectivity: NSObject, ObservableObject, WCSessionDelegate {
     }
   }
 
+  private func playRestCompleteHaptic() {
+    guard !didPlayRestCompleteHaptic, !suppressRestCompleteHaptic else {
+      suppressRestCompleteHaptic = false
+      return
+    }
+    didPlayRestCompleteHaptic = true
+    WKInterfaceDevice.current().play(.notification)
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+      WKInterfaceDevice.current().play(.success)
+    }
+  }
+
   private func startRestCountdown(seconds: Int) {
+    let continuingSameRest =
+      restEndDate != nil && seconds > 0 && seconds <= (restSeconds ?? seconds) + 1
+    if !continuingSameRest {
+      didPlayRestWarning = false
+      didPlayRestCompleteHaptic = false
+      suppressRestCompleteHaptic = false
+    }
+
+    isRestCountdownActive = true
     restEndDate = Date().addingTimeInterval(TimeInterval(seconds))
     restSeconds = seconds
     restTimer?.invalidate()
     restTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
       guard let self, let end = self.restEndDate else { return }
-      let remaining = max(0, Int(end.timeIntervalSinceNow.rounded()))
+      let remaining = max(0, Int(end.timeIntervalSinceNow.rounded(.up)))
       self.restSeconds = remaining > 0 ? remaining : nil
+      if remaining <= 3 && remaining > 0 && !self.didPlayRestWarning {
+        self.didPlayRestWarning = true
+        WKInterfaceDevice.current().play(.directionUp)
+      }
       if remaining <= 0 {
-        WKInterfaceDevice.current().play(.notification)
-        self.clearRestCountdown()
+        self.playRestCompleteHaptic()
+        self.clearRestCountdown(announceComplete: false)
       }
     }
   }
 
-  private func clearRestCountdown() {
+  private func clearRestCountdown(announceComplete: Bool = false) {
+    if announceComplete && isRestCountdownActive {
+      playRestCompleteHaptic()
+    }
     restTimer?.invalidate()
     restTimer = nil
     restEndDate = nil
     restSeconds = nil
+    didPlayRestWarning = false
+    isRestCountdownActive = false
+    suppressRestCompleteHaptic = false
+  }
+
+  private func playPhaseTransitionCue(from oldPhase: String, to newPhase: String) {
+    guard oldPhase != newPhase else { return }
+    if newPhase == "rest" {
+      WKInterfaceDevice.current().play(.directionDown)
+    } else if oldPhase == "rest" && (newPhase == "active_set" || newPhase == "between_sets") {
+      WKInterfaceDevice.current().play(.start)
+    }
+    previousPhase = newPhase
   }
 
   func sendToPhone(type: String, extra: [String: Any] = [:]) {
@@ -300,6 +524,8 @@ final class WorkoutConnectivity: NSObject, ObservableObject, WCSessionDelegate {
   }
 
   func skipRest() {
+    suppressRestCompleteHaptic = true
+    clearRestCountdown(announceComplete: false)
     sendToPhone(type: "skip_rest")
   }
 

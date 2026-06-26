@@ -91,6 +91,12 @@ export const planDataCache = {
     await writeJson(cacheKey(userId, weekFrom, weekTo, 'program'), program);
   },
 
+  async clearWeekWorkouts(userId: string, weekFrom: string, weekTo: string): Promise<void> {
+    const key = cacheKey(userId, weekFrom, weekTo, 'workouts');
+    memory.delete(key);
+    await AsyncStorage.removeItem(key);
+  },
+
   /** Warm AsyncStorage → memory for the current week (call as early as auth allows). */
   prefetchWeek(userId: string, weekFrom: string, weekTo: string): void {
     void this.readWeek(userId, weekFrom, weekTo);

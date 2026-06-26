@@ -22,6 +22,7 @@ type ActiveWorkoutVoiceHandlerParams = {
     reps: number;
     restSeconds: number;
   }) => Promise<boolean>;
+  undoLastSet: () => Promise<boolean>;
   goToExerciseIndex: (index: number) => void;
   startRestSeconds: (seconds: number) => Promise<void>;
   finishWorkout: () => void;
@@ -65,6 +66,7 @@ export function useActiveWorkoutVoiceHandlers(
     preferredWeightUnit,
     isPaused,
     logSetFromVoice,
+    undoLastSet,
     goToExerciseIndex,
     startRestSeconds,
     finishWorkout,
@@ -154,6 +156,17 @@ export function useActiveWorkoutVoiceHandlers(
         };
       },
 
+      undoLastSet: async () => {
+        if (isPaused) {
+          return { ok: false, message: 'Workout is paused.' };
+        }
+        const removed = await undoLastSet();
+        if (!removed) {
+          return { ok: false, message: 'No set to undo.' };
+        }
+        return { ok: true, message: 'Removed last set.' };
+      },
+
       replaceExercise: async (fromName, toName) => {
         return {
           ok: false,
@@ -172,6 +185,7 @@ export function useActiveWorkoutVoiceHandlers(
       preferredWeightUnit,
       isPaused,
       logSetFromVoice,
+      undoLastSet,
       goToExerciseIndex,
       startRestSeconds,
       finishWorkout,

@@ -8,6 +8,7 @@ export type WorkoutVoiceIntent =
   | 'START_REST_TIMER'
   | 'FINISH_WORKOUT'
   | 'ASK_STATUS'
+  | 'UNDO_LAST_SET'
   | 'CANCEL'
   | 'UNKNOWN';
 
@@ -45,6 +46,7 @@ export type VoiceWorkoutHandlers = {
   startRestTimer: (durationSeconds: number) => Promise<{ ok: boolean; message: string }>;
   finishWorkout: () => Promise<{ ok: boolean; message: string }>;
   askStatus: () => Promise<{ ok: boolean; message: string }>;
+  undoLastSet: () => Promise<{ ok: boolean; message: string }>;
   replaceExercise: (
     fromName: string,
     toName: string,

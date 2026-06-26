@@ -6,10 +6,12 @@ import { HistoryCard } from '@/components/history/HistoryCard';
 import { Card } from '@/components/layout/Card';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { SectionHeader } from '@/components/layout/SectionHeader';
+import { TabScreenHeader } from '@/components/layout/TabScreenHeader';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 import { screenDataCache } from '@/lib/screenDataCache';
+import { getCombinedActivityHistory } from '@/services/activityHistoryService';
 import { analyticsService } from '@/services/analyticsService';
 import { workoutService } from '@/services/workoutService';
 import type { WorkoutHistoryItem } from '@/types';
@@ -31,7 +33,7 @@ export default function HistoryScreen() {
 
     if (!silent) setLoading(true);
 
-    const historyResult = await workoutService.getHistory(user.id);
+    const historyResult = await getCombinedActivityHistory(user.id);
     if (generation !== loadGenerationRef.current) return;
 
     const items = historyResult.success ? historyResult.data.data : [];
@@ -77,7 +79,11 @@ export default function HistoryScreen() {
     };
   }, [user?.id, load]);
 
-  async function handleDelete(id: string) {
+  async function handleDelete(id: string, sessionKind?: WorkoutHistoryItem['sessionKind']) {
+    if (sessionKind === 'cardio') {
+      Alert.alert('Cardio session', 'Cardio entries are kept for recovery tracking.');
+      return;
+    }
     Alert.alert('Delete workout', 'Remove this session from history?', [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -102,14 +108,8 @@ export default function HistoryScreen() {
 
   return (
     <ScreenContainer
+      header={<TabScreenHeader title="History" subtitle="Track progression over time" />}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load({ silent: true }); }} tintColor={LiftFlowColors.accent} />}>
-      <View style={styles.header}>
-        <AppText variant="headline">History</AppText>
-        <AppText variant="body" color="textSecondary">
-          Track progression over time
-        </AppText>
-      </View>
-
       <View style={styles.statsRow}>
         <Card style={styles.statCard}>
           <AppText variant="metric" color="accent">
@@ -122,24 +122,28 @@ export default function HistoryScreen() {
         <Card style={styles.statCard}>
           <AppText variant="metric">{history.length}</AppText>
           <AppText variant="caption" color="textSecondary">
-            Workouts
+            Sessions
           </AppText>
         </Card>
       </View>
 
-      <SectionHeader title="Recent Workouts" subtitle="Tap to view · Long press to delete" />
+      <SectionHeader title="Recent Sessions" subtitle="Tap strength sessions to view · Long press to delete" />
 
       {history.length === 0 ? (
         <AppText variant="body" color="textSecondary">
-          No completed workouts yet.
+          No completed sessions yet.
         </AppText>
       ) : (
         history.map((item) => (
           <HistoryCard
             key={item.id}
             item={item}
-            onPress={() => router.push(`/session/${item.id}`)}
-            onLongPress={() => handleDelete(item.id)}
+            onPress={
+              item.sessionKind === 'cardio'
+                ? undefined
+                : () => router.push(`/session/${item.id}`)
+            }
+            onLongPress={() => handleDelete(item.id, item.sessionKind)}
           />
         ))
       )}

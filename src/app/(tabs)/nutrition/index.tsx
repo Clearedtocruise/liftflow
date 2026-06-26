@@ -9,6 +9,7 @@ import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { SkeletonBlock } from '@/components/layout/SkeletonBlock';
 import { ErrorStateCard } from '@/components/layout/StateCard';
+import { TabScreenHeader } from '@/components/layout/TabScreenHeader';
 import { MealDetailSheet } from '@/components/nutrition/MealDetailSheet';
 import { MealPlanCard } from '@/components/nutrition/MealPlanCard';
 import { MealReplaceSheet, type SmartReplacementPayload } from '@/components/nutrition/MealReplaceSheet';
@@ -529,24 +530,24 @@ export default function NutritionScreen() {
 
   return (
     <ScreenContainer
+      testID="nutrition-screen"
+      header={
+        <TabScreenHeader
+          title="Nutrition"
+          subtitle={formatScheduleSubtitle(schedule)}
+          right={
+            <Pressable onPress={() => router.push('/(features)/nutrition-preferences')} hitSlop={8}>
+              <AppText variant="caption" color="accent">
+                Preferences
+              </AppText>
+            </Pressable>
+          }
+        />
+      }
       contentContainerStyle={styles.content}
       refreshControl={
         <RefreshControl refreshing={refreshing} onRefresh={() => void handleRefresh()} tintColor={LiftFlowColors.accent} />
       }>
-      <View style={styles.headerRow}>
-        <View style={styles.headerText}>
-          <AppText variant="headline">Nutrition</AppText>
-          <AppText variant="footnote" color="textSecondary">
-            {formatScheduleSubtitle(schedule)}
-          </AppText>
-        </View>
-        <Pressable onPress={() => router.push('/(features)/nutrition-preferences')} hitSlop={8}>
-          <AppText variant="caption" color="accent">
-            Preferences
-          </AppText>
-        </Pressable>
-      </View>
-
       <Pressable onPress={() => router.push('/(features)/nutrition-intelligence')}>
         <Card glow style={styles.intelCard}>
           <AppText variant="label" color="accent">
@@ -611,25 +612,27 @@ export default function NutritionScreen() {
               <PrimaryButton label="Log a Meal" onPress={() => setQuickLogOpen(true)} />
             </Card>
           ) : (
-            todayMeals.map((meal, index) => (
-              <MealPlanCard
-                key={meal.id}
-                meal={meal}
-                scheduledTime={todayTimes[index]}
-                onMarkComplete={(status) => handleMarkMeal(meal, status)}
-                onReplace={() => {
-                  setReplaceMeal(meal);
-                  setReplaceMode('meal');
-                  setReplaceIngredientName(null);
-                }}
-                onReplaceIngredient={(ingredientName) => {
-                  setReplaceMeal(meal);
-                  setReplaceMode('ingredient');
-                  setReplaceIngredientName(ingredientName);
-                }}
-                onOpenDetail={() => setDetailMeal(meal)}
-              />
-            ))
+            <View testID="meal-list">
+              {todayMeals.map((meal, index) => (
+                <MealPlanCard
+                  key={meal.id}
+                  meal={meal}
+                  scheduledTime={todayTimes[index]}
+                  onMarkComplete={(status) => handleMarkMeal(meal, status)}
+                  onReplace={() => {
+                    setReplaceMeal(meal);
+                    setReplaceMode('meal');
+                    setReplaceIngredientName(null);
+                  }}
+                  onReplaceIngredient={(ingredientName) => {
+                    setReplaceMeal(meal);
+                    setReplaceMode('ingredient');
+                    setReplaceIngredientName(ingredientName);
+                  }}
+                  onOpenDetail={() => setDetailMeal(meal)}
+                />
+              ))}
+            </View>
           )}
         </>
       ) : null}
@@ -665,16 +668,23 @@ export default function NutritionScreen() {
                         day.date === today && hasWorkoutToday,
                       );
                       return (
-                        <View key={meal.id} style={styles.weekMealRow}>
-                          <AppText variant="footnote" color="accent">
-                            {times[index]}
-                          </AppText>
-                          <AppText variant="body">{meal.name}</AppText>
-                          <AppText variant="caption" color="textSecondary">
-                            {meal.calories ?? 0} cal · {Math.round(meal.proteinG ?? 0)}P · {Math.round(meal.carbsG ?? 0)}C ·{' '}
-                            {Math.round(meal.fatG ?? 0)}F
-                          </AppText>
-                        </View>
+                        <MealPlanCard
+                          key={meal.id}
+                          meal={meal}
+                          scheduledTime={times[index]}
+                          onMarkComplete={(status) => handleMarkMeal(meal, status)}
+                          onReplace={() => {
+                            setReplaceMeal(meal);
+                            setReplaceMode('meal');
+                            setReplaceIngredientName(null);
+                          }}
+                          onReplaceIngredient={(ingredientName) => {
+                            setReplaceMeal(meal);
+                            setReplaceMode('ingredient');
+                            setReplaceIngredientName(ingredientName);
+                          }}
+                          onOpenDetail={() => setDetailMeal(meal)}
+                        />
                       );
                     })
                   : null}

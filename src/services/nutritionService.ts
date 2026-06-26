@@ -2,15 +2,16 @@ import { api } from '@/api/client';
 import { mapGroceryList, mapMeal, mapMealPlan, mapNutritionGoals } from '@/lib/db-mappers';
 import { aggregateWeeklyGroceries } from '@/lib/groceryAggregation';
 import { resolveTimeZone } from '@/lib/localDate';
-import { mealSlotKey, remapApiMealsToClientWeek, type ApiPlanMeal } from '@/lib/mealPlanWeekAlign';
 import { aggregateDailyMeals, mealsForCalendarDay } from '@/lib/mealAggregation';
 import { isReplaceablePlannedMeal, pickMealsToKeep, weekEndDate } from '@/lib/mealCleanup';
 import { enrichMealMeta, serializeMealMeta } from '@/lib/mealIngredients';
+import { mealSlotKey, remapApiMealsToClientWeek, type ApiPlanMeal } from '@/lib/mealPlanWeekAlign';
 import { fail, fromError, ok } from '@/lib/serviceResult';
 import { getWeekRange } from '@/lib/weekPlan';
 import type { INutritionService } from '@/services/interfaces';
 import { getAccessToken, supabase } from '@/supabase/client';
 import type { DailyNutritionSummary, Meal, MealType } from '@/types';
+import type { FoodMacroEstimate } from '@/types/nutrition';
 
 function todayDate(): string {
   return localDateString();
@@ -470,6 +471,17 @@ export const nutritionService: INutritionService = {
       const targets = await api.getAdaptiveMacroTargets(userId, token);
       return ok(targets);
     } catch (e) {
+      // Fallback to active nutrition goals so coaching screens remain functional offline.
+      const goals = await this.getGoals(userId);
+      if (goals.success && goals.data) {
+        return ok({
+          calories: goals.data.dailyCalories,
+          proteinG: goals.data.proteinG,
+          carbsG: goals.data.carbsG,
+          fatG: goals.data.fatG,
+          rationale: 'Using your saved nutrition goals while adaptive targets are temporarily unavailable.',
+        });
+      }
       return fromError(e);
     }
   },
@@ -550,3 +562,16 @@ export const nutritionService: INutritionService = {
     }
   },
 };
+
+export function sumMealMacros(macros: FoodMacroEstimate[]): FoodMacroEstimate {
+  return macros.reduce(
+    (total, item) => ({
+      calories: total.calories + (item.calories ?? 0),
+      proteinG: total.proteinG + (item.proteinG ?? 0),
+      carbsG: total.carbsG + (item.carbsG ?? 0),
+      fatG: total.fatG + (item.fatG ?? 0),
+      reasoning: total.reasoning ?? item.reasoning,
+    }),
+    { calories: 0, proteinG: 0, carbsG: 0, fatG: 0 },
+  );
+}

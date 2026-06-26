@@ -1,20 +1,13 @@
 import { Redirect } from 'expo-router';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
-import { LogoMark } from '@/components/brand/LogoMark';
-import { LiftFlowColors, Spacing } from '@/constants/theme';
+import { BrandBootScreen } from '@/components/brand/BrandBootScreen';
 import { useAuth } from '@/hooks/useAuth';
 
 export default function Index() {
   const { user, isAuthenticated, isLoading, isProfileReady } = useAuth();
 
   if (isLoading) {
-    return (
-      <View style={styles.loading}>
-        <LogoMark size={80} glow={false} animate={false} />
-        <ActivityIndicator color={LiftFlowColors.primary} style={styles.spinner} />
-      </View>
-    );
+    return <BrandBootScreen />;
   }
 
   if (isAuthenticated) {
@@ -26,15 +19,3 @@ export default function Index() {
 
   return <Redirect href="/welcome" />;
 }
-
-const styles = StyleSheet.create({
-  loading: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: LiftFlowColors.background,
-  },
-  spinner: {
-    marginTop: Spacing.xl,
-  },
-});

@@ -390,7 +390,7 @@ export function resolveExerciseFormGuide(
       feelShould: structured.feelShould ?? enriched.feelShould,
       feelShouldNot: structured.feelShouldNot ?? enriched.feelShouldNot,
       musclesWorked: structured.musclesWorked ?? enriched.musclesWorked,
-      illustratedSteps: structured.illustratedSteps ?? enriched.illustratedSteps,
+      illustratedSteps: structured.illustratedSteps,
     };
   }
 
@@ -408,7 +408,7 @@ export function resolveExerciseFormGuide(
       feelShouldNot: enriched.feelShouldNot,
       coachingCues: enriched.coachingCues,
       commonMistakes: legacy.tips ?? enriched.commonMistakes,
-      illustratedSteps: enriched.illustratedSteps,
+      illustratedSteps: legacy.illustratedSteps,
     };
   }
 
@@ -418,13 +418,11 @@ export function resolveExerciseFormGuide(
     return {
       ...enriched,
       feelShould: month1Guide.feelLike ? [month1Guide.feelLike] : enriched.feelShould,
-      setupSteps: month1Guide.setup?.length ? month1Guide.setup : enriched.setupSteps,
-      executionSteps: month1Guide.execution?.length ? month1Guide.execution : enriched.executionSteps,
-      breathing: month1Guide.breathing ?? enriched.breathing,
-      coachingCues: month1Guide.cues?.length ? month1Guide.cues : enriched.coachingCues,
+      coachingCues: enriched.coachingCues?.length ? enriched.coachingCues : month1Guide.cues,
       commonMistakes: month1Guide.commonMistakes?.length ? month1Guide.commonMistakes : enriched.commonMistakes,
       regressions: month1Guide.regressions?.length ? month1Guide.regressions : enriched.regressions,
       progressions: month1Guide.progressions?.length ? month1Guide.progressions : enriched.progressions,
+      illustratedSteps: undefined,
     };
   }
 

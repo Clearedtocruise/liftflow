@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
 
+import { SplashController } from '@/components/brand/SplashController';
 import { SentryBootstrap } from '@/components/observability/SentryBootstrap';
+import { GlobalRestTimerOverlay } from '@/components/workout/execution/GlobalRestTimerOverlay';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { PlanAdjustmentProvider } from '@/contexts/PlanAdjustmentContext';
 import { SubscriptionProvider } from '@/contexts/SubscriptionContext';
@@ -14,6 +16,7 @@ function WorkoutSessionBridge({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   return (
     <WorkoutSessionProvider userId={user?.id}>
+      <GlobalRestTimerOverlay />
       <WorkoutPlanDraftProvider>
         <VoiceWorkoutProvider>
           <VoiceWorkoutSettingsBridge userId={user?.id} />
@@ -27,7 +30,9 @@ function WorkoutSessionBridge({ children }: { children: ReactNode }) {
 export function AppProviders({ children }: { children: ReactNode }) {
   return (
     <AuthProvider>
-      <AuthenticatedShell>{children}</AuthenticatedShell>
+      <SplashController>
+        <AuthenticatedShell>{children}</AuthenticatedShell>
+      </SplashController>
     </AuthProvider>
   );
 }

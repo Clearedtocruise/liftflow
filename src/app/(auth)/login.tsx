@@ -67,6 +67,11 @@ export default function LoginScreen() {
 
   return (
     <AuthFormContainer title={Brand.name} subtitle={Brand.taglinePrimary}>
+      <Pressable onPress={() => router.replace('/welcome')} style={styles.backLink}>
+        <AppText variant="footnote" color="accent">
+          ← Back to welcome
+        </AppText>
+      </Pressable>
       {banner ? (
         <AppText variant="footnote" color="accent" style={styles.banner}>
           {banner}
@@ -132,6 +137,10 @@ const styles = StyleSheet.create({
   },
   banner: {
     lineHeight: 20,
+  },
+  backLink: {
+    alignSelf: 'flex-start',
+    marginBottom: Spacing.xs,
   },
   error: {
     lineHeight: 20,

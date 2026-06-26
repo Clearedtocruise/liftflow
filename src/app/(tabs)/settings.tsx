@@ -8,6 +8,7 @@ import { Card } from '@/components/layout/Card';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { SectionHeader } from '@/components/layout/SectionHeader';
+import { TabScreenHeader } from '@/components/layout/TabScreenHeader';
 import { ConfirmationModePicker, SettingsRow } from '@/components/settings/SettingsRow';
 import { AppSymbol, SYMBOL_FALLBACKS } from '@/components/ui/AppSymbol';
 import { AppText } from '@/components/ui/AppText';
@@ -62,6 +63,8 @@ export default function SettingsScreen() {
   const [locationDetection, setLocationDetection] = useState(true);
   const [locationPermission, setLocationPermission] = useState<string>('—');
   const [tabataMode, setTabataMode] = useState(false);
+  const [restTimerSound, setRestTimerSound] = useState(true);
+  const [restTimerHaptics, setRestTimerHaptics] = useState(true);
   const [validationState, setValidationState] = useState<RolloverValidationState | null>(null);
 
   const refreshValidationState = useCallback(async () => {
@@ -96,6 +99,8 @@ export default function SettingsScreen() {
         setWakePhraseSettingEnabled(coaching.wakePhraseEnabled === true);
         setGymModeActive(coaching.gymModeEnabled === true);
         setTabataMode(isTabataModeEnabled(result.data));
+        setRestTimerSound(result.data.restTimerSound !== false);
+        setRestTimerHaptics(result.data.restTimerHaptics !== false);
       }
     });
     deviceLocationService.getPermissionStatus().then((status) => {
@@ -245,35 +250,32 @@ export default function SettingsScreen() {
   }
 
   return (
-    <ScreenContainer>
-      <View style={styles.header}>
-        <AppText variant="headline">Settings</AppText>
-        {user ? (
-          <AppText variant="footnote" color="textSecondary">
-            {user.displayName ?? user.email}
-          </AppText>
-        ) : null}
-        {isFounder || isBetaTester ? (
-          <View style={styles.accessBadges}>
-            {isFounder ? (
-              <View style={styles.accessBadge}>
-                <AppText variant="caption" color="accent">
-                  Founder
-                </AppText>
-              </View>
-            ) : null}
-            {isBetaTester ? (
-              <View style={styles.accessBadge}>
-                <AppText variant="caption" color="accent">
-                  Beta Tester
-                </AppText>
-              </View>
-            ) : null}
-          </View>
-        ) : null}
-        <View style={styles.headerAccent} />
-      </View>
-
+    <ScreenContainer
+      testID="settings-screen"
+      header={
+        <TabScreenHeader
+          title="Settings"
+          subtitle={user ? (user.displayName ?? user.email) : undefined}
+        />
+      }>
+      {isFounder || isBetaTester ? (
+        <View style={styles.accessBadges}>
+          {isFounder ? (
+            <View style={styles.accessBadge}>
+              <AppText variant="caption" color="accent">
+                Founder
+              </AppText>
+            </View>
+          ) : null}
+          {isBetaTester ? (
+            <View style={styles.accessBadge}>
+              <AppText variant="caption" color="accent">
+                Beta Tester
+              </AppText>
+            </View>
+          ) : null}
+        </View>
+      ) : null}
       <SectionHeader title="Voice & Logging" />
       <ConfirmationModePicker value={confirmationMode} onChange={handleConfirmationChange} />
       <Card style={styles.group}>
@@ -347,6 +349,32 @@ export default function SettingsScreen() {
             await userService.updatePreferences(user.id, {
               coachingPreferences: { ...coaching, ...coachingPrefsPatch({ gymModeEnabled: next }) },
             });
+          }}
+        />
+      </Card>
+
+      <View style={styles.sectionGap}>
+        <SectionHeader title="Rest Timer" subtitle="Alert when rest ends between sets" />
+      </View>
+      <Card style={styles.group}>
+        <SettingsRow
+          label="Rest complete sound"
+          value={restTimerSound ? 'On' : 'Off'}
+          onPress={async () => {
+            if (!user) return;
+            const next = !restTimerSound;
+            setRestTimerSound(next);
+            await userService.updatePreferences(user.id, { restTimerSound: next });
+          }}
+        />
+        <SettingsRow
+          label="Rest complete vibration"
+          value={restTimerHaptics ? 'On' : 'Off'}
+          onPress={async () => {
+            if (!user) return;
+            const next = !restTimerHaptics;
+            setRestTimerHaptics(next);
+            await userService.updatePreferences(user.id, { restTimerHaptics: next });
           }}
         />
       </Card>
@@ -634,17 +662,31 @@ export default function SettingsScreen() {
         <BetaInviteRow userId={user?.id} isBetaTester={isBetaTester} onRedeemed={refreshProfile} />
       </Card>
 
-      <View style={styles.sectionGap}>
-        <SectionHeader title="Validation" subtitle="Current app state for testing" />
-      </View>
-      <Card style={styles.group}>
-        <ValidationDebugPanel state={validationState} onRefresh={refreshValidationState} />
-      </Card>
+      {__DEV__ ? (
+        <>
+          <View style={styles.sectionGap}>
+            <SectionHeader title="Validation" subtitle="Current app state for testing" />
+          </View>
+          <Card style={styles.group}>
+            <ValidationDebugPanel state={validationState} onRefresh={refreshValidationState} />
+          </Card>
+        </>
+      ) : null}
 
+      {isFounder ? (
+        <Card style={styles.group}>
+          <SettingsRow
+            label="QA Checklist"
+            value="Founder device verification"
+            icon={<AppSymbol name="checklist" fallback="✓" size={20} tintColor={LiftFlowColors.textSecondary} />}
+            onPress={() => router.push('/(features)/qa-checklist')}
+          />
+        </Card>
+      ) : null}
       <View style={styles.sectionGap}>
         <SectionHeader title="Account" />
       </View>
-      <Card style={styles.group}>
+      <Card style={styles.group} testID="settings-reset-button">
         <SettingsRow
           label="Reset Workout Data"
           value={resetting ? 'Resetting…' : undefined}
@@ -652,6 +694,7 @@ export default function SettingsScreen() {
             <AppSymbol name="arrow.counterclockwise" fallback="↺" size={20} tintColor={LiftFlowColors.textSecondary} />
           }
           onPress={resetting ? undefined : handleResetWorkoutData}
+          testID="reset-workouts-button"
         />
         <SettingsRow
           label="Reset Nutrition Data"
@@ -660,6 +703,7 @@ export default function SettingsScreen() {
             <AppSymbol name="arrow.counterclockwise" fallback="↺" size={20} tintColor={LiftFlowColors.textSecondary} />
           }
           onPress={resetting ? undefined : handleResetNutritionData}
+          testID="reset-nutrition-button"
         />
         <SettingsRow
           label="Reset Workout + Nutrition"
@@ -668,6 +712,7 @@ export default function SettingsScreen() {
             <AppSymbol name="arrow.counterclockwise" fallback="↺" size={20} tintColor={LiftFlowColors.textSecondary} />
           }
           onPress={resetting ? undefined : handleResetWorkoutAndNutritionData}
+          testID="reset-all-button"
         />
         <SettingsRow
           label="Full Test Reset"

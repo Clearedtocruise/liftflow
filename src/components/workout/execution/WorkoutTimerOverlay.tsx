@@ -123,7 +123,7 @@ export function WorkoutTimerOverlay({
       onRequestClose={handleRequestClose}
     >
       <View style={styles.backdrop}>
-        <View style={styles.card}>
+        <View style={styles.card} testID="rest-timer">
           {position ? <WorkoutUpNextCard position={position} compact /> : null}
 
           {activeMode === 'traditional' && traditional ? (
@@ -172,7 +172,7 @@ export function WorkoutTimerOverlay({
                   ) : null}
                 </View>
               ) : null}
-              <PrimaryButton label="Continue" onPress={traditional.onSkip} variant="secondary" />
+              <PrimaryButton label="Continue" onPress={traditional.onSkip} variant="secondary" testID="rest-timer-skip" />
             </>
           ) : null}
 

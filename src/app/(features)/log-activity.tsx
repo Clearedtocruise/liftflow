@@ -31,8 +31,16 @@ export default function LogActivityScreen() {
   useEffect(() => {
     if (kind === 'walk') {
       router.replace('/(features)/cardio-tracking?activity=walk');
+      return;
     }
-  }, [kind]);
+    if (activityParam === 'run') {
+      router.replace('/(features)/cardio-tracking?activity=steady-run');
+      return;
+    }
+    if (activityParam === 'bike') {
+      router.replace('/(features)/cardio-tracking?activity=steady-bike');
+    }
+  }, [activityParam, kind]);
 
   useEffect(() => {
     if (activityParam) {
@@ -129,7 +137,7 @@ export default function LogActivityScreen() {
     }
   }
 
-  if (kind === 'walk') {
+  if (kind === 'walk' || activityParam === 'run' || activityParam === 'bike') {
     return null;
   }
 
@@ -152,7 +160,21 @@ export default function LogActivityScreen() {
                   key={option.id}
                   label={option.label}
                   variant={selectedId === option.id ? 'primary' : 'secondary'}
-                  onPress={() => setSelectedId(option.id)}
+                  onPress={() => {
+                    if (option.id === 'walk') {
+                      router.push('/(features)/cardio-tracking?activity=walk');
+                      return;
+                    }
+                    if (option.id === 'run') {
+                      router.push('/(features)/cardio-tracking?activity=steady-run');
+                      return;
+                    }
+                    if (option.id === 'bike') {
+                      router.push('/(features)/cardio-tracking?activity=steady-bike');
+                      return;
+                    }
+                    setSelectedId(option.id);
+                  }}
                 />
               ))}
             </View>

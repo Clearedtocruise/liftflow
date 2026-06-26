@@ -25,6 +25,7 @@ let readExerciseIndex: (() => number) | null = null;
 let readRestSeconds: (() => number | null) | null = null;
 let readTargetSets: (() => number) | null = null;
 let displayContext: WatchDisplayContext | null = null;
+let executionRestOverride: number | null = null;
 
 export const watchPhoneBridge = {
   setLogSetHandler(handler: (() => Promise<void>) | null) {
@@ -72,6 +73,7 @@ export const watchPhoneBridge = {
       cancelWorkoutHandler = null;
       readExerciseIndex = null;
       readRestSeconds = null;
+      executionRestOverride = null;
       return;
     }
     skipRestHandler = handlers.skipRest;
@@ -92,6 +94,11 @@ export const watchPhoneBridge = {
     return displayContext;
   },
 
+  /** Tabata/circuit rest — takes priority over session traditional rest on Watch. */
+  setExecutionRestOverride(seconds: number | null) {
+    executionRestOverride = seconds;
+  },
+
   getTargetSets(): number {
     return readTargetSets?.() ?? 3;
   },
@@ -101,7 +108,14 @@ export const watchPhoneBridge = {
   },
 
   getRestSecondsRemaining(): number | null {
+    if (executionRestOverride != null && executionRestOverride > 0) {
+      return executionRestOverride;
+    }
     return readRestSeconds?.() ?? null;
+  },
+
+  getEffectiveRestSecondsRemaining(): number | null {
+    return this.getRestSecondsRemaining();
   },
 
   applyReps(reps: number): boolean {

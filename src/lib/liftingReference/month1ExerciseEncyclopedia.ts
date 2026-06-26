@@ -20,15 +20,7 @@ function normalizeName(name: string): string {
 }
 
 export function getMonth1EncyclopediaEntry(exerciseName: string): Month1EncyclopediaEntry | null {
-  const direct = byName.get(normalizeName(exerciseName));
-  if (direct) return direct;
-
-  for (const [key, entry] of byName) {
-    if (key.includes(normalizeName(exerciseName)) || normalizeName(exerciseName).includes(key)) {
-      return entry;
-    }
-  }
-  return null;
+  return byName.get(normalizeName(exerciseName)) ?? null;
 }
 
 export function month1GuideFromEncyclopedia(exerciseName: string) {

@@ -11,6 +11,7 @@
         "simulator": false
       },
       "env": {
+        "INCLUDE_WATCH_TARGET": "1",
         "EXPO_PUBLIC_API_URL": "https://liftflow-api.onrender.com",
         "EXPO_PUBLIC_SUPABASE_URL": "https://jaajsalblkjtmrapijbe.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_l_d781eIJciTmAKZh0sjsQ_0NwmvDRA",
@@ -33,6 +34,7 @@
         "simulator": false
       },
       "env": {
+        "INCLUDE_WATCH_TARGET": "1",
         "EXPO_PUBLIC_API_URL": "https://liftflow-api.onrender.com",
         "EXPO_PUBLIC_SUPABASE_URL": "https://jaajsalblkjtmrapijbe.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_l_d781eIJciTmAKZh0sjsQ_0NwmvDRA",
@@ -50,6 +52,7 @@
         "buildType": "app-bundle"
       },
       "env": {
+        "INCLUDE_WATCH_TARGET": "1",
         "EXPO_PUBLIC_API_URL": "https://liftflow-api.onrender.com",
         "EXPO_PUBLIC_SUPABASE_URL": "https://jaajsalblkjtmrapijbe.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_l_d781eIJciTmAKZh0sjsQ_0NwmvDRA",

@@ -8,11 +8,11 @@ import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import { enrichMealMeta, type MealReplacementReason } from '@/lib/mealIngredients';
 import { mealTypeLabel } from '@/lib/mealSchedule';
 import {
-  nutritionAdvisoryService,
-  type MealAlternativeOption,
+    nutritionAdvisoryService,
+    type MealAlternativeOption,
 } from '@/services/nutritionAdvisoryService';
-import type { FoodMacroEstimate, MealReplacementScope } from '@/types/nutrition';
 import type { Meal } from '@/types';
+import type { FoodMacroEstimate, MealReplacementScope } from '@/types/nutrition';
 
 export type ReplacementMethod = 'smart' | 'ai';
 
@@ -120,7 +120,8 @@ export function MealReplaceSheet({
         <View style={styles.methodRow}>
           <Pressable
             style={[styles.methodChip, replacementMethod === 'smart' && styles.methodChipActive]}
-            onPress={() => setReplacementMethod('smart')}>
+            onPress={() => setReplacementMethod('smart')}
+            testID="smart-replace-button">
             <AppText variant="caption" color={replacementMethod === 'smart' ? 'accent' : 'textSecondary'}>
               Smart Replacement
             </AppText>

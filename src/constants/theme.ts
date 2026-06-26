@@ -5,9 +5,9 @@ export const LiftFlowColors = {
   background: '#080B10',
   backgroundSecondary: '#111318',
   backgroundElevated: '#111318',
-  surface: '#171B22',
-  surfaceElevated: '#1E2430',
-  surfaceHighlight: '#252C3A',
+  surface: '#1C2230',
+  surfaceElevated: '#242B3A',
+  surfaceHighlight: '#2E3648',
   border: 'rgba(255, 255, 255, 0.08)',
   borderSubtle: 'rgba(255, 255, 255, 0.04)',
 

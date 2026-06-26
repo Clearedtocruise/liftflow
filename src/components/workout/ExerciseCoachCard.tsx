@@ -24,6 +24,8 @@ type ExerciseCoachCardProps = {
   setNumber?: number;
   titleLabel?: string;
   showPerformanceSummary?: boolean;
+  /** Compact variant only — hide the coach reason sentence. */
+  showReason?: boolean;
   onPrescription?: (prescription: ExerciseCoachPrescription | null) => void;
   onApplyTarget?: (recommended: { weightKg: number; reps: number; durationSeconds?: number }) => void;
 };
@@ -61,6 +63,7 @@ export function ExerciseCoachCard({
   setNumber,
   titleLabel = 'Coach prescription',
   showPerformanceSummary = true,
+  showReason = true,
   onPrescription,
   onApplyTarget,
 }: ExerciseCoachCardProps) {
@@ -110,8 +113,8 @@ export function ExerciseCoachCard({
     return (
       <View style={styles.loading}>
         <ActivityIndicator color={LiftFlowColors.accent} size="small" />
-        <AppText variant="caption" color="textSecondary">
-          Coach analyzing…
+        <AppText variant="caption" color="textTertiary">
+          …
         </AppText>
       </View>
     );
@@ -273,12 +276,37 @@ export function ExerciseCoachCard({
   if (variant === 'compact') {
     return (
       <View style={styles.compact}>
-        <AppText variant="caption" color={adjColor}>
-          {coachAdjustmentLabel(displayLabel)}
-        </AppText>
-        <AppText variant="footnote" color="textSecondary">
-          {targetLine} · {prescription.reason}
-        </AppText>
+        <View style={styles.compactRow}>
+          <AppText variant="bodyBold" color="accent">
+            {targetLine}
+          </AppText>
+          <AppText variant="caption" color={adjColor}>
+            {coachAdjustmentLabel(displayLabel)}
+          </AppText>
+        </View>
+        {showReason ? (
+          <AppText variant="footnote" color="textTertiary">
+            {prescription.reason}
+          </AppText>
+        ) : null}
+        {onApplyTarget ? (
+          <Pressable
+            style={({ pressed }) => [styles.applyButton, pressed && styles.applyButtonPressed]}
+            onPress={() =>
+              onApplyTarget({
+                weightKg: loggingMode === 'timed' ? 0 : targets.weightKg,
+                reps: loggingMode === 'timed' ? 1 : targets.reps,
+                durationSeconds:
+                  loggingMode === 'timed'
+                    ? targets.durationSeconds ?? defaultTimedDurationSeconds(targets.repRange || plan?.plannedReps)
+                    : undefined,
+              })
+            }>
+            <AppText variant="caption" color="accent">
+              Use
+            </AppText>
+          </Pressable>
+        ) : null}
       </View>
     );
   }
@@ -296,7 +324,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: LiftFlowColors.border,
   },
-  compact: { gap: 2, marginTop: Spacing.xs },
+  compact: { gap: Spacing.xs },
+  compactRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.sm,
+  },
   loading: {
     flexDirection: 'row',
     alignItems: 'center',

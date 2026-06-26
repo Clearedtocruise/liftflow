@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
-import { TextField } from '@/components/layout/TextField';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
+import { TextField } from '@/components/layout/TextField';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import { nutritionAdvisoryService } from '@/services/nutritionAdvisoryService';
@@ -48,7 +48,7 @@ export function SmartMealReplaceForm({ replacingLabel, onConfirm }: SmartMealRep
   }
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} testID="smart-replace-form">
       <AppText variant="footnote" color="textSecondary">
         Replacing: {replacingLabel}
       </AppText>
@@ -118,6 +118,7 @@ export function SmartMealReplaceForm({ replacingLabel, onConfirm }: SmartMealRep
       <PrimaryButton
         label="Confirm Replacement"
         disabled={!macros || !foodName.trim() || !servingSize.trim()}
+        testID="confirm-replacement-button"
         onPress={() => {
           if (!macros) return;
           onConfirm({

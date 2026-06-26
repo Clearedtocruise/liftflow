@@ -9,7 +9,7 @@ import {
 
 import { watchOfflineQueue } from '@/integrations/watchOfflineQueue';
 
-import type { WatchMotionSample, WatchWorkoutAssistantState, WatchWorkoutMessage } from '@/integrations/watch';
+import type { WatchCardioState, WatchMotionSample, WatchWorkoutAssistantState, WatchWorkoutMessage } from '@/integrations/watch';
 import {
     parseWatchHeartRate,
     parseWatchMovement,
@@ -110,6 +110,14 @@ export function parseWatchWorkoutMessage(raw: Record<string, unknown>): WatchWor
     case 'workout_sync':
     case 'health_sync':
       return { type: 'workout_sync', ...raw };
+    case 'cardio_state':
+      return { type: 'cardio_state', state: raw.state as WatchCardioState };
+    case 'heart_rate_sample':
+      return {
+        type: 'heart_rate_sample',
+        bpm: Number(raw.bpm ?? 0),
+        recordedAt: String(raw.recordedAt ?? new Date().toISOString()),
+      };
     default:
       return null;
   }
@@ -129,6 +137,7 @@ export async function sendToWatch(
   message: WatchWorkoutMessage | Record<string, unknown>,
 ): Promise<{ sent: boolean; error?: string }> {
   const isWorkoutState = (message as Record<string, unknown>).type === 'workout_state';
+  const isCardioState = (message as Record<string, unknown>).type === 'cardio_state';
 
   try {
     require('react-native-watch-connectivity');
@@ -138,7 +147,7 @@ export async function sendToWatch(
   }
 
   try {
-    if (isWorkoutState) {
+    if (isWorkoutState || isCardioState) {
       updateApplicationContext(message as Record<string, unknown>);
     }
 
@@ -238,6 +247,24 @@ export function subscribeToWatchMessages(
   };
 }
 
+export async function pushRestCompleteToWatch(): Promise<{ sent: boolean; error?: string }> {
+  return sendToWatch({ type: 'rest_complete', timestamp: Date.now() });
+}
+
+export async function pushCardioStateToWatch(
+  state: WatchCardioState | null,
+  options?: { presentWorkout?: boolean },
+): Promise<{ sent: boolean; error?: string }> {
+  const payload: Record<string, unknown> = {
+    type: 'cardio_state',
+    state: state,
+  };
+  if (options?.presentWorkout) {
+    payload.presentWorkout = true;
+  }
+  return sendToWatch(payload);
+}
+
 export async function pushWorkoutStateToWatch(
   state: WatchWorkoutAssistantState,
   options?: { presentWorkout?: boolean },
@@ -292,8 +319,8 @@ export function isWorkoutAssistantMessage(message: Record<string, unknown>): boo
 /** Watch → phone commands (not phone → watch state echoes). */
 export function isInboundWatchCommand(message: Record<string, unknown>): boolean {
   const type = message.type;
-  if (typeof type !== 'string' || type === 'workout_state') return false;
-  if (type === 'request_sync') return true;
+  if (typeof type !== 'string' || type === 'workout_state' || type === 'cardio_state') return false;
+  if (type === 'request_sync' || type === 'heart_rate_sample') return true;
   return isWorkoutAssistantMessage(message);
 }
 

@@ -21,7 +21,7 @@ const checks = [
   {
     label: 'exercise guides avoid broken generated lookup',
     file: 'src/lib/exerciseFormGuides.ts',
-    patterns: ['buildExerciseGuide', 'STRUCTURED_EXERCISE_GUIDES'],
+    patterns: ['buildExerciseGuide', 'STRUCTURED_EXERCISE_GUIDES', 'buildExerciseEducation'],
     forbidden: ['GENERATED_EXERCISE_FORM_GUIDES'],
   },
   {
@@ -30,9 +30,14 @@ const checks = [
     patterns: ["['back extension', 'hyperextension', 'reverse hyper']", 'spinal erectors'],
   },
   {
-    label: 'ExerciseGuideSheet structured sections',
+    label: 'Exercise guide feel-like section',
     file: 'src/components/workout/execution/ExerciseGuideSheet.tsx',
-    patterns: ['guideSections', 'guideHasStructure', 'section.label'],
+    patterns: ['What it should feel like', 'feelShould', 'feelShouldNot', 'ExerciseMovementMedia'],
+  },
+  {
+    label: 'Exercise education inference',
+    file: 'src/lib/exerciseEducation/inferExerciseMetadata.ts',
+    patterns: ['reverse fly', 'neck', 'thruster', 'detectMetadataMismatches'],
   },
   {
     label: 'cardioService startedAt timestamps',

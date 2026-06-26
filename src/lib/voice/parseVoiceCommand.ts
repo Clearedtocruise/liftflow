@@ -1,5 +1,7 @@
 import type { ParsedVoiceCommandExtended, VoiceIntent, VoiceParseContext } from '@/types/voice';
 
+import { normalizeVoiceTranscript } from '@/lib/voice/normalizeSpokenNumbers';
+
 function detectWeightUnit(text: string): 'lb' | 'kg' | undefined {
   if (/\bkg\b|kilos?\b/i.test(text)) return 'kg';
   if (/\blbs?\b|pounds?\b/i.test(text)) return 'lb';
@@ -86,6 +88,10 @@ const CONTROL_PATTERNS: PatternDef[] = [
   {
     pattern: /^undo\.?$/i,
     build: (_, raw) => ({ intent: 'undo_last_set', rawText: raw, confidence: 0.94 }),
+  },
+  {
+    pattern: /^(?:scratch that|remove that|take that back)\.?$/i,
+    build: (_, raw) => ({ intent: 'undo_last_set', rawText: raw, confidence: 0.93 }),
   },
   {
     pattern: /^(?:next\s+set|next)\.?$/i,
@@ -214,6 +220,33 @@ const CONTROL_PATTERNS: PatternDef[] = [
 const SET_PATTERNS: PatternDef[] = [
   {
     pattern:
+      /^(?<weight>\d+(?:\.\d+)?)\s*(?<unit>lbs?|pounds?|kg|kilos?)\s*(?:for|x|\*|×|at)\s*(?<reps>\d+)\s*reps?\.?$/i,
+    build: (m, raw, ctx) => ({
+      intent: 'log_set',
+      exercise: ctx.activeExerciseName,
+      weight: parseFloat(m.groups!.weight!),
+      reps: parseInt(m.groups!.reps!, 10),
+      weightUnit: detectWeightUnit(m.groups!.unit ?? raw) ?? detectWeightUnit(raw),
+      usesContextExercise: !ctx.activeExerciseName,
+      rawText: raw,
+      confidence: ctx.activeExerciseName ? 0.94 : 0.8,
+    }),
+  },
+  {
+    pattern: /^(?<reps>\d+)\s*reps?\s*(?:at|@)\s*(?<weight>\d+(?:\.\d+)?)\s*(?<unit>lbs?|pounds?|kg|kilos?)?\.?$/i,
+    build: (m, raw, ctx) => ({
+      intent: 'log_set',
+      exercise: ctx.activeExerciseName,
+      weight: parseFloat(m.groups!.weight!),
+      reps: parseInt(m.groups!.reps!, 10),
+      weightUnit: detectWeightUnit(m.groups!.unit ?? raw) ?? detectWeightUnit(raw),
+      usesContextExercise: !ctx.activeExerciseName,
+      rawText: raw,
+      confidence: ctx.activeExerciseName ? 0.93 : 0.78,
+    }),
+  },
+  {
+    pattern:
       /^(?<exercise>.+?)\s+(?<weight>\d+(?:\.\d+)?)\s*(?<unit>lbs?|pounds?|kg|kilos?)?\s*(?:for|x|\*|×)\s*(?<reps>\d+)/i,
     build: (m, raw) => ({
       intent: 'log_set',
@@ -268,21 +301,26 @@ export function parseVoiceCommandLocal(
 ): ParsedVoiceCommandExtended | null {
   const raw = transcript.trim();
   if (!raw) return null;
-  const text = raw.toLowerCase();
+  const normalized = normalizeVoiceTranscript(raw);
+  const candidates = [...new Set([normalized, raw.toLowerCase(), raw])];
 
-  for (const { pattern, build } of CONTROL_PATTERNS) {
-    const match = text.match(pattern) ?? raw.match(pattern);
-    if (match) {
-      const result = build(match, raw, context);
-      if (result) return result;
+  for (const text of candidates) {
+    for (const { pattern, build } of CONTROL_PATTERNS) {
+      const match = text.match(pattern);
+      if (match) {
+        const result = build(match, raw, context);
+        if (result) return result;
+      }
     }
   }
 
-  for (const { pattern, build } of SET_PATTERNS) {
-    const match = text.match(pattern) ?? raw.match(pattern);
-    if (match) {
-      const result = build(match, raw, context);
-      if (result) return result;
+  for (const text of candidates) {
+    for (const { pattern, build } of SET_PATTERNS) {
+      const match = text.match(pattern);
+      if (match) {
+        const result = build(match, raw, context);
+        if (result) return result;
+      }
     }
   }
 

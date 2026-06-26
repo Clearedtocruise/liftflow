@@ -1,6 +1,10 @@
 import { Platform } from 'react-native';
 
-type SpeechResultEvent = { results?: { transcript?: string }[]; isFinal?: boolean };
+type SpeechResultItem = { transcript?: string; confidence?: number };
+type SpeechResultEvent = {
+  results?: SpeechResultItem[];
+  isFinal?: boolean;
+};
 type SpeechErrorEvent = { error?: string; message?: string };
 
 export type SpeechRecognitionModule = {
@@ -40,6 +44,19 @@ export function speechRecognitionUnavailableMessage(): string {
 
 export type SpeechListenerCleanup = () => void;
 
+/** Prefer the longest transcript alternative — final phrases beat partial fragments. */
+export function pickBestTranscript(results: SpeechResultItem[] | undefined): string {
+  if (!results?.length) return '';
+  let best = '';
+  for (const item of results) {
+    const text = item.transcript?.trim() ?? '';
+    if (text.length > best.length) {
+      best = text;
+    }
+  }
+  return best;
+}
+
 export function attachSpeechListeners(
   module: SpeechRecognitionModule,
   handlers: {
@@ -52,9 +69,9 @@ export function attachSpeechListeners(
 
   const resultSub = mod.addListener('result', (event) => {
     const ev = event as SpeechResultEvent;
-    const transcript = ev.results?.[0]?.transcript ?? '';
+    const transcript = pickBestTranscript(ev.results);
     if (!transcript) return;
-    handlers.onResult(transcript, ev.isFinal !== false);
+    handlers.onResult(transcript, ev.isFinal === true);
   });
 
   const errorSub = mod.addListener('error', (event) => {

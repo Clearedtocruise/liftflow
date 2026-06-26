@@ -1,43 +1,15 @@
 import type { ParsedVoiceCommandExtended } from '@/types/voice';
 
+import { normalizeVoiceTranscript } from '@/lib/voice/normalizeSpokenNumbers';
+
 import type { ParsedWorkoutCommand, WorkoutVoiceIntent } from './workoutCommandTypes';
 
-const numberWords: Record<string, number> = {
-  one: 1,
-  two: 2,
-  three: 3,
-  four: 4,
-  five: 5,
-  six: 6,
-  seven: 7,
-  eight: 8,
-  nine: 9,
-  ten: 10,
-  eleven: 11,
-  twelve: 12,
-  thirteen: 13,
-  fourteen: 14,
-  fifteen: 15,
-  sixteen: 16,
-  seventeen: 17,
-  eighteen: 18,
-  nineteen: 19,
-  twenty: 20,
+export type WorkoutParseContext = {
+  activeExerciseName?: string;
 };
 
 function normalizeText(text: string): string {
-  let normalized = text.toLowerCase().trim();
-
-  Object.entries(numberWords).forEach(([word, value]) => {
-    normalized = normalized.replace(new RegExp(`\\b${word}\\b`, 'g'), String(value));
-  });
-
-  return normalized
-    .replace(/pounds/g, 'lb')
-    .replace(/lbs/g, 'lb')
-    .replace(/kilograms/g, 'kg')
-    .replace(/kilos/g, 'kg')
-    .replace(/\s+/g, ' ');
+  return normalizeVoiceTranscript(text);
 }
 
 function cleanExerciseName(name: string): string {
@@ -51,7 +23,102 @@ function cleanExerciseName(name: string): string {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
-export function parseWorkoutCommand(rawText: string): ParsedWorkoutCommand {
+function parseWeightUnit(unit: string | undefined): 'lb' | 'kg' {
+  return unit === 'kg' ? 'kg' : 'lb';
+}
+
+function logSetCommand(
+  rawText: string,
+  exerciseName: string | undefined,
+  weight: number,
+  reps: number,
+  unit: 'lb' | 'kg' | 'bodyweight',
+  confidence: number,
+): ParsedWorkoutCommand {
+  return {
+    intent: unit === 'bodyweight' ? 'LOG_BODYWEIGHT_SET' : 'LOG_SET',
+    exerciseName: exerciseName ? cleanExerciseName(exerciseName) : undefined,
+    weight: unit === 'bodyweight' ? undefined : weight,
+    reps,
+    unit,
+    rawText,
+    confidence,
+  };
+}
+
+/** "45 lb for 8", "45 for 8 reps", "log 45 pounds for 8" — no exercise name in phrase. */
+function parseWeightFirstLog(text: string, context?: WorkoutParseContext): ParsedWorkoutCommand | null {
+  const withUnitFor = text.match(
+    /^(?:log|add|record)?\s*(\d+(?:\.\d+)?)\s*(lb|kg)\s*(?:for|x|\*|×|at)\s*(\d+)\s*(?:reps?)?$/,
+  );
+  if (withUnitFor) {
+    return logSetCommand(
+      text,
+      context?.activeExerciseName,
+      Number(withUnitFor[1]),
+      Number(withUnitFor[3]),
+      parseWeightUnit(withUnitFor[2]),
+      0.94,
+    );
+  }
+
+  const withUnitOnly = text.match(/^(\d+(?:\.\d+)?)\s*(lb|kg)\s*(?:for|x|\*|×|at)\s*(\d+)\s*(?:reps?)?$/);
+  if (withUnitOnly) {
+    return logSetCommand(
+      text,
+      context?.activeExerciseName,
+      Number(withUnitOnly[1]),
+      Number(withUnitOnly[3]),
+      parseWeightUnit(withUnitOnly[2]),
+      0.94,
+    );
+  }
+
+  const withUnitSpaceReps = text.match(/^(\d+(?:\.\d+)?)\s*(lb|kg)\s+(\d+)\s*(?:reps?)?$/);
+  if (withUnitSpaceReps) {
+    return logSetCommand(
+      text,
+      context?.activeExerciseName,
+      Number(withUnitSpaceReps[1]),
+      Number(withUnitSpaceReps[3]),
+      parseWeightUnit(withUnitSpaceReps[2]),
+      0.93,
+    );
+  }
+
+  const implicitUnit = text.match(/^(?:log|add|record)?\s*(\d+(?:\.\d+)?)\s*(?:for|x|\*|×|at)\s*(\d+)\s*(?:reps?)?$/);
+  if (implicitUnit) {
+    return logSetCommand(
+      text,
+      context?.activeExerciseName,
+      Number(implicitUnit[1]),
+      Number(implicitUnit[2]),
+      'lb',
+      0.88,
+    );
+  }
+
+  return null;
+}
+
+/** "bench press 45 lb for 8" — exercise name before weight. */
+function parseNamedWeightLog(text: string): ParsedWorkoutCommand | null {
+  const match = text.match(
+    /^(?:log|add|record)?\s*(.+?)\s+(\d+(?:\.\d+)?)\s*(lb|kg)\s*(?:for|x|\*|×|at)\s*(\d+)\s*(?:reps?)?$/,
+  );
+  if (!match) return null;
+
+  const weight = Number(match[2]);
+  const reps = Number(match[4]);
+  if (!Number.isFinite(weight) || !Number.isFinite(reps) || reps <= 0) return null;
+
+  return logSetCommand(text, match[1], weight, reps, parseWeightUnit(match[3]), 0.92);
+}
+
+export function parseWorkoutCommand(
+  rawText: string,
+  context?: WorkoutParseContext,
+): ParsedWorkoutCommand {
   const text = normalizeText(rawText);
 
   if (!text) {
@@ -60,6 +127,14 @@ export function parseWorkoutCommand(rawText: string): ParsedWorkoutCommand {
 
   if (text.includes('cancel') || text.includes('nevermind') || text.includes('never mind')) {
     return { intent: 'CANCEL', rawText, confidence: 0.95 };
+  }
+
+  if (
+    /(?:undo|delete|remove)\s+(?:the\s+)?last\s+set/.test(text) ||
+    text.includes('undo last set') ||
+    text.includes('delete last set')
+  ) {
+    return { intent: 'UNDO_LAST_SET', rawText, confidence: 0.95 };
   }
 
   if (text.includes('finish workout') || text.includes('end workout')) {
@@ -111,6 +186,12 @@ export function parseWorkoutCommand(rawText: string): ParsedWorkoutCommand {
     };
   }
 
+  const weightFirst = parseWeightFirstLog(text, context);
+  if (weightFirst) return weightFirst;
+
+  const namedWeight = parseNamedWeightLog(text);
+  if (namedWeight) return namedWeight;
+
   const bodyweightMatch = text.match(
     /(?:log|add|record)?\s*(.+?)\s+(?:bodyweight|body weight)\s*(?:for)?\s*(\d+)\s*(?:reps?)?/,
   );
@@ -121,22 +202,6 @@ export function parseWorkoutCommand(rawText: string): ParsedWorkoutCommand {
       exerciseName: cleanExerciseName(bodyweightMatch[1]!),
       reps: Number(bodyweightMatch[2]),
       unit: 'bodyweight',
-      rawText,
-      confidence: 0.85,
-    };
-  }
-
-  const weightedMatch = text.match(
-    /(?:log|add|record)?\s*(.+?)\s+(\d+)\s*(lb|kg)?\s*(?:for|x)?\s*(\d+)\s*(?:reps?)?/,
-  );
-
-  if (weightedMatch) {
-    return {
-      intent: 'LOG_SET',
-      exerciseName: cleanExerciseName(weightedMatch[1]!),
-      weight: Number(weightedMatch[2]),
-      reps: Number(weightedMatch[4]),
-      unit: weightedMatch[3] === 'kg' ? 'kg' : 'lb',
       rawText,
       confidence: 0.85,
     };
@@ -170,18 +235,19 @@ export function mapExtendedVoiceToWorkoutCommand(
     completed_set: 'LOG_BODYWEIGHT_SET',
     next_set: 'NEXT_EXERCISE',
     declare_exercise: 'ADD_EXERCISE',
-    undo_last_set: 'CANCEL',
-    delete_last_set: 'CANCEL',
+    undo_last_set: 'UNDO_LAST_SET',
+    delete_last_set: 'UNDO_LAST_SET',
   };
 
   const mappedIntent = parsed.intent ? intentMap[parsed.intent] : undefined;
 
   if (mappedIntent === 'LOG_SET' || mappedIntent === 'LOG_BODYWEIGHT_SET') {
+    const defaultReps = parsed.intent === 'completed_set' ? 1 : undefined;
     return {
       intent: mappedIntent,
       exerciseName: parsed.exercise,
       weight: parsed.weight ?? parsed.targetWeight,
-      reps: parsed.reps,
+      reps: parsed.reps ?? defaultReps,
       unit: parsed.weightUnit ?? (parsed.weight != null ? 'lb' : 'bodyweight'),
       rawText,
       confidence,

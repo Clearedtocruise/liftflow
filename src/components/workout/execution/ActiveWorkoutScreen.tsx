@@ -6,6 +6,7 @@ import { ExerciseMusclePanel } from '@/components/exercise/ExerciseMusclePanel';
 import { Card } from '@/components/layout/Card';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
+import { TabScreenHeader } from '@/components/layout/TabScreenHeader';
 import { AppText } from '@/components/ui/AppText';
 import { ExerciseCompleteCard } from '@/components/workout/execution/ExerciseCompleteCard';
 import { ExerciseGuideSheet } from '@/components/workout/execution/ExerciseGuideSheet';
@@ -21,6 +22,7 @@ import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import { useAppResume } from '@/hooks/useAppResume';
 import { useAuth } from '@/hooks/useAuth';
 import { useUnits } from '@/hooks/useUnits';
+import { useWatchExecutionRestSync } from '@/hooks/useWatchExecutionRestSync';
 import { formatWorkoutClockTime, useWorkoutElapsedSeconds } from '@/hooks/useWorkoutElapsedSeconds';
 import { useWorkoutTimerEngine } from '@/hooks/useWorkoutTimerEngine';
 import {
@@ -47,6 +49,7 @@ import {
     resolvePostSetFlowAction,
     resolveSupersetWorkoutPosition,
     shouldShowSupersetPrep,
+    targetSetsForIndex,
 } from '@/lib/supersetFlow';
 import {
     executionModeUsesIntervalTimer,
@@ -139,9 +142,6 @@ export function ActiveWorkoutScreen({
     pauseSession,
     resumeSession,
     logSet,
-    pauseRestTimer,
-    resumeRestTimer,
-    adjustRestTimer,
     setRestTimer,
     skipRestTimer,
     refreshSession,
@@ -154,7 +154,27 @@ export function ActiveWorkoutScreen({
     setWatchDraftReps,
     watchDraftWeightKg,
     setWatchDraftWeightKg,
+    restTimerHaptics,
   } = useWorkoutSession();
+
+  const { suppressNextWatchRestComplete } = useWatchExecutionRestSync({
+    userId: user?.id,
+    restTimerHaptics,
+    traditionalRestSeconds: restSecondsRemaining,
+    usesTraditionalRest: executionModeUsesTraditionalRest(executionMode),
+    intervalTimer,
+    circuitTimer,
+  });
+
+  const handleIntervalSkipPhase = useCallback(() => {
+    suppressNextWatchRestComplete();
+    skipIntervalPhase();
+  }, [skipIntervalPhase, suppressNextWatchRestComplete]);
+
+  const handleSkipCircuitTimer = useCallback(() => {
+    suppressNextWatchRestComplete();
+    skipCircuitTimer();
+  }, [skipCircuitTimer, suppressNextWatchRestComplete]);
 
   const watchDraftRepsRef = useRef<number | null>(null);
   watchDraftRepsRef.current = watchDraftReps;
@@ -185,7 +205,6 @@ export function ActiveWorkoutScreen({
   const [coachPrescription, setCoachPrescription] = useState<ExerciseCoachPrescription | null>(null);
   const [showComplete, setShowComplete] = useState(false);
   const [exerciseHadPr, setExerciseHadPr] = useState(false);
-  const [restPaused, setRestPaused] = useState(false);
   const [restTargetSeconds, setRestTargetSeconds] = useState(() =>
     resolveTraditionalRestSeconds(executionMode),
   );
@@ -205,7 +224,6 @@ export function ActiveWorkoutScreen({
   const [exercisePickerVisible, setExercisePickerVisible] = useState(false);
   const [exerciseGuideOpen, setExerciseGuideOpen] = useState(false);
   const [intervalOverlayOpen, setIntervalOverlayOpen] = useState(false);
-  const [restOverlayOpen, setRestOverlayOpen] = useState(false);
   const [circuitOverlayOpen, setCircuitOverlayOpen] = useState(false);
   const [tabataBetweenExerciseRestSeconds, setTabataBetweenExerciseRestSeconds] = useState(
     TABATA_BETWEEN_EXERCISE_REST_DEFAULT,
@@ -236,7 +254,7 @@ export function ActiveWorkoutScreen({
   const allSetsDone = completedSets.length >= effectiveTargetSets;
   const coachSetNotice =
     coachExtraSets > 0
-      ? `Coach added ${coachExtraSets} set${coachExtraSets > 1 ? 's' : ''} — ${effectiveTargetSets} sets total today.`
+      ? `+${coachExtraSets} set${coachExtraSets > 1 ? 's' : ''} today`
       : null;
   const isLastExercise = currentIndex >= sortedExercises.length - 1;
   const nextExercise = sortedExercises[currentIndex + 1];
@@ -259,25 +277,78 @@ export function ActiveWorkoutScreen({
       restSeconds: number;
     }) => {
       if (isPaused) return false;
+
+      const exerciseIndex = sortedExercises.findIndex((exercise) => exercise.id === input.workoutExerciseId);
+      if (exerciseIndex < 0) return false;
+
+      const completedAfterLog = (sortedExercises[exerciseIndex]?.sets?.length ?? 0) + 1;
+      const flowAction = resolvePostSetFlowAction(
+        exerciseIndex,
+        planExercises,
+        sortedExercises,
+        executionMode,
+        circuitRound,
+        completedAfterLog,
+      );
+      const skipRest =
+        !executionModeUsesTraditionalRest(executionMode) || flowAction.skipRest;
+      const targetForExercise = targetSetsForIndex(exerciseIndex, planExercises);
+
       const logged =
         input.weightKg == null
           ? await logSet({
               workoutExerciseId: input.workoutExerciseId,
               reps: input.reps,
               restSeconds: input.restSeconds,
+              skipRest,
             })
           : await logSet({
               workoutExerciseId: input.workoutExerciseId,
               weight: input.weightKg,
               reps: input.reps,
               restSeconds: input.restSeconds,
+              skipRest,
             });
-      if (logged) {
-        await refreshSession();
+
+      if (!logged) return false;
+
+      await refreshSession();
+
+      if (flowAction.circuitTimer && flowAction.circuitTimer.seconds > 0) {
+        pendingAdvanceRef.current = flowAction.circuitTimer.advanceIndex;
+        pendingRoundIncrementRef.current = flowAction.circuitTimer.phase === 'round_rest';
+        startCircuitTransition(
+          flowAction.circuitTimer.phase,
+          flowAction.circuitTimer.round,
+          undefined,
+          flowAction.circuitTimer.seconds,
+        );
+      } else if (flowAction.immediateAdvanceIndex != null) {
+        pendingAdvanceRef.current = null;
+        setCurrentIndex(flowAction.immediateAdvanceIndex);
+        setShowComplete(false);
+      } else if (flowAction.afterRestAdvanceIndex != null) {
+        pendingAdvanceRef.current = flowAction.afterRestAdvanceIndex;
+      } else if (
+        completedAfterLog >= targetForExercise &&
+        executionModeUsesTraditionalRest(executionMode) &&
+        !skipRest
+      ) {
+        pendingExerciseAdvanceAfterRestRef.current = true;
       }
-      return logged != null;
+
+      return true;
     },
-    [isPaused, logSet, refreshSession],
+    [
+      isPaused,
+      sortedExercises,
+      planExercises,
+      executionMode,
+      circuitRound,
+      logSet,
+      refreshSession,
+      startCircuitTransition,
+    ],
   );
 
   const startRestSeconds = useCallback(
@@ -291,6 +362,23 @@ export function ActiveWorkoutScreen({
     [lastLoggedSet?.id, startRestTimer, setRestTimer],
   );
 
+  const undoLastSetFromVoice = useCallback(async () => {
+    const setToRemove =
+      lastLoggedSet ??
+      [...session.exercises]
+        .flatMap((exercise) => exercise.sets)
+        .sort((a, b) => b.loggedAt.localeCompare(a.loggedAt))[0] ??
+      null;
+    if (!setToRemove?.id) return false;
+    if (activeRestPeriod) await skipRestTimer();
+    const removed = await deleteSet(setToRemove.id);
+    if (removed) {
+      setShowComplete(false);
+      await refreshSession();
+    }
+    return removed;
+  }, [activeRestPeriod, deleteSet, lastLoggedSet, refreshSession, session.exercises, skipRestTimer]);
+
   const voiceHandlers = useActiveWorkoutVoiceHandlers({
     session,
     sortedExerciseIds: sortedExercises.map((exercise) => exercise.id),
@@ -302,6 +390,7 @@ export function ActiveWorkoutScreen({
     preferredWeightUnit: units.preferredWeightUnit,
     isPaused,
     logSetFromVoice,
+    undoLastSet: undoLastSetFromVoice,
     goToExerciseIndex: setCurrentIndex,
     startRestSeconds,
     finishWorkout: onFinish,
@@ -479,16 +568,6 @@ export function ActiveWorkoutScreen({
   );
 
   useEffect(() => {
-    if (restSecondsRemaining === 0) {
-      setRestPaused(false);
-    }
-  }, [restSecondsRemaining]);
-
-  useEffect(() => {
-    if (!restActive) setRestOverlayOpen(false);
-  }, [restActive]);
-
-  useEffect(() => {
     if (!intervalTimer) setIntervalOverlayOpen(false);
   }, [intervalTimer]);
 
@@ -498,7 +577,6 @@ export function ActiveWorkoutScreen({
 
   useEffect(() => {
     setIntervalOverlayOpen(false);
-    setRestOverlayOpen(false);
     setCircuitOverlayOpen(false);
     setIsTabataPrepActive(false);
     tabataBetweenExercisePendingRef.current = false;
@@ -886,6 +964,9 @@ export function ActiveWorkoutScreen({
       const skipRest =
         !executionModeUsesTraditionalRest(executionMode) || flowAction.skipRest;
 
+      const repsToLog = watchPhoneBridge.getPendingWatchReps() ?? watchDraftReps ?? reps;
+      const weightToLog = watchPhoneBridge.getPendingWatchWeightKg() ?? watchDraftWeightKg ?? weightKg;
+
       const logged =
         loggingMode === 'cardio'
           ? await logSet({
@@ -898,8 +979,8 @@ export function ActiveWorkoutScreen({
           : loggingMode === 'timed'
           ? await logSet({ ...base, durationSeconds, reps: 1, skipRest })
           : loggingMode === 'bodyweight'
-            ? await logSet({ ...base, reps, skipRest })
-            : await logSet({ ...base, weight: weightKg, reps, skipRest });
+            ? await logSet({ ...base, reps: repsToLog, skipRest })
+            : await logSet({ ...base, weight: weightToLog, reps: repsToLog, skipRest });
 
       if (logged?.isPr) {
         setExerciseHadPr(true);
@@ -1026,13 +1107,13 @@ export function ActiveWorkoutScreen({
 
   function handleFinishBetweenExerciseRest() {
     tabataBetweenExercisePendingRef.current = false;
-    skipCircuitTimer();
+    handleSkipCircuitTimer();
   }
 
   function handleFinishTabataPrep() {
     tabataExercisePrepPendingRef.current = false;
     setIsTabataPrepActive(false);
-    skipCircuitTimer();
+    handleSkipCircuitTimer();
   }
 
   function handleFinishCircuitTimer() {
@@ -1056,25 +1137,9 @@ export function ActiveWorkoutScreen({
     performExerciseAdvance();
   }
 
-  function handlePauseRest() {
-    pauseRestTimer();
-    setRestPaused(true);
-  }
-
-  function handleResumeRest() {
-    resumeRestTimer();
-    setRestPaused(false);
-  }
-
-  async function handleSkipRest() {
-    setRestOverlayOpen(false);
-    await skipRestTimer();
-    setRestPaused(false);
-  }
-
   if (!currentExercise) {
     return (
-      <ScreenContainer>
+      <ScreenContainer enableTabSwipe={false}>
         <AppText variant="body" color="textSecondary">
           No exercises in this session.
         </AppText>
@@ -1084,35 +1149,27 @@ export function ActiveWorkoutScreen({
   }
 
   return (
-    <View style={styles.root}>
-      <ScreenContainer contentContainerStyle={styles.content}>
-        <View style={styles.header}>
-          <View style={styles.headerMain}>
-            <View style={styles.headerMeta}>
-              <AppText variant="caption" color="accent">
-                Exercise {currentIndex + 1} of {sortedExercises.length}
-              </AppText>
-              <View style={styles.workoutTimeBlock}>
-                <AppText variant="caption" color="textSecondary">
-                  Workout Time
-                </AppText>
-                <AppText variant="caption" color="textSecondary">
-                  {formatWorkoutClockTime(elapsedSeconds)}
-                </AppText>
-              </View>
-            </View>
-            <AppText variant="title">{session.name}</AppText>
+    <View style={styles.root} testID="active-workout-screen">
+      <ScreenContainer
+        enableTabSwipe={false}
+        keyboardExtraPadding={40}
+        header={
+          <View style={styles.stickyWorkoutHeader}>
+            <TabScreenHeader
+              title={session.name}
+              subtitle={`${currentIndex + 1} of ${sortedExercises.length} · ${formatWorkoutClockTime(elapsedSeconds)}`}
+              right={
+                isPaused ? (
+                  <PrimaryButton label="Resume" onPress={resumeSession} />
+                ) : (
+                  <PrimaryButton label="Pause" variant="secondary" onPress={pauseSession} />
+                )
+              }
+            />
             <WorkoutProgressBar percent={workoutProgress.percent} />
           </View>
-          <View style={styles.headerActions}>
-            {isPaused ? (
-              <PrimaryButton label="Resume" onPress={resumeSession} />
-            ) : (
-              <PrimaryButton label="Pause" variant="secondary" onPress={pauseSession} />
-            )}
-          </View>
-        </View>
-
+        }
+        contentContainerStyle={styles.content}>
         <View style={styles.heroOuter}>
           <LinearGradient colors={['rgba(31, 107, 255, 0.35)', 'rgba(0, 229, 255, 0.12)']} style={styles.heroBorder}>
             <View style={styles.heroCard}>
@@ -1122,14 +1179,17 @@ export function ActiveWorkoutScreen({
                 onPress={() => setExerciseGuideOpen(true)}
                 style={styles.exerciseNamePressable}>
                 <AppText variant="headline" style={styles.exerciseName}>
-                  {(currentExercise.exercise?.name ?? 'Exercise').toUpperCase()}
-                </AppText>
-                <AppText variant="caption" color="accent">
-                  Tap for form guide
+                  {currentExercise.exercise?.name ?? 'Exercise'}
                 </AppText>
               </Pressable>
 
-              {!showComplete ? <WorkoutUpNextCard position={workoutPosition} supersetActive={usesSupersetRotation && inSuperset} /> : null}
+              {!showComplete ? (
+                <WorkoutUpNextCard
+                  position={workoutPosition}
+                  compact
+                  supersetActive={usesSupersetRotation && inSuperset}
+                />
+              ) : null}
 
               {showSupersetPrepBanner && supersetPrepGroup ? (
                 <SupersetPrepBanner
@@ -1143,35 +1203,19 @@ export function ActiveWorkoutScreen({
                 />
               ) : null}
 
-              {usesSupersetRotation && inSuperset && !showComplete && !showSupersetPrepBanner ? (
-                <AppText variant="footnote" color="accent">
-                  Superset active · {workoutPosition.upNextLabel}
-                </AppText>
-              ) : null}
-
               {executionMode === 'circuit' ? (
                 <AppText variant="caption" color="accent">
-                  Circuit · Round {circuitRound}
+                  Round {circuitRound}
                   {stationLabel ? ` · ${stationLabel}` : ''}
-                </AppText>
-              ) : null}
-              {stationLabel ? (
-                <AppText variant="caption" color="accent">
-                  {stationLabel} · {(currentExercise.exercise?.name ?? 'Exercise')}
                 </AppText>
               ) : null}
 
               {!showComplete ? (
-                <>
-                  <AppText variant="caption" color="textTertiary">
-                    Exercise muscles
-                  </AppText>
-                  <ExerciseMusclePanel
-                    exerciseName={currentExercise.exercise?.name ?? 'Exercise'}
-                    gender={figureGender}
-                    variant="compact"
-                  />
-                </>
+                <ExerciseMusclePanel
+                  exerciseName={currentExercise.exercise?.name ?? 'Exercise'}
+                  gender={figureGender}
+                  variant="compact"
+                />
               ) : null}
 
               {!showComplete ? (
@@ -1187,6 +1231,10 @@ export function ActiveWorkoutScreen({
                   weightLabel={units.weightLabel}
                   distanceUnit={units.preferredDistanceUnit}
                   fallbackWeightKg={weightKg > 0 ? weightKg : currentExercise.suggestedWeight}
+                  compact
+                  hideTarget={
+                    user != null && currentExercise.exerciseId != null && loggingMode !== 'cardio'
+                  }
                 />
               ) : null}
 
@@ -1198,8 +1246,9 @@ export function ActiveWorkoutScreen({
 
               {user && currentExercise.exerciseId && loggingMode !== 'cardio' && !showComplete ? (
                 <ExerciseCoachCard
-                  variant="inline"
+                  variant="compact"
                   showPerformanceSummary={false}
+                  showReason={false}
                   loggingMode={loggingMode}
                   userId={user.id}
                   exerciseId={currentExercise.exerciseId}
@@ -1214,9 +1263,6 @@ export function ActiveWorkoutScreen({
 
               {loadingOptions.length > 1 && !showComplete ? (
                 <View style={styles.loadingMethodRow}>
-                  <AppText variant="caption" color="textTertiary">
-                    Loading method
-                  </AppText>
                   <View style={styles.loadingMethodChoices}>
                     {loadingOptions.map((option) => (
                       <Pressable
@@ -1237,85 +1283,45 @@ export function ActiveWorkoutScreen({
                 </View>
               ) : null}
 
-              {restActive && !showComplete ? (
-                <View style={styles.intervalBanner}>
-                  <AppText variant="label" color="restTimer">
-                    Rest timer
-                  </AppText>
-                  <AppText variant="bodyBold" color="restTimer">
-                    {formatTimerSeconds(restSecondsRemaining ?? restTargetSeconds)}
-                  </AppText>
-                  <AppText variant="footnote" color="textSecondary">
-                    {workoutPosition.currentSetLabel} · {workoutPosition.upNextLabel}
-                  </AppText>
-                  <PrimaryButton
-                    label={restOverlayOpen ? 'Hide timer' : 'Open timer'}
-                    variant="secondary"
-                    onPress={() => setRestOverlayOpen((open) => !open)}
-                  />
-                </View>
-              ) : null}
-
               {circuitTimer &&
               circuitTimer.phase !== 'done' &&
               !showComplete ? (
-                <View style={styles.intervalBanner}>
-                  <AppText variant="label" color="accent">
-                    {isTabataPrepActive ? 'Get ready' : 'Rest between exercises'}
-                  </AppText>
-                  <AppText variant="bodyBold">
+                <Pressable
+                  style={styles.timerChip}
+                  onPress={() => setCircuitOverlayOpen((open) => !open)}>
+                  <AppText variant="bodyBold" color="accent">
+                    {isTabataPrepActive ? 'Ready' : 'Break'}{' '}
                     {formatTimerSeconds(circuitTimer.secondsRemaining)}
                   </AppText>
-                  <AppText variant="footnote" color="textSecondary">
-                    {workoutPosition.currentSetLabel} · {workoutPosition.upNextLabel}
-                  </AppText>
-                  <PrimaryButton
-                    label={circuitOverlayOpen ? 'Hide timer' : 'Open timer'}
-                    variant="secondary"
-                    onPress={() => setCircuitOverlayOpen((open) => !open)}
-                  />
-                </View>
+                </Pressable>
               ) : null}
 
               {executionModeUsesIntervalTimer(executionMode) && !showComplete ? (
-                <View style={styles.intervalBanner}>
-                  <AppText variant="label" color="accent">
-                    {executionMode === 'tabata' ? 'Tabata timer' : 'HIIT timer'}
-                  </AppText>
+                <Pressable
+                  style={styles.timerChip}
+                  onPress={() => {
+                    if (!intervalTimer) startIntervalTimer(undefined, true);
+                    setIntervalOverlayOpen((open) => !open);
+                  }}>
                   {intervalTimer ? (
-                    <>
-                      <AppText variant="bodyBold">
-                        {intervalPhaseLabel(intervalTimer.phase).toUpperCase()} ·{' '}
-                        {formatTimerSeconds(intervalTimer.secondsRemaining)}
-                      </AppText>
-                      <AppText variant="footnote" color="textSecondary">
-                        {workoutPosition.currentSetLabel} · {workoutPosition.upNextLabel}
-                      </AppText>
-                    </>
+                    <AppText variant="bodyBold" color="accent">
+                      {intervalPhaseLabel(intervalTimer.phase)} ·{' '}
+                      {formatTimerSeconds(intervalTimer.secondsRemaining)}
+                    </AppText>
                   ) : (
-                    <AppText variant="footnote" color="textSecondary">
-                      {executionMode === 'tabata'
-                        ? 'Work & rest 20s default · adjust 10–45s each in timer · 10 rounds'
-                        : 'Configurable work, rest, and rounds'}
+                    <AppText variant="bodyBold" color="accent">
+                      Start timer
                     </AppText>
                   )}
-                  <PrimaryButton
-                    label={intervalOverlayOpen ? 'Hide timer' : intervalTimer ? 'Open timer' : 'Start timer'}
-                    variant="secondary"
-                    onPress={() => {
-                      if (!intervalTimer) startIntervalTimer(undefined, true);
-                      setIntervalOverlayOpen((open) => !open);
-                    }}
-                  />
-                </View>
+                </Pressable>
               ) : null}
 
               {executionModeUsesTraditionalRest(executionMode) ? (
               <View style={styles.restPresetRow}>
                 {[60, 90, 120, 150].map((seconds) => (
                   <Pressable key={seconds} onPress={() => setRestTargetSeconds(seconds)}>
-                    <AppText variant="caption" color={restTargetSeconds === seconds ? 'accent' : 'textSecondary'}>
-                      {seconds}s rest
+                    <AppText variant="caption" color={restTargetSeconds === seconds ? 'accent' : 'textTertiary'}>
+                      {seconds}s
                     </AppText>
                   </Pressable>
                 ))}
@@ -1342,20 +1348,21 @@ export function ActiveWorkoutScreen({
                     loading={logging}
                     disabled={isPaused}
                     onPress={handleLogSet}
+                    testID="log-set-button"
                   />
                   <VoiceMicButton disabled={isPaused || logging} />
                   <VoiceDebugPanel />
                   <View style={styles.extraActions}>
-                    <PrimaryButton label="+ Add Set" variant="secondary" onPress={handleAddSet} disabled={isPaused} />
+                    <PrimaryButton label="+ Set" variant="secondary" onPress={handleAddSet} disabled={isPaused} />
                     <PrimaryButton
-                      label="+ Add Exercise"
+                      label="+ Exercise"
                       variant="secondary"
                       onPress={() => setExercisePickerVisible(true)}
                       disabled={isPaused}
                     />
                     {completedSets.length > 0 ? (
                       <PrimaryButton
-                        label="Delete Last Set"
+                        label="Undo"
                         variant="ghost"
                         onPress={() => handleDeleteSet(completedSets[completedSets.length - 1]!.id)}
                         disabled={isPaused}
@@ -1369,31 +1376,29 @@ export function ActiveWorkoutScreen({
         </View>
 
         <Card style={styles.setProgress}>
+          <View style={styles.setChipRow}>
           {Array.from({ length: Math.max(effectiveTargetSets, completedSets.length) }).map((_, index) => {
             const set = completedSets[index];
             const pending = !set;
             return (
-              <Pressable
+              <View
                 key={`set-${index + 1}`}
-                style={styles.setRow}
-                onLongPress={set ? () => handleDeleteSet(set.id) : undefined}>
-                <AppText variant="bodyBold" color={pending ? 'textTertiary' : 'textPrimary'}>
-                  Set {index + 1} {pending ? 'Pending' : '✓'}
+                style={[styles.setChip, pending && styles.setChipPending]}>
+                <AppText variant="caption" color={pending ? 'textTertiary' : 'textPrimary'}>
+                  {pending
+                    ? `${index + 1}`
+                    : formatSetLoggedLabel(
+                        loggingMode,
+                        set,
+                        (kg) => formatWorkoutWeightForInput(kg, units.preferredWeightUnit),
+                        units.weightLabel,
+                        units.preferredDistanceUnit,
+                      )}
                 </AppText>
-                {!pending ? (
-                  <AppText variant="footnote" color="textSecondary">
-                    {formatSetLoggedLabel(
-                      loggingMode,
-                      set,
-                      (kg) => formatWorkoutWeightForInput(kg, units.preferredWeightUnit),
-                      units.weightLabel,
-                      units.preferredDistanceUnit,
-                    )}
-                  </AppText>
-                ) : null}
-              </Pressable>
+              </View>
             );
           })}
+          </View>
         </Card>
 
         {showComplete ? (
@@ -1411,9 +1416,9 @@ export function ActiveWorkoutScreen({
         ) : null}
 
         <View style={styles.footerActions}>
-          <PrimaryButton label="Finish Workout" variant="secondary" onPress={onFinish} />
+          <PrimaryButton label="Finish" variant="secondary" onPress={onFinish} testID="finish-workout-button" />
           <PrimaryButton
-            label="Cancel Workout"
+            label="Cancel"
             variant="ghost"
             onPress={() =>
               Alert.alert('Cancel workout', 'Discard this session?', [
@@ -1429,39 +1434,16 @@ export function ActiveWorkoutScreen({
         visible={
           !showComplete &&
           !activeChallenge &&
-          ((restActive && restOverlayOpen) ||
-            (intervalTimer != null && intervalOverlayOpen) ||
+          ((intervalTimer != null && intervalOverlayOpen) ||
             (circuitTimer != null && circuitTimer.phase !== 'done' && circuitOverlayOpen))
         }
         position={workoutPosition}
-        traditional={restActive && !intervalTimer && !circuitTimer ? {
-                secondsRemaining: restSecondsRemaining,
-                recommendedSeconds: activeRestPeriod?.recommendedSeconds ?? restTargetSeconds,
-                isPaused: restPaused,
-                onPause: handlePauseRest,
-                onResume: handleResumeRest,
-                onSkip: handleSkipRest,
-                onAdjust: adjustRestTimer,
-                onSetRest: setRestTimer,
-                nextExerciseName: usesSupersetRotation && inSuperset
-                  ? workoutPosition.upNextLabel
-                  : nextExercise?.exercise?.name,
-                nextExerciseDetail:
-                  usesSupersetRotation && inSuperset
-                    ? 'Superset rotation'
-                    : nextPlanMeta
-                    ? `${nextPlanMeta.sets} sets · ${nextPlanMeta.repRange ?? '8-10'} reps`
-                    : nextExercise?.suggestedReps
-                      ? `${nextExercise.suggestedReps} reps`
-                      : null,
-              }
-            : undefined}
         interval={intervalTimer && !circuitTimer ? intervalTimer : null}
         intervalExerciseName={currentExercise.exercise?.name ?? 'Exercise'}
         intervalNextExerciseName={nextExercise?.exercise?.name}
         onIntervalDismiss={() => setIntervalOverlayOpen(false)}
         onIntervalToggle={toggleIntervalTimer}
-        onIntervalSkip={skipIntervalPhase}
+        onIntervalSkip={handleIntervalSkipPhase}
         onIntervalSkipRound={skipIntervalRound}
         onIntervalReset={resetIntervalTimer}
         onIntervalConfigChange={handleIntervalConfigChange}
@@ -1536,30 +1518,19 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing.huge,
     gap: Spacing.lg,
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    gap: Spacing.md,
-  },
-  headerMain: {
-    flex: 1,
-    gap: Spacing.xs,
-  },
-  headerMeta: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    gap: Spacing.md,
-  },
-  workoutTimeBlock: {
-    alignItems: 'flex-end',
-    gap: 2,
-  },
-  headerActions: {
-    minWidth: 96,
+  stickyWorkoutHeader: {
+    gap: Spacing.sm,
   },
   heroOuter: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.full,
+    backgroundColor: LiftFlowColors.backgroundSecondary,
+    borderWidth: 1,
+    borderColor: LiftFlowColors.border,
+  },
+  timerChip: {
     borderRadius: Radius.lg,
     overflow: 'hidden',
   },
@@ -1577,7 +1548,7 @@ const styles = StyleSheet.create({
     gap: Spacing.xs,
   },
   exerciseName: {
-    letterSpacing: 1,
+    letterSpacing: 0.25,
   },
   nextPreview: {
     gap: Spacing.xs,
@@ -1616,18 +1587,31 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(31, 107, 255, 0.12)',
   },
   setProgress: {
+    paddingVertical: Spacing.sm,
+  },
+  setChipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: Spacing.sm,
   },
-  setRow: {
-    gap: Spacing.xs,
-    paddingVertical: Spacing.xs,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: LiftFlowColors.border,
+  setChip: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.full,
+    backgroundColor: LiftFlowColors.backgroundSecondary,
+    borderWidth: 1,
+    borderColor: LiftFlowColors.accent,
+  },
+  setChipPending: {
+    borderColor: LiftFlowColors.border,
+    opacity: 0.6,
   },
   footerActions: {
     gap: Spacing.sm,
   },
   extraActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: Spacing.sm,
   },
 });

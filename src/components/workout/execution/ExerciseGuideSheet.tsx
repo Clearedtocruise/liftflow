@@ -1,9 +1,11 @@
 import { Linking, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
+import { ExerciseMovementMedia } from '@/components/exercise/ExerciseMovementMedia';
 import { ExerciseMusclePanel } from '@/components/exercise/ExerciseMusclePanel';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
+import { inferExerciseMetadata } from '@/lib/exerciseEducation/inferExerciseMetadata';
 import { guideHasStructure, guideSections, resolveExerciseFormGuide } from '@/lib/exerciseFormGuides';
 import type { Exercise } from '@/types';
 
@@ -24,6 +26,16 @@ export function ExerciseGuideSheet({
   const guide = resolveExerciseFormGuide(exercise, exerciseName);
   const sections = guide ? guideSections(guide) : [];
   const structured = guide ? guideHasStructure(guide) : false;
+  const inferred = inferExerciseMetadata({
+    name,
+    slug: exercise?.slug,
+    category: exercise?.category,
+    equipment: exercise?.equipment,
+    muscleGroups: exercise?.muscleGroups,
+    secondaryMuscles: exercise?.secondaryMuscles,
+    exerciseType: exercise?.exerciseType,
+  });
+  const primaryMuscles = guide?.musclesWorked?.primary ?? inferred.primaryMuscles;
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
@@ -31,17 +43,13 @@ export function ExerciseGuideSheet({
         <AppText variant="title">How to do it</AppText>
         <AppText variant="bodyBold">{name}</AppText>
 
-        {exercise?.muscleGroups?.length ? (
-          <AppText variant="footnote" color="textSecondary">
-            Primary: {exercise.muscleGroups.slice(0, 4).join(', ')}
-          </AppText>
-        ) : null}
-
         <ExerciseMusclePanel
           exerciseName={name}
-          muscleGroups={exercise?.muscleGroups}
+          muscleGroups={primaryMuscles}
           variant="inline"
         />
+
+        {guide ? <ExerciseMovementMedia guide={guide} exerciseName={name} /> : null}
 
         {structured ? (
           <View style={styles.sectionList}>
@@ -80,7 +88,50 @@ export function ExerciseGuideSheet({
           </AppText>
         )}
 
-        {guide?.tips?.length ? (
+        {guide?.feelShould?.length || guide?.feelShouldNot?.length ? (
+          <View style={styles.feelCard}>
+            <AppText variant="label" color="textSecondary">
+              What it should feel like
+            </AppText>
+            {guide.feelShould?.length ? (
+              <View style={styles.feelBlock}>
+                <AppText variant="footnote" color="accent">
+                  You should feel:
+                </AppText>
+                {guide.feelShould.map((item) => (
+                  <AppText key={`should-${item}`} variant="body" color="textPrimary">
+                    · {item}
+                  </AppText>
+                ))}
+              </View>
+            ) : null}
+            {guide.feelShouldNot?.length ? (
+              <View style={styles.feelBlock}>
+                <AppText variant="footnote" color="textSecondary">
+                  You should not feel:
+                </AppText>
+                {guide.feelShouldNot.map((item) => (
+                  <AppText key={`not-${item}`} variant="body" color="textSecondary">
+                    · {item}
+                  </AppText>
+                ))}
+              </View>
+            ) : null}
+          </View>
+        ) : null}
+
+        {guide?.commonMistakes?.length ? (
+          <View style={styles.tipsCard}>
+            <AppText variant="label" color="textSecondary">
+              Common mistakes to avoid
+            </AppText>
+            {guide.commonMistakes.map((tip) => (
+              <AppText key={tip} variant="footnote" color="textSecondary">
+                · {tip}
+              </AppText>
+            ))}
+          </View>
+        ) : guide?.tips?.length ? (
           <View style={styles.tipsCard}>
             <AppText variant="label" color="textSecondary">
               Common mistakes to avoid
@@ -148,19 +199,30 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(31, 107, 255, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 2,
   },
   stepText: {
     flex: 1,
-    lineHeight: 22,
+  },
+  feelCard: {
+    gap: Spacing.sm,
+    padding: Spacing.md,
+    borderRadius: Radius.md,
+    backgroundColor: LiftFlowColors.surface,
+    borderWidth: 1,
+    borderColor: LiftFlowColors.border,
+  },
+  feelBlock: {
+    gap: 4,
   },
   tipsCard: {
     gap: Spacing.xs,
     padding: Spacing.md,
     borderRadius: Radius.md,
-    backgroundColor: LiftFlowColors.surfaceHighlight,
+    backgroundColor: LiftFlowColors.surface,
+    borderWidth: 1,
+    borderColor: LiftFlowColors.border,
   },
   tutorialLink: {
-    paddingVertical: Spacing.xs,
+    paddingVertical: Spacing.sm,
   },
 });

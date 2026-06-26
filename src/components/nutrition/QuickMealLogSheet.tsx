@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Modal, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { AppText } from '@/components/ui/AppText';
@@ -53,9 +53,18 @@ export function QuickMealLogSheet({ visible, onClose, onSubmit }: QuickMealLogSh
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose}>
-        <Pressable style={styles.sheet} onPress={(event) => event.stopPropagation()}>
-          <AppText variant="title">Log a meal</AppText>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <Pressable style={styles.backdrop} onPress={onClose}>
+          <Pressable style={styles.sheet} onPress={(event) => event.stopPropagation()}>
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="interactive"
+              automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+              bounces={false}
+              showsVerticalScrollIndicator={false}>
+              <AppText variant="title">Log a meal</AppText>
           <AppText variant="footnote" color="textSecondary">
             Log what you ate — no meal plan required.
           </AppText>
@@ -125,17 +134,22 @@ export function QuickMealLogSheet({ visible, onClose, onSubmit }: QuickMealLogSh
             <PrimaryButton label="Save meal" onPress={handleSave} loading={saving} disabled={!name.trim()} />
             <PrimaryButton label="Cancel" variant="secondary" onPress={onClose} />
           </View>
+            </ScrollView>
+          </Pressable>
         </Pressable>
-      </Pressable>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: {
+    flex: 1,
+  },
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'center',
+    justifyContent: 'flex-end',
     padding: Spacing.xl,
   },
   sheet: {

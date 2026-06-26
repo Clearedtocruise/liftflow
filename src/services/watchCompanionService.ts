@@ -1,6 +1,8 @@
 import type { WatchWorkoutAssistantState } from '@/integrations/watch';
 import {
     flushWatchOutboundQueue,
+    pushCardioStateToWatch,
+    pushRestCompleteToWatch,
     pushWorkoutStateToWatch,
     subscribeToWatchMessages,
     type WatchInboundHandlerResult,
@@ -17,6 +19,7 @@ import { watchWorkoutService } from '@/services/watchWorkoutService';
 import { workoutRecommendationService } from '@/services/workoutRecommendationService';
 import { workoutService } from '@/services/workoutService';
 import { watchPhoneBridge } from '@/state/WatchPhoneBridge';
+import { watchCardioBridge } from '@/state/watchCardioBridge';
 import { supabase } from '@/supabase/client';
 import type { WorkoutSession } from '@/types';
 import type { ServiceResult } from '@/types/common';
@@ -161,6 +164,13 @@ export const watchCompanionService = {
     await pushWorkoutStateToWatch(patched);
   },
 
+  /** Lightweight cue when any workout rest period ends on iPhone. */
+  async notifyWatchRestComplete(userId: string): Promise<void> {
+    const assistantState = watchWorkoutService.getState(userId);
+    if (!assistantState.activeSet) return;
+    await pushRestCompleteToWatch();
+  },
+
   applyDisplayContext(
     state: WatchWorkoutAssistantState,
     display: ReturnType<typeof watchPhoneBridge.getDisplayContext>,
@@ -269,7 +279,36 @@ export const watchCompanionService = {
     userId: string,
     message: Record<string, unknown>,
   ): Promise<WatchInboundHandlerResult> {
+    if (message.type === 'heart_rate_sample') {
+      const bpm = Number(message.bpm);
+      if (Number.isFinite(bpm) && bpm > 0) {
+        watchCardioBridge.recordHeartRate(Math.round(bpm));
+      }
+      return { reply: { received: true } };
+    }
+
+    if (message.type === 'cardio_pause') {
+      watchCardioBridge.emitCommand('pause');
+      return { reply: { received: true } };
+    }
+
+    if (message.type === 'cardio_resume') {
+      watchCardioBridge.emitCommand('resume');
+      return { reply: { received: true } };
+    }
+
+    if (message.type === 'cardio_finish') {
+      watchCardioBridge.emitCommand('finish');
+      return { reply: { received: true } };
+    }
+
     if (message.type === 'request_sync') {
+      const activeCardio = watchCardioBridge.getActive();
+      if (activeCardio) {
+        await pushCardioStateToWatch(activeCardio);
+        return { reply: { type: 'cardio_state', state: activeCardio } };
+      }
+
       const sessionResult = await workoutService.getActiveSession(userId);
       await this.pushPhoneWorkoutState(userId, {
         session: sessionResult.success ? sessionResult.data : null,

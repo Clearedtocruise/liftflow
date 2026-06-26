@@ -62,6 +62,7 @@ export type PlannedWorkoutMetadata = {
   locationId?: string;
   locationName?: string;
   rescheduledFrom?: string;
+  rescheduledAt?: string;
   recoveryAdjusted?: boolean;
   limitationAdjusted?: boolean;
   sessionKind?: 'strength' | 'cardio' | 'mobility';

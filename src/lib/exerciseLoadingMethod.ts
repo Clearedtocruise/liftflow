@@ -36,7 +36,19 @@ export function supportedLoadingMethods(
   }
 
   if (isTimedExercise(exercise, undefined, exercise?.name)) {
+    const label = (exercise?.name ?? '').toLowerCase();
+    if (label.includes('farmer') || label.includes('yoke') || label.includes('suitcase')) {
+      return ['external_load', 'timed_hold'];
+    }
     return ['timed_hold'];
+  }
+
+  const label = (exercise?.name ?? '').toLowerCase();
+  if (
+    exercise?.exerciseType === 'cardio' &&
+    (label.includes('thruster') || label.includes('dumbbell') || label.includes('db '))
+  ) {
+    return ['external_load', 'distance'];
   }
 
   const mode = getExerciseLoggingMode(exercise);
@@ -63,7 +75,27 @@ export function inferLoadingMethodFromHistory(
   lastDurationSeconds?: number | null,
 ): LoadingMethod {
   const supported = supportedLoadingMethods(exercise, slug);
-  if (supported.includes('timed_hold')) return 'timed_hold';
+  const label = (exercise?.name ?? '').toLowerCase();
+
+  if (supported.includes('external_load') && label.includes('farmer')) {
+    return 'external_load';
+  }
+  if (
+    supported.includes('external_load') &&
+    exercise?.exerciseType === 'cardio' &&
+    (label.includes('thruster') || label.includes('dumbbell'))
+  ) {
+    return 'external_load';
+  }
+  if (
+    supported.includes('bodyweight') &&
+    (label.includes('lunge') || label.includes('pull-up') || label.includes('pull up') || label.includes('chin-up') || label.includes('chin up') || label.includes('dip'))
+  ) {
+    return 'bodyweight';
+  }
+  if (supported.includes('timed_hold') && !label.includes('farmer')) {
+    return 'timed_hold';
+  }
   if (supported.includes('distance')) return 'distance';
   if (lastDurationSeconds != null && lastDurationSeconds > 0 && supported.includes('timed_hold')) {
     return 'timed_hold';

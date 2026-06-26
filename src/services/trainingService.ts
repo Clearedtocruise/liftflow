@@ -223,12 +223,14 @@ export const trainingService: ITrainingService = {
 
     const [apiResult, sbResult] = await Promise.allSettled([fromApi(), fromSupabase()]);
 
-    if (apiResult.status === 'fulfilled' && apiResult.value.success) {
-      return apiResult.value;
-    }
-    if (sbResult.status === 'fulfilled' && sbResult.value.success) {
-      return sbResult.value;
-    }
+    const apiData =
+      apiResult.status === 'fulfilled' && apiResult.value.success ? apiResult.value.data : null;
+    const sbData =
+      sbResult.status === 'fulfilled' && sbResult.value.success ? sbResult.value.data : null;
+
+    // Prefer Supabase on device — reads land immediately after plan adaptations.
+    if (sbData) return ok(sbData);
+    if (apiData) return ok(apiData);
 
     if (apiResult.status === 'fulfilled' && !apiResult.value.success) return apiResult.value;
     if (sbResult.status === 'fulfilled' && !sbResult.value.success) return sbResult.value;

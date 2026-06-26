@@ -15,44 +15,46 @@ export function VoiceMicButton({ disabled }: VoiceMicButtonProps) {
     wakeWordEnabled,
     listeningForWakeWord,
     listeningForCommand,
+    transcript,
     startCommandListening,
     error,
   } = useVoiceWorkout();
+
+  const showWakeHint =
+    wakePhraseSettingEnabled && (listeningForWakeWord || listeningForCommand || wakeWordEnabled);
 
   return (
     <View style={styles.wrapper}>
       <Pressable
         onPress={() => void startCommandListening()}
-        disabled={disabled || listeningForCommand}
+        disabled={disabled}
         style={({ pressed }) => [
           styles.primaryButton,
           listeningForCommand && styles.primaryActive,
-          (disabled || listeningForCommand) && styles.disabled,
+          disabled && styles.disabled,
           pressed && !disabled && styles.pressed,
         ]}
         accessibilityRole="button"
-        accessibilityLabel={listeningForCommand ? 'Listening for workout command' : 'Tap to voice log'}>
+        accessibilityLabel={listeningForCommand ? 'Listening for workout command' : 'Voice log'}>
         <AppText variant="bodyBold" color="textPrimary" align="center">
-          {listeningForCommand ? 'Listening…' : 'Tap to Voice Log'}
+          {listeningForCommand ? 'Listening…' : 'Voice Log'}
         </AppText>
       </Pressable>
 
-      {wakePhraseSettingEnabled ? (
+      {listeningForCommand && transcript ? (
+        <AppText variant="footnote" color="textSecondary" align="center" numberOfLines={2}>
+          “{transcript}”
+        </AppText>
+      ) : null}
+
+      {showWakeHint ? (
         <View style={styles.wakeRow}>
           <View style={[styles.dot, wakeWordEnabled ? styles.dotOn : styles.dotOff]} />
-          <AppText variant="footnote" color="textSecondary" align="center">
-            {listeningForWakeWord
-              ? 'Say “Hey OneMore”'
-              : wakeWordEnabled
-                ? 'Hey OneMore is on'
-                : 'Hey OneMore enabled in Settings — wake word starting…'}
+          <AppText variant="caption" color="textTertiary" align="center">
+            {listeningForWakeWord ? 'Hey OneMore' : 'Wake word on'}
           </AppText>
         </View>
-      ) : (
-        <AppText variant="caption" color="textTertiary" align="center">
-          Enable “Hey OneMore” in Settings for hands-free wake word.
-        </AppText>
-      )}
+      ) : null}
 
       {error ? (
         <AppText variant="caption" color="error" align="center">
@@ -65,8 +67,8 @@ export function VoiceMicButton({ disabled }: VoiceMicButtonProps) {
 
 const styles = StyleSheet.create({
   wrapper: {
-    gap: Spacing.sm,
-    marginTop: Spacing.md,
+    gap: Spacing.xs,
+    marginTop: Spacing.sm,
   },
   primaryButton: {
     backgroundColor: LiftFlowColors.backgroundSecondary,
@@ -93,8 +95,8 @@ const styles = StyleSheet.create({
     gap: Spacing.xs,
   },
   dot: {
-    width: 8,
-    height: 8,
+    width: 6,
+    height: 6,
     borderRadius: Radius.full,
   },
   dotOn: {

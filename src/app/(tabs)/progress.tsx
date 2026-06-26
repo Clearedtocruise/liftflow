@@ -12,6 +12,7 @@ import { TransformationStoryHero } from '@/components/body/TransformationStoryHe
 import { Card } from '@/components/layout/Card';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
+import { TabScreenHeader } from '@/components/layout/TabScreenHeader';
 import { FeatureGate } from '@/components/subscription/PremiumGate';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
@@ -227,14 +228,13 @@ export default function ProgressScreen() {
   }
 
   return (
-    <ScreenContainer>
-      <View style={styles.header}>
-        <AppText variant="headline">Your Transformation</AppText>
-        <AppText variant="body" color="textSecondary">
-          Where you are, where you&apos;re going, and how to get there.
-        </AppText>
-      </View>
-
+    <ScreenContainer
+      header={
+        <TabScreenHeader
+          title="Progress"
+          subtitle="Your transformation journey"
+        />
+      }>
       <FeatureGate featureId="transformation-engine">
         {story ? (
           <>

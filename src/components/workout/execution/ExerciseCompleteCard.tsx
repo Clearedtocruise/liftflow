@@ -50,6 +50,7 @@ export function ExerciseCompleteCard({
         label={isLastExercise ? 'Finish Workout' : 'Next Exercise'}
         onPress={onNext}
         size="large"
+        testID={isLastExercise ? 'finish-workout-button' : undefined}
       />
     </Card>
   );

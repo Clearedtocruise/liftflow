@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { LiftFlowWordmark } from '@/components/brand/LiftFlowWordmark';
@@ -21,27 +21,41 @@ export function AuthFormContainer({ title, subtitle, children }: AuthFormContain
   return (
     <View style={styles.root}>
       <LinearGradient
-        colors={['rgba(31, 107, 255, 0.12)', 'transparent', 'transparent']}
+        colors={['rgba(14, 144, 255, 0.12)', 'transparent', 'transparent']}
         style={StyleSheet.absoluteFill}
       />
       <KeyboardAvoidingView
-        style={[styles.inner, { paddingTop: insets.top + Spacing.xxl, paddingBottom: insets.bottom + Spacing.xl }]}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <View style={styles.brandBlock}>
-          <Image source={{ uri: HeroImages.welcome }} style={styles.heroImage} contentFit="cover" />
-          <LogoMark size={48} glow />
-          <LiftFlowWordmark size="sm" align="center" showTagline />
-        </View>
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}>
+        <ScrollView
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
+          automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+          contentContainerStyle={[
+            styles.scrollContent,
+            {
+              paddingTop: insets.top + Spacing.xxl,
+              paddingBottom: insets.bottom + Spacing.xxxl,
+            },
+          ]}
+          showsVerticalScrollIndicator={false}>
+          <View style={styles.brandBlock}>
+            <Image source={{ uri: HeroImages.welcome }} style={styles.heroImage} contentFit="cover" />
+            <LogoMark size={48} glow />
+            <LiftFlowWordmark size="sm" align="center" showTagline />
+          </View>
 
-        <View style={styles.header}>
-          <AppText variant="title">{title}</AppText>
-          {subtitle ? (
-            <AppText variant="body" color="textSecondary">
-              {subtitle}
-            </AppText>
-          ) : null}
-        </View>
-        <View style={styles.form}>{children}</View>
+          <View style={styles.header}>
+            <AppText variant="title">{title}</AppText>
+            {subtitle ? (
+              <AppText variant="body" color="textSecondary">
+                {subtitle}
+              </AppText>
+            ) : null}
+          </View>
+          <View style={styles.form}>{children}</View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </View>
   );
@@ -52,12 +66,14 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: LiftFlowColors.background,
   },
-  inner: {
+  flex: {
     flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
     paddingHorizontal: Spacing.xxl,
   },
   brandBlock: {
-    alignItems: 'center',
     alignItems: 'center',
     gap: Spacing.md,
     marginBottom: Spacing.xxxl,
@@ -74,5 +90,6 @@ const styles = StyleSheet.create({
   },
   form: {
     gap: Spacing.lg,
+    paddingBottom: Spacing.xxl,
   },
 });

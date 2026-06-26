@@ -11,8 +11,27 @@ type WorkoutUpNextCardProps = {
 };
 
 export function WorkoutUpNextCard({ position, compact = false, supersetActive = false }: WorkoutUpNextCardProps) {
+  if (compact) {
+    return (
+      <View style={styles.compactRow}>
+        <AppText variant="bodyBold">{position.currentSetLabel}</AppText>
+        <AppText variant="caption" color="textTertiary">
+          →
+        </AppText>
+        <AppText variant="bodyBold" color="accent" style={styles.upNextCompact}>
+          {position.upNextLabel}
+        </AppText>
+        {supersetActive ? (
+          <AppText variant="caption" color="accent">
+            · SS
+          </AppText>
+        ) : null}
+      </View>
+    );
+  }
+
   return (
-    <View style={[styles.card, compact && styles.cardCompact]}>
+    <View style={styles.card}>
       {supersetActive ? (
         <AppText variant="caption" color="accent">
           Superset rotation
@@ -24,11 +43,9 @@ export function WorkoutUpNextCard({ position, compact = false, supersetActive = 
             Now
           </AppText>
           <AppText variant="bodyBold">{position.currentSetLabel}</AppText>
-          {!compact ? (
-            <AppText variant="footnote" color="textTertiary">
-              {position.exerciseName}
-            </AppText>
-          ) : null}
+          <AppText variant="footnote" color="textTertiary">
+            {position.exerciseName}
+          </AppText>
         </View>
         <View style={styles.divider} />
         <View style={styles.cell}>
@@ -53,8 +70,14 @@ const styles = StyleSheet.create({
     padding: Spacing.md,
     gap: Spacing.sm,
   },
-  cardCompact: {
-    padding: Spacing.sm,
+  compactRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: Spacing.sm,
+  },
+  upNextCompact: {
+    flexShrink: 1,
   },
   row: {
     flexDirection: 'row',

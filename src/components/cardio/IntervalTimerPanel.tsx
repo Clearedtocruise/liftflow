@@ -1,24 +1,26 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { AppText } from '@/components/ui/AppText';
 import type { CardioActivity } from '@/constants/cardioActivities';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
+import { useWatchCardioSync } from '@/hooks/useWatchCardioSync';
 import {
-  createIntervalTimerState,
-  formatTimerSeconds,
-  intervalPhaseLabel,
-  resolveIntervalConfig,
-  tickIntervalTimer,
+    createIntervalTimerState,
+    formatTimerSeconds,
+    intervalPhaseLabel,
+    resolveIntervalConfig,
+    tickIntervalTimer,
 } from '@/lib/timerEngine';
 
 type IntervalTimerPanelProps = {
   activity: CardioActivity;
+  sessionId: string;
   onComplete: (elapsedSeconds: number) => void;
 };
 
-export function IntervalTimerPanel({ activity, onComplete }: IntervalTimerPanelProps) {
+export function IntervalTimerPanel({ activity, sessionId, onComplete }: IntervalTimerPanelProps) {
   const mode = activity.mode === 'tabata' ? 'tabata' : 'hiit';
   const [timer, setTimer] = useState(() =>
     createIntervalTimerState(mode, {
@@ -28,6 +30,7 @@ export function IntervalTimerPanel({ activity, onComplete }: IntervalTimerPanelP
     }),
   );
   const [elapsed, setElapsed] = useState(0);
+  const completedRef = useRef(false);
 
   useEffect(() => {
     if (!timer.running || timer.phase === 'done') return;
@@ -39,14 +42,25 @@ export function IntervalTimerPanel({ activity, onComplete }: IntervalTimerPanelP
   }, [timer.running, timer.phase]);
 
   useEffect(() => {
-    if (timer.phase === 'done') {
-      onComplete(elapsed);
-    }
+    if (timer.phase !== 'done' || completedRef.current) return;
+    completedRef.current = true;
+    onComplete(elapsed);
   }, [elapsed, onComplete, timer.phase]);
 
   const config = resolveIntervalConfig(mode, timer.config);
 
+  const { heartRateBpm } = useWatchCardioSync({
+    sessionId,
+    activityLabel: activity.label,
+    activityType: activity.type,
+    running: timer.running,
+    elapsedSeconds: elapsed,
+    phaseLabel: intervalPhaseLabel(timer.phase),
+    enabled: timer.phase !== 'done',
+  });
+
   function handleReset() {
+    completedRef.current = false;
     setTimer(createIntervalTimerState(mode, config));
     setElapsed(0);
   }
@@ -64,6 +78,7 @@ export function IntervalTimerPanel({ activity, onComplete }: IntervalTimerPanelP
       </AppText>
       <AppText variant="footnote" color="textSecondary" align="center">
         {config.workSeconds}s work · {config.restSeconds}s rest
+        {heartRateBpm ? ` · ${heartRateBpm} bpm` : ''}
       </AppText>
 
       <View style={styles.controls}>

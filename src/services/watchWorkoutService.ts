@@ -325,18 +325,7 @@ export const watchWorkoutService = {
         progressionLine: enriched.progressionLine,
       });
 
-      if (result.shouldLogSet && assistant.getState().activeSet) {
-        const logResult = await this.completeSet(userId);
-        if (logResult.success) {
-          return ok({
-            state: logResult.data.state,
-            spokenResponse: `${result.spokenResponse} Set logged on iPhone.`,
-            shouldLogSet: true,
-          });
-        }
-      }
-
-      if (result.intent === 'set_reps') {
+      if (result.intent === 'set_reps' || result.intent === 'correct_rep') {
         const repCount =
           result.state?.currentRepCount ??
           extractRepCountFromTranscript(transcript);
@@ -344,7 +333,32 @@ export const watchWorkoutService = {
           watchPhoneBridge.applyReps(repCount);
           return ok({
             state: assistant.getState(),
-            spokenResponse: `${repCount} reps on iPhone.`,
+            spokenResponse:
+              result.intent === 'correct_rep'
+                ? `Corrected to ${repCount} reps on iPhone.`
+                : `${repCount} reps on iPhone.`,
+          });
+        }
+      }
+
+      if (result.intent === 'manual_log') {
+        const repCount = result.state?.currentRepCount;
+        const weightLbs = result.state?.weightLbs;
+        if (repCount != null) {
+          watchPhoneBridge.applyReps(repCount);
+        }
+        if (weightLbs != null) {
+          watchPhoneBridge.applyWeightLbs(weightLbs);
+        }
+      }
+
+      if (result.shouldLogSet && assistant.getState().activeSet) {
+        const logResult = await this.completeSet(userId);
+        if (logResult.success) {
+          return ok({
+            state: logResult.data.state,
+            spokenResponse: `${result.spokenResponse} Set logged on iPhone.`,
+            shouldLogSet: true,
           });
         }
       }

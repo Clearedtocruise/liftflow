@@ -1,12 +1,14 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { Alert, StyleSheet } from 'react-native';
 
+import { BrandBootScreen } from '@/components/brand/BrandBootScreen';
+import { ManageDayModal } from '@/components/dashboard/ManageDayModal';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
+import { TabScreenHeader } from '@/components/layout/TabScreenHeader';
 import { ActiveWorkoutScreen } from '@/components/workout/execution/ActiveWorkoutScreen';
 import { WorkoutWeeklyPlanScreen } from '@/components/workout/execution/WorkoutWeeklyPlanScreen';
-import { LiftFlowColors } from '@/constants/theme';
 import { usePlanAdjustment } from '@/contexts/PlanAdjustmentContext';
 import { useAppResume } from '@/hooks/useAppResume';
 import { useAuth } from '@/hooks/useAuth';
@@ -20,7 +22,7 @@ import {
 import { localDateString } from '@/lib/localDate';
 import { planDataCache } from '@/lib/planDataCache';
 import { warmWeekPlanData } from '@/lib/planDataPrefetch';
-import { showWeeklyEditDayMenu } from '@/lib/planDayActions';
+import { buildEditDayMenu, type ManageDayMenuContent } from '@/lib/planDayActions';
 import { logStartup } from '@/lib/startupLogger';
 import { enrichWithSupersetGroups, inferExecutionModeFromPlan } from '@/lib/supersetFlow';
 import { buildWeekPlan, getWeekRange, isConditioningWorkout, type WeekDayPlan } from '@/lib/weekPlan';
@@ -46,6 +48,8 @@ export default function WorkoutScreen() {
   const [loadingPlan, setLoadingPlan] = useState(true);
   const [refreshingPlan, setRefreshingPlan] = useState(false);
   const [adaptingPlan, setAdaptingPlan] = useState(false);
+  const [editDayOpen, setEditDayOpen] = useState(false);
+  const [editDayMenu, setEditDayMenu] = useState<ManageDayMenuContent | null>(null);
   const [challengeRecords, setChallengeRecords] = useState<WorkoutChallengeRecord[]>([]);
   const loadGenerationRef = useRef(0);
   const hydratedFromCacheRef = useRef(false);
@@ -200,20 +204,46 @@ export default function WorkoutScreen() {
   const handleEditDay = useCallback(
     (day: WeekDayPlan) => {
       if (!user?.id) return;
-      showWeeklyEditDayMenu(
-        {
-          userId: user.id,
-          workouts: weekWorkouts,
-          setFromAdaptation,
-          onComplete: () => void loadWeekPlan({ silent: true }),
-          onBusyChange: setAdaptingPlan,
-          timeZone: user.timezone,
+
+      const planDeps = {
+        userId: user.id,
+        workouts: weekWorkouts,
+        setFromAdaptation,
+        onWorkoutsUpdated: (workouts: PlannedWorkout[]) => {
+          setWeekDays(buildWeekPlan(workouts, new Date(), user.timezone));
         },
-        day.date,
-        day.workout ? () => handleSelectDay(day) : undefined,
-      );
+        onComplete: () => void loadWeekPlan({ silent: true }),
+        onBusyChange: setAdaptingPlan,
+        timeZone: user.timezone,
+      };
+
+      const menu = buildEditDayMenu(planDeps, day.date, {
+        onEditExercises: day.workout
+          ? () => {
+              setEditDayOpen(false);
+              setEditDayMenu(null);
+              setPlannedWorkout(day.workout!);
+              router.push({ pathname: '/(tabs)/workout/day', params: { id: day.workout!.id } });
+            }
+          : undefined,
+        onStartWorkout: day.workout
+          ? () => {
+              setEditDayOpen(false);
+              setEditDayMenu(null);
+              handleSelectDay(day);
+            }
+          : undefined,
+      });
+
+      if (!menu) {
+        Alert.alert('Edit Day', 'No workouts available to adjust this week.');
+        return;
+      }
+
+      setEditDayMenu(menu);
+      setEditDayOpen(true);
     },
-    [user?.id, weekWorkouts, setFromAdaptation, loadWeekPlan, handleSelectDay],
+    [user?.id, user?.timezone, weekWorkouts, setFromAdaptation, loadWeekPlan, handleSelectDay, setPlannedWorkout],
   );
 
   const handleFinishWorkout = useCallback(async () => {
@@ -245,11 +275,7 @@ export default function WorkoutScreen() {
   }, []);
 
   if (loading && !session && weekDays.length === 0) {
-    return (
-      <View style={styles.loading}>
-        <ActivityIndicator size="large" color={LiftFlowColors.accent} />
-      </View>
-    );
+    return <BrandBootScreen message="Loading your workout plan…" />;
   }
 
   if (session) {
@@ -302,7 +328,9 @@ export default function WorkoutScreen() {
   }
 
   return (
-    <ScreenContainer contentContainerStyle={styles.content}>
+    <ScreenContainer
+      header={<TabScreenHeader title="Workout" subtitle="This week's plan" />}
+      contentContainerStyle={styles.content}>
       <WorkoutWeeklyPlanScreen
         days={weekDays}
         loading={loadingPlan}
@@ -313,17 +341,33 @@ export default function WorkoutScreen() {
         onEditDay={handleEditDay}
         onManualLog={() => router.push('/(tabs)/workout/manual-log')}
       />
+
+      {editDayMenu ? (
+        <ManageDayModal
+          visible={editDayOpen}
+          title={editDayMenu.title}
+          showWeekList={editDayMenu.showWeekList}
+          weeklyPlan={editDayMenu.weeklyPlan}
+          focusDate={editDayMenu.focusDate}
+          todayLabel={editDayMenu.todayLabel}
+          focusWorkoutId={editDayMenu.focusWorkoutId}
+          actions={editDayMenu.actions}
+          swapTargets={editDayMenu.swapTargets}
+          moveTargets={editDayMenu.moveTargets}
+          restDayTargets={editDayMenu.restDayTargets}
+          doTodayTargets={editDayMenu.doTodayTargets}
+          onScheduleChange={editDayMenu.onScheduleChange}
+          onClose={() => {
+            setEditDayOpen(false);
+            setEditDayMenu(null);
+          }}
+        />
+      ) : null}
     </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  loading: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: LiftFlowColors.background,
-  },
   content: {
     paddingBottom: 48,
   },

@@ -14,6 +14,7 @@ type PrimaryButtonProps = {
   disabled?: boolean;
   variant?: 'primary' | 'secondary' | 'ghost';
   size?: 'default' | 'large';
+  testID?: string;
 };
 
 export function PrimaryButton({
@@ -23,6 +24,7 @@ export function PrimaryButton({
   disabled,
   variant = 'primary',
   size = 'default',
+  testID,
 }: PrimaryButtonProps) {
   const scale = useSharedValue(1);
   const animStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
@@ -40,6 +42,7 @@ export function PrimaryButton({
           scale.value = withSpring(1, { damping: 15 });
         }}
         style={[animStyle, isDisabled && styles.disabledWrap]}
+        testID={testID}
         accessibilityRole="button"
         accessibilityState={{ disabled: isDisabled }}>
         <LinearGradient
@@ -77,6 +80,7 @@ export function PrimaryButton({
         variant === 'ghost' && styles.ghost,
         isDisabled && styles.disabledWrap,
       ]}
+      testID={testID}
       accessibilityRole="button"
       accessibilityState={{ disabled: isDisabled }}>
       {loading ? (

@@ -4,16 +4,27 @@ import { Alert, StyleSheet, TextInput, View } from 'react-native';
 
 import { ActivitySessionSaveCard } from '@/components/cardio/ActivitySessionSaveCard';
 import { IntervalTimerPanel } from '@/components/cardio/IntervalTimerPanel';
+import { SteadyCardioMetrics } from '@/components/cardio/SteadyCardioMetrics';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { AppText } from '@/components/ui/AppText';
 import type { CardioActivity } from '@/constants/cardioActivities';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
+import { useCardioLocationTracking } from '@/hooks/useCardioLocationTracking';
+import { useCardioSessionClock } from '@/hooks/useCardioSessionClock';
 import { useUnits } from '@/hooks/useUnits';
+import { useWatchCardioSync } from '@/hooks/useWatchCardioSync';
 import { estimateActivityCalories } from '@/lib/activityCalories';
+import {
+    formatLiveDistance,
+    formatPace,
+    formatSpeed,
+    supportsSteadyDistanceMetrics,
+} from '@/lib/cardioMetrics';
 import { formatCardioDuration } from '@/lib/exerciseModality';
 import { parseDistanceToKm } from '@/lib/unitConversion';
 import { cardioService } from '@/services/cardioService';
+import { watchCardioBridge } from '@/state/watchCardioBridge';
 
 type CardioSessionPanelProps = {
   activity: CardioActivity;
@@ -23,38 +34,119 @@ type CardioSessionPanelProps = {
 export function CardioSessionPanel({ activity, activityKind }: CardioSessionPanelProps) {
   const { user } = useAuth();
   const units = useUnits();
-  const [running, setRunning] = useState(false);
-  const [elapsed, setElapsed] = useState(0);
   const [completed, setCompleted] = useState(false);
   const [distanceText, setDistanceText] = useState('');
   const [saving, setSaving] = useState(false);
-  const startedAtRef = useRef<number | null>(null);
+  const sessionIdRef = useRef(`cardio-${activity.id}`);
+  const heartRateSamplesRef = useRef<number[]>([]);
+
+  const tracksDistance = supportsSteadyDistanceMetrics(activity.type);
+  const {
+    running,
+    elapsed,
+    start,
+    pause,
+    reset,
+    getStartedAt,
+    getElapsedForSave,
+    getSessionStartedAtIso,
+    persist,
+  } = useCardioSessionClock({
+    persistence: {
+      sessionId: sessionIdRef.current,
+      activityId: activity.id,
+      activityLabel: activity.label,
+      activityType: activity.type,
+      activityMode: activity.mode,
+    },
+    onRestore: (saved) => {
+      if (saved.distanceMeters > 0) {
+        setDistanceText('');
+      }
+    },
+  });
+
+  const { distanceMeters: trackedMeters, status: gpsStatus, reset: resetGps } = useCardioLocationTracking(
+    running && tracksDistance,
+  );
 
   useEffect(() => {
-    if (!running || activity.mode !== 'steady') return;
-    const timer = setInterval(() => setElapsed((current) => current + 1), 1000);
-    return () => clearInterval(timer);
-  }, [activity.mode, running]);
+    if (!getStartedAt()) return;
+    void persist(trackedMeters);
+  }, [trackedMeters, running, elapsed, persist, getStartedAt]);
 
-  const distanceKm = parseDistanceToKm(distanceText, units.preferredDistanceUnit) ?? 0;
+  useEffect(() => {
+    return watchCardioBridge.subscribeCommands((command) => {
+      if (command === 'pause') pause();
+      if (command === 'resume') start();
+      if (command === 'finish') {
+        pause();
+        setCompleted(true);
+      }
+    });
+  }, [pause, start]);
+
+  const manualDistanceKm = parseDistanceToKm(distanceText, units.preferredDistanceUnit) ?? 0;
+  const manualDistanceMeters = manualDistanceKm > 0 ? Math.round(manualDistanceKm * 1000) : 0;
+  const effectiveDistanceMeters = manualDistanceMeters > 0 ? manualDistanceMeters : trackedMeters;
   const distanceLabel = units.preferredDistanceUnit === 'km' ? 'km' : 'mi';
-  const distanceMeters = distanceKm > 0 ? Math.round(distanceKm * 1000) : undefined;
 
   const kind =
     activityKind ?? (activity.type === 'walk' ? 'walk' : activity.mode === 'steady' ? 'cardio' : 'conditioning');
+
+  const calorieEstimate = estimateActivityCalories({
+    durationSeconds: elapsed,
+    weightKg: user?.weightKg,
+    cardioType: activity.type,
+    distanceMeters: effectiveDistanceMeters > 0 ? effectiveDistanceMeters : undefined,
+    activityLabel: activity.label,
+  });
+
+  const liveDistanceLabel = formatLiveDistance(effectiveDistanceMeters, units.preferredDistanceUnit);
+  const paceLabel = formatPace(elapsed, effectiveDistanceMeters, units.preferredDistanceUnit);
+  const speedLabel = formatSpeed(elapsed, effectiveDistanceMeters, units.preferredDistanceUnit);
+  const usedDefaultWeight = !user?.weightKg;
+
+  const { heartRateBpm } = useWatchCardioSync({
+    sessionId: sessionIdRef.current,
+    activityLabel: activity.label.toUpperCase(),
+    activityType: activity.type,
+    running,
+    elapsedSeconds: elapsed,
+    sessionStartedAt: getSessionStartedAtIso(),
+    distanceMeters: effectiveDistanceMeters > 0 ? effectiveDistanceMeters : undefined,
+    paceLabel,
+    speedLabel,
+    calories: calorieEstimate.calories,
+    enabled: !completed && activity.mode === 'steady',
+  });
+
+  useEffect(() => {
+    if (heartRateBpm) {
+      heartRateSamplesRef.current.push(heartRateBpm);
+    }
+  }, [heartRateBpm]);
+
+  const intervalSavedRef = useRef(false);
 
   async function saveSession(durationSeconds: number) {
     if (!user) {
       Alert.alert('Sign in required', 'Log in to save this activity.');
       return;
     }
+    if (saving) return;
     if (durationSeconds < 30) {
       Alert.alert('Too short', 'Record at least 30 seconds before saving.');
       return;
     }
 
     setSaving(true);
-    const startedAt = startedAtRef.current ?? Date.now() - durationSeconds * 1000;
+    const startedAt = getStartedAt() ?? Date.now() - durationSeconds * 1000;
+    const distanceMeters = effectiveDistanceMeters > 0 ? effectiveDistanceMeters : undefined;
+    const samples = heartRateSamplesRef.current;
+    const avgHeartRate =
+      samples.length > 0 ? Math.round(samples.reduce((sum, bpm) => sum + bpm, 0) / samples.length) : undefined;
+
     const { calories, met, weightKg } = estimateActivityCalories({
       durationSeconds,
       weightKg: user.weightKg,
@@ -69,52 +161,81 @@ export function CardioSessionPanel({ activity, activityKind }: CardioSessionPane
       durationSeconds,
       distanceMeters,
       caloriesBurned: calories,
+      avgHeartRate,
       startedAt: new Date(startedAt).toISOString(),
       activityKind: kind,
       intensity: activity.mode === 'tabata' || activity.mode === 'interval' ? 'high' : 'moderate',
       notes: activity.label,
-      metadata: { met, estimatedCalories: true, weightKgUsed: weightKg },
+      metadata: {
+        met,
+        estimatedCalories: true,
+        weightKgUsed: weightKg,
+        avgPace: paceLabel,
+        avgSpeed: speedLabel,
+        gpsTracked: trackedMeters > 0 && manualDistanceMeters === 0,
+        avgHeartRateBpm: avgHeartRate,
+      },
     });
 
     setSaving(false);
     if (result.success) {
-      Alert.alert(
-        'Activity saved',
-        `${activity.label} · ${formatCardioDuration(durationSeconds)} · ~${calories} cal`,
-        [{ text: 'OK', onPress: () => router.back() }],
-      );
+      reset();
+      resetGps();
+      heartRateSamplesRef.current = [];
+      const summary = [
+        formatCardioDuration(durationSeconds),
+        effectiveDistanceMeters > 0 ? liveDistanceLabel : null,
+        `~${calories} cal`,
+      ]
+        .filter(Boolean)
+        .join(' · ');
+      Alert.alert('Activity saved', `${activity.label} · ${summary}`, [
+        { text: 'OK', onPress: () => router.back() },
+      ]);
     } else {
       Alert.alert('Could not save', result.error);
     }
   }
 
-  function resetSession() {
-    setRunning(false);
-    setElapsed(0);
+  function handleFinish() {
+    pause();
+    setCompleted(true);
+  }
+
+  function handleReset() {
+    reset();
+    resetGps();
     setCompleted(false);
     setDistanceText('');
-    startedAtRef.current = null;
+    heartRateSamplesRef.current = [];
+    intervalSavedRef.current = false;
   }
 
   if (completed && elapsed > 0) {
-    const { calories } = estimateActivityCalories({
-      durationSeconds: elapsed,
-      weightKg: user?.weightKg,
-      cardioType: activity.type,
-      distanceMeters,
-    });
-    const usedDefaultWeight = !user?.weightKg;
-
+    const saveDuration = getElapsedForSave();
     return (
       <ActivitySessionSaveCard
         activityLabel={activity.label}
-        durationSeconds={elapsed}
-        distanceLabel={distanceMeters ? units.formatDistance(distanceKm) : undefined}
-        estimatedCalories={calories}
+        durationSeconds={saveDuration}
+        distanceLabel={effectiveDistanceMeters > 0 ? liveDistanceLabel : undefined}
+        paceLabel={paceLabel}
+        speedLabel={speedLabel}
+        estimatedCalories={estimateActivityCalories({
+          durationSeconds: saveDuration,
+          weightKg: user?.weightKg,
+          cardioType: activity.type,
+          distanceMeters: effectiveDistanceMeters > 0 ? effectiveDistanceMeters : undefined,
+          activityLabel: activity.label,
+        }).calories}
         usedDefaultWeight={usedDefaultWeight}
+        heartRateBpm={heartRateBpm}
         saving={saving}
-        onSave={() => void saveSession(elapsed)}
-        onDiscard={resetSession}
+        showDistanceEdit={tracksDistance}
+        distanceText={distanceText}
+        distanceUnitLabel={distanceLabel}
+        onDistanceChange={setDistanceText}
+        onSave={() => void saveSession(getElapsedForSave())}
+        onDiscard={handleReset}
       />
     );
   }
@@ -123,25 +244,44 @@ export function CardioSessionPanel({ activity, activityKind }: CardioSessionPane
     return (
       <IntervalTimerPanel
         activity={activity}
+        sessionId={sessionIdRef.current}
         onComplete={(seconds) => {
-          startedAtRef.current = Date.now() - seconds * 1000;
-          setElapsed(seconds);
+          if (intervalSavedRef.current) return;
+          intervalSavedRef.current = true;
           setCompleted(true);
+          void saveSession(seconds);
         }}
       />
     );
   }
 
+  const activityTitle = activity.type === 'run' ? 'RUN' : activity.label.toUpperCase();
+  const showManualDistance = tracksDistance && !running && elapsed > 0;
+
   return (
     <View style={styles.steadyCard}>
-      <AppText variant="label" color="accent" align="center">
-        {activity.label}
+      <AppText variant="label" color="textSecondary" align="center" style={styles.activityTitle}>
+        {activityTitle}
       </AppText>
+
       <AppText variant="timer" color="restTimer" align="center" style={styles.timer}>
         {formatCardioDuration(elapsed)}
       </AppText>
 
-      {!running ? (
+      {(running || elapsed > 0) && (
+        <SteadyCardioMetrics
+          distanceLabel={liveDistanceLabel}
+          paceLabel={paceLabel}
+          speedLabel={speedLabel}
+          calories={calorieEstimate.calories}
+          usedDefaultWeight={usedDefaultWeight}
+          heartRateBpm={heartRateBpm}
+          gpsStatus={running ? gpsStatus : undefined}
+          compact
+        />
+      )}
+
+      {showManualDistance ? (
         <View style={styles.distanceBlock}>
           <AppText variant="caption" color="textSecondary">
             Distance ({distanceLabel}, optional)
@@ -151,51 +291,30 @@ export function CardioSessionPanel({ activity, activityKind }: CardioSessionPane
             value={distanceText}
             onChangeText={setDistanceText}
             keyboardType="decimal-pad"
-            placeholder={`0.0 ${distanceLabel}`}
+            placeholder={trackedMeters > 0 ? liveDistanceLabel : `0.0 ${distanceLabel}`}
             placeholderTextColor={LiftFlowColors.textTertiary}
           />
         </View>
       ) : null}
 
-      <AppText variant="footnote" color="textSecondary" align="center">
-        {running ? 'Session in progress' : 'Tap Start when you begin'}
-      </AppText>
-
-      <PrimaryButton
-        label={running ? 'Pause' : 'Start'}
-        onPress={() => {
-          if (running) {
-            setRunning(false);
-            return;
-          }
-          if (!startedAtRef.current) {
-            startedAtRef.current = Date.now();
-          }
-          setRunning(true);
-          setCompleted(false);
-        }}
-      />
-
-      {elapsed > 0 && !running ? (
+      <View style={styles.actions}>
         <PrimaryButton
-          label="Finish & save"
-          variant="secondary"
+          label={running ? 'Pause' : elapsed > 0 ? 'Resume' : 'Start'}
           onPress={() => {
-            setRunning(false);
-            setCompleted(true);
+            if (running) pause();
+            else start();
+            setCompleted(false);
           }}
         />
-      ) : null}
+        {elapsed > 0 ? (
+          <PrimaryButton label="Finish" variant="secondary" onPress={handleFinish} />
+        ) : null}
+      </View>
 
       {running ? (
-        <PrimaryButton
-          label="Finish"
-          variant="secondary"
-          onPress={() => {
-            setRunning(false);
-            setCompleted(true);
-          }}
-        />
+        <AppText variant="footnote" color="textTertiary" align="center">
+          Tracking continues when your screen locks or you switch apps
+        </AppText>
       ) : null}
     </View>
   );
@@ -203,16 +322,21 @@ export function CardioSessionPanel({ activity, activityKind }: CardioSessionPane
 
 const styles = StyleSheet.create({
   steadyCard: {
-    gap: Spacing.md,
-    padding: Spacing.lg,
-    borderRadius: Radius.lg,
-    backgroundColor: LiftFlowColors.surface,
+    gap: Spacing.lg,
+    padding: Spacing.xl,
+    borderRadius: Radius.xl,
+    backgroundColor: LiftFlowColors.surfaceElevated,
     borderWidth: 1,
     borderColor: LiftFlowColors.border,
   },
+  activityTitle: {
+    letterSpacing: 2,
+    fontWeight: '600',
+  },
   timer: {
-    fontSize: 56,
-    lineHeight: 64,
+    fontSize: 64,
+    lineHeight: 72,
+    fontVariant: ['tabular-nums'],
   },
   distanceBlock: {
     gap: Spacing.xs,
@@ -227,5 +351,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontSize: 20,
     fontWeight: '700',
+  },
+  actions: {
+    gap: Spacing.sm,
   },
 });

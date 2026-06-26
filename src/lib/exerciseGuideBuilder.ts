@@ -143,7 +143,70 @@ function buildByPattern(ctx: GuideContext): ExerciseFormGuide {
     });
   }
 
-  if (matches(name, ['row', 'pulldown', 'pull-up', 'pull up', 'pullup', 'chin-up', 'chin up', 'lat pull']) || category === 'pull') {
+  if (matches(name, ['reverse fly', 'rear delt fly', 'rear-delt fly'])) {
+    return baseGuide(ctx, {
+      setup: 'Hinge forward with flat back, or use a pec-deck/reverse fly machine with chest on the pad. Hold dumbbells or cables with palms facing each other.',
+      startPosition: 'Arms hanging below shoulders with a soft bend in elbows — not straight, not 90°.',
+      movement: 'Raise arms out to the sides in a wide arc, leading with elbows and squeezing shoulder blades together.',
+      endPosition: 'Pause when upper arms are parallel to the floor and rear delts are fully contracted.',
+      muscleFocus: 'Rear delts and rhomboids — not chest, not biceps. Squeeze shoulder blades together at the top.',
+      commonMistakes: ['Turning this into a chest fly or row', 'Shrugging traps to lift the weight', 'Swinging torso for momentum'],
+      coachingCues: ['Lead with elbows', 'Squeeze shoulder blades', 'Keep chest still'],
+    });
+  }
+
+  if (matches(name, ['neck'])) {
+    return baseGuide(ctx, {
+      setup: 'Sit or stand with tall posture. Use a harness, light plate, or hands for gentle resistance only — start very light.',
+      startPosition: 'Head in neutral alignment over shoulders. Move slowly through a controlled range.',
+      movement: 'Flex, extend, or rotate the neck against light resistance as prescribed — small ranges only.',
+      endPosition: 'Return to neutral without jerking. Never force end range.',
+      muscleFocus: 'Neck flexors/extensors working evenly. Stop immediately if you feel sharp pain or dizziness.',
+      commonMistakes: ['Using heavy weight', 'Jerking through range', 'Holding breath or clenching jaw'],
+      coachingCues: ['Small controlled range', 'Light resistance only', 'Stop if any sharp pain'],
+    });
+  }
+
+  if (matches(name, ['thruster', 'man maker', 'clean and press', 'squat to press']) || (matches(name, ['interval']) && matches(name, ['thruster', 'dumbbell', 'db']))) {
+    return baseGuide(ctx, {
+      setup: 'Hold dumbbells, kettlebells, or a barbell at shoulder height (front rack). Feet shoulder-width. For intervals, set work/rest timing before you start.',
+      startPosition: 'Core braced, elbows under the weight, hips ready to squat.',
+      movement: 'Squat to depth, then drive up explosively and press the weight overhead in one fluid motion. Repeat for the work interval.',
+      endPosition: 'Stand tall with arms locked overhead over mid-foot. Lower weight to shoulders during rest.',
+      muscleFocus: 'Legs initiate the drive; shoulders and triceps finish the press. Cardio demand builds across intervals — keep form over speed.',
+      commonMistakes: ['Pressing before hips fully extend', 'Using weight too heavy to squat safely', 'Dropping form to beat the clock'],
+      coachingCues: ['Squat first, then press', 'Drive through mid-foot', 'Use dumbbells for load'],
+    });
+  }
+
+  if (matches(name, ['lateral raise', 'front raise', 'rear delt raise'])) {
+    return baseGuide(ctx, {
+      setup: 'Stand tall with dumbbells or cables at your sides. Slight bend in elbows, core braced.',
+      startPosition: 'Arms at your sides, palms facing in or slightly forward, shoulders down.',
+      movement: 'Raise arms out to the sides until upper arms are parallel to the floor — lead with elbows, not hands.',
+      endPosition: 'Pause at shoulder height; lower slowly without swinging or leaning back.',
+      muscleFocus: 'Side delts do the work — not traps or momentum. Keep torso still.',
+      commonMistakes: ['Shrugging weight up', 'Swinging torso', 'Bending elbows past 90°'],
+      coachingCues: ['Lead with elbows', 'Stop at shoulder height', 'Control the descent'],
+    });
+  }
+
+  if (matches(name, ['shrug'])) {
+    return baseGuide(ctx, {
+      setup: 'Hold dumbbells, barbell, or trap bar at arm\'s length. Stand tall with shoulders down before you start.',
+      startPosition: 'Arms straight, traps relaxed, gaze forward.',
+      movement: 'Elevate shoulders straight up toward your ears — do not roll shoulders.',
+      endPosition: 'Squeeze traps at the top briefly; lower with control.',
+      muscleFocus: 'Upper traps — straight up and down path. Keep arms straight.',
+      commonMistakes: ['Rolling shoulders', 'Bending elbows', 'Using hip thrust to move weight'],
+      coachingCues: ['Straight up', 'Pause at top', 'Arms stay long'],
+    });
+  }
+
+  if (
+    matches(name, ['row', 'pulldown', 'pull-up', 'pull up', 'pullup', 'chin-up', 'chin up', 'lat pull']) ||
+    (category === 'pull' && !matches(name, ['reverse fly', 'rear delt']))
+  ) {
     const vertical = matches(name, ['pulldown', 'pull-up', 'pull up', 'pullup', 'chin']);
     return baseGuide(ctx, {
       setup: vertical
@@ -190,7 +253,7 @@ function buildByPattern(ctx: GuideContext): ExerciseFormGuide {
     });
   }
 
-  if (matches(name, ['fly', 'crossover', 'pec deck']) || (matches(name, ['raise']) && !matches(name, ['calf', 'leg']))) {
+  if (matches(name, ['fly', 'crossover', 'pec deck']) || (matches(name, ['raise']) && !matches(name, ['calf', 'leg', 'lateral', 'front', 'rear']))) {
     return baseGuide(ctx, {
       setup: 'Set cables or hold dumbbells. Slight bend in elbows that stays fixed throughout.',
       startPosition: 'Arms open to a comfortable stretch — chest tall, shoulders down.',
@@ -253,12 +316,17 @@ function buildByPattern(ctx: GuideContext): ExerciseFormGuide {
   }
 
   if (matches(name, ['carry', 'farmer', 'yoke', 'suitcase', 'zercher', 'walk']) || category === 'carry') {
+    const farmer = matches(name, ['farmer']);
     return baseGuide(ctx, {
       setup: 'Pick up weights with neutral spine. Stand tall before moving.',
       startPosition: 'Shoulders level, ribs stacked over pelvis, gaze forward.',
-      movement: 'Short, quick steps. Do not lean or let weights pull you sideways.',
+      movement: farmer
+        ? 'Walk with short, controlled steps. Keep shoulders level and core braced for the full carry.'
+        : 'Short, quick steps. Do not lean or let weights pull you sideways.',
       endPosition: 'Set weights down with a controlled squat or hinge — do not drop from standing.',
-      muscleFocus: 'Core and grip stay tight. Shoulders packed, not shrugged.',
+      muscleFocus: farmer
+        ? 'Grip and traps working hard; core stays tight. Shoulders stay packed, not shrugged.'
+        : 'Core and grip stay tight. Shoulders packed, not shrugged.',
     });
   }
 
@@ -282,7 +350,7 @@ function buildByPattern(ctx: GuideContext): ExerciseFormGuide {
     });
   }
 
-  if (category === 'cardio' || matches(name, ['run', 'sprint', 'row', 'cycle', 'bike', 'swim', 'burpee', 'jump rope'])) {
+  if (category === 'cardio' || matches(name, ['run', 'sprint', 'row', 'cycle', 'bike', 'swim', 'burpee', 'jump rope', 'interval'])) {
     return baseGuide(ctx, {
       setup: 'Start at easy effort. Posture tall, shoulders relaxed.',
       startPosition: 'Rhythm established before building intensity.',

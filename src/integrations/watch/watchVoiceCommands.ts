@@ -1,5 +1,7 @@
 import type { WatchActiveSetState, WatchVoiceCommandResult } from './types';
 
+import { normalizeSpokenNumbers } from '@/lib/voice/normalizeSpokenNumbers';
+
 export type WatchVoiceContext = {
   activeSet: WatchActiveSetState | null;
   lastWeightLbs?: number;
@@ -24,7 +26,7 @@ function matchInt(text: string, patterns: RegExp[]): number | null {
  * Parse hands-free Watch voice commands (also used on phone during workouts).
  */
 export function parseWatchVoiceCommand(transcript: string, ctx: WatchVoiceContext): WatchVoiceCommandResult | null {
-  const text = transcript.trim().toLowerCase();
+  const text = normalizeSpokenNumbers(transcript.trim());
   if (!text) return null;
 
   const set = ctx.activeSet;
@@ -214,8 +216,22 @@ export function parseWatchVoiceCommand(transcript: string, ctx: WatchVoiceContex
     };
   }
 
+  const weightRepsMatch = text.match(
+    /^(\d+(?:\.\d+)?)\s*(?:lb|kg)\s*(?:for|x|\*|×|at)\s*(\d+)\s*(?:reps?)?$/,
+  );
+  if (weightRepsMatch) {
+    const weightLbs = Math.round(Number(weightRepsMatch[1]));
+    const reps = Number(weightRepsMatch[2]);
+    return {
+      intent: 'manual_log',
+      spokenResponse: `Logging ${weightLbs} pounds for ${reps} reps.`,
+      state: { currentRepCount: reps, weightLbs },
+      shouldLogSet: true,
+    };
+  }
+
   const logReps = matchInt(text, [/(\d+)\s+reps?/, /for\s+(\d+)/]);
-  const logWeight = matchInt(text, [/(\d+)\s*(?:lbs?|pounds?)/]);
+  const logWeight = matchInt(text, [/(\d+(?:\.\d+)?)\s*(?:lb|kg)/]);
   if (logReps !== null && (logWeight !== null || /bench|press|curl|squat|row/.test(text))) {
     return {
       intent: 'manual_log',

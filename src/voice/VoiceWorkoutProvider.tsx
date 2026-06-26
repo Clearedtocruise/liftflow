@@ -10,6 +10,7 @@ import {
 } from 'react';
 import { Platform } from 'react-native';
 
+import { enrichParsedCommand, parseVoiceCommandLocal } from '@/lib/voice/parseVoiceCommand';
 import { productAnalyticsService } from '@/services/productAnalyticsService';
 import { processVoiceTranscript } from '@/services/voiceService';
 
@@ -79,6 +80,12 @@ export function VoiceWorkoutProvider({
   const handlersRef = useRef<VoiceWorkoutHandlers | null>(null);
   const handlingTranscriptRef = useRef(false);
   const commandListeningRef = useRef(false);
+  const pendingTranscriptRef = useRef('');
+  const interimFinalizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const wakePhraseEnabledRef = useRef(initialWakePhraseEnabled);
+  const voiceScopeActiveRef = useRef(false);
+  const handleTranscriptRef = useRef<(text: string) => Promise<void>>(async () => {});
+  const startWakeWordRef = useRef<() => Promise<void>>(async () => {});
 
   const workoutContextRef = useRef<{
     userId?: string;
@@ -95,6 +102,7 @@ export function VoiceWorkoutProvider({
   const [workoutScreenActive, setWorkoutScreenActive] = useState(false);
   const [gymModeActive, setGymModeActive] = useState(false);
   const voiceScopeActive = workoutScreenActive || gymModeActive;
+  voiceScopeActiveRef.current = voiceScopeActive;
   const [wakePhraseSettingEnabled, setWakePhraseSettingEnabled] = useState(initialWakePhraseEnabled);
   const [voiceFeedbackEnabled, setVoiceFeedbackEnabled] = useState(initialVoiceFeedback);
 
@@ -107,6 +115,7 @@ export function VoiceWorkoutProvider({
 
   useEffect(() => {
     setWakePhraseSettingEnabled(initialWakePhraseEnabled);
+    wakePhraseEnabledRef.current = initialWakePhraseEnabled;
   }, [initialWakePhraseEnabled]);
 
   useEffect(() => {
@@ -144,6 +153,10 @@ export function VoiceWorkoutProvider({
   );
 
   const stopCommandListening = useCallback(async () => {
+    if (interimFinalizeTimerRef.current) {
+      clearTimeout(interimFinalizeTimerRef.current);
+      interimFinalizeTimerRef.current = null;
+    }
     commandListeningRef.current = false;
     const speech = loadSpeechRecognitionModule();
     if (speech) {
@@ -154,6 +167,9 @@ export function VoiceWorkoutProvider({
       }
     }
     setState((prev) => ({ ...prev, listeningForCommand: false }));
+    if (voiceScopeActiveRef.current && wakePhraseEnabledRef.current) {
+      void startWakeWordRef.current();
+    }
   }, []);
 
   const parseTranscript = useCallback(async (text: string): Promise<ParsedWorkoutCommand> => {
@@ -163,29 +179,43 @@ export function VoiceWorkoutProvider({
     }
 
     const ctx = workoutContextRef.current;
-    const local = parseWorkoutCommand(trimmed);
-    if (local.intent !== 'UNKNOWN' && local.confidence >= 0.8) {
+    const voiceContext = {
+      activeExerciseName: ctx.activeExerciseName,
+      lastWeight: ctx.lastWeight,
+      lastReps: ctx.lastReps,
+      preferredWeightUnit: ctx.preferredWeightUnit,
+      setNumber: ctx.setNumber,
+    };
+    const localOnly = workoutScreenActive || gymModeActive;
+    const minConfidence = localOnly ? 0.65 : 0.7;
+
+    const extendedLocal = parseVoiceCommandLocal(trimmed, voiceContext);
+    if (extendedLocal) {
+      const mapped = mapExtendedVoiceToWorkoutCommand(
+        enrichParsedCommand(extendedLocal, voiceContext),
+      );
+      if (mapped.intent !== 'UNKNOWN' && mapped.confidence >= minConfidence) {
+        return mapped;
+      }
+    }
+
+    const local = parseWorkoutCommand(trimmed, { activeExerciseName: ctx.activeExerciseName });
+    if (local.intent !== 'UNKNOWN' && local.confidence >= (localOnly ? 0.65 : 0.8)) {
       return local;
     }
 
-    if (ctx.userId) {
+    if (!localOnly && ctx.userId) {
       const result = await processVoiceTranscript(ctx.userId, {
         transcript: trimmed,
-        context: {
-          activeExerciseName: ctx.activeExerciseName,
-          lastWeight: ctx.lastWeight,
-          lastReps: ctx.lastReps,
-          preferredWeightUnit: ctx.preferredWeightUnit,
-          setNumber: ctx.setNumber,
-        },
+        context: voiceContext,
       });
       if (result.success) {
         return mapExtendedVoiceToWorkoutCommand(result.data.parsed);
       }
     }
 
-    return local.intent !== 'UNKNOWN' ? local : parseWorkoutCommand(trimmed);
-  }, []);
+    return local.intent !== 'UNKNOWN' ? local : parseWorkoutCommand(trimmed, { activeExerciseName: ctx.activeExerciseName });
+  }, [workoutScreenActive, gymModeActive]);
 
   const handleTranscript = useCallback(
     async (text: string) => {
@@ -248,6 +278,8 @@ export function VoiceWorkoutProvider({
           speak(`Logged ${parsedCommand.exerciseName} for ${parsedCommand.reps} reps.`);
         } else if (parsedCommand.intent === 'START_REST_TIMER') {
           speak(`Started rest timer for ${parsedCommand.durationSeconds ?? 90} seconds.`);
+        } else if (parsedCommand.intent === 'UNDO_LAST_SET') {
+          speak(result.message);
         } else {
           speak(result.message);
         }
@@ -264,9 +296,11 @@ export function VoiceWorkoutProvider({
     [parseTranscript, speak, stopCommandListening],
   );
 
-  const startCommandListening = useCallback(async () => {
-    if (commandListeningRef.current) return;
+  useEffect(() => {
+    handleTranscriptRef.current = handleTranscript;
+  }, [handleTranscript]);
 
+  const startCommandListening = useCallback(async () => {
     const speech = loadSpeechRecognitionModule();
     if (!speech) {
       const message = speechRecognitionUnavailableMessage();
@@ -276,6 +310,24 @@ export function VoiceWorkoutProvider({
     }
 
     try {
+      if (porcupineRef.current) {
+        try {
+          await porcupineRef.current.stop();
+        } catch {
+          // Mic handoff — wake word resumes after command listening ends.
+        }
+      }
+
+      if (commandListeningRef.current) {
+        handlingTranscriptRef.current = false;
+        try {
+          await speech.ExpoSpeechRecognitionModule.stop();
+        } catch {
+          speech.ExpoSpeechRecognitionModule.abort?.();
+        }
+        commandListeningRef.current = false;
+      }
+
       const permissions = await speech.ExpoSpeechRecognitionModule.requestPermissionsAsync();
       if (!permissions.granted) {
         setState((prev) => ({
@@ -287,6 +339,11 @@ export function VoiceWorkoutProvider({
       }
 
       commandListeningRef.current = true;
+      pendingTranscriptRef.current = '';
+      if (interimFinalizeTimerRef.current) {
+        clearTimeout(interimFinalizeTimerRef.current);
+        interimFinalizeTimerRef.current = null;
+      }
       setState((prev) => ({
         ...prev,
         listeningForCommand: true,
@@ -294,13 +351,12 @@ export function VoiceWorkoutProvider({
         error: undefined,
       }));
 
-      speak('Listening.');
-
       await speech.ExpoSpeechRecognitionModule.start({
         lang: 'en-US',
-        interimResults: false,
-        continuous: false,
-        maxAlternatives: 1,
+        interimResults: true,
+        continuous: true,
+        maxAlternatives: 3,
+        // Cloud recognition is more reliable in gyms; on-device often fails silently.
         requiresOnDeviceRecognition: false,
       });
     } catch (error) {
@@ -374,6 +430,10 @@ export function VoiceWorkoutProvider({
     }
   }, [onWakeWordDetected, wakePhraseSettingEnabled]);
 
+  useEffect(() => {
+    startWakeWordRef.current = startWakeWord;
+  }, [startWakeWord]);
+
   const stopWakeWord = useCallback(async () => {
     try {
       if (porcupineRef.current) {
@@ -397,40 +457,91 @@ export function VoiceWorkoutProvider({
 
     return attachSpeechListeners(speech, {
       onResult: (transcript, isFinal) => {
-        if (!isFinal || !commandListeningRef.current) return;
-        void handleTranscript(transcript);
+        pendingTranscriptRef.current = transcript;
+        if (isFinal) {
+          if (interimFinalizeTimerRef.current) {
+            clearTimeout(interimFinalizeTimerRef.current);
+            interimFinalizeTimerRef.current = null;
+          }
+          pendingTranscriptRef.current = '';
+          void handleTranscriptRef.current(transcript);
+          return;
+        }
+
+        setState((prev) => ({
+          ...prev,
+          transcript,
+          listeningForCommand: true,
+        }));
+
+        if (interimFinalizeTimerRef.current) {
+          clearTimeout(interimFinalizeTimerRef.current);
+        }
+        interimFinalizeTimerRef.current = setTimeout(() => {
+          interimFinalizeTimerRef.current = null;
+          const pending = pendingTranscriptRef.current.trim();
+          if (!pending || handlingTranscriptRef.current) return;
+          pendingTranscriptRef.current = '';
+          void handleTranscriptRef.current(pending);
+        }, 1800);
       },
       onError: (message) => {
         console.warn('[voice] speech error', message);
+        if (interimFinalizeTimerRef.current) {
+          clearTimeout(interimFinalizeTimerRef.current);
+          interimFinalizeTimerRef.current = null;
+        }
         commandListeningRef.current = false;
+        pendingTranscriptRef.current = '';
         setState((prev) => ({
           ...prev,
           listeningForCommand: false,
           error: message,
         }));
-        speak('I did not catch that.');
+        speak('I did not catch that. Tap the mic and try again.');
+        if (voiceScopeActiveRef.current && wakePhraseEnabledRef.current) {
+          void startWakeWordRef.current();
+        }
       },
       onEnd: () => {
+        if (interimFinalizeTimerRef.current) {
+          clearTimeout(interimFinalizeTimerRef.current);
+          interimFinalizeTimerRef.current = null;
+        }
+
+        const pending = pendingTranscriptRef.current.trim();
+        if (pending && !handlingTranscriptRef.current) {
+          pendingTranscriptRef.current = '';
+          void handleTranscriptRef.current(pending);
+          return;
+        }
+
+        setState((prev) => ({
+          ...prev,
+          listeningForCommand: false,
+        }));
         commandListeningRef.current = false;
-        setState((prev) => ({ ...prev, listeningForCommand: false }));
+        if (voiceScopeActiveRef.current && wakePhraseEnabledRef.current) {
+          void startWakeWordRef.current();
+        }
       },
     });
-  }, [handleTranscript, speak]);
+  }, [speak]);
 
   useEffect(() => {
-    const shouldListen = voiceScopeActive && wakePhraseSettingEnabled;
-    if (shouldListen) {
+    if (voiceScopeActive && wakePhraseSettingEnabled) {
       void startWakeWord();
     } else {
       void stopWakeWord();
-      void stopCommandListening();
     }
+  }, [voiceScopeActive, wakePhraseSettingEnabled, startWakeWord, stopWakeWord]);
 
+  useEffect(() => {
+    if (!voiceScopeActive) return;
     return () => {
-      void stopWakeWord();
       void stopCommandListening();
     };
-  }, [voiceScopeActive, wakePhraseSettingEnabled, startWakeWord, stopWakeWord, stopCommandListening]);
+  }, [voiceScopeActive, stopCommandListening]);
 
   useEffect(() => {
     return () => {

@@ -1,12 +1,14 @@
 import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet } from 'react-native';
+import { ScrollView, StyleSheet } from 'react-native';
 
 import { Card } from '@/components/layout/Card';
+import { EscapeScreen } from '@/components/layout/EscapeScreen';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
+import { SkeletonBlock } from '@/components/layout/SkeletonBlock';
 import { AppText } from '@/components/ui/AppText';
-import { LiftFlowColors, Spacing } from '@/constants/theme';
+import { Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 import { useUnits } from '@/hooks/useUnits';
 import { formatWorkoutWeightForInput } from '@/lib/unitConversion';
@@ -33,19 +35,23 @@ export default function WeeklySummaryScreen() {
 
   if (loading) {
     return (
-      <ScreenContainer>
-        <ActivityIndicator color={LiftFlowColors.accent} />
+      <ScreenContainer contentContainerStyle={styles.content}>
+        <SkeletonBlock height={28} width="55%" />
+        <SkeletonBlock height={14} width="40%" />
+        <Card style={styles.section}>
+          <SkeletonBlock height={120} />
+        </Card>
       </ScreenContainer>
     );
   }
 
   if (!record) {
     return (
-      <ScreenContainer>
-        <AppText variant="body" color="textSecondary">
-          Weekly summary unavailable.
-        </AppText>
-      </ScreenContainer>
+      <EscapeScreen
+        title="Weekly summary unavailable"
+        message="We couldn't load this week's review. Try again from Home or check back after logging more workouts."
+        primaryLabel="Go to Home"
+      />
     );
   }
 

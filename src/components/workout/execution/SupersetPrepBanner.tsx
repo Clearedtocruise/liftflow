@@ -3,9 +3,8 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import {
-  formatExerciseStationLabel,
-  formatSupersetPartnerNames,
-  type SupersetGroup,
+    formatSupersetPartnerNames,
+    type SupersetGroup,
 } from '@/lib/supersetFlow';
 import type { WorkoutExercise } from '@/types/workout';
 import type { EditableWorkoutExercise } from '@/types/workoutExecution';
@@ -24,10 +23,6 @@ export function SupersetPrepBanner({
   onDismiss,
 }: SupersetPrepBannerProps) {
   const partners = formatSupersetPartnerNames(group, planExercises, sessionExercises);
-  const stations = group.memberIndices
-    .map((index) => formatExerciseStationLabel(planExercises[index], index, planExercises))
-    .filter(Boolean)
-    .join(' ↔ ');
 
   return (
     <View style={styles.banner}>
@@ -36,8 +31,7 @@ export function SupersetPrepBanner({
       </AppText>
       <AppText variant="bodyBold">{partners}</AppText>
       <AppText variant="footnote" color="textSecondary">
-        Alternate exercises with no rest between partners. After both sides, take your rest and repeat.
-        {stations ? ` Stations: ${stations}.` : ''}
+        Alternate with no rest between partners.
       </AppText>
       <Pressable onPress={onDismiss} style={styles.button}>
         <AppText variant="caption" color="accent">

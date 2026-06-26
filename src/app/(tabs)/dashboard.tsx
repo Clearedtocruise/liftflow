@@ -2,18 +2,21 @@ import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, InteractionManager, Pressable, RefreshControl, StyleSheet, View, type AlertButton, type ViewStyle } from 'react-native';
+import { Alert, InteractionManager, Pressable, RefreshControl, StyleSheet, View, type AlertButton } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { HomeNextUpCard } from '@/components/dashboard/HomeNextUpCard';
 import { HomePlanAdjustedBanner } from '@/components/dashboard/HomePlanAdjustedBanner';
 import { ManageDayModal } from '@/components/dashboard/ManageDayModal';
+import { RecoveryCheckInCue } from '@/components/dashboard/RecoveryCheckInCue';
 import { RingGauge } from '@/components/dashboard/RingGauge';
 import { WeeklyReviewCard } from '@/components/dashboard/WeeklyReviewCard';
 import { InsightCard } from '@/components/insights/InsightCard';
 import { Card } from '@/components/layout/Card';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
+import { SkeletonBlock } from '@/components/layout/SkeletonBlock';
+import { TabScreenHeader } from '@/components/layout/TabScreenHeader';
 import { AppText } from '@/components/ui/AppText';
 import { HOME_ACTIVITY_OPTIONS } from '@/constants/activityOptions';
 import { Brand, LiftFlowColors, Radius, Spacing } from '@/constants/theme';
@@ -29,15 +32,15 @@ import { useUnits } from '@/hooks/useUnits';
 import { closingWeekStart, useWeeklyReviewWindow } from '@/hooks/useWeeklyReviewPrompt';
 import { useWorkoutLocations } from '@/hooks/useWorkoutLocations';
 import {
-    resolveActiveTrainingDay,
-    resolveCoachTrainingGuidance,
-    validateWorkoutAssignmentConsistency,
+  resolveActiveTrainingDay,
+  resolveCoachTrainingGuidance,
+  validateWorkoutAssignmentConsistency,
 } from '@/lib/activeTrainingDay';
 import { deviceTimeZone, formatScheduledDbTime } from '@/lib/localDate';
 import {
-    aggregateDailyMeals,
-    findNextMeal,
-    mealsForCalendarDay,
+  aggregateDailyMeals,
+  findNextMeal,
+  mealsForCalendarDay,
 } from '@/lib/mealAggregation';
 import { formatWorkoutTime, scheduleFromProfile, scheduledTimesForDay } from '@/lib/mealSchedule';
 import { planDataCache } from '@/lib/planDataCache';
@@ -323,8 +326,14 @@ export default function DashboardScreen() {
   });
 
   useEffect(() => {
-    if (adjustment && user) void load({ silent: true });
-  }, [adjustment?.id, revision, user, load]);
+    if (!adjustment || !user) return;
+    const { from, to } = getWeekRange(new Date(), user.timezone);
+    void nutritionService.getMealsForWeek(user.id, from, to).then((mealsResult) => {
+      if (!mealsResult.success) return;
+      void planDataCache.writeMeals(user.id, from, to, mealsResult.data);
+      setTodayMeals(mealsForCalendarDay(mealsResult.data, today));
+    });
+  }, [adjustment?.id, revision, user, today]);
 
   useEffect(() => {
     if (!user || !showWeeklyReview) return;
@@ -451,7 +460,16 @@ export default function DashboardScreen() {
         userId: user.id,
         workouts: weekWorkouts,
         setFromAdaptation,
-        onComplete: () => load(),
+        onWorkoutsUpdated: setWeekWorkouts,
+        onComplete: () => {
+          if (!user) return;
+          const { from, to } = getWeekRange(new Date(), user.timezone);
+          void nutritionService.getMealsForWeek(user.id, from, to).then((mealsResult) => {
+            if (!mealsResult.success) return;
+            void planDataCache.writeMeals(user.id, from, to, mealsResult.data);
+            setTodayMeals(mealsForCalendarDay(mealsResult.data, today));
+          });
+        },
         onBusyChange: setAdaptingPlan,
         timeZone: user.timezone,
       },
@@ -492,6 +510,13 @@ export default function DashboardScreen() {
 
   return (
     <ScreenContainer
+      testID="home-screen"
+      header={
+        <TabScreenHeader
+          title={user?.displayName ? `Hey, ${user.displayName.split(' ')[0]}` : Brand.heroHeadline}
+          subtitle={coachHeadline}
+        />
+      }
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
@@ -502,21 +527,16 @@ export default function DashboardScreen() {
           tintColor={LiftFlowColors.primary}
         />
       }>
-      <Animated.View entering={FadeInDown.duration(400)} style={styles.header}>
-        <AppText variant="headline" style={styles.heroHeadline}>
-          {user?.displayName ? `Hey, ${user.displayName.split(' ')[0]}` : Brand.heroHeadline}
-        </AppText>
-        <AppText variant="footnote" color="textSecondary" align="center">
-          {coachHeadline}
-        </AppText>
-      </Animated.View>
-
       <HomePlanAdjustedBanner />
 
-      <Animated.View entering={FadeInDown.delay(60).duration(400)}>
+      {!hasRecoveryScore && !summaryLoading ? (
+        <RecoveryCheckInCue onPress={handleRecoveryPress} />
+      ) : null}
+
+      <Animated.View entering={FadeInDown.duration(400)}>
         {summaryLoading && !coachMessage ? (
           <View style={styles.aiOuter}>
-            <LinearGradient colors={['rgba(31, 107, 255, 0.35)', 'rgba(0, 229, 255, 0.12)']} style={styles.aiBorder}>
+            <LinearGradient colors={['rgba(14, 144, 255, 0.35)', 'rgba(14, 144, 255, 0.12)']} style={styles.aiBorder}>
               <View style={styles.aiCard}>
                 <SkeletonBlock height={14} width="30%" />
                 <SkeletonBlock height={20} width="70%" />
@@ -526,11 +546,8 @@ export default function DashboardScreen() {
           </View>
         ) : (
           <View style={styles.aiOuter}>
-            <LinearGradient colors={['rgba(31, 107, 255, 0.35)', 'rgba(0, 229, 255, 0.12)']} style={styles.aiBorder}>
+            <LinearGradient colors={['rgba(14, 144, 255, 0.35)', 'rgba(14, 144, 255, 0.12)']} style={styles.aiBorder}>
               <View style={styles.aiCard}>
-                <AppText variant="label" color="primary">
-                  AI Coach
-                </AppText>
                 <AppText variant="footnote" color="textSecondary">
                   {coachMessage}
                 </AppText>
@@ -616,82 +633,46 @@ export default function DashboardScreen() {
         </Animated.View>
       ) : null}
 
-      <Animated.View entering={FadeInDown.delay(180).duration(400)}>
+      <Animated.View entering={FadeInDown.delay(180).duration(400)} style={styles.statsRow}>
         {summaryLoading && recoveryScore === null ? (
-          <Card style={styles.recoveryCard} glow>
-            <SkeletonBlock height={14} width="45%" />
-            <View style={styles.gaugeRow}>
-              <SkeletonBlock height={88} width={88} style={styles.skeletonCircle} />
-            </View>
+          <Card style={styles.statCard}>
+            <SkeletonBlock height={72} />
           </Card>
         ) : (
-          <Pressable onPress={handleRecoveryPress} accessibilityRole="button">
-            <Card style={styles.recoveryCard} glow>
-              <AppText variant="label" color="accent">
+          <Pressable onPress={handleRecoveryPress} accessibilityRole="button" style={styles.statFlex}>
+            <Card style={styles.statCard}>
+              <AppText variant="caption" color="textTertiary">
                 Recovery
               </AppText>
-              <View style={styles.gaugeRow}>
-                <RingGauge
-                  label="Score"
-                  value={recoveryScore}
-                  color={recoveryScoreColor(recoveryScore)}
-                />
-                {readinessScore != null ? (
-                  <RingGauge
-                    label="Readiness"
-                    value={readinessScore}
-                    color={recoveryScoreColor(readinessScore)}
-                  />
-                ) : null}
-                <View style={styles.trainingBadge}>
-                  <AppText variant="caption" color="textTertiary">
-                    Today
-                  </AppText>
-                  <AppText variant="headline" color="accent">
-                    {trainingLabel}
-                  </AppText>
-                  {recoveryIntel?.recoveryStatusLabel ? (
-                    <AppText variant="footnote" color="textSecondary" align="center">
-                      {recoveryIntel.recoveryStatusLabel}
-                    </AppText>
-                  ) : !hasRecoveryScore ? (
-                    <AppText variant="footnote" color="textSecondary" align="center">
-                      Tap to check in
-                    </AppText>
-                  ) : (
-                    <AppText variant="footnote" color="textSecondary" align="center">
-                      Tap for details
-                    </AppText>
-                  )}
-                  {recoveryIntel?.transparency?.estimatedFromDefaults ? (
-                    <AppText variant="caption" color="textTertiary" align="center">
-                      Partial check-in — some inputs estimated
-                    </AppText>
-                  ) : null}
-                </View>
-              </View>
+              <RingGauge
+                label=""
+                value={recoveryScore}
+                color={recoveryScoreColor(recoveryScore)}
+                size={64}
+              />
+              <AppText variant="caption" color="accent" align="center">
+                {trainingLabel}
+              </AppText>
+              <AppText variant="caption" color="textTertiary" align="center">
+                Tap for details
+              </AppText>
             </Card>
           </Pressable>
         )}
-      </Animated.View>
-
-      <Animated.View entering={FadeInDown.delay(240).duration(400)}>
         {summaryLoading && !data ? (
-          <Card style={styles.progressCard}>
-            <SkeletonBlock height={14} width="30%" />
-            <SkeletonBlock height={36} width="45%" />
-            <SkeletonBlock height={14} width="65%" />
+          <Card style={styles.statCard}>
+            <SkeletonBlock height={72} />
           </Card>
         ) : (
-          <Card style={styles.progressCard}>
-            <AppText variant="label" color="accent">
+          <Card style={styles.statCard}>
+            <AppText variant="caption" color="textTertiary">
               Progress
             </AppText>
-            <AppText variant="metric" style={styles.weightMetric}>
+            <AppText variant="bodyBold" style={styles.weightMetric}>
               {units.formatWeight(data?.currentWeightKg)}
             </AppText>
-            <AppText variant="footnote" color="textSecondary">
-              Current weight · {data?.weeklyWorkouts ?? 0} workouts this week · {data?.streak ?? 0}d streak
+            <AppText variant="caption" color="textSecondary" align="center">
+              {data?.weeklyWorkouts ?? 0} workouts · {data?.streak ?? 0}d streak
             </AppText>
           </Card>
         )}
@@ -709,10 +690,18 @@ export default function DashboardScreen() {
       {manageDayMenu ? (
         <ManageDayModal
           visible={manageDayOpen}
+          title={manageDayMenu.title}
+          showWeekList={manageDayMenu.showWeekList}
           weeklyPlan={manageDayMenu.weeklyPlan}
-          todayDate={manageDayMenu.todayDate}
+          focusDate={manageDayMenu.focusDate}
           todayLabel={manageDayMenu.todayLabel}
+          focusWorkoutId={manageDayMenu.focusWorkoutId}
           actions={manageDayMenu.actions}
+          swapTargets={manageDayMenu.swapTargets}
+          moveTargets={manageDayMenu.moveTargets}
+          restDayTargets={manageDayMenu.restDayTargets}
+          doTodayTargets={manageDayMenu.doTodayTargets}
+          onScheduleChange={manageDayMenu.onScheduleChange}
           onClose={() => setManageDayOpen(false)}
         />
       ) : null}
@@ -720,42 +709,20 @@ export default function DashboardScreen() {
   );
 }
 
-function SkeletonBlock({
-  height,
-  width = '100%',
-  style,
-}: {
-  height: number;
-  width?: number | `${number}%`;
-  style?: ViewStyle;
-}) {
-  return <View style={[styles.skeleton, { height, width }, style]} />;
-}
-
 const styles = StyleSheet.create({
-  header: {
-    gap: Spacing.sm,
-    marginBottom: Spacing.xxl,
-    alignItems: 'center',
-  },
-  heroHeadline: {
-    textAlign: 'center',
-    letterSpacing: 0.8,
-    lineHeight: 30,
-  },
-  recoveryCard: {
+  statsRow: {
+    flexDirection: 'row',
     gap: Spacing.md,
     marginBottom: Spacing.lg,
   },
-  gaugeRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
+  statFlex: {
+    flex: 1,
   },
-  trainingBadge: {
+  statCard: {
+    flex: 1,
     alignItems: 'center',
     gap: Spacing.xs,
-    maxWidth: 140,
+    paddingVertical: Spacing.md,
   },
   aiOuter: {
     marginBottom: Spacing.lg,
@@ -776,13 +743,9 @@ const styles = StyleSheet.create({
     gap: Spacing.md,
     marginBottom: Spacing.lg,
   },
-  progressCard: {
-    gap: Spacing.sm,
-    marginBottom: Spacing.xxl,
-  },
   weightMetric: {
-    fontSize: 32,
-    lineHeight: 38,
+    fontSize: 22,
+    lineHeight: 28,
   },
   insightLabel: {
     marginBottom: Spacing.md,
@@ -792,8 +755,5 @@ const styles = StyleSheet.create({
     borderRadius: Radius.sm,
     borderWidth: 1,
     borderColor: LiftFlowColors.border,
-  },
-  skeletonCircle: {
-    borderRadius: 44,
   },
 });

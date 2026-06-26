@@ -1,16 +1,14 @@
 import { useLocalSearchParams } from 'expo-router';
-import { StyleSheet, View } from 'react-native';
 
 import { FeaturePlaceholderScreen } from '@/components/features/FeaturePlaceholderScreen';
-import { AppText } from '@/components/ui/AppText';
+import { EscapeScreen } from '@/components/layout/EscapeScreen';
 import { FEATURE_MAP } from '@/constants/features';
-import { LiftFlowColors } from '@/constants/theme';
 
 import AppleWatchScreen from './apple-watch';
 import CardioTrackingScreen from './cardio-tracking';
-import NutritionPreferencesScreen from './nutrition-preferences';
 import EquipmentScreen from './equipment';
 import HealthKitScreen from './healthkit';
+import NutritionPreferencesScreen from './nutrition-preferences';
 import SubscriptionScreen from './subscription';
 import TrainingGoalsScreen from './training-goals';
 import TrainingProfileScreen from './training-profile';
@@ -39,24 +37,12 @@ export default function FeatureScreen() {
 
   if (!definition) {
     return (
-      <View style={styles.error}>
-        <AppText variant="headline">Feature Not Found</AppText>
-        <AppText variant="body" color="textSecondary">
-          Unknown feature: {feature}
-        </AppText>
-      </View>
+      <EscapeScreen
+        title="Feature Not Found"
+        message={`We couldn't find "${feature ?? 'this feature'}". Head back or return home.`}
+      />
     );
   }
 
   return <FeaturePlaceholderScreen feature={definition} />;
 }
-
-const styles = StyleSheet.create({
-  error: {
-    flex: 1,
-    backgroundColor: LiftFlowColors.background,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-});

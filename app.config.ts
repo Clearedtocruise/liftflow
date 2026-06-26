@@ -32,7 +32,7 @@ const config: ExpoConfig = {
   ios: {
     icon: './assets/branding/one-more-icon-1024.png',
     bundleIdentifier: 'com.liftflow.app',
-    buildNumber: '14',
+    buildNumber: '16',
     appleTeamId: 'DZXP5Q6649',
     entitlements: {
       'com.apple.security.application-groups': ['group.com.liftflow.app'],
@@ -44,13 +44,17 @@ const config: ExpoConfig = {
       NSHealthShareUsageDescription: 'ONE MORE reads steps, weight, heart rate, and workouts from Apple Health to personalize coaching.',
       NSHealthUpdateUsageDescription: 'ONE MORE may write workout data to Apple Health when you log sessions.',
       NSLocationWhenInUseUsageDescription:
-        'ONE MORE uses your location to detect when you arrive at a saved gym and suggest starting a workout.',
+        'ONE MORE uses your location to track outdoor cardio distance and pace, and to detect when you arrive at a saved gym.',
+      NSLocationAlwaysAndWhenInUseUsageDescription:
+        'ONE MORE continues tracking outdoor cardio distance when your screen is locked so your full run is recorded.',
+      UIBackgroundModes: ['location'],
       ITSAppUsesNonExemptEncryption: false,
     },
   },
   android: {
     package: 'com.liftflow.app',
-    versionCode: 14,
+    versionCode: 15,
+    softwareKeyboardLayoutMode: 'resize',
     permissions: [
       'android.permission.ACCESS_COARSE_LOCATION',
       'android.permission.ACCESS_FINE_LOCATION',
@@ -94,7 +98,10 @@ const config: ExpoConfig = {
       'expo-location',
       {
         locationWhenInUsePermission:
-          'ONE MORE uses your location to detect when you arrive at a saved gym and suggest starting a workout.',
+          'ONE MORE uses your location to track outdoor cardio distance and detect when you arrive at a saved gym.',
+        locationAlwaysAndWhenInUsePermission:
+          'ONE MORE continues tracking outdoor cardio distance when your screen is locked so your full run is recorded.',
+        isIosBackgroundLocationEnabled: true,
       },
     ],
     // expo-notifications plugin omitted — package autolinks; strip push entitlement below.
@@ -111,7 +118,7 @@ const config: ExpoConfig = {
     [
       'expo-splash-screen',
       {
-        backgroundColor: '#000000',
+        backgroundColor: '#080B10',
         image: './assets/branding/one-more-splash-full-512.png',
         imageWidth: 200,
         android: {

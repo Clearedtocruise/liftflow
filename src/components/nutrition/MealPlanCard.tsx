@@ -90,7 +90,8 @@ export function MealPlanCard({
                 onPress={(event) => {
                   event.stopPropagation?.();
                   onReplace();
-                }}>
+                }}
+                testID="replace-meal-button">
                 <AppText variant="caption" color="accent">
                   Replace Meal
                 </AppText>

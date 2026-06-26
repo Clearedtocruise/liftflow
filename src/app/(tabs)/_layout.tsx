@@ -1,10 +1,14 @@
 import { Tabs } from 'expo-router';
 import { Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppSymbol, SYMBOL_FALLBACKS } from '@/components/ui/AppSymbol';
-import { LiftFlowColors, TabBarHeight, Typography } from '@/constants/theme';
+import { LiftFlowColors, Typography } from '@/constants/theme';
 
 export default function TabsLayout() {
+  const insets = useSafeAreaInsets();
+  const bottomPad = Math.max(insets.bottom, Platform.OS === 'ios' ? 20 : 10);
+
   return (
     <Tabs
       screenOptions={{
@@ -15,16 +19,17 @@ export default function TabsLayout() {
           backgroundColor: LiftFlowColors.tabBar,
           borderTopColor: LiftFlowColors.border,
           borderTopWidth: 1,
-          height: TabBarHeight,
+          height: 56 + bottomPad,
           paddingTop: 8,
-          paddingBottom: Platform.OS === 'ios' ? 24 : 12,
+          paddingBottom: bottomPad,
           elevation: 0,
           shadowOpacity: 0,
         },
         tabBarLabelStyle: {
           ...Typography.caption,
+          fontSize: 11,
+          fontWeight: '600',
           marginTop: 2,
-          fontSize: 10,
         },
         sceneStyle: {
           backgroundColor: LiftFlowColors.background,
@@ -34,6 +39,7 @@ export default function TabsLayout() {
         name="dashboard"
         options={{
           title: 'Home',
+          tabBarButtonTestID: 'home-tab',
           tabBarIcon: ({ color, focused }) => (
             <AppSymbol
               name="house.fill"
@@ -48,6 +54,7 @@ export default function TabsLayout() {
         name="workout"
         options={{
           title: 'Workout',
+          tabBarButtonTestID: 'workout-tab',
           tabBarIcon: ({ color, focused }) => (
             <AppSymbol
               name="figure.strengthtraining.traditional"
@@ -62,6 +69,7 @@ export default function TabsLayout() {
         name="nutrition"
         options={{
           title: 'Nutrition',
+          tabBarButtonTestID: 'nutrition-tab',
           tabBarIcon: ({ color, focused }) => (
             <AppSymbol
               name="leaf.fill"
@@ -76,6 +84,7 @@ export default function TabsLayout() {
         name="progress"
         options={{
           title: 'Progress',
+          tabBarButtonTestID: 'progress-tab',
           tabBarIcon: ({ color, focused }) => (
             <AppSymbol
               name="camera.fill"
@@ -104,6 +113,7 @@ export default function TabsLayout() {
         name="settings"
         options={{
           title: 'Settings',
+          tabBarButtonTestID: 'settings-tab',
           tabBarIcon: ({ color, focused }) => (
             <AppSymbol
               name="gearshape.fill"

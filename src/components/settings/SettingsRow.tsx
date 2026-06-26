@@ -14,13 +14,15 @@ type SettingsRowProps = {
   icon?: ReactNode;
   onPress?: () => void;
   destructive?: boolean;
+  testID?: string;
 };
 
-export function SettingsRow({ label, value, icon, onPress, destructive }: SettingsRowProps) {
+export function SettingsRow({ label, value, icon, onPress, destructive, testID }: SettingsRowProps) {
   return (
     <Pressable
       onPress={onPress}
       disabled={!onPress}
+      testID={testID}
       style={({ pressed }) => [styles.row, pressed && onPress && styles.pressed]}
       accessibilityRole={onPress ? 'button' : undefined}>
       {icon}

@@ -1,8 +1,8 @@
-import { Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Card } from '@/components/layout/Card';
-import { EmptyStateCard } from '@/components/layout/StateCard';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
+import { SkeletonBlock } from '@/components/layout/SkeletonBlock';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import {
@@ -38,12 +38,7 @@ export function WorkoutWeeklyPlanScreen({
   onManualLog,
 }: WorkoutWeeklyPlanScreenProps) {
   return (
-    <View style={styles.container}>
-      <AppText variant="headline">Workout</AppText>
-      <AppText variant="body" color="textSecondary">
-        Your weekly training plan
-      </AppText>
-
+    <View style={styles.container} testID="weekly-plan">
       {loading ? (
         <View style={styles.loadingWrap}>
           <AppText variant="body" color="textSecondary">
@@ -73,7 +68,8 @@ export function WorkoutWeeklyPlanScreen({
             return (
               <Card
                 key={day.date}
-                style={[styles.dayCard, styles.dayCardActive, isToday(day.date, timeZone) && styles.dayCardToday]}>
+                style={[styles.dayCard, styles.dayCardActive, isToday(day.date, timeZone) && styles.dayCardToday]}
+                testID={isToday(day.date, timeZone) ? 'today-workout-card' : undefined}>
                 <Pressable onPress={() => onSelectDay(day)} style={styles.dayPressable}>
                   <View style={styles.dayHeader}>
                     <View style={styles.dayHeaderText}>
@@ -132,18 +128,6 @@ export function WorkoutWeeklyPlanScreen({
   );
 }
 
-function SkeletonBlock({
-  height,
-  width = '100%',
-  style,
-}: {
-  height: number;
-  width?: number | `${number}%`;
-  style?: ViewStyle;
-}) {
-  return <View style={[styles.skeleton, { height, width }, style]} />;
-}
-
 const styles = StyleSheet.create({
   container: {
     gap: Spacing.md,
@@ -156,12 +140,6 @@ const styles = StyleSheet.create({
     padding: Spacing.lg,
     borderRadius: Radius.lg,
     backgroundColor: LiftFlowColors.surface,
-    borderWidth: 1,
-    borderColor: LiftFlowColors.border,
-  },
-  skeleton: {
-    backgroundColor: LiftFlowColors.backgroundSecondary,
-    borderRadius: Radius.sm,
     borderWidth: 1,
     borderColor: LiftFlowColors.border,
   },

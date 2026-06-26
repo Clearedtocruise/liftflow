@@ -5,6 +5,7 @@ import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import { formatPlanTargetPerformance, formatPreviousPerformanceLine } from '@/lib/activeWorkoutMetrics';
 import type { ExerciseLoggingMode } from '@/lib/exerciseModality';
 import type { DistanceUnit } from '@/types/common';
+import type { ExerciseHistorySet } from '@/types/workoutExecution';
 
 type GuidedWorkoutMetricsProps = {
   currentSet: number;
@@ -18,12 +19,14 @@ type GuidedWorkoutMetricsProps = {
   weightLabel: string;
   distanceUnit: DistanceUnit;
   fallbackWeightKg?: number;
+  /** Minimal layout — one target line + optional last-session hint. */
+  compact?: boolean;
+  /** When true, target line is shown elsewhere (e.g. coach card). */
+  hideTarget?: boolean;
 };
 
 export function GuidedWorkoutMetrics({
-  currentSet,
   targetSets,
-  remainingSets,
   loggingMode,
   repRange,
   historySets,
@@ -32,6 +35,8 @@ export function GuidedWorkoutMetrics({
   weightLabel,
   distanceUnit,
   fallbackWeightKg,
+  compact = false,
+  hideTarget = false,
 }: GuidedWorkoutMetricsProps) {
   const planFallback = formatPlanTargetPerformance(
     loggingMode,
@@ -41,26 +46,33 @@ export function GuidedWorkoutMetrics({
     weightLabel,
     fallbackWeightKg,
   );
+  const targetLine = targetPerformanceLine ?? planFallback;
+  const lastLine =
+    historySets.length > 0
+      ? formatPreviousPerformanceLine(historySets[0], loggingMode, formatWeight, weightLabel, distanceUnit)
+      : null;
+
+  if (compact) {
+    if (hideTarget && !lastLine) return null;
+
+    return (
+      <View style={styles.compact}>
+        {!hideTarget ? (
+          <AppText variant="bodyBold" color="accent">
+            {targetLine}
+          </AppText>
+        ) : null}
+        {lastLine ? (
+          <AppText variant="footnote" color="textTertiary">
+            Last · {lastLine}
+          </AppText>
+        ) : null}
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
-      <View style={styles.metricRow}>
-        <View style={styles.metricCell}>
-          <AppText variant="caption" color="textSecondary">
-            Current Set
-          </AppText>
-          <AppText variant="bodyBold">
-            {Math.min(currentSet, targetSets)} of {targetSets}
-          </AppText>
-        </View>
-        <View style={styles.metricCell}>
-          <AppText variant="caption" color="textSecondary">
-            Remaining Sets
-          </AppText>
-          <AppText variant="bodyBold">{Math.max(remainingSets, 0)}</AppText>
-        </View>
-      </View>
-
       <View style={styles.block}>
         <AppText variant="label" color="textSecondary">
           Previous Performance
@@ -78,42 +90,30 @@ export function GuidedWorkoutMetrics({
         )}
       </View>
 
-      <View style={styles.block}>
-        <AppText variant="label" color="textSecondary">
-          Suggested Weight
-        </AppText>
-        {historySets.length > 0 && loggingMode === 'weighted' && historySets[0]?.weightKg != null && historySets[0].weightKg > 0 ? (
-          <AppText variant="bodyBold" color="accent">
-            {formatPreviousPerformanceLine(historySets[0], loggingMode, formatWeight, weightLabel, distanceUnit)}
-            {' · from last session'}
+      {!hideTarget ? (
+        <View style={styles.block}>
+          <AppText variant="label" color="textSecondary">
+            Target Performance
           </AppText>
-        ) : (
-          <AppText variant="footnote" color="textTertiary">
-            Log your first set — we'll suggest weight next time
-          </AppText>
-        )}
-      </View>
-
-      <View style={styles.block}>
-        <AppText variant="label" color="textSecondary">
-          Target Performance
-        </AppText>
-        <AppText variant="bodyBold">{targetPerformanceLine ?? planFallback}</AppText>
-      </View>
+          <AppText variant="bodyBold">{targetLine}</AppText>
+        </View>
+      ) : null}
     </View>
   );
 }
 
-export function WorkoutProgressBar({ percent }: { percent: number }) {
+export function WorkoutProgressBar({ percent, compact = false }: { percent: number; compact?: boolean }) {
   const clamped = Math.max(0, Math.min(100, percent));
   return (
     <View style={styles.progressWrap}>
       <View style={styles.progressTrack}>
         <View style={[styles.progressFill, { width: `${clamped}%` }]} />
       </View>
-      <AppText variant="caption" color="textSecondary">
-        {clamped}% complete
-      </AppText>
+      {!compact ? (
+        <AppText variant="caption" color="textSecondary">
+          {clamped}% complete
+        </AppText>
+      ) : null}
     </View>
   );
 }
@@ -122,18 +122,8 @@ const styles = StyleSheet.create({
   container: {
     gap: Spacing.md,
   },
-  metricRow: {
-    flexDirection: 'row',
-    gap: Spacing.md,
-  },
-  metricCell: {
-    flex: 1,
+  compact: {
     gap: Spacing.xs,
-    padding: Spacing.md,
-    borderRadius: Radius.md,
-    backgroundColor: LiftFlowColors.backgroundSecondary,
-    borderWidth: 1,
-    borderColor: LiftFlowColors.border,
   },
   block: {
     gap: Spacing.xs,

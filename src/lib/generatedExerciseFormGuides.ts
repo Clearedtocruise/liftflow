@@ -1869,10 +1869,10 @@ export const GENERATED_EXERCISE_FORM_GUIDES: Record<string, GeneratedExerciseFor
   },
   'lateral-raise': {
     steps: [
-      'Set up for Lateral Raise with a slight bend in your elbows that stays fixed.',
-      'Open or raise through a controlled arc—no jerking.',
-      'Pause briefly at the top when you feel the target muscle contract.',
-      'Return slowly until you feel a comfortable stretch.',
+      'Stand tall with dumbbells at your sides. Slight bend in elbows, core braced.',
+      'Raise arms out to the sides until upper arms reach shoulder height — lead with elbows so side delts do the work.',
+      'Pause at shoulder height without shrugging; lower slowly with control.',
+      'Keep torso still — no swinging or leaning back.',
     ],
   },
   'lateral-raise-sh0049': {

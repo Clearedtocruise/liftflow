@@ -13,7 +13,9 @@ struct ContentView: View {
         workoutStatusCard
         metricsRow
 
-        if connectivity.isRestPhase {
+        if connectivity.isCardioMode {
+          cardioPanel
+        } else if connectivity.isRestPhase {
           restPanel
         } else if connectivity.workoutSessionId != nil {
           activeSetPanel
@@ -132,6 +134,56 @@ struct ContentView: View {
           .foregroundStyle(.secondary)
       }
     }
+  }
+
+  private var cardioPanel: some View {
+    VStack(spacing: 8) {
+      Text(connectivity.cardioActivityLabel)
+        .font(.caption2)
+        .foregroundStyle(.secondary)
+        .lineLimit(1)
+      Text(connectivity.cardioRunning ? "ACTIVE" : "PAUSED")
+        .font(.caption2)
+        .foregroundStyle(connectivity.cardioRunning ? accent : .orange)
+      Text(formatRest(connectivity.cardioElapsedSeconds))
+        .font(.system(size: 36, weight: .bold, design: .rounded))
+        .monospacedDigit()
+      if !connectivity.cardioDistanceLabel.isEmpty {
+        Text(connectivity.cardioDistanceLabel)
+          .font(.caption)
+          .foregroundStyle(accent)
+      }
+      if !connectivity.cardioPaceLabel.isEmpty {
+        Text(connectivity.cardioPaceLabel)
+          .font(.caption2)
+          .foregroundStyle(.secondary)
+      }
+      if connectivity.sessionCalories > 0 {
+        Text("\(connectivity.sessionCalories) cal")
+          .font(.caption)
+          .foregroundStyle(.orange)
+      }
+      if let hr = heartRate.bpm ?? connectivity.heartRateBpm {
+        Label("\(hr) bpm", systemImage: "heart.fill")
+          .font(.caption)
+          .foregroundStyle(.pink)
+      }
+      HStack(spacing: 8) {
+        Button(connectivity.cardioRunning ? "Pause" : "Resume") {
+          if connectivity.cardioRunning {
+            connectivity.pauseCardio()
+          } else {
+            connectivity.resumeCardio()
+          }
+        }
+        .buttonStyle(.bordered)
+        .tint(accent)
+        Button("Finish") { connectivity.finishCardio() }
+          .buttonStyle(.borderedProminent)
+          .tint(.orange)
+      }
+    }
+    .frame(maxWidth: .infinity)
   }
 
   private var restPanel: some View {

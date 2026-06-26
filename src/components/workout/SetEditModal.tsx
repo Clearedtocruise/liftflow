@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Modal, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { AppText } from '@/components/ui/AppText';
@@ -54,9 +54,18 @@ export function SetEditModal({ visible, set, exerciseName, onSave, onDelete, onC
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose}>
-        <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
-          <AppText variant="title">Edit Set {set?.setNumber}</AppText>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <Pressable style={styles.backdrop} onPress={onClose}>
+          <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="interactive"
+              automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+              bounces={false}
+              showsVerticalScrollIndicator={false}>
+              <AppText variant="title">Edit Set {set?.setNumber}</AppText>
           {exerciseName ? (
             <AppText variant="footnote" color="textSecondary">
               {exerciseName}
@@ -95,17 +104,22 @@ export function SetEditModal({ visible, set, exerciseName, onSave, onDelete, onC
             <PrimaryButton label="Delete Set" onPress={handleDelete} variant="secondary" loading={saving} />
             <PrimaryButton label="Cancel" onPress={onClose} variant="secondary" />
           </View>
+            </ScrollView>
+          </Pressable>
         </Pressable>
-      </Pressable>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: {
+    flex: 1,
+  },
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'center',
+    justifyContent: 'flex-end',
     padding: Spacing.xl,
   },
   sheet: {

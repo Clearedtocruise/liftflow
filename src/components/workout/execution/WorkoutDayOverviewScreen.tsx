@@ -98,7 +98,13 @@ export function WorkoutDayOverviewScreen({
       />
 
       <View style={styles.actions}>
-        <PrimaryButton label={starting ? 'Starting…' : 'Start Workout'} size="large" loading={starting} onPress={onStart} />
+        <PrimaryButton
+          label={starting ? 'Starting…' : 'Start Workout'}
+          size="large"
+          loading={starting}
+          onPress={onStart}
+          testID="start-workout-button"
+        />
         <PrimaryButton label="Edit Workout" variant="secondary" onPress={onEdit} />
       </View>
 

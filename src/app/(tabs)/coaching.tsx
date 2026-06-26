@@ -1,7 +1,8 @@
 import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 
+import { BrandHeader } from '@/components/brand/BrandHeader';
 import { ConversationalCoachPanel } from '@/components/coaching/ConversationalCoachPanel';
 import { RecoveryCheckInForm } from '@/components/coaching/RecoveryCheckInForm';
 import { RecoveryScoreCard } from '@/components/coaching/RecoveryScoreCard';
@@ -9,15 +10,17 @@ import { Card } from '@/components/layout/Card';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { SectionHeader } from '@/components/layout/SectionHeader';
+import { SkeletonBlock } from '@/components/layout/SkeletonBlock';
 import { NutritionIntelligenceDashboard } from '@/components/nutrition/NutritionIntelligenceDashboard';
 import { RecoveryIntelligenceDashboard } from '@/components/recovery/RecoveryIntelligenceDashboard';
 import { FeatureGate } from '@/components/subscription/PremiumGate';
 import { UpgradePrompt } from '@/components/subscription/UpgradePrompt';
 import { AppText } from '@/components/ui/AppText';
 import { WorkoutRecommendationPanel } from '@/components/workout/WorkoutRecommendationPanel';
-import { LiftFlowColors, Spacing } from '@/constants/theme';
+import { Brand, LiftFlowColors, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 import { useSubscription } from '@/hooks/useSubscription';
+import { logStartup } from '@/lib/startupLogger';
 import { aiService } from '@/services/aiService';
 import { conversationalCoachService } from '@/services/conversationalCoachService';
 import { nutritionIntelligenceService } from '@/services/nutritionIntelligenceService';
@@ -64,46 +67,6 @@ export default function CoachingScreen() {
     if (today.success && today.data) setCheckIn(today.data);
     if (trendRes.success) setTrend(trendRes.data);
 
-    if (isPremium) {
-      const [recs, intel, workoutRecommendation, nutritionReport] = await Promise.all([
-        aiService.getRecommendations(user.id),
-        recoveryService.getIntelligence(user.id),
-        workoutRecommendationService.getDaily(user.id),
-        nutritionIntelligenceService.getIntelligence(user.id),
-      ]);
-      if (recs.success) setRecommendations(recs.data);
-      else setRecommendations([]);
-      if (intel.success) {
-        setIntelligence(intel.data);
-        setIntelError(null);
-      } else {
-        setIntelligence(null);
-        setIntelError(intel.error);
-      }
-      if (workoutRecommendation.success) {
-        setWorkoutRec(workoutRecommendation.data);
-        setWorkoutRecError(null);
-      } else {
-        setWorkoutRec(null);
-        setWorkoutRecError(workoutRecommendation.error);
-      }
-      if (nutritionReport.success) {
-        setNutritionIntel(nutritionReport.data);
-        setNutritionIntelError(null);
-      } else {
-        setNutritionIntel(null);
-        setNutritionIntelError(nutritionReport.error);
-      }
-    } else {
-      setRecommendations([]);
-      setIntelligence(null);
-      setWorkoutRec(null);
-      setNutritionIntel(null);
-      setIntelError(null);
-      setWorkoutRecError(null);
-      setNutritionIntelError(null);
-    }
-
     if (macros.success) {
       setMacroRationale(macros.data.rationale);
       setMacroError(null);
@@ -111,8 +74,56 @@ export default function CoachingScreen() {
       setMacroRationale(null);
       setMacroError(macros.error || 'Adaptive nutrition is unavailable. Check your connection or try again later.');
     }
+
     setLoading(false);
     setRefreshing(false);
+
+    if (!isPremium) {
+      setRecommendations([]);
+      setIntelligence(null);
+      setWorkoutRec(null);
+      setNutritionIntel(null);
+      setIntelError(null);
+      setWorkoutRecError(null);
+      setNutritionIntelError(null);
+      return;
+    }
+
+    void aiService.getRecommendations(user.id).then((recs) => {
+      if (recs.success) setRecommendations(recs.data);
+      else setRecommendations([]);
+    });
+
+    void recoveryService.getIntelligence(user.id).then((intel) => {
+      if (intel.success) {
+        setIntelligence(intel.data);
+        setIntelError(null);
+        logStartup('AI_COACH_LOADED', { source: 'coaching-tab' });
+      } else {
+        setIntelligence(null);
+        setIntelError(intel.error);
+      }
+    });
+
+    void workoutRecommendationService.getDaily(user.id).then((workoutRecommendation) => {
+      if (workoutRecommendation.success) {
+        setWorkoutRec(workoutRecommendation.data);
+        setWorkoutRecError(null);
+      } else {
+        setWorkoutRec(null);
+        setWorkoutRecError(workoutRecommendation.error);
+      }
+    });
+
+    void nutritionIntelligenceService.getIntelligence(user.id).then((nutritionReport) => {
+      if (nutritionReport.success) {
+        setNutritionIntel(nutritionReport.data);
+        setNutritionIntelError(null);
+      } else {
+        setNutritionIntel(null);
+        setNutritionIntelError(nutritionReport.error);
+      }
+    });
   }, [user, isPremium]);
 
   useEffect(() => {
@@ -173,9 +184,12 @@ export default function CoachingScreen() {
 
   if (loading) {
     return (
-      <View style={styles.loading}>
-        <ActivityIndicator size="large" color={LiftFlowColors.accent} />
-      </View>
+      <ScreenContainer contentContainerStyle={styles.loadingShell}>
+        <BrandHeader subtitle={Brand.coachName} />
+        <SkeletonBlock height={120} />
+        <SkeletonBlock height={180} />
+        <SkeletonBlock height={140} />
+      </ScreenContainer>
     );
   }
 
@@ -185,10 +199,8 @@ export default function CoachingScreen() {
         isPremium ? <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={LiftFlowColors.accent} /> : undefined
       }>
       <View style={styles.header}>
-        <AppText variant="title">AI Coaching</AppText>
-        <AppText variant="body" color="textSecondary">
-          Recovery, training, and nutrition guidance
-        </AppText>
+        <BrandHeader subtitle="Recovery, training, and nutrition guidance" />
+        <AppText variant="title">{Brand.coachName}</AppText>
       </View>
 
       <RecoveryScoreCard checkIn={checkIn} trend={trend} />
@@ -198,12 +210,16 @@ export default function CoachingScreen() {
           <RecoveryIntelligenceDashboard report={intelligence} compact />
         </FeatureGate>
       ) : isPremium ? (
-        <Card style={styles.fallbackCard}>
-          <AppText variant="footnote" color="textSecondary">
-            {intelError ?? 'Recovery intelligence is temporarily unavailable.'}
-          </AppText>
-          <PrimaryButton label="Retry" onPress={() => void load()} variant="secondary" />
-        </Card>
+        intelError ? (
+          <Card style={styles.fallbackCard}>
+            <AppText variant="footnote" color="textSecondary">
+              {intelError}
+            </AppText>
+            <PrimaryButton label="Retry" onPress={() => void load()} variant="secondary" />
+          </Card>
+        ) : (
+          <SkeletonBlock height={160} style={styles.fallbackCard} />
+        )
       ) : (
         <UpgradePrompt featureId="recovery-intelligence" />
       )}
@@ -213,12 +229,16 @@ export default function CoachingScreen() {
           <WorkoutRecommendationPanel report={workoutRec} compact />
         </FeatureGate>
       ) : isPremium ? (
-        <Card style={styles.fallbackCard}>
-          <AppText variant="footnote" color="textSecondary">
-            {workoutRecError ?? 'Workout recommendations are temporarily unavailable.'}
-          </AppText>
-          <PrimaryButton label="Retry" onPress={() => void load()} variant="secondary" />
-        </Card>
+        workoutRecError ? (
+          <Card style={styles.fallbackCard}>
+            <AppText variant="footnote" color="textSecondary">
+              {workoutRecError}
+            </AppText>
+            <PrimaryButton label="Retry" onPress={() => void load()} variant="secondary" />
+          </Card>
+        ) : (
+          <SkeletonBlock height={140} style={styles.fallbackCard} />
+        )
       ) : (
         <UpgradePrompt featureId="workout-recommendations" compact />
       )}
@@ -228,12 +248,16 @@ export default function CoachingScreen() {
           <NutritionIntelligenceDashboard report={nutritionIntel} compact />
         </FeatureGate>
       ) : isPremium ? (
-        <Card style={styles.fallbackCard}>
-          <AppText variant="footnote" color="textSecondary">
-            {nutritionIntelError ?? 'Nutrition intelligence is temporarily unavailable.'}
-          </AppText>
-          <PrimaryButton label="Retry" onPress={() => void load()} variant="secondary" />
-        </Card>
+        nutritionIntelError ? (
+          <Card style={styles.fallbackCard}>
+            <AppText variant="footnote" color="textSecondary">
+              {nutritionIntelError}
+            </AppText>
+            <PrimaryButton label="Retry" onPress={() => void load()} variant="secondary" />
+          </Card>
+        ) : (
+          <SkeletonBlock height={140} style={styles.fallbackCard} />
+        )
       ) : (
         <UpgradePrompt featureId="nutrition-intelligence" compact />
       )}
@@ -371,13 +395,8 @@ export default function CoachingScreen() {
 }
 
 const styles = StyleSheet.create({
-  loading: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: LiftFlowColors.background,
-  },
-  header: { gap: Spacing.xs, marginBottom: Spacing.xxl },
+  loadingShell: { gap: Spacing.lg, paddingBottom: Spacing.xxl },
+  header: { gap: Spacing.sm, marginBottom: Spacing.xxl },
   linkRow: { gap: Spacing.md, marginBottom: Spacing.xl },
   linkGroup: { gap: Spacing.sm },
   macroCard: { gap: Spacing.sm, marginBottom: Spacing.xl },

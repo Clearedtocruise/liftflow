@@ -98,7 +98,7 @@ export function useWatchCompanionSync(userId: string | undefined) {
 
   useEffect(() => {
     if (!userId || !activeSession) return;
-    void watchCompanionService.pushRestTimerOnly(userId, restSecondsRemaining);
+    void watchCompanionService.pushRestTimerOnly(userId, watchPhoneBridge.getEffectiveRestSecondsRemaining());
   }, [userId, activeSession?.id, restSecondsRemaining]);
 
   useEffect(() => {
