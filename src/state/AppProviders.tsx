@@ -6,6 +6,7 @@ import { GlobalRestTimerOverlay } from '@/components/workout/execution/GlobalRes
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { PlanAdjustmentProvider } from '@/contexts/PlanAdjustmentContext';
 import { SubscriptionProvider } from '@/contexts/SubscriptionContext';
+import { ThemeProvider } from '@/contexts/ThemeContext';
 import { WatchCompanionBridge } from '@/state/WatchCompanionBridge';
 import { WorkoutPlanDraftProvider } from '@/state/workout/WorkoutPlanDraftContext';
 import { WorkoutSessionProvider } from '@/state/workout/WorkoutSessionContext';
@@ -29,11 +30,13 @@ function WorkoutSessionBridge({ children }: { children: ReactNode }) {
 
 export function AppProviders({ children }: { children: ReactNode }) {
   return (
-    <AuthProvider>
-      <SplashController>
-        <AuthenticatedShell>{children}</AuthenticatedShell>
-      </SplashController>
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <SplashController>
+          <AuthenticatedShell>{children}</AuthenticatedShell>
+        </SplashController>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
 

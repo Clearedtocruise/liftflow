@@ -1,12 +1,14 @@
 import { StyleSheet, Text, type TextProps, type TextStyle } from 'react-native';
 
-import { LiftFlowColors, Typography } from '@/constants/theme';
+import type { ThemeColorPalette } from '@/constants/themes';
+import { Typography } from '@/constants/theme';
+import { useLiftFlowTheme } from '@/hooks/useLiftFlowTheme';
 
 type TypographyVariant = keyof typeof Typography;
 
 type AppTextProps = TextProps & {
   variant?: TypographyVariant;
-  color?: keyof typeof LiftFlowColors | string;
+  color?: keyof ThemeColorPalette | string;
   align?: TextStyle['textAlign'];
 };
 
@@ -17,10 +19,8 @@ export function AppText({
   style,
   ...rest
 }: AppTextProps) {
-  const textColor =
-    color in LiftFlowColors
-      ? LiftFlowColors[color as keyof typeof LiftFlowColors]
-      : color;
+  const colors = useLiftFlowTheme();
+  const textColor = color in colors ? colors[color as keyof ThemeColorPalette] : color;
 
   return (
     <Text
@@ -30,9 +30,20 @@ export function AppText({
   );
 }
 
+export function ThemedLinkText({ style, ...rest }: TextProps) {
+  const colors = useLiftFlowTheme();
+  return <Text style={[styles.link, { color: colors.primary }, style]} {...rest} />;
+}
+
+const styles = StyleSheet.create({
+  link: {
+    fontWeight: '600',
+  },
+});
+
+/** @deprecated Use ThemedLinkText */
 export const textStyles = StyleSheet.create({
   link: {
-    color: LiftFlowColors.primary,
     fontWeight: '600',
   },
 });

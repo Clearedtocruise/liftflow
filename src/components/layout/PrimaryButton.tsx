@@ -3,7 +3,10 @@ import { ActivityIndicator, Pressable, StyleSheet } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 
 import { AppText } from '@/components/ui/AppText';
-import { BrandGradients, LiftFlowColors, Radius, Shadows, Spacing, TouchTarget, Typography } from '@/constants/theme';
+import type { AppTheme } from '@/constants/themes';
+import { TouchTarget, Typography } from '@/constants/theme';
+import { useAppTheme } from '@/contexts/ThemeContext';
+import { useThemedStyles } from '@/hooks/useLiftFlowTheme';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -17,7 +20,11 @@ type PrimaryButtonProps = {
   testID?: string;
 };
 
-export function PrimaryButton({
+export function PrimaryButton(props: PrimaryButtonProps) {
+  return <PrimaryActionButton {...props} />;
+}
+
+export function PrimaryActionButton({
   label,
   onPress,
   loading,
@@ -26,6 +33,8 @@ export function PrimaryButton({
   size = 'default',
   testID,
 }: PrimaryButtonProps) {
+  const theme = useAppTheme();
+  const styles = useThemedStyles(createStyles);
   const scale = useSharedValue(1);
   const animStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
   const isDisabled = disabled || loading;
@@ -48,16 +57,16 @@ export function PrimaryButton({
         <LinearGradient
           colors={
             isDisabled
-              ? [LiftFlowColors.surfaceHighlight, LiftFlowColors.surfaceElevated]
-              : [...BrandGradients.button]
+              ? [theme.colors.surfaceHighlight, theme.colors.surfaceElevated]
+              : [...theme.brandGradients.button]
           }
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
-          style={[styles.base, size === 'large' && styles.large, styles.primaryGradient, !isDisabled && Shadows.glow]}>
+          style={[styles.base, size === 'large' && styles.large, styles.primaryGradient, !isDisabled && theme.shadows.glow]}>
           {loading ? (
-            <ActivityIndicator color={LiftFlowColors.textPrimary} />
+            <ActivityIndicator color={theme.colors.onPrimary} />
           ) : (
-            <AppText variant="bodyBold" color="textPrimary" style={styles.label}>
+            <AppText variant="bodyBold" style={[styles.label, { color: theme.colors.onPrimary }]}>
               {label}
             </AppText>
           )}
@@ -89,7 +98,7 @@ export function PrimaryButton({
       accessibilityRole="button"
       accessibilityState={{ disabled: isDisabled }}>
       {loading ? (
-        <ActivityIndicator color={LiftFlowColors.primary} />
+        <ActivityIndicator color={theme.colors.primary} />
       ) : (
         <AppText
           variant="bodyBold"
@@ -108,39 +117,41 @@ export function PrimaryButton({
   );
 }
 
-const styles = StyleSheet.create({
-  base: {
-    minHeight: TouchTarget.comfortable,
-    borderRadius: Radius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: Spacing.xxl,
-  },
-  large: {
-    minHeight: TouchTarget.large,
-    borderRadius: Radius.lg,
-  },
-  primaryGradient: {
-    overflow: 'hidden',
-  },
-  secondary: {
-    backgroundColor: LiftFlowColors.surface,
-    borderWidth: 1,
-    borderColor: LiftFlowColors.border,
-  },
-  ghost: {
-    backgroundColor: 'transparent',
-  },
-  destructive: {
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 91, 91, 0.45)',
-  },
-  label: {
-    ...Typography.bodyBold,
-    letterSpacing: 0.3,
-  },
-  disabledWrap: {
-    opacity: 0.5,
-  },
-});
+function createStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    base: {
+      minHeight: TouchTarget.comfortable,
+      borderRadius: theme.radius.md,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: theme.spacing.xxl,
+    },
+    large: {
+      minHeight: TouchTarget.large,
+      borderRadius: theme.radius.lg,
+    },
+    primaryGradient: {
+      overflow: 'hidden',
+    },
+    secondary: {
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    ghost: {
+      backgroundColor: 'transparent',
+    },
+    destructive: {
+      backgroundColor: 'transparent',
+      borderWidth: 1,
+      borderColor: theme.isDark ? 'rgba(255, 91, 91, 0.45)' : 'rgba(239, 68, 68, 0.35)',
+    },
+    label: {
+      ...Typography.bodyBold,
+      letterSpacing: 0.3,
+    },
+    disabledWrap: {
+      opacity: 0.5,
+    },
+  });
+}

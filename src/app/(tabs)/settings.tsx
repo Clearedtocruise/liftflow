@@ -9,6 +9,7 @@ import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { SectionHeader } from '@/components/layout/SectionHeader';
 import { TabScreenHeader } from '@/components/layout/TabScreenHeader';
+import { AppearanceThemePicker } from '@/components/settings/AppearanceThemePicker';
 import { ConfirmationModePicker, SettingsRow } from '@/components/settings/SettingsRow';
 import { AppSymbol, SYMBOL_FALLBACKS } from '@/components/ui/AppSymbol';
 import { AppText } from '@/components/ui/AppText';
@@ -21,6 +22,7 @@ import { summarizeGoals } from '@/constants/trainingGoals';
 import { getPrimaryGymLabel, summarizeEquipment } from '@/constants/trainingProfile';
 import { summarizeUnitPreferences } from '@/constants/units';
 import { usePlanAdjustment } from '@/contexts/PlanAdjustmentContext';
+import { useThemeControl } from '@/contexts/ThemeContext';
 import { useAuth } from '@/hooks/useAuth';
 import { useSubscription } from '@/hooks/useSubscription';
 import { useUnits } from '@/hooks/useUnits';
@@ -47,6 +49,7 @@ import { useVoiceWorkout } from '@/voice/useVoiceWorkout';
 export default function SettingsScreen() {
   const { user, signOut, refreshProfile, deleteAccount } = useAuth();
   const { bumpRevision, dismiss } = usePlanAdjustment();
+  const { themeId, setThemeId } = useThemeControl();
   const { hydrate: hydrateWorkoutSession } = useWorkoutSession();
   const units = useUnits();
   const { isPremium, isFounder, isBetaTester } = useSubscription();
@@ -276,6 +279,8 @@ export default function SettingsScreen() {
           ) : null}
         </View>
       ) : null}
+      <SectionHeader title="Appearance" variant="secondary" />
+      <AppearanceThemePicker value={themeId} onChange={(id) => void setThemeId(id)} />
       <SectionHeader title="Voice & Logging" variant="secondary" />
       <ConfirmationModePicker value={confirmationMode} onChange={handleConfirmationChange} />
       <Card style={styles.group}>

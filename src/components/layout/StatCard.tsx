@@ -3,13 +3,14 @@ import { Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
 
 import { Card } from '@/components/layout/Card';
 import { AppText } from '@/components/ui/AppText';
-import { LiftFlowColors, Spacing } from '@/constants/theme';
+import type { AppTheme, ThemeColorPalette } from '@/constants/themes';
+import { useThemedStyles } from '@/hooks/useLiftFlowTheme';
 
-type StatCardProps = {
+type MetricTileProps = {
   label: string;
   children: ReactNode;
   footer?: string;
-  footerColor?: keyof typeof LiftFlowColors;
+  footerColor?: keyof ThemeColorPalette;
   onPress?: () => void;
   style?: ViewStyle;
 };
@@ -22,7 +23,9 @@ export function StatCard({
   footerColor = 'textSecondary',
   onPress,
   style,
-}: StatCardProps) {
+}: MetricTileProps) {
+  const styles = useThemedStyles(createStyles);
+
   const card = (
     <Card style={[styles.card, style]}>
       <AppText variant="label" color="textTertiary">
@@ -48,14 +51,18 @@ export function StatCard({
   return <View style={styles.flex}>{card}</View>;
 }
 
-const styles = StyleSheet.create({
-  flex: {
-    flex: 1,
-  },
-  card: {
-    flex: 1,
-    alignItems: 'center',
-    gap: Spacing.xs,
-    paddingVertical: Spacing.lg,
-  },
-});
+export const MetricTile = StatCard;
+
+function createStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    flex: {
+      flex: 1,
+    },
+    card: {
+      flex: 1,
+      alignItems: 'center',
+      gap: theme.spacing.xs,
+      paddingVertical: theme.spacing.lg,
+    },
+  });
+}

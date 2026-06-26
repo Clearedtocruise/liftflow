@@ -3,9 +3,11 @@ import { Platform, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppSymbol, SYMBOL_FALLBACKS } from '@/components/ui/AppSymbol';
-import { LiftFlowColors, Shadows, Typography } from '@/constants/theme';
+import { Typography } from '@/constants/theme';
+import { useAppTheme } from '@/contexts/ThemeContext';
 
 export default function TabsLayout() {
+  const theme = useAppTheme();
   const insets = useSafeAreaInsets();
   const bottomPad = Math.max(insets.bottom, Platform.OS === 'ios' ? 20 : 10);
 
@@ -13,16 +15,16 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: LiftFlowColors.tabActive,
-        tabBarInactiveTintColor: LiftFlowColors.tabInactive,
+        tabBarActiveTintColor: theme.colors.tabActive,
+        tabBarInactiveTintColor: theme.colors.tabInactive,
         tabBarStyle: {
-          backgroundColor: LiftFlowColors.tabBar,
-          borderTopColor: LiftFlowColors.tabBarBorder,
+          backgroundColor: theme.colors.tabBar,
+          borderTopColor: theme.colors.tabBarBorder,
           borderTopWidth: StyleSheet.hairlineWidth,
           height: 56 + bottomPad,
           paddingTop: 6,
           paddingBottom: bottomPad,
-          ...Shadows.tabBar,
+          ...theme.shadows.tabBar,
         },
         tabBarLabelStyle: {
           ...Typography.caption,
@@ -31,7 +33,7 @@ export default function TabsLayout() {
           marginTop: 2,
         },
         sceneStyle: {
-          backgroundColor: LiftFlowColors.background,
+          backgroundColor: theme.colors.background,
         },
       }}>
       <Tabs.Screen

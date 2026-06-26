@@ -3,18 +3,18 @@ import { StyleSheet, View, type ViewStyle } from 'react-native';
 
 import { BrandHeader } from '@/components/brand/BrandHeader';
 import { AppText } from '@/components/ui/AppText';
-import { BrandGradients, Spacing } from '@/constants/theme';
+import type { AppTheme } from '@/constants/themes';
+import { useAppTheme } from '@/contexts/ThemeContext';
+import { useThemedStyles } from '@/hooks/useLiftFlowTheme';
 
 type TabScreenHeaderProps = {
   title: string;
   subtitle?: string;
   right?: React.ReactNode;
-  /** Show ONE MORE wordmark eyebrow above the title. */
   showBrand?: boolean;
   style?: ViewStyle;
 };
 
-/** Consistent top-of-screen title for tab routes — pair with ScreenContainer `header`. */
 export function TabScreenHeader({
   title,
   subtitle,
@@ -22,6 +22,9 @@ export function TabScreenHeader({
   showBrand = true,
   style,
 }: TabScreenHeaderProps) {
+  const theme = useAppTheme();
+  const styles = useThemedStyles(createStyles);
+
   return (
     <View style={[styles.wrap, style]}>
       <View style={styles.row}>
@@ -37,7 +40,7 @@ export function TabScreenHeader({
         {right ? <View style={styles.right}>{right}</View> : null}
       </View>
       <LinearGradient
-        colors={[...BrandGradients.border.default]}
+        colors={[...theme.brandGradients.border.default]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0 }}
         style={styles.accentLine}
@@ -46,26 +49,28 @@ export function TabScreenHeader({
   );
 }
 
-const styles = StyleSheet.create({
-  wrap: {
-    gap: Spacing.sm,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: Spacing.md,
-  },
-  textBlock: {
-    flex: 1,
-    gap: Spacing.xs,
-  },
-  right: {
-    paddingTop: 2,
-  },
-  accentLine: {
-    width: 48,
-    height: 3,
-    borderRadius: 2,
-  },
-});
+function createStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    wrap: {
+      gap: theme.spacing.sm,
+    },
+    row: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      justifyContent: 'space-between',
+      gap: theme.spacing.md,
+    },
+    textBlock: {
+      flex: 1,
+      gap: theme.spacing.xs,
+    },
+    right: {
+      paddingTop: 2,
+    },
+    accentLine: {
+      width: 48,
+      height: 3,
+      borderRadius: 2,
+    },
+  });
+}

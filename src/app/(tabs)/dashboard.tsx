@@ -21,7 +21,8 @@ import { StatCard } from '@/components/layout/StatCard';
 import { AppText } from '@/components/ui/AppText';
 import { HOME_ACTIVITY_OPTIONS } from '@/constants/activityOptions';
 import { HeroImages } from '@/constants/imagery';
-import { LiftFlowColors, Spacing } from '@/constants/theme';
+import { Spacing } from '@/constants/theme';
+import { useLiftFlowTheme } from '@/hooks/useLiftFlowTheme';
 import { usePlanAdjustment } from '@/contexts/PlanAdjustmentContext';
 import { useAppResume } from '@/hooks/useAppResume';
 import { useAuth } from '@/hooks/useAuth';
@@ -74,6 +75,7 @@ export default function DashboardScreen() {
   const { startSessionFromPlanned, refreshSession } = useWorkoutSession();
   const { setPlannedWorkout, setExercises } = useWorkoutPlanDraft();
   const { tabataModeEnabled } = useTabataModePreference();
+  const colors = useLiftFlowTheme();
   const { locations, selectedId } = useWorkoutLocations(user?.id);
   const [data, setData] = useState<DashboardSummary | null>(null);
   const [recoveryScore, setRecoveryScore] = useState<number | null>(null);
@@ -520,7 +522,7 @@ export default function DashboardScreen() {
             setRefreshing(true);
             load();
           }}
-          tintColor={LiftFlowColors.primary}
+          tintColor={colors.primary}
         />
       }>
       <HeroPhotoBanner

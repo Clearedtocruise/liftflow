@@ -1,7 +1,10 @@
 import type { ReactNode } from 'react';
+import { useMemo } from 'react';
 import { Pressable, StyleSheet, View, type ViewProps } from 'react-native';
 
-import { LiftFlowColors, Radius, Shadows, Spacing } from '@/constants/theme';
+import type { AppTheme } from '@/constants/themes';
+import { useAppTheme } from '@/contexts/ThemeContext';
+import { useThemedStyles } from '@/hooks/useLiftFlowTheme';
 
 type CardProps = ViewProps & {
   elevated?: boolean;
@@ -13,6 +16,8 @@ type CardProps = ViewProps & {
 };
 
 export function Card({ elevated, accent, glow, onPress, onLongPress, style, children, ...rest }: CardProps) {
+  const styles = useThemedStyles(createStyles);
+
   const content = (
     <View
       style={[
@@ -42,28 +47,35 @@ export function Card({ elevated, accent, glow, onPress, onLongPress, style, chil
   return content;
 }
 
-const styles = StyleSheet.create({
-  card: {
-    backgroundColor: LiftFlowColors.surface,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: LiftFlowColors.border,
-    padding: Spacing.lg,
-    ...Shadows.card,
-  },
-  elevated: {
-    backgroundColor: LiftFlowColors.surfaceElevated,
-  },
-  accent: {
-    borderColor: LiftFlowColors.primary,
-    backgroundColor: LiftFlowColors.primaryGlow,
-  },
-  glow: {
-    borderColor: 'rgba(14, 144, 255, 0.28)',
-    ...Shadows.glow,
-  },
-  pressed: {
-    opacity: 0.92,
-    transform: [{ scale: 0.99 }],
-  },
-});
+/** Premium white card — Light Professional styling via shared Card. */
+export function PremiumCard(props: CardProps) {
+  return <Card elevated glow {...props} />;
+}
+
+function createStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    card: {
+      backgroundColor: theme.colors.card,
+      borderRadius: theme.radius.lg,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      padding: theme.spacing.lg,
+      ...theme.shadows.card,
+    },
+    elevated: {
+      backgroundColor: theme.colors.surfaceElevated,
+    },
+    accent: {
+      borderColor: theme.colors.primary,
+      backgroundColor: theme.colors.primaryGlow,
+    },
+    glow: {
+      borderColor: theme.isDark ? 'rgba(14, 144, 255, 0.28)' : 'rgba(22, 119, 255, 0.22)',
+      ...theme.shadows.glow,
+    },
+    pressed: {
+      opacity: 0.92,
+      transform: [{ scale: 0.99 }],
+    },
+  });
+}
