@@ -1,4 +1,5 @@
-import { applyEquipmentSubstitutionsToExercises, findEquipmentSubstitute } from '../equipmentSubstitutionEngine.js';
+import { isCatalogVariantSlug } from '../exerciseCatalogDedup.js';
+import { findEquipmentSubstitute } from '../equipmentSubstitutionEngine.js';
 import { applySubstitutionsToExercises, type LimitationContext } from '../exerciseSubstitution.js';
 import { maxPatternUsesForDayFocus, patternExclusionGroupId } from '../movementPatternExclusion.js';
 import { applyWeeklyProgression } from '../programProgression.js';
@@ -45,17 +46,38 @@ function findExerciseInPool(
   name: string,
   slug: string,
   pool: ExerciseRecord[],
+  usedSlugs?: Set<string>,
 ): ExerciseRecord | undefined {
   const byExactSlug = pool.find((exercise) => exercise.slug === slug);
-  if (byExactSlug) return byExactSlug;
+  if (byExactSlug && (!usedSlugs || !usedSlugs.has(byExactSlug.slug))) return byExactSlug;
 
   const target = normalizeName(name);
   const matches = pool.filter((exercise) => normalizeName(exercise.name) === target);
   if (matches.length === 0) return undefined;
 
-  return (
-    matches.find((exercise) => !/-(?:qd|ba|la|ch)\d+$/i.test(exercise.slug)) ?? matches[0]
-  );
+  const sorted = [...matches].sort((a, b) => {
+    const aUsed = usedSlugs?.has(a.slug) ? 1 : 0;
+    const bUsed = usedSlugs?.has(b.slug) ? 1 : 0;
+    if (aUsed !== bUsed) return aUsed - bUsed;
+    const aVariant = isCatalogVariantSlug(a.slug) ? 1 : 0;
+    const bVariant = isCatalogVariantSlug(b.slug) ? 1 : 0;
+    if (aVariant !== bVariant) return aVariant - bVariant;
+    return a.slug.length - b.slug.length;
+  });
+
+  return sorted.find((exercise) => !usedSlugs?.has(exercise.slug)) ?? sorted[0];
+}
+
+function maxMovementFamilyUses(plan: DayFocusPlan | null, family: string): number {
+  if (!plan) return 99;
+  if (family === 'horizontal_press') {
+    return plan.key === 'chest_shoulders_triceps' ? 2 : 1;
+  }
+  if (family === 'vertical_press') return 1;
+  if (['core', 'core_rotation', 'core_anti_extension', 'core_flexion'].includes(family)) {
+    return 2;
+  }
+  return 99;
 }
 
 function resolveBlockExercise(
@@ -69,6 +91,8 @@ function resolveBlockExercise(
     rotationSeed: number;
     recentSlugs: Set<string>;
     usedSlugs: Set<string>;
+    usedNormalizedNames: Set<string>;
+    usedMovementFamilies: Map<string, number>;
     dayFocusPlan: DayFocusPlan | null;
     patternGroupUses: Map<string, number>;
   },
@@ -77,7 +101,14 @@ function resolveBlockExercise(
 
   function isAccepted(exercise: ExerciseRecord | null | undefined): exercise is ExerciseRecord {
     if (!exercise || !exerciseMeetsEquipment(exercise, available)) return false;
+    if (options.usedSlugs.has(exercise.slug)) return false;
+    if (options.usedNormalizedNames.has(normalizeName(exercise.name))) return false;
     if (options.dayFocusPlan && !isAllowedOnDayFocus(exercise, options.dayFocusPlan)) return false;
+    const family = exercise.metadata?.movement_family ?? '';
+    if (family) {
+      const familyUsed = options.usedMovementFamilies.get(family) ?? 0;
+      if (familyUsed >= maxMovementFamilyUses(options.dayFocusPlan, family)) return false;
+    }
     const groupId = patternExclusionGroupId(exercise.slug);
     if (groupId && options.dayFocusPlan) {
       const max = maxPatternUsesForDayFocus(options.dayFocusPlan.key, groupId);
@@ -88,6 +119,12 @@ function resolveBlockExercise(
   }
 
   function registerPatternUse(exercise: ExerciseRecord): void {
+    options.usedSlugs.add(exercise.slug);
+    options.usedNormalizedNames.add(normalizeName(exercise.name));
+    const family = exercise.metadata?.movement_family;
+    if (family) {
+      options.usedMovementFamilies.set(family, (options.usedMovementFamilies.get(family) ?? 0) + 1);
+    }
     const groupId = patternExclusionGroupId(exercise.slug);
     if (groupId) {
       options.patternGroupUses.set(groupId, (options.patternGroupUses.get(groupId) ?? 0) + 1);
@@ -104,10 +141,10 @@ function resolveBlockExercise(
   let catalogExercise: ExerciseRecord | undefined;
 
   if (options.useExactPrescription) {
-    catalogExercise = findExerciseInPool(block.name, blueprintSlug, pool);
+    catalogExercise = findExerciseInPool(block.name, blueprintSlug, pool, options.usedSlugs);
     if (!catalogExercise) {
       const fallbackSlug = blueprintSlug.replace(/-ba\d+$/, '').replace(/-la\d+$/, '');
-      catalogExercise = findExerciseInPool(block.name, fallbackSlug, pool);
+      catalogExercise = findExerciseInPool(block.name, fallbackSlug, pool, options.usedSlugs);
     }
   } else {
     catalogExercise =
@@ -119,7 +156,7 @@ function resolveBlockExercise(
         options.recentSlugs,
         options.usedSlugs,
         blueprintSlug,
-      ) ?? findExerciseInPool(block.name, blueprintSlug, pool);
+      ) ?? findExerciseInPool(block.name, blueprintSlug, pool, options.usedSlugs);
   }
 
   if (isAccepted(catalogExercise)) {
@@ -138,7 +175,7 @@ function resolveBlockExercise(
 
   const swap = findEquipmentSubstitute(block.name, equipmentList, pool);
   if (swap) {
-    const swapped = findExerciseInPool(swap.to, resolveSlugForName(swap.to), pool);
+    const swapped = findExerciseInPool(swap.to, resolveSlugForName(swap.to), pool, options.usedSlugs);
     if (isAccepted(swapped)) {
       registerPatternUse(swapped);
       return { catalogExercise: swapped, swapNote: swap.reason };
@@ -243,6 +280,11 @@ function formatExerciseNotes(block: Month1ExerciseBlock, workoutNotes?: string, 
   return parts.join(' · ');
 }
 
+export function slotLabelKey(label: string): string {
+  const tokens = label.toLowerCase().match(/[a-z]+/g) ?? [];
+  return [...new Set(tokens)].sort().join('|');
+}
+
 export function getMonth1Workout(week: number, dayIndex: number): Month1Workout | null {
   return (
     MONTH1_WORKOUTS.find((workout) => workout.week === week && workout.dayIndex === dayIndex) ?? null
@@ -254,19 +296,34 @@ export function resolveMonth1Workout(
   dayIndex: number,
   slotLabel: string,
 ): Month1Workout | null {
-  const direct = getMonth1Workout(week, dayIndex);
-  if (direct) return direct;
-
+  const slotKey = slotLabelKey(slotLabel);
   const bySlot = MONTH1_WORKOUTS.filter(
-    (workout) => workout.week === week && workout.slotLabel === slotLabel,
+    (workout) => workout.week === week && slotLabelKey(workout.slotLabel) === slotKey,
   );
   if (bySlot.length === 1) return bySlot[0];
 
-  const byLabelAnyWeek = MONTH1_WORKOUTS.filter((workout) => workout.slotLabel === slotLabel);
+  const direct = getMonth1Workout(week, dayIndex);
+  if (direct && slotLabelKey(direct.slotLabel) === slotKey) return direct;
+
+  const byLabelAnyWeek = MONTH1_WORKOUTS.filter(
+    (workout) => slotLabelKey(workout.slotLabel) === slotKey,
+  );
   if (byLabelAnyWeek.length > 0) {
     return byLabelAnyWeek[(week - 1) % byLabelAnyWeek.length] ?? byLabelAnyWeek[0];
   }
   return null;
+}
+
+function dedupeExercisesByName<T extends { name: string }>(exercises: T[]): T[] {
+  const seen = new Set<string>();
+  const result: T[] = [];
+  for (const exercise of exercises) {
+    const key = normalizeName(exercise.name);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(exercise);
+  }
+  return result;
 }
 
 type BuildReferenceOptions = {
@@ -311,6 +368,8 @@ export async function buildReferenceStyleWorkoutPlan(
     if (history.sessions?.length) recentSlugs.add(slug);
   }
   const usedSlugs = new Set<string>();
+  const usedNormalizedNames = new Set<string>();
+  const usedMovementFamilies = new Map<string, number>();
   const patternGroupUses = new Map<string, number>();
 
   const draft: Array<
@@ -330,6 +389,8 @@ export async function buildReferenceStyleWorkoutPlan(
         rotationSeed,
         recentSlugs,
         usedSlugs,
+        usedNormalizedNames,
+        usedMovementFamilies,
         dayFocusPlan,
         patternGroupUses,
       },
@@ -341,7 +402,6 @@ export async function buildReferenceStyleWorkoutPlan(
 
     const resolvedName = catalogExercise.name;
     const resolvedSlug = catalogExercise.slug;
-    usedSlugs.add(catalogExercise.slug);
 
     let sets = block.sets;
     if (recoveryMods.volumeMultiplier < 1) {
@@ -386,26 +446,7 @@ export async function buildReferenceStyleWorkoutPlan(
     limitations as LimitationContext[],
   );
 
-  if (equipmentList.length) {
-    const swapped = applyEquipmentSubstitutionsToExercises(exercises, equipmentList, pool);
-    exercises = swapped.exercises.map((exercise) => {
-      const catalog = findExerciseInPool(exercise.name, resolveSlugForName(exercise.name), pool);
-      if (catalog && (!dayFocusPlan || isAllowedOnDayFocus(catalog, dayFocusPlan))) {
-        return exercise;
-      }
-      const reswap = findEquipmentSubstitute(exercise.name, equipmentList, pool);
-      if (!reswap) return exercise;
-      const replacement = findExerciseInPool(reswap.to, resolveSlugForName(reswap.to), pool);
-      if (!replacement || (dayFocusPlan && !isAllowedOnDayFocus(replacement, dayFocusPlan))) {
-        return exercise;
-      }
-      return {
-        ...exercise,
-        name: reswap.to,
-        notes: [exercise.notes, reswap.reason].filter(Boolean).join(' · '),
-      };
-    });
-  }
+  exercises = dedupeExercisesByName(exercises);
 
   exercises = applyWeeklyProgression(
     exercises,

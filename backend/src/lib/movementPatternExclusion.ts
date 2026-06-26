@@ -11,6 +11,14 @@ export const MOVEMENT_PATTERN_EXCLUSION_GROUPS: string[][] = [
   ['barbell-row', 'dumbbell-row', 'band-row', 'seated-cable-row'],
   ['overhead-press', 'dumbbell-shoulder-press', 'seated-dumbbell-shoulder-press'],
   ['bench-press', 'incline-bench-press', 'dumbbell-bench-press', 'push-up', 'band-chest-press', 'cable-fly'],
+  [
+    'close-grip-bench-press',
+    'trap-bar-close-grip-press',
+    'trap-bar-floor-press',
+    'trap-bar-incline-press',
+    'smith-close-grip-press',
+  ],
+  ['pallof-press'],
   ['plank'],
   ['side-plank'],
   ['hanging-leg-raise'],
@@ -64,7 +72,11 @@ export function maxPatternUsesForDayFocus(dayFocusKey: string | undefined, patte
 }
 
 export function patternExclusionGroupId(slug: string): string | null {
-  return slugToPatternGroup.get(slug) ?? null;
+  const direct = slugToPatternGroup.get(slug);
+  if (direct) return direct;
+  if (slug === 'pallof-press' || slug.startsWith('pallof-press-')) return 'pallof-press';
+  if (slug.includes('half-kneeling-pallof') || slug.includes('anti-rotation')) return 'pallof-press';
+  return null;
 }
 
 export function sharesPatternFamily(slugA: string, slugB: string): boolean {

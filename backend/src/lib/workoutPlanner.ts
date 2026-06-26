@@ -1,4 +1,5 @@
 import { expandEquipmentRequirements } from './equipmentCatalog.js';
+import { isCatalogVariantSlug } from './exerciseCatalogDedup.js';
 import {
     applySubstitutionsToExercises,
     type LimitationContext,
@@ -432,7 +433,8 @@ export async function loadAvailableExercises(
       ...row,
       metadata: (row.metadata ?? {}) as ExerciseRecord['metadata'],
     }))
-    .filter((exercise) => exerciseMeetsEquipment(exercise, available));
+    .filter((exercise) => exerciseMeetsEquipment(exercise, available))
+    .filter((exercise) => !isCatalogVariantSlug(exercise.slug));
 
   if (filtered.length < WORKOUT_TARGET_EXERCISES) {
     const expanded = expandAvailableEquipment([...equipment, 'bodyweight']);
@@ -441,7 +443,8 @@ export async function loadAvailableExercises(
         ...row,
         metadata: (row.metadata ?? {}) as ExerciseRecord['metadata'],
       }))
-      .filter((exercise) => exerciseMeetsEquipment(exercise, expanded));
+      .filter((exercise) => exerciseMeetsEquipment(exercise, expanded))
+      .filter((exercise) => !isCatalogVariantSlug(exercise.slug));
 
     const bySlug = new Map<string, ExerciseRecord>();
     for (const exercise of [...filtered, ...supplemental]) {
@@ -645,11 +648,13 @@ export function selectFocusedSplitExercises(
   const eligible = pool.filter((exercise) => isAllowedOnDayFocus(exercise, plan));
   const selected: ExerciseRecord[] = [];
   const usedSlugs = new Set<string>();
+  const usedNormalizedNames = new Set<string>();
   const patternUseCounts = new Map<string, number>();
 
   function registerPick(exercise: ExerciseRecord): void {
     selected.push(exercise);
     usedSlugs.add(exercise.slug);
+    usedNormalizedNames.add(exercise.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim());
     const patternGroup = patternExclusionGroupId(exercise.slug);
     if (patternGroup) {
       patternUseCounts.set(patternGroup, (patternUseCounts.get(patternGroup) ?? 0) + 1);
@@ -675,6 +680,8 @@ export function selectFocusedSplitExercises(
 
   function canPick(exercise: ExerciseRecord, allowProgramReuse = false, relaxPatterns = false): boolean {
     if (usedSlugs.has(exercise.slug)) return false;
+    const normalizedName = exercise.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    if (usedNormalizedNames.has(normalizedName)) return false;
     if (!allowProgramReuse && programRecentSlugs?.has(exercise.slug)) return false;
     const patternGroup = patternExclusionGroupId(exercise.slug);
     if (patternGroup) {

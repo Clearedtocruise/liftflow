@@ -42,6 +42,12 @@ test('pattern exclusion groups dedupe squat and deadlift families', () => {
   assert.ok(sharesPatternFamily('walking-lunge', 'bulgarian-split-squat'));
 });
 
+test('pallof press catalog variants share one pattern group', () => {
+  assert.equal(patternExclusionGroupId('pallof-press'), 'pallof-press');
+  assert.equal(patternExclusionGroupId('pallof-press-ch0046'), 'pallof-press');
+  assert.ok(sharesPatternFamily('trap-bar-close-grip-press', 'trap-bar-floor-press'));
+});
+
 test('20 generated lower workouts avoid duplicate pattern families', () => {
   const recentSlugs = new Map<string, Date>();
   const violations: string[] = [];
