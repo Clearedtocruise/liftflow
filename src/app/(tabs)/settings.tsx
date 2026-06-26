@@ -17,13 +17,15 @@ import {
     isWorkoutLocationDetectionEnabled,
     PRIVACY_WORKOUT_LOCATION_DETECTION,
 } from '@/constants/locationPreferences';
-import { Brand, LiftFlowColors, Radius, Spacing } from '@/constants/theme';
+import { Brand, Spacing } from '@/constants/theme';
+import type { AppTheme } from '@/constants/themes';
 import { summarizeGoals } from '@/constants/trainingGoals';
 import { getPrimaryGymLabel, summarizeEquipment } from '@/constants/trainingProfile';
 import { summarizeUnitPreferences } from '@/constants/units';
 import { usePlanAdjustment } from '@/contexts/PlanAdjustmentContext';
 import { useThemeControl } from '@/contexts/ThemeContext';
 import { useAuth } from '@/hooks/useAuth';
+import { useLiftFlowTheme, useThemedStyles } from '@/hooks/useLiftFlowTheme';
 import { useSubscription } from '@/hooks/useSubscription';
 import { useUnits } from '@/hooks/useUnits';
 import { loadRolloverValidationState, type RolloverValidationState } from '@/lib/rolloverDebug';
@@ -47,9 +49,11 @@ import { useGymModeVoiceScope } from '@/voice/useGymModeVoiceScope';
 import { useVoiceWorkout } from '@/voice/useVoiceWorkout';
 
 export default function SettingsScreen() {
+  const styles = useThemedStyles(createSettingsStyles);
   const { user, signOut, refreshProfile, deleteAccount } = useAuth();
   const { bumpRevision, dismiss } = usePlanAdjustment();
   const { themeId, setThemeId } = useThemeControl();
+  const colors = useLiftFlowTheme();
   const { hydrate: hydrateWorkoutSession } = useWorkoutSession();
   const units = useUnits();
   const { isPremium, isFounder, isBetaTester } = useSubscription();
@@ -396,7 +400,7 @@ export default function SettingsScreen() {
           label="Tabata mode"
           value={tabataMode ? `On · ${tabataModeSummary()}` : 'Off'}
           icon={
-            <AppSymbol name="timer" fallback="⏱" size={20} tintColor={LiftFlowColors.textSecondary} />
+            <AppSymbol name="timer" fallback="⏱" size={20} tintColor={colors.textSecondary} />
           }
           onPress={async () => {
             if (!user) return;
@@ -419,7 +423,7 @@ export default function SettingsScreen() {
           label="Gym arrival detection"
           value={locationDetection ? 'On' : 'Off'}
           icon={
-            <AppSymbol name="location.fill" fallback={SYMBOL_FALLBACKS['location.fill'] ?? '◎'} size={20} tintColor={LiftFlowColors.textSecondary} />
+            <AppSymbol name="location.fill" fallback={SYMBOL_FALLBACKS['location.fill'] ?? '◎'} size={20} tintColor={colors.textSecondary} />
           }
           onPress={toggleLocationDetection}
         />
@@ -427,7 +431,7 @@ export default function SettingsScreen() {
           label="Device location access"
           value={locationPermission}
           icon={
-            <AppSymbol name="location.circle.fill" fallback="◎" size={20} tintColor={LiftFlowColors.textSecondary} />
+            <AppSymbol name="location.circle.fill" fallback="◎" size={20} tintColor={colors.textSecondary} />
           }
           onPress={async () => {
             const result = await deviceLocationService.requestForegroundPermission();
@@ -450,7 +454,7 @@ export default function SettingsScreen() {
           label="Workouts per week"
           value={user ? summarizeTrainingSchedule(resolveDaysPerWeek(user)) : 'Not set'}
           icon={
-            <AppSymbol name="calendar" fallback="📅" size={20} tintColor={LiftFlowColors.textSecondary} />
+            <AppSymbol name="calendar" fallback="📅" size={20} tintColor={colors.textSecondary} />
           }
           onPress={() => router.push('/(features)/training-schedule')}
         />
@@ -464,7 +468,7 @@ export default function SettingsScreen() {
                 : 'Set goals'
           }
           icon={
-            <AppSymbol name="target" fallback="🎯" size={20} tintColor={LiftFlowColors.textSecondary} />
+            <AppSymbol name="target" fallback="🎯" size={20} tintColor={colors.textSecondary} />
           }
           onPress={() => router.push('/(features)/training-goals')}
         />
@@ -472,7 +476,7 @@ export default function SettingsScreen() {
           label="Units"
           value={user ? summarizeUnitPreferences(resolveUnitPreferences(user)) : 'Not set'}
           icon={
-            <AppSymbol name="ruler.fill" fallback="📏" size={20} tintColor={LiftFlowColors.textSecondary} />
+            <AppSymbol name="ruler.fill" fallback="📏" size={20} tintColor={colors.textSecondary} />
           }
           onPress={() => router.push('/(features)/unit-preferences')}
         />
@@ -480,7 +484,7 @@ export default function SettingsScreen() {
           label="Gym equipment"
           value={user?.availableEquipment?.length ? summarizeEquipment(user.availableEquipment) : 'Set up equipment'}
           icon={
-            <AppSymbol name="dumbbell.fill" fallback="🏋" size={20} tintColor={LiftFlowColors.textSecondary} />
+            <AppSymbol name="dumbbell.fill" fallback="🏋" size={20} tintColor={colors.textSecondary} />
           }
           onPress={() => router.push('/(features)/equipment')}
         />
@@ -492,7 +496,7 @@ export default function SettingsScreen() {
               : 'Allergies, diet, schedule'
           }
           icon={
-            <AppSymbol name="leaf.fill" fallback="🥗" size={20} tintColor={LiftFlowColors.textSecondary} />
+            <AppSymbol name="leaf.fill" fallback="🥗" size={20} tintColor={colors.textSecondary} />
           }
           onPress={() => router.push('/(features)/nutrition-preferences')}
         />
@@ -500,7 +504,7 @@ export default function SettingsScreen() {
           label="Workout locations"
           value={user ? (getPrimaryGymLabel(user) ?? 'Add gyms') : 'Add gyms'}
           icon={
-            <AppSymbol name="figure.strengthtraining.traditional" fallback={SYMBOL_FALLBACKS['figure.strengthtraining.traditional']} size={20} tintColor={LiftFlowColors.textSecondary} />
+            <AppSymbol name="figure.strengthtraining.traditional" fallback={SYMBOL_FALLBACKS['figure.strengthtraining.traditional']} size={20} tintColor={colors.textSecondary} />
           }
           onPress={() => router.push('/(features)/training-profile')}
         />
@@ -514,7 +518,7 @@ export default function SettingsScreen() {
           label="Weight"
           value={user?.weightKg ? units.formatWeight(user.weightKg) : 'Not set'}
           icon={
-            <AppSymbol name="figure.stand" fallback={SYMBOL_FALLBACKS['figure.stand']} size={20} tintColor={LiftFlowColors.textSecondary} />
+            <AppSymbol name="figure.stand" fallback={SYMBOL_FALLBACKS['figure.stand']} size={20} tintColor={colors.textSecondary} />
           }
           onPress={() => router.push('/(tabs)/progress')}
         />
@@ -522,14 +526,14 @@ export default function SettingsScreen() {
           label="AI Coaching Hub"
           value={`${user?.trainingExperience ?? 'Beginner'} · Recovery, training, nutrition`}
           icon={
-            <AppSymbol name="person.fill" fallback={SYMBOL_FALLBACKS['person.fill']} size={20} tintColor={LiftFlowColors.textSecondary} />
+            <AppSymbol name="person.fill" fallback={SYMBOL_FALLBACKS['person.fill']} size={20} tintColor={colors.textSecondary} />
           }
           onPress={() => router.push('/(tabs)/coaching')}
         />
         <SettingsRow
           label="Daily recovery check-in"
           icon={
-            <AppSymbol name="heart.fill" fallback="♥" size={20} tintColor={LiftFlowColors.textSecondary} />
+            <AppSymbol name="heart.fill" fallback="♥" size={20} tintColor={colors.textSecondary} />
           }
           onPress={() => router.push('/(features)/recovery-check-in')}
         />
@@ -542,21 +546,21 @@ export default function SettingsScreen() {
         <SettingsRow
           label="Workout PDF"
           icon={
-            <AppSymbol name="doc.text" fallback={SYMBOL_FALLBACKS['doc.text']} size={20} tintColor={LiftFlowColors.textSecondary} />
+            <AppSymbol name="doc.text" fallback={SYMBOL_FALLBACKS['doc.text']} size={20} tintColor={colors.textSecondary} />
           }
           onPress={() => handleExport('workout', 'Workout Export')}
         />
         <SettingsRow
           label="Progress PDF"
           icon={
-            <AppSymbol name="chart.line.uptrend.xyaxis" fallback={SYMBOL_FALLBACKS['chart.line.uptrend.xyaxis']} size={20} tintColor={LiftFlowColors.textSecondary} />
+            <AppSymbol name="chart.line.uptrend.xyaxis" fallback={SYMBOL_FALLBACKS['chart.line.uptrend.xyaxis']} size={20} tintColor={colors.textSecondary} />
           }
           onPress={() => handleExport('progress_summary', 'Progress Export')}
         />
         <SettingsRow
           label="Nutrition PDF"
           icon={
-            <AppSymbol name="leaf.fill" fallback={SYMBOL_FALLBACKS['leaf.fill']} size={20} tintColor={LiftFlowColors.textSecondary} />
+            <AppSymbol name="leaf.fill" fallback={SYMBOL_FALLBACKS['leaf.fill']} size={20} tintColor={colors.textSecondary} />
           }
           onPress={() => handleExport('meal_plan', 'Nutrition Export')}
         />
@@ -583,7 +587,7 @@ export default function SettingsScreen() {
               : 'Free'
           }
           icon={
-            <AppSymbol name="creditcard.fill" fallback={SYMBOL_FALLBACKS['creditcard.fill']} size={20} tintColor={LiftFlowColors.textSecondary} />
+            <AppSymbol name="creditcard.fill" fallback={SYMBOL_FALLBACKS['creditcard.fill']} size={20} tintColor={colors.textSecondary} />
           }
           onPress={() => router.push(isPremium ? '/(features)/manage-subscription' : '/(features)/upgrade')}
         />
@@ -591,7 +595,7 @@ export default function SettingsScreen() {
           label="Compare plans"
           value="Free vs Pro"
           icon={
-            <AppSymbol name="sparkles" fallback={SYMBOL_FALLBACKS.sparkles} size={20} tintColor={LiftFlowColors.textSecondary} />
+            <AppSymbol name="sparkles" fallback={SYMBOL_FALLBACKS.sparkles} size={20} tintColor={colors.textSecondary} />
           }
           onPress={() => router.push('/(features)/subscription')}
         />
@@ -605,7 +609,7 @@ export default function SettingsScreen() {
           label="Health & Strava"
           value="Sync settings"
           icon={
-            <AppSymbol name="heart.text.square.fill" fallback={SYMBOL_FALLBACKS['heart.text.square.fill']} size={20} tintColor={LiftFlowColors.textSecondary} />
+            <AppSymbol name="heart.text.square.fill" fallback={SYMBOL_FALLBACKS['heart.text.square.fill']} size={20} tintColor={colors.textSecondary} />
           }
           onPress={() => router.push('/(features)/healthkit')}
         />
@@ -618,28 +622,28 @@ export default function SettingsScreen() {
         <SettingsRow
           label="Privacy Policy"
           icon={
-            <AppSymbol name="hand.raised.fill" fallback={SYMBOL_FALLBACKS['hand.raised.fill']} size={20} tintColor={LiftFlowColors.textSecondary} />
+            <AppSymbol name="hand.raised.fill" fallback={SYMBOL_FALLBACKS['hand.raised.fill']} size={20} tintColor={colors.textSecondary} />
           }
           onPress={() => router.push('/legal/privacy')}
         />
         <SettingsRow
           label="Terms of Service"
           icon={
-            <AppSymbol name="doc.text" fallback={SYMBOL_FALLBACKS['doc.text']} size={20} tintColor={LiftFlowColors.textSecondary} />
+            <AppSymbol name="doc.text" fallback={SYMBOL_FALLBACKS['doc.text']} size={20} tintColor={colors.textSecondary} />
           }
           onPress={() => router.push('/legal/terms')}
         />
         <SettingsRow
           label="Subscription Terms"
           icon={
-            <AppSymbol name="creditcard.fill" fallback={SYMBOL_FALLBACKS['creditcard.fill']} size={20} tintColor={LiftFlowColors.textSecondary} />
+            <AppSymbol name="creditcard.fill" fallback={SYMBOL_FALLBACKS['creditcard.fill']} size={20} tintColor={colors.textSecondary} />
           }
           onPress={() => router.push('/legal/subscription-terms')}
         />
         <SettingsRow
           label="Contact Support"
           icon={
-            <AppSymbol name="envelope.fill" fallback={SYMBOL_FALLBACKS['envelope.fill']} size={20} tintColor={LiftFlowColors.textSecondary} />
+            <AppSymbol name="envelope.fill" fallback={SYMBOL_FALLBACKS['envelope.fill']} size={20} tintColor={colors.textSecondary} />
           }
           onPress={() => router.push('/legal/support')}
         />
@@ -684,7 +688,7 @@ export default function SettingsScreen() {
           <SettingsRow
             label="QA Checklist"
             value="Founder device verification"
-            icon={<AppSymbol name="checklist" fallback="✓" size={20} tintColor={LiftFlowColors.textSecondary} />}
+            icon={<AppSymbol name="checklist" fallback="✓" size={20} tintColor={colors.textSecondary} />}
             onPress={() => router.push('/(features)/qa-checklist')}
           />
         </Card>
@@ -697,7 +701,7 @@ export default function SettingsScreen() {
           label="Reset Workout Data"
           value={resetting ? 'Resetting…' : undefined}
           icon={
-            <AppSymbol name="arrow.counterclockwise" fallback="↺" size={20} tintColor={LiftFlowColors.textSecondary} />
+            <AppSymbol name="arrow.counterclockwise" fallback="↺" size={20} tintColor={colors.textSecondary} />
           }
           onPress={resetting ? undefined : handleResetWorkoutData}
           testID="reset-workouts-button"
@@ -706,7 +710,7 @@ export default function SettingsScreen() {
           label="Reset Nutrition Data"
           value={resetting ? 'Resetting…' : undefined}
           icon={
-            <AppSymbol name="arrow.counterclockwise" fallback="↺" size={20} tintColor={LiftFlowColors.textSecondary} />
+            <AppSymbol name="arrow.counterclockwise" fallback="↺" size={20} tintColor={colors.textSecondary} />
           }
           onPress={resetting ? undefined : handleResetNutritionData}
           testID="reset-nutrition-button"
@@ -715,7 +719,7 @@ export default function SettingsScreen() {
           label="Reset Workout + Nutrition"
           value={resetting ? 'Resetting…' : undefined}
           icon={
-            <AppSymbol name="arrow.counterclockwise" fallback="↺" size={20} tintColor={LiftFlowColors.textSecondary} />
+            <AppSymbol name="arrow.counterclockwise" fallback="↺" size={20} tintColor={colors.textSecondary} />
           }
           onPress={resetting ? undefined : handleResetWorkoutAndNutritionData}
           testID="reset-all-button"
@@ -724,7 +728,7 @@ export default function SettingsScreen() {
           label="Full Test Reset"
           value={resetting ? 'Resetting…' : 'Includes equipment'}
           icon={
-            <AppSymbol name="arrow.counterclockwise" fallback="↺" size={20} tintColor={LiftFlowColors.textSecondary} />
+            <AppSymbol name="arrow.counterclockwise" fallback="↺" size={20} tintColor={colors.textSecondary} />
           }
           onPress={resetting ? undefined : handleFullTestReset}
         />
@@ -767,6 +771,8 @@ function ValidationDebugPanel({
   state: RolloverValidationState | null;
   onRefresh: () => void;
 }) {
+  const styles = useThemedStyles(createSettingsStyles);
+
   if (!state) {
     return (
       <View style={styles.validationPanel}>
@@ -816,6 +822,8 @@ function BetaInviteRow({
   isBetaTester: boolean;
   onRedeemed: () => Promise<void>;
 }) {
+  const styles = useThemedStyles(createSettingsStyles);
+  const colors = useLiftFlowTheme();
   const [code, setCode] = useState('');
   const [status, setStatus] = useState<string | null>(null);
 
@@ -844,7 +852,7 @@ function BetaInviteRow({
       <TextInput
         style={styles.inviteInput}
         placeholder="Beta invite code"
-        placeholderTextColor={LiftFlowColors.textTertiary}
+        placeholderTextColor={colors.textTertiary}
         value={code}
         onChangeText={setCode}
         autoCapitalize="characters"
@@ -862,7 +870,8 @@ function BetaInviteRow({
   );
 }
 
-const styles = StyleSheet.create({
+function createSettingsStyles(theme: AppTheme) {
+  return StyleSheet.create({
   header: {
     gap: Spacing.xs,
     marginBottom: Spacing.xxl,
@@ -871,7 +880,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 3,
     borderRadius: 2,
-    backgroundColor: LiftFlowColors.primary,
+    backgroundColor: theme.colors.primary,
     marginTop: Spacing.sm,
   },
   accessBadges: {
@@ -883,10 +892,10 @@ const styles = StyleSheet.create({
   accessBadge: {
     paddingHorizontal: Spacing.sm,
     paddingVertical: Spacing.xs,
-    borderRadius: Radius.full,
-    backgroundColor: LiftFlowColors.surfaceElevated,
+    borderRadius: theme.radius.full,
+    backgroundColor: theme.colors.surfaceElevated,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: LiftFlowColors.accent,
+    borderColor: theme.colors.accent,
   },
   sectionGap: {
     marginTop: Spacing.xxl,
@@ -910,10 +919,10 @@ const styles = StyleSheet.create({
   },
   inviteInput: {
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: LiftFlowColors.border,
-    borderRadius: 12,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
     padding: Spacing.md,
-    color: LiftFlowColors.textPrimary,
+    color: theme.colors.textPrimary,
   },
   validationPanel: {
     gap: Spacing.sm,
@@ -925,4 +934,5 @@ const styles = StyleSheet.create({
   validationValue: {
     fontFamily: 'Menlo',
   },
-});
+  });
+}

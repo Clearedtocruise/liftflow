@@ -191,6 +191,11 @@ const REQUIRED = [
     label: 'Settings tabata preference imports',
     patterns: ['isTabataModeEnabled', 'TABATA_MODE_PREF_KEY', 'tabataModeSummary'],
   },
+  {
+    file: 'src/app/(tabs)/settings.tsx',
+    label: 'Settings useAuth import',
+    patterns: ["import { useAuth } from '@/hooks/useAuth'", 'useAuth()'],
+  },
 ];
 
 let fail = 0;

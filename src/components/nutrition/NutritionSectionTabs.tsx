@@ -1,7 +1,8 @@
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/ui/AppText';
-import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
+import type { AppTheme } from '@/constants/themes';
+import { useThemedStyles } from '@/hooks/useLiftFlowTheme';
 
 export type NutritionSection = 'today' | 'week' | 'shopping';
 
@@ -17,6 +18,8 @@ const SECTIONS: { id: NutritionSection; label: string }[] = [
 ];
 
 export function NutritionSectionTabs({ active, onChange }: NutritionSectionTabsProps) {
+  const styles = useThemedStyles(createStyles);
+
   return (
     <View style={styles.row}>
       {SECTIONS.map((section) => {
@@ -36,22 +39,24 @@ export function NutritionSectionTabs({ active, onChange }: NutritionSectionTabsP
   );
 }
 
-const styles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
-  },
-  tab: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: Spacing.md,
-    borderRadius: Radius.md,
-    backgroundColor: LiftFlowColors.surface,
-    borderWidth: 1,
-    borderColor: LiftFlowColors.border,
-  },
-  tabActive: {
-    borderColor: LiftFlowColors.accent,
-    backgroundColor: LiftFlowColors.accentGlow,
-  },
-});
+function createStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    row: {
+      flexDirection: 'row',
+      gap: theme.spacing.sm,
+    },
+    tab: {
+      flex: 1,
+      alignItems: 'center',
+      paddingVertical: theme.spacing.md,
+      borderRadius: theme.radius.md,
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    tabActive: {
+      borderColor: theme.colors.accent,
+      backgroundColor: theme.colors.accentGlow,
+    },
+  });
+}

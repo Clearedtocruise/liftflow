@@ -3,40 +3,41 @@
  * Runtime theme selection lives in ThemeContext — use useAppTheme() in components.
  */
 import {
-  Brand,
-  BottomTabInset,
-  darkClassicTheme,
-  FontFamily,
-  Fonts,
-  MaxContentWidth,
-  TabBarHeight,
-  TouchTarget,
-  Typography,
+    BottomTabInset,
+    Brand,
+    darkClassicTheme,
+    FontFamily,
+    Fonts,
+    MaxContentWidth,
+    TabBarHeight,
+    TouchTarget,
+    Typography,
 } from '@/constants/themes';
+import { runtimeColors, syncRuntimeTheme } from '@/lib/themeRuntime';
 
 export {
-  Brand,
-  BottomTabInset,
-  FontFamily,
-  Fonts,
-  MaxContentWidth,
-  TabBarHeight,
-  TouchTarget,
-  Typography,
+    BottomTabInset, Brand, FontFamily,
+    Fonts,
+    MaxContentWidth,
+    TabBarHeight,
+    TouchTarget,
+    Typography
 };
 
-export type { AppTheme, ThemeColorPalette, ThemeId } from '@/constants/themes';
-export {
-  darkClassicTheme,
-  defaultThemeId,
-  lightProfessionalTheme,
-  resolveTheme,
-  themeCatalog,
-  themeOptions,
-} from '@/constants/themes';
+    export {
+        darkClassicTheme,
+        defaultThemeId,
+        lightProfessionalTheme,
+        resolveTheme,
+        themeCatalog,
+        themeOptions
+    } from '@/constants/themes';
+    export type { AppTheme, ThemeColorPalette, ThemeId } from '@/constants/themes';
 
-/** @deprecated Prefer useAppTheme().colors — defaults to Dark Classic for static imports. */
-export const LiftFlowColors = darkClassicTheme.colors;
+export { syncRuntimeTheme };
+
+/** @deprecated Prefer useAppTheme().colors — synced at runtime when theme changes. */
+export const LiftFlowColors = runtimeColors;
 
 /** @deprecated Prefer useAppTheme().brandGradients */
 export const BrandGradients = darkClassicTheme.brandGradients;
@@ -47,10 +48,10 @@ export const Shadows = darkClassicTheme.shadows;
 /** @deprecated Prefer useAppTheme().navigationTheme */
 export const NavigationTheme = darkClassicTheme.navigationTheme;
 
-/** @deprecated Prefer useAppTheme().radius */
+/** @deprecated Prefer useAppTheme().radius — use useAppTheme().radius in themed components */
 export const Radius = darkClassicTheme.radius;
 
-/** @deprecated Prefer useAppTheme().spacing */
+/** @deprecated Prefer useAppTheme().spacing — use useAppTheme().spacing in themed components */
 export const Spacing = darkClassicTheme.spacing;
 
 export type LiftFlowColor = keyof typeof LiftFlowColors;

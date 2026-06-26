@@ -1,7 +1,9 @@
 import { StyleSheet, TextInput, View, type TextInputProps } from 'react-native';
 
 import { AppText } from '@/components/ui/AppText';
-import { LiftFlowColors, Radius, Spacing, TouchTarget, Typography } from '@/constants/theme';
+import { TouchTarget, Typography } from '@/constants/theme';
+import type { AppTheme } from '@/constants/themes';
+import { useLiftFlowTheme, useThemedStyles } from '@/hooks/useLiftFlowTheme';
 
 type TextFieldProps = TextInputProps & {
   label: string;
@@ -9,6 +11,9 @@ type TextFieldProps = TextInputProps & {
 };
 
 export function TextField({ label, error, style, ...rest }: TextFieldProps) {
+  const styles = useThemedStyles(createStyles);
+  const colors = useLiftFlowTheme();
+
   return (
     <View style={styles.wrapper}>
       <AppText variant="subhead" color="textSecondary" style={styles.label}>
@@ -16,7 +21,7 @@ export function TextField({ label, error, style, ...rest }: TextFieldProps) {
       </AppText>
       <TextInput
         style={[styles.input, error && styles.inputError, style]}
-        placeholderTextColor={LiftFlowColors.textMuted}
+        placeholderTextColor={colors.textMuted}
         autoCapitalize="none"
         autoCorrect={false}
         {...rest}
@@ -30,24 +35,26 @@ export function TextField({ label, error, style, ...rest }: TextFieldProps) {
   );
 }
 
-const styles = StyleSheet.create({
-  wrapper: {
-    gap: Spacing.sm,
-  },
-  label: {
-    marginLeft: Spacing.xs,
-  },
-  input: {
-    minHeight: TouchTarget.comfortable,
-    backgroundColor: LiftFlowColors.surface,
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    borderColor: LiftFlowColors.border,
-    paddingHorizontal: Spacing.lg,
-    color: LiftFlowColors.textPrimary,
-    ...Typography.body,
-  },
-  inputError: {
-    borderColor: LiftFlowColors.error,
-  },
-});
+function createStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    wrapper: {
+      gap: theme.spacing.sm,
+    },
+    label: {
+      marginLeft: theme.spacing.xs,
+    },
+    input: {
+      minHeight: TouchTarget.comfortable,
+      backgroundColor: theme.colors.surface,
+      borderRadius: theme.radius.md,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      paddingHorizontal: theme.spacing.lg,
+      color: theme.colors.textPrimary,
+      ...Typography.body,
+    },
+    inputError: {
+      borderColor: theme.colors.error,
+    },
+  });
+}

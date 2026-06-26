@@ -1,19 +1,12 @@
-import { Stack } from 'expo-router';
-
-import { LiftFlowColors } from '@/constants/theme';
+import { ThemedStack } from '@/components/layout/ThemedStack';
 
 export default function AuthLayout() {
   return (
-    <Stack
-      screenOptions={{
-        headerShown: false,
-        contentStyle: { backgroundColor: LiftFlowColors.background },
-        animation: 'slide_from_right',
-      }}>
-      <Stack.Screen name="login" />
-      <Stack.Screen name="signup" />
-      <Stack.Screen name="forgot-password" />
-      <Stack.Screen name="reset-password" />
-    </Stack>
+    <ThemedStack>
+      <ThemedStack.Screen name="login" />
+      <ThemedStack.Screen name="signup" />
+      <ThemedStack.Screen name="forgot-password" />
+      <ThemedStack.Screen name="reset-password" />
+    </ThemedStack>
   );
 }

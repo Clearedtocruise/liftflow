@@ -1,27 +1,32 @@
-import { Stack, router } from 'expo-router';
+import { router } from 'expo-router';
 import { Pressable } from 'react-native';
 
+import { ThemedStack } from '@/components/layout/ThemedStack';
 import { AppSymbol, SYMBOL_FALLBACKS } from '@/components/ui/AppSymbol';
-import { LiftFlowColors } from '@/constants/theme';
+import { useLiftFlowTheme } from '@/hooks/useLiftFlowTheme';
 
 export default function LegalLayout() {
+  const colors = useLiftFlowTheme();
+
   return (
-    <Stack
+    <ThemedStack
+      showHeader
       screenOptions={{
-        headerShown: true,
-        headerStyle: { backgroundColor: LiftFlowColors.background },
-        headerTintColor: LiftFlowColors.textPrimary,
-        contentStyle: { backgroundColor: LiftFlowColors.background },
         headerLeft: () => (
           <Pressable onPress={() => router.back()} hitSlop={12}>
-            <AppSymbol name="chevron.left" fallback={SYMBOL_FALLBACKS['chevron.left']} size={20} tintColor={LiftFlowColors.textPrimary} />
+            <AppSymbol
+              name="chevron.left"
+              fallback={SYMBOL_FALLBACKS['chevron.left']}
+              size={20}
+              tintColor={colors.textPrimary}
+            />
           </Pressable>
         ),
       }}>
-      <Stack.Screen name="privacy" options={{ title: 'Privacy Policy' }} />
-      <Stack.Screen name="terms" options={{ title: 'Terms of Service' }} />
-      <Stack.Screen name="subscription-terms" options={{ title: 'Subscription Terms' }} />
-      <Stack.Screen name="support" options={{ title: 'Support' }} />
-    </Stack>
+      <ThemedStack.Screen name="privacy" options={{ title: 'Privacy Policy' }} />
+      <ThemedStack.Screen name="terms" options={{ title: 'Terms of Service' }} />
+      <ThemedStack.Screen name="subscription-terms" options={{ title: 'Subscription Terms' }} />
+      <ThemedStack.Screen name="support" options={{ title: 'Support' }} />
+    </ThemedStack>
   );
 }

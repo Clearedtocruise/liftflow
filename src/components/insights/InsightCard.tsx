@@ -6,7 +6,9 @@ import { GradientBorderCard } from '@/components/layout/GradientBorderCard';
 import { AppText } from '@/components/ui/AppText';
 import type { LiftFlowInsight } from '@/constants/insights/types';
 import { INSIGHT_CATEGORY_LABELS } from '@/constants/insights/types';
-import { BrandGradients, LiftFlowColors, Radius, Shadows, Spacing } from '@/constants/theme';
+import type { AppTheme } from '@/constants/themes';
+import { useAppTheme } from '@/contexts/ThemeContext';
+import { useThemedStyles } from '@/hooks/useLiftFlowTheme';
 
 type InsightCardProps = {
   insight: LiftFlowInsight;
@@ -14,10 +16,13 @@ type InsightCardProps = {
 };
 
 export function InsightCard({ insight, compact }: InsightCardProps) {
+  const theme = useAppTheme();
+  const styles = useThemedStyles(createStyles);
+
   return (
     <Animated.View entering={FadeInUp.duration(320).springify()} style={styles.wrap}>
       <GradientBorderCard intensity="subtle" innerStyle={[styles.inner, compact && styles.innerCompact]}>
-        <LinearGradient colors={[...BrandGradients.insightFill]} style={StyleSheet.absoluteFill} />
+        <LinearGradient colors={[...theme.brandGradients.insightFill]} style={StyleSheet.absoluteFill} />
         <AppText variant="label" color="accent">
           {INSIGHT_CATEGORY_LABELS[insight.category]}
         </AppText>
@@ -39,37 +44,39 @@ export function InsightCard({ insight, compact }: InsightCardProps) {
   );
 }
 
-const styles = StyleSheet.create({
-  wrap: {
-    ...Shadows.card,
-  },
-  inner: {
-    overflow: 'hidden',
-    gap: Spacing.sm,
-  },
-  innerCompact: {
-    padding: Spacing.md,
-  },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-  },
-  iconBubble: {
-    width: 40,
-    height: 40,
-    borderRadius: Radius.md,
-    backgroundColor: LiftFlowColors.primaryGlow,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: LiftFlowColors.border,
-  },
-  icon: {
-    fontSize: 20,
-    lineHeight: 24,
-  },
-  headline: {
-    flex: 1,
-  },
-});
+function createStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    wrap: {
+      ...theme.shadows.card,
+    },
+    inner: {
+      overflow: 'hidden',
+      gap: theme.spacing.sm,
+    },
+    innerCompact: {
+      padding: theme.spacing.md,
+    },
+    titleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.md,
+    },
+    iconBubble: {
+      width: 40,
+      height: 40,
+      borderRadius: theme.radius.md,
+      backgroundColor: theme.colors.primaryGlow,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    icon: {
+      fontSize: 20,
+      lineHeight: 24,
+    },
+    headline: {
+      flex: 1,
+    },
+  });
+}

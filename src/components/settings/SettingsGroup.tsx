@@ -2,13 +2,15 @@ import { Children, type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { Card } from '@/components/layout/Card';
-import { LiftFlowColors, Spacing } from '@/constants/theme';
+import type { AppTheme } from '@/constants/themes';
+import { useThemedStyles } from '@/hooks/useLiftFlowTheme';
 
 type SettingsGroupProps = {
   children: ReactNode;
 };
 
 export function SettingsGroup({ children }: SettingsGroupProps) {
+  const styles = useThemedStyles(createStyles);
   const items = Children.toArray(children).filter(Boolean);
 
   return (
@@ -23,15 +25,17 @@ export function SettingsGroup({ children }: SettingsGroupProps) {
   );
 }
 
-const styles = StyleSheet.create({
-  group: {
-    paddingVertical: Spacing.xs,
-    paddingHorizontal: Spacing.md,
-    gap: 0,
-  },
-  divider: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: LiftFlowColors.border,
-    marginLeft: 36,
-  },
-});
+function createStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    group: {
+      paddingVertical: theme.spacing.xs,
+      paddingHorizontal: theme.spacing.md,
+      gap: 0,
+    },
+    divider: {
+      height: StyleSheet.hairlineWidth,
+      backgroundColor: theme.colors.border,
+      marginLeft: 36,
+    },
+  });
+}

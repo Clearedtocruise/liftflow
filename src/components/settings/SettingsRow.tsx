@@ -1,11 +1,12 @@
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { AppSymbol, SYMBOL_FALLBACKS } from '@/components/ui/AppSymbol';
-
 import { Card } from '@/components/layout/Card';
+import { AppSymbol, SYMBOL_FALLBACKS } from '@/components/ui/AppSymbol';
 import { AppText } from '@/components/ui/AppText';
-import { LiftFlowColors, Spacing, TouchTarget } from '@/constants/theme';
+import { TouchTarget } from '@/constants/theme';
+import type { AppTheme } from '@/constants/themes';
+import { useLiftFlowTheme, useThemedStyles } from '@/hooks/useLiftFlowTheme';
 import type { ConfirmationMode } from '@/types/common';
 
 type SettingsRowProps = {
@@ -18,6 +19,9 @@ type SettingsRowProps = {
 };
 
 export function SettingsRow({ label, value, icon, onPress, destructive, testID }: SettingsRowProps) {
+  const colors = useLiftFlowTheme();
+  const styles = useThemedStyles(createStyles);
+
   return (
     <Pressable
       onPress={onPress}
@@ -38,7 +42,7 @@ export function SettingsRow({ label, value, icon, onPress, destructive, testID }
           name="chevron.right"
           fallback={SYMBOL_FALLBACKS['chevron.right']}
           size={14}
-          tintColor={LiftFlowColors.textTertiary}
+          tintColor={colors.textTertiary}
         />
       ) : null}
     </Pressable>
@@ -57,6 +61,8 @@ const MODES: { id: ConfirmationMode; label: string; description: string }[] = [
 ];
 
 export function ConfirmationModePicker({ value, onChange }: ConfirmationModePickerProps) {
+  const styles = useThemedStyles(createStyles);
+
   return (
     <Card style={styles.pickerCard}>
       <AppText variant="bodyBold" style={styles.pickerTitle}>
@@ -85,56 +91,58 @@ export function ConfirmationModePicker({ value, onChange }: ConfirmationModePick
   );
 }
 
-const styles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    minHeight: TouchTarget.comfortable,
-    gap: Spacing.md,
-    paddingVertical: Spacing.sm,
-  },
-  label: {
-    flex: 1,
-  },
-  pressed: {
-    opacity: 0.7,
-  },
-  pickerCard: {
-    gap: Spacing.sm,
-  },
-  pickerTitle: {
-    marginBottom: Spacing.sm,
-  },
-  modeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: Spacing.md,
-    borderRadius: 12,
-    gap: Spacing.md,
-  },
-  modeRowSelected: {
-    backgroundColor: LiftFlowColors.accentGlow,
-  },
-  modeText: {
-    flex: 1,
-    gap: Spacing.xs,
-  },
-  radio: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 2,
-    borderColor: LiftFlowColors.textTertiary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  radioSelected: {
-    borderColor: LiftFlowColors.accent,
-  },
-  radioDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: LiftFlowColors.accent,
-  },
-});
+function createStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    row: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      minHeight: TouchTarget.comfortable,
+      gap: theme.spacing.md,
+      paddingVertical: theme.spacing.sm,
+    },
+    label: {
+      flex: 1,
+    },
+    pressed: {
+      opacity: 0.7,
+    },
+    pickerCard: {
+      gap: theme.spacing.sm,
+    },
+    pickerTitle: {
+      marginBottom: theme.spacing.sm,
+    },
+    modeRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: theme.spacing.md,
+      borderRadius: theme.radius.md,
+      gap: theme.spacing.md,
+    },
+    modeRowSelected: {
+      backgroundColor: theme.colors.accentGlow,
+    },
+    modeText: {
+      flex: 1,
+      gap: theme.spacing.xs,
+    },
+    radio: {
+      width: 22,
+      height: 22,
+      borderRadius: theme.radius.full,
+      borderWidth: 2,
+      borderColor: theme.colors.textTertiary,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    radioSelected: {
+      borderColor: theme.colors.accent,
+    },
+    radioDot: {
+      width: 10,
+      height: 10,
+      borderRadius: theme.radius.full,
+      backgroundColor: theme.colors.accent,
+    },
+  });
+}

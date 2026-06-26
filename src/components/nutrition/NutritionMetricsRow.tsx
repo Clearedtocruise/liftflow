@@ -5,7 +5,7 @@ import { AppText } from '@/components/ui/AppText';
 import { Spacing } from '@/constants/theme';
 
 type NutritionMetricsRowProps = {
-  caloriesLabel: string;
+  caloriesLabel?: string;
   caloriesValue: string;
   caloriesFooter?: string;
   proteinLabel?: string;

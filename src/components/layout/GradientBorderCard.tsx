@@ -2,9 +2,11 @@ import { LinearGradient } from 'expo-linear-gradient';
 import type { ReactNode } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
-import { BrandGradients, LiftFlowColors, Radius, Spacing } from '@/constants/theme';
+import type { AppTheme, BrandGradientSet } from '@/constants/themes';
+import { useAppTheme } from '@/contexts/ThemeContext';
+import { useThemedStyles } from '@/hooks/useLiftFlowTheme';
 
-type GradientIntensity = keyof typeof BrandGradients.border;
+type GradientIntensity = keyof BrandGradientSet['border'];
 
 type GradientBorderCardProps = {
   children: ReactNode;
@@ -13,17 +15,19 @@ type GradientBorderCardProps = {
   intensity?: GradientIntensity;
 };
 
-/** ONE MORE signature gradient border — use for coach, hero, and insight surfaces. */
 export function GradientBorderCard({
   children,
   style,
   innerStyle,
   intensity = 'default',
 }: GradientBorderCardProps) {
+  const theme = useAppTheme();
+  const styles = useThemedStyles(createStyles);
+
   return (
     <View style={[styles.outer, style]}>
       <LinearGradient
-        colors={[...BrandGradients.border[intensity]]}
+        colors={[...theme.brandGradients.border[intensity]]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={styles.border}>
@@ -33,19 +37,21 @@ export function GradientBorderCard({
   );
 }
 
-const styles = StyleSheet.create({
-  outer: {
-    borderRadius: Radius.lg,
-    overflow: 'hidden',
-  },
-  border: {
-    borderRadius: Radius.lg,
-    padding: 1,
-  },
-  inner: {
-    backgroundColor: LiftFlowColors.surface,
-    borderRadius: Radius.lg - 1,
-    padding: Spacing.lg,
-    gap: Spacing.sm,
-  },
-});
+function createStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    outer: {
+      borderRadius: theme.radius.lg,
+      overflow: 'hidden',
+    },
+    border: {
+      borderRadius: theme.radius.lg,
+      padding: 1,
+    },
+    inner: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: theme.radius.lg - 1,
+      padding: theme.spacing.lg,
+      gap: theme.spacing.sm,
+    },
+  });
+}

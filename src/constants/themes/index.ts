@@ -2,10 +2,10 @@ import { darkClassicTheme } from './darkClassic';
 import { lightProfessionalTheme } from './lightProfessional';
 import type { AppTheme, ThemeId } from './types';
 
-export * from './types';
-export * from './shared';
 export { darkClassicTheme } from './darkClassic';
 export { lightProfessionalTheme } from './lightProfessional';
+export * from './shared';
+export * from './types';
 
 export const themeCatalog: Record<ThemeId, AppTheme> = {
   'dark-classic': darkClassicTheme,
@@ -21,7 +21,7 @@ export const themeOptions: { id: ThemeId; label: string; description: string }[]
   {
     id: 'light-professional',
     label: 'Light Professional',
-    description: 'Clean premium light layout with soft cards',
+    description: 'Clean white cards, soft blue accents, premium spacing',
   },
 ];
 

@@ -1,7 +1,7 @@
 import { StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/ui/AppText';
-import { Brand, FontFamily, LiftFlowColors } from '@/constants/theme';
+import { Brand, FontFamily } from '@/constants/theme';
 
 type LiftFlowWordmarkProps = {
   size?: 'sm' | 'md' | 'lg';
@@ -29,11 +29,15 @@ export function LiftFlowWordmark({
   return (
     <View style={[styles.block, align === 'center' && styles.centered]}>
       <View style={[styles.row, align === 'center' && styles.centered]}>
-        <AppText
-          align={align}
-          style={[styles.word, scale, onPhoto && styles.wordOnPhoto]}>
-          {Brand.name}
-        </AppText>
+        {onPhoto ? (
+          <AppText align={align} style={[styles.word, scale, styles.wordOnPhoto]}>
+            {Brand.name}
+          </AppText>
+        ) : (
+          <AppText align={align} color="textPrimary" style={[styles.word, scale]}>
+            {Brand.name}
+          </AppText>
+        )}
       </View>
       {showTagline ? (
         <AppText
@@ -65,7 +69,6 @@ const styles = StyleSheet.create({
   word: {
     fontFamily: FontFamily.hero,
     fontWeight: '800',
-    color: LiftFlowColors.textPrimary,
   },
   wordOnPhoto: {
     color: '#FFFFFF',

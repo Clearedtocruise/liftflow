@@ -2,13 +2,14 @@ import type { ReactNode } from 'react';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
 import {
-  darkClassicTheme,
-  defaultThemeId,
-  resolveTheme,
-  type AppTheme,
-  type ThemeId,
+    darkClassicTheme,
+    defaultThemeId,
+    resolveTheme,
+    type AppTheme,
+    type ThemeId,
 } from '@/constants/themes';
 import { loadAppearanceThemeId, saveAppearanceThemeId } from '@/lib/appearancePreferences';
+import { syncRuntimeTheme } from '@/lib/themeRuntime';
 
 type ThemeContextValue = {
   theme: AppTheme;
@@ -46,6 +47,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const theme = useMemo(() => resolveTheme(themeId), [themeId]);
+
+  useEffect(() => {
+    syncRuntimeTheme(theme);
+  }, [theme]);
 
   const value = useMemo(
     () => ({
