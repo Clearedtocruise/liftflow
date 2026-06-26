@@ -80,8 +80,20 @@ record('Dashboard cache-first load', fs.readFileSync(path.join(root, 'src/app/(t
 
 record('Backend rotates weekly meals', fs.readFileSync(path.join(root, 'backend/src/lib/mealPlanTemplates.ts'), 'utf8').includes('pickFromPool'));
 record('Weekly generator uses day index', fs.readFileSync(path.join(root, 'backend/src/lib/aiCoach.ts'), 'utf8').includes('generateWeeklyMealPlanMeals'));
-record('Program varies exercises per calendar day', fs.readFileSync(path.join(root, 'backend/src/lib/programEngine.ts'), 'utf8').includes('day-${slot.dayIndex}'));
-record('PLAN_RULES_VERSION bumped for regen', fs.readFileSync(path.join(root, 'backend/src/lib/programEngine.ts'), 'utf8').includes('PLAN_RULES_VERSION = 5'));
+const programEngineSrc = fs.readFileSync(path.join(root, 'backend/src/lib/programEngine.ts'), 'utf8');
+record(
+  'Program varies exercises per calendar day',
+  programEngineSrc.includes('rotationSeed = (week - 1) * 7 + slot.dayIndex') &&
+    programEngineSrc.includes('dayIndex: slot.dayIndex'),
+);
+const planRulesMatch = programEngineSrc.match(/PLAN_RULES_VERSION\s*=\s*(\d+)/);
+const planRulesVersion = planRulesMatch ? Number(planRulesMatch[1]) : 0;
+record(
+  'PLAN_RULES_VERSION bumped for regen',
+  planRulesVersion >= 5 &&
+    programEngineSrc.includes('meta.planRulesVersion === PLAN_RULES_VERSION'),
+  planRulesVersion ? `v${planRulesVersion}` : 'missing',
+);
 try {
   const res = await fetch(`${api}/api/nutrition/meal-plan/generate`, {
     method: 'POST',
