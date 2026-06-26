@@ -325,6 +325,11 @@ final class WorkoutConnectivity: NSObject, ObservableObject, WCSessionDelegate {
   }
 
   private func applyWorkoutState(_ state: [String: Any], shouldPresent: Bool = false) {
+    // Cardio owns the Watch while a run/ride is active on iPhone — ignore strength pushes.
+    if isCardioMode, cardioSessionId != nil {
+      return
+    }
+
     isCardioMode = false
     cardioSessionId = nil
     let previousSessionId = workoutSessionId

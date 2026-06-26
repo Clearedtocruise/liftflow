@@ -1,11 +1,13 @@
 import { router } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, RefreshControl, StyleSheet, View } from 'react-native';
+import { Alert, RefreshControl, StyleSheet, View } from 'react-native';
 
 import { HistoryCard } from '@/components/history/HistoryCard';
-import { Card } from '@/components/layout/Card';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { SectionHeader } from '@/components/layout/SectionHeader';
+import { SkeletonBlock } from '@/components/layout/SkeletonBlock';
+import { StatCard } from '@/components/layout/StatCard';
+import { EmptyStateCard } from '@/components/layout/StateCard';
 import { TabScreenHeader } from '@/components/layout/TabScreenHeader';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Spacing } from '@/constants/theme';
@@ -100,39 +102,61 @@ export default function HistoryScreen() {
 
   if (loading && history.length === 0) {
     return (
-      <View style={styles.loading}>
-        <ActivityIndicator size="large" color={LiftFlowColors.accent} />
-      </View>
+      <ScreenContainer
+        header={<TabScreenHeader title="History" subtitle="Track progression over time" />}
+        scroll={false}>
+        <View style={styles.statsRow}>
+          <StatCard label="Day Streak">
+            <SkeletonBlock height={40} width="50%" />
+          </StatCard>
+          <StatCard label="Sessions">
+            <SkeletonBlock height={40} width="50%" />
+          </StatCard>
+        </View>
+        <SkeletonBlock height={20} width="40%" />
+        <SkeletonBlock height={88} />
+        <SkeletonBlock height={88} />
+      </ScreenContainer>
     );
   }
 
   return (
     <ScreenContainer
       header={<TabScreenHeader title="History" subtitle="Track progression over time" />}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load({ silent: true }); }} tintColor={LiftFlowColors.accent} />}>
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={() => {
+            setRefreshing(true);
+            load({ silent: true });
+          }}
+          tintColor={LiftFlowColors.primary}
+        />
+      }>
       <View style={styles.statsRow}>
-        <Card style={styles.statCard}>
+        <StatCard label="Day Streak">
           <AppText variant="metric" color="accent">
             {streak}
           </AppText>
-          <AppText variant="caption" color="textSecondary">
-            Day Streak
-          </AppText>
-        </Card>
-        <Card style={styles.statCard}>
+        </StatCard>
+        <StatCard label="Sessions">
           <AppText variant="metric">{history.length}</AppText>
-          <AppText variant="caption" color="textSecondary">
-            Sessions
-          </AppText>
-        </Card>
+        </StatCard>
       </View>
 
-      <SectionHeader title="Recent Sessions" subtitle="Tap strength sessions to view · Long press to delete" />
+      <SectionHeader
+        title="Recent Sessions"
+        subtitle="Tap strength sessions to view · Long press to delete"
+        variant="secondary"
+      />
 
       {history.length === 0 ? (
-        <AppText variant="body" color="textSecondary">
-          No completed sessions yet.
-        </AppText>
+        <EmptyStateCard
+          title="No sessions yet"
+          message="Complete a workout or log cardio to build your history."
+          actionLabel="Start a workout"
+          onAction={() => router.push('/(tabs)/workout')}
+        />
       ) : (
         history.map((item) => (
           <HistoryCard
@@ -152,25 +176,8 @@ export default function HistoryScreen() {
 }
 
 const styles = StyleSheet.create({
-  loading: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: LiftFlowColors.background,
-  },
-  header: {
-    gap: Spacing.xs,
-    marginBottom: Spacing.xxl,
-  },
   statsRow: {
     flexDirection: 'row',
     gap: Spacing.md,
-    marginBottom: Spacing.xxl,
-  },
-  statCard: {
-    flex: 1,
-    alignItems: 'center',
-    gap: Spacing.xs,
-    paddingVertical: Spacing.lg,
   },
 });

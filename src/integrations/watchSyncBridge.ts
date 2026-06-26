@@ -8,6 +8,7 @@ import {
 } from 'react-native-watch-connectivity';
 
 import { watchOfflineQueue } from '@/integrations/watchOfflineQueue';
+import { watchCardioBridge } from '@/state/watchCardioBridge';
 
 import type { WatchCardioState, WatchMotionSample, WatchWorkoutAssistantState, WatchWorkoutMessage } from '@/integrations/watch';
 import {
@@ -267,8 +268,12 @@ export async function pushCardioStateToWatch(
 
 export async function pushWorkoutStateToWatch(
   state: WatchWorkoutAssistantState,
-  options?: { presentWorkout?: boolean },
+  options?: { presentWorkout?: boolean; force?: boolean },
 ): Promise<{ sent: boolean; error?: string }> {
+  if (!options?.force && watchCardioBridge.isWatchOwnedByCardio()) {
+    return { sent: false, error: 'Watch is showing cardio' };
+  }
+
   const payload: Record<string, unknown> = {
     type: 'workout_state',
     state: serializeWatchStateForNative(state),

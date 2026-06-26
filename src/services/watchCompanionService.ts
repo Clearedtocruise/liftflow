@@ -99,6 +99,10 @@ export const watchCompanionService = {
       presentWorkout?: boolean;
     },
   ): Promise<void> {
+    if (watchCardioBridge.isWatchOwnedByCardio() && !params.forceClear) {
+      return;
+    }
+
     const exerciseIndex = params.activeExerciseIndex ?? watchPhoneBridge.getExerciseIndex();
     const restSeconds = params.restSecondsRemaining ?? watchPhoneBridge.getRestSecondsRemaining();
 
@@ -153,6 +157,8 @@ export const watchCompanionService = {
 
   /** Rest tick only — avoids re-syncing exercise/set state every second. */
   async pushRestTimerOnly(userId: string, restSecondsRemaining: number | null): Promise<void> {
+    if (watchCardioBridge.isWatchOwnedByCardio()) return;
+
     const assistantState = watchWorkoutService.getState(userId);
     if (!assistantState.activeSet) return;
 
@@ -210,6 +216,12 @@ export const watchCompanionService = {
   },
 
   async replyWithCurrentState(userId: string): Promise<WatchInboundHandlerResult> {
+    const activeCardio = watchCardioBridge.getActive();
+    if (activeCardio) {
+      await pushCardioStateToWatch(activeCardio);
+      return { reply: { type: 'cardio_state', state: activeCardio } };
+    }
+
     const state = watchWorkoutService.getState(userId);
     const enriched = await this.enrichState(userId, state);
     watchWorkoutService.loadState(userId, enriched);
@@ -364,6 +376,9 @@ export const watchCompanionService = {
     const messageType = typeof message.type === 'string' ? message.type : '';
 
     if (result && typeof result === 'object' && 'success' in result && result.success === false) {
+      if (watchCardioBridge.isWatchOwnedByCardio()) {
+        return { reply: { received: true } };
+      }
       const errorMessage =
         'error' in result && typeof result.error === 'string' ? result.error : 'Command failed.';
       const feedback = await this.buildFeedbackState(userId, errorMessage);
@@ -372,6 +387,9 @@ export const watchCompanionService = {
     }
 
     if (LIGHTWEIGHT_INBOUND.has(messageType)) {
+      if (watchCardioBridge.isWatchOwnedByCardio()) {
+        return { reply: { received: true } };
+      }
       const state = this.applyDisplayContext(
         watchWorkoutService.getState(userId),
         watchPhoneBridge.getDisplayContext(),

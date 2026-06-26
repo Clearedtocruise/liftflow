@@ -26,7 +26,7 @@ function RootLayout() {
         <StartupErrorBoundary>
           <FontProvider>
             <AppProviders>
-              <StatusBar style="light" />
+              <StatusBar style="dark" />
               <Stack
                 screenOptions={{
                   headerShown: false,

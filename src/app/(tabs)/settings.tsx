@@ -276,7 +276,7 @@ export default function SettingsScreen() {
           ) : null}
         </View>
       ) : null}
-      <SectionHeader title="Voice & Logging" />
+      <SectionHeader title="Voice & Logging" variant="secondary" />
       <ConfirmationModePicker value={confirmationMode} onChange={handleConfirmationChange} />
       <Card style={styles.group}>
         <SettingsRow
@@ -354,7 +354,7 @@ export default function SettingsScreen() {
       </Card>
 
       <View style={styles.sectionGap}>
-        <SectionHeader title="Rest Timer" subtitle="Alert when rest ends between sets" />
+        <SectionHeader title="Rest Timer" subtitle="Alert when rest ends between sets" variant="secondary" />
       </View>
       <Card style={styles.group}>
         <SettingsRow
@@ -383,6 +383,7 @@ export default function SettingsScreen() {
         <SectionHeader
           title="Workout style"
           subtitle="Tabata only when enabled — work and rest timers adjustable 10–45s in workout"
+          variant="secondary"
         />
       </View>
       <Card style={styles.group}>
@@ -406,7 +407,7 @@ export default function SettingsScreen() {
       </Card>
 
       <View style={styles.sectionGap}>
-        <SectionHeader title="Location" subtitle="Detect when you arrive at a saved gym" />
+        <SectionHeader title="Gym & Location" subtitle="Arrival detection and saved gyms" variant="secondary" />
       </View>
       <Card style={styles.group}>
         <SettingsRow
@@ -501,7 +502,7 @@ export default function SettingsScreen() {
       </Card>
 
       <View style={styles.sectionGap}>
-        <SectionHeader title="Profile" />
+        <SectionHeader title="Profile" variant="secondary" />
       </View>
       <Card style={styles.group}>
         <SettingsRow
@@ -530,7 +531,7 @@ export default function SettingsScreen() {
       </Card>
 
       <View style={styles.sectionGap}>
-        <SectionHeader title="Export" />
+        <SectionHeader title="Export" variant="secondary" />
       </View>
       <Card style={styles.group}>
         <SettingsRow
@@ -562,7 +563,7 @@ export default function SettingsScreen() {
       ) : null}
 
       <View style={styles.sectionGap}>
-        <SectionHeader title="ONE MORE Pro" />
+        <SectionHeader title="ONE MORE Pro" variant="secondary" />
       </View>
       <Card style={styles.group}>
         <SettingsRow
@@ -592,7 +593,7 @@ export default function SettingsScreen() {
       </Card>
 
       <View style={styles.sectionGap}>
-        <SectionHeader title="Integrations" />
+        <SectionHeader title="Integrations" variant="secondary" />
       </View>
       <Card style={styles.group}>
         <SettingsRow
@@ -606,7 +607,7 @@ export default function SettingsScreen() {
       </Card>
 
       <View style={styles.sectionGap}>
-        <SectionHeader title="Legal & Support" />
+        <SectionHeader title="Legal & Support" variant="secondary" />
       </View>
       <Card style={styles.group}>
         <SettingsRow
@@ -656,7 +657,7 @@ export default function SettingsScreen() {
       </Card>
 
       <View style={styles.sectionGap}>
-        <SectionHeader title="Beta" subtitle="Closed beta program" />
+        <SectionHeader title="Beta" subtitle="Closed beta program" variant="secondary" />
       </View>
       <Card style={styles.group}>
         <BetaInviteRow userId={user?.id} isBetaTester={isBetaTester} onRedeemed={refreshProfile} />
@@ -665,7 +666,7 @@ export default function SettingsScreen() {
       {__DEV__ ? (
         <>
           <View style={styles.sectionGap}>
-            <SectionHeader title="Validation" subtitle="Current app state for testing" />
+            <SectionHeader title="Validation" subtitle="Current app state for testing" variant="secondary" />
           </View>
           <Card style={styles.group}>
             <ValidationDebugPanel state={validationState} onRefresh={refreshValidationState} />
@@ -684,7 +685,7 @@ export default function SettingsScreen() {
         </Card>
       ) : null}
       <View style={styles.sectionGap}>
-        <SectionHeader title="Account" />
+        <SectionHeader title="Account" variant="secondary" />
       </View>
       <Card style={styles.group} testID="settings-reset-button">
         <SettingsRow
@@ -724,7 +725,7 @@ export default function SettingsScreen() {
         />
       </Card>
       <PrimaryButton label="Log Out" onPress={handleSignOut} variant="secondary" />
-      <PrimaryButton label="Delete Account" onPress={handleDeleteAccount} variant="secondary" />
+      <PrimaryButton label="Delete Account" onPress={handleDeleteAccount} variant="destructive" />
 
       <AppText variant="caption" color="textTertiary" style={styles.footer}>
         ONE MORE provides informational coaching only. Not medical advice. Exercise at your own risk.

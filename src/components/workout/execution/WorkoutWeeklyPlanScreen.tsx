@@ -1,10 +1,12 @@
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Card } from '@/components/layout/Card';
+import { GradientBorderCard } from '@/components/layout/GradientBorderCard';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
+import { SectionHeader } from '@/components/layout/SectionHeader';
 import { SkeletonBlock } from '@/components/layout/SkeletonBlock';
 import { AppText } from '@/components/ui/AppText';
-import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
+import { Spacing } from '@/constants/theme';
 import {
     isConditioningWorkout,
     isToday,
@@ -27,6 +29,83 @@ type WorkoutWeeklyPlanScreenProps = {
   onManualLog: () => void;
 };
 
+function DayCard({
+  day,
+  timeZone,
+  adaptingPlan,
+  onSelectDay,
+  onEditDay,
+}: {
+  day: WeekDayPlan;
+  timeZone?: string | null;
+  adaptingPlan?: boolean;
+  onSelectDay: (day: WeekDayPlan) => void;
+  onEditDay: (day: WeekDayPlan) => void;
+}) {
+  const hasWorkout = Boolean(day.workout);
+  const isConditioning = hasWorkout && isConditioningWorkout(day.workout!);
+  const today = isToday(day.date, timeZone);
+
+  const body = (
+    <>
+      <Pressable onPress={() => onSelectDay(day)} style={styles.dayPressable}>
+        <View style={styles.dayHeader}>
+          <View style={styles.dayHeaderText}>
+            <AppText variant="label" color={today ? 'accent' : 'textSecondary'}>
+              {day.dayLabel}
+              {today ? ' · Today' : ''}
+            </AppText>
+            <AppText variant="bodyBold">
+              {hasWorkout ? day.workout!.name : restDayLabel(day.dayLabel)}
+            </AppText>
+          </View>
+          {hasWorkout ? (
+            <AppText variant="footnote" color={isConditioning ? 'accent' : 'textSecondary'}>
+              {isConditioning ? 'Cardio / HIIT' : `${workoutDurationMinutes(day.workout!)} min`}
+            </AppText>
+          ) : null}
+        </View>
+
+        {hasWorkout && !isConditioning ? (
+          <>
+            <AppText variant="footnote" color="textSecondary">
+              {workoutMuscleGroups(day.workout!)}
+            </AppText>
+            <AppText variant="footnote" color="textSecondary">
+              {workoutExerciseCount(day.workout!)} exercises · {workoutTotalSets(day.workout!)} sets
+            </AppText>
+          </>
+        ) : hasWorkout && isConditioning ? (
+          <AppText variant="footnote" color="textSecondary">
+            Cardio session · tap to log
+          </AppText>
+        ) : (
+          <AppText variant="footnote" color="textSecondary">
+            Recovery, mobility, or optional light activity
+          </AppText>
+        )}
+      </Pressable>
+      <PrimaryButton
+        label="Edit Day"
+        variant="ghost"
+        onPress={() => onEditDay(day)}
+        loading={adaptingPlan}
+        disabled={adaptingPlan}
+      />
+    </>
+  );
+
+  if (today) {
+    return (
+      <View testID="today-workout-card">
+        <GradientBorderCard innerStyle={styles.dayCardInner}>{body}</GradientBorderCard>
+      </View>
+    );
+  }
+
+  return <Card style={styles.dayCard}>{body}</Card>;
+}
+
 export function WorkoutWeeklyPlanScreen({
   days,
   loading,
@@ -39,17 +118,16 @@ export function WorkoutWeeklyPlanScreen({
 }: WorkoutWeeklyPlanScreenProps) {
   return (
     <View style={styles.container} testID="weekly-plan">
+      <SectionHeader title="This week" variant="secondary" />
+
       {loading ? (
         <View style={styles.loadingWrap}>
-          <AppText variant="body" color="textSecondary">
-            Loading weekly plan…
-          </AppText>
           {Array.from({ length: 4 }).map((_, index) => (
-            <View key={index} style={styles.skeletonCard}>
+            <Card key={index} style={styles.skeletonCard}>
               <SkeletonBlock height={14} width="28%" />
               <SkeletonBlock height={20} width="55%" />
               <SkeletonBlock height={14} width="72%" />
-            </View>
+            </Card>
           ))}
         </View>
       ) : null}
@@ -61,99 +139,41 @@ export function WorkoutWeeklyPlanScreen({
       ) : null}
 
       {!loading
-        ? days.map((day) => {
-            const hasWorkout = Boolean(day.workout);
-            const isConditioning = hasWorkout && isConditioningWorkout(day.workout!);
-
-            return (
-              <Card
-                key={day.date}
-                style={[styles.dayCard, styles.dayCardActive, isToday(day.date, timeZone) && styles.dayCardToday]}
-                testID={isToday(day.date, timeZone) ? 'today-workout-card' : undefined}>
-                <Pressable onPress={() => onSelectDay(day)} style={styles.dayPressable}>
-                  <View style={styles.dayHeader}>
-                    <View style={styles.dayHeaderText}>
-                      <AppText variant="label" color={isToday(day.date, timeZone) ? 'accent' : 'textSecondary'}>
-                        {day.dayLabel}
-                        {isToday(day.date, timeZone) ? ' · Today' : ''}
-                      </AppText>
-                      <AppText variant="bodyBold">
-                        {hasWorkout ? day.workout!.name : restDayLabel(day.dayLabel)}
-                      </AppText>
-                    </View>
-                    {hasWorkout ? (
-                      <AppText variant="footnote" color={isConditioning ? 'accent' : 'textSecondary'}>
-                        {isConditioning ? 'Cardio / HIIT' : `${workoutDurationMinutes(day.workout!)} min`}
-                      </AppText>
-                    ) : null}
-                  </View>
-
-                  {hasWorkout && !isConditioning ? (
-                    <>
-                      <AppText variant="footnote" color="textSecondary">
-                        {workoutMuscleGroups(day.workout!)}
-                      </AppText>
-                      <AppText variant="footnote" color="textSecondary">
-                        {workoutExerciseCount(day.workout!)} exercises · {workoutTotalSets(day.workout!)} sets
-                      </AppText>
-                    </>
-                  ) : hasWorkout && isConditioning ? (
-                    <AppText variant="footnote" color="textSecondary">
-                      Cardio session · tap to log
-                    </AppText>
-                  ) : (
-                    <AppText variant="footnote" color="textSecondary">
-                      Recovery, mobility, or optional light activity
-                    </AppText>
-                  )}
-                </Pressable>
-                <PrimaryButton
-                  label="Edit Day"
-                  variant="ghost"
-                  onPress={() => onEditDay(day)}
-                  loading={adaptingPlan}
-                  disabled={adaptingPlan}
-                />
-              </Card>
-            );
-          })
+        ? days.map((day) => (
+            <DayCard
+              key={day.date}
+              day={day}
+              timeZone={timeZone}
+              adaptingPlan={adaptingPlan}
+              onSelectDay={onSelectDay}
+              onEditDay={onEditDay}
+            />
+          ))
         : null}
 
-      <Pressable onPress={onManualLog}>
-        <AppText variant="footnote" color="accent" align="center">
-          Quick log
-        </AppText>
-      </Pressable>
+      <PrimaryButton label="Quick log" variant="ghost" onPress={onManualLog} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    gap: Spacing.md,
+    gap: Spacing.lg,
   },
   loadingWrap: {
     gap: Spacing.md,
   },
   skeletonCard: {
     gap: Spacing.sm,
-    padding: Spacing.lg,
-    borderRadius: Radius.lg,
-    backgroundColor: LiftFlowColors.surface,
-    borderWidth: 1,
-    borderColor: LiftFlowColors.border,
   },
   dayCard: {
     gap: Spacing.sm,
   },
-  dayPressable: {
+  dayCardInner: {
     gap: Spacing.sm,
   },
-  dayCardActive: {
-    opacity: 1,
-  },
-  dayCardToday: {
-    borderColor: LiftFlowColors.accent,
+  dayPressable: {
+    gap: Spacing.sm,
   },
   dayHeader: {
     flexDirection: 'row',

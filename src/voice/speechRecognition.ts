@@ -16,6 +16,11 @@ export type SpeechRecognitionModule = {
       continuous: boolean;
       maxAlternatives?: number;
       requiresOnDeviceRecognition?: boolean;
+      iosCategory?: {
+        category: string;
+        categoryOptions: string[];
+        mode?: string;
+      };
     }): void;
     stop(): Promise<void> | void;
     abort?(): void;

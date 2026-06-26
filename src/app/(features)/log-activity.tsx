@@ -1,10 +1,11 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { Card } from '@/components/layout/Card';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
+import { TabScreenHeader } from '@/components/layout/TabScreenHeader';
 import { AppText } from '@/components/ui/AppText';
 import { MANUAL_CARDIO_OPTIONS, SPORTS_ACTIVITIES } from '@/constants/activityOptions';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
@@ -142,16 +143,24 @@ export default function LogActivityScreen() {
   }
 
   return (
-    <ScreenContainer>
-      <ScrollView contentContainerStyle={styles.content}>
-        <AppText variant="headline">{screenTitle}</AppText>
-        <AppText variant="body" color="textSecondary">
-          Duration counts toward recovery load. Calories are estimated from your weight and activity type.
-        </AppText>
-
-        {!preselected ? (
+    <ScreenContainer
+      header={
+        <TabScreenHeader
+          showBrand={false}
+          title={screenTitle}
+          subtitle="Duration counts toward recovery load. Calories are estimated from your weight."
+          right={
+            <Pressable onPress={() => router.back()} hitSlop={8}>
+              <AppText variant="caption" color="accent">
+                Back
+              </AppText>
+            </Pressable>
+          }
+        />
+      }>
+      {!preselected ? (
           <Card style={styles.section}>
-            <AppText variant="label" color="textSecondary">
+            <AppText variant="label" color="accent">
               Activity
             </AppText>
             <View style={styles.chips}>
@@ -181,7 +190,7 @@ export default function LogActivityScreen() {
           </Card>
         ) : selectedOption ? (
           <Card style={styles.section}>
-            <AppText variant="label" color="textSecondary">
+            <AppText variant="label" color="accent">
               Activity
             </AppText>
             <AppText variant="bodyBold">{selectedOption.label}</AppText>
@@ -241,24 +250,22 @@ export default function LogActivityScreen() {
         </Card>
 
         <PrimaryButton label="Log Activity" onPress={handleLog} loading={logging} size="large" />
-      </ScrollView>
     </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  content: { gap: Spacing.lg, paddingBottom: Spacing.huge },
   section: { gap: Spacing.sm },
   chips: { gap: Spacing.sm },
   input: {
-    backgroundColor: LiftFlowColors.backgroundSecondary,
+    backgroundColor: LiftFlowColors.surface,
     borderWidth: 1,
     borderColor: LiftFlowColors.border,
     borderRadius: Radius.md,
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.md,
     color: LiftFlowColors.textPrimary,
-    fontSize: 16,
+    fontSize: 17,
   },
   notes: { minHeight: 80, textAlignVertical: 'top' },
 });

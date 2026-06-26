@@ -15,6 +15,7 @@ import type { WorkoutChallengeRecord } from '@/types/workoutChallenge';
 type WorkoutSummaryScreenProps = {
   session: WorkoutSession;
   coachSummary: PostWorkoutCoachSummary | null;
+  coachLoading?: boolean;
   challenges: WorkoutChallengeRecord[];
   onDone: () => void;
   onShare: () => void;
@@ -23,6 +24,7 @@ type WorkoutSummaryScreenProps = {
 export function WorkoutSummaryScreen({
   session,
   coachSummary,
+  coachLoading = false,
   challenges,
   onDone,
   onShare,
@@ -54,13 +56,20 @@ export function WorkoutSummaryScreen({
           </View>
           <AppText variant="title">{session.name}</AppText>
           <AppText variant="body" color="textSecondary">
-            {durationMinutes} min · {session.totalSets ?? 0} sets · {units.formatWeight(session.totalVolume ?? 0)} volume
+            {durationMinutes} min · {session.totalSets ?? 0} sets · {units.formatVolume(session.totalVolume ?? 0)} volume
             {prCount > 0 ? ` · ${prCount} PR${prCount === 1 ? '' : 's'}` : ''}
           </AppText>
         </View>
       </LinearGradient>
 
-      {coachSummary ? (
+      {coachLoading ? (
+        <Card style={styles.coachCard} glow>
+          <SectionHeader title="Coach Summary" />
+          <AppText variant="footnote" color="textSecondary">
+            Preparing your debrief…
+          </AppText>
+        </Card>
+      ) : coachSummary ? (
         <Card style={styles.coachCard} glow>
           <SectionHeader title="Coach Summary" />
           <AppText variant="body" color="textSecondary">

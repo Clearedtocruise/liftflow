@@ -1,53 +1,67 @@
 import { Platform } from 'react-native';
 
-/** LiftFlow Sprint 5.0 — Premium performance brand system */
+/** ONE MORE — light performance brand system */
 export const LiftFlowColors = {
-  background: '#080B10',
-  backgroundSecondary: '#111318',
-  backgroundElevated: '#111318',
-  surface: '#1C2230',
-  surfaceElevated: '#242B3A',
-  surfaceHighlight: '#2E3648',
-  border: 'rgba(255, 255, 255, 0.08)',
-  borderSubtle: 'rgba(255, 255, 255, 0.04)',
+  background: '#F0F3F8',
+  backgroundSecondary: '#FFFFFF',
+  backgroundElevated: '#FFFFFF',
+  surface: '#FFFFFF',
+  surfaceElevated: '#FFFFFF',
+  surfaceHighlight: '#E8EDF4',
+  border: 'rgba(15, 23, 42, 0.09)',
+  borderSubtle: 'rgba(15, 23, 42, 0.05)',
 
-  textPrimary: '#FFFFFF',
-  textSecondary: '#A6B0C3',
-  textTertiary: '#6B7589',
-  textMuted: '#4A5366',
+  textPrimary: '#0F172A',
+  textSecondary: '#5B6577',
+  textTertiary: '#8B95A8',
+  textMuted: '#B8C0CC',
 
   primary: '#0E90FF',
   primaryMuted: '#0B73CC',
-  primaryGlow: 'rgba(14, 144, 255, 0.22)',
+  primaryGlow: 'rgba(14, 144, 255, 0.1)',
 
   accent: '#0E90FF',
   accentMuted: '#0B73CC',
-  accentGlow: 'rgba(14, 144, 255, 0.15)',
+  accentGlow: 'rgba(14, 144, 255, 0.08)',
 
-  /** @deprecated use primary — kept for gradual migration */
   legacyAccent: '#1F6BFF',
 
-  success: '#00E5A8',
-  warning: '#FFC857',
-  error: '#FF5B5B',
+  success: '#059669',
+  warning: '#D97706',
+  error: '#DC2626',
 
-  restTimer: '#00E5FF',
-  restTimerMuted: 'rgba(0, 229, 255, 0.12)',
+  restTimer: '#0891B2',
+  restTimerMuted: 'rgba(8, 145, 178, 0.1)',
 
-  gradientStart: '#1F6BFF',
-  gradientEnd: '#00E5FF',
+  gradientStart: '#0E90FF',
+  gradientEnd: '#38BDF8',
 
-  glass: 'rgba(23, 27, 34, 0.72)',
-  overlay: 'rgba(8, 11, 16, 0.85)',
+  glass: 'rgba(255, 255, 255, 0.88)',
+  overlay: 'rgba(15, 23, 42, 0.5)',
 
-  microphoneRing: '#1F6BFF',
-  microphoneFill: '#171B22',
-  microphoneGlow: 'rgba(31, 107, 255, 0.35)',
+  microphoneRing: '#0E90FF',
+  microphoneFill: '#FFFFFF',
+  microphoneGlow: 'rgba(14, 144, 255, 0.2)',
 
-  tabBar: '#080B10',
-  tabBarBorder: '#111318',
-  tabInactive: '#6B7589',
-  tabActive: '#00E5FF',
+  tabBar: '#FFFFFF',
+  tabBarBorder: 'rgba(15, 23, 42, 0.07)',
+  tabInactive: '#8B95A8',
+  tabActive: '#0E90FF',
+
+  /** Text on top of hero photography */
+  onPhoto: '#FFFFFF',
+  onPhotoMuted: 'rgba(255, 255, 255, 0.82)',
+} as const;
+
+export const BrandGradients = {
+  border: {
+    default: ['rgba(14, 144, 255, 0.45)', 'rgba(56, 189, 248, 0.2)'] as const,
+    subtle: ['rgba(14, 144, 255, 0.28)', 'rgba(14, 144, 255, 0.08)'] as const,
+    bold: ['rgba(14, 144, 255, 0.55)', 'rgba(56, 189, 248, 0.25)'] as const,
+  },
+  button: [LiftFlowColors.primary, LiftFlowColors.primaryMuted] as const,
+  insightFill: ['rgba(14, 144, 255, 0.06)', '#FFFFFF'] as const,
+  photoOverlay: ['transparent', 'rgba(15, 23, 42, 0.72)'] as const,
 } as const;
 
 export type LiftFlowColor = keyof typeof LiftFlowColors;
@@ -176,25 +190,32 @@ export const Radius = {
 
 export const Shadows = {
   card: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35,
-    shadowRadius: 16,
-    elevation: 8,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.07,
+    shadowRadius: 12,
+    elevation: 3,
   },
   glow: {
     shadowColor: LiftFlowColors.primary,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 6,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  tabBar: {
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 8,
   },
 } as const;
 
 export const TabBarHeight = Platform.select({ ios: 84, android: 72, default: 72 }) ?? 72;
 
 export const NavigationTheme = {
-  dark: true,
+  dark: false,
   colors: {
     primary: LiftFlowColors.primary,
     background: LiftFlowColors.background,
@@ -206,9 +227,7 @@ export const NavigationTheme = {
 } as const;
 
 export const Brand = {
-  /** In-app display name */
   name: 'ONE MORE',
-  /** App Store Connect listing name */
   appStoreName: 'One More Fitness',
   companyName: 'One More Fitness',
   planName: 'ONE MORE Pro',
@@ -219,7 +238,6 @@ export const Brand = {
   heroHeadline: 'YOUR TRANSFORMATION STARTS WITH ONE MORE.',
 } as const;
 
-/** @deprecated */
 export const Colors = {
   light: {
     text: LiftFlowColors.textPrimary,

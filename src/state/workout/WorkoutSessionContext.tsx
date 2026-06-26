@@ -13,6 +13,7 @@ import { AppState } from 'react-native';
 import { DEFAULT_REST_SECONDS } from '@/constants/workout';
 import { cueRestTimerComplete } from '@/lib/restTimerFeedback';
 import { isStaleWorkoutSession } from '@/lib/staleWorkoutSession';
+import { clearWorkoutProgress, loadWorkoutProgress, saveWorkoutProgress } from '@/lib/workoutSessionPersistence';
 import { peakMusicService } from '@/services/peakMusicService';
 import { userService } from '@/services/userService';
 import { watchCompanionService } from '@/services/watchCompanionService';
@@ -33,6 +34,8 @@ type WorkoutSessionState = {
   watchDraftReps: number | null;
   /** Weight (kg) dictated from Apple Watch. */
   watchDraftWeightKg: number | null;
+  /** Per-exercise target sets (plan + manual bonus + coach) for global rest UI. */
+  exerciseEffectiveTargetSets: Record<string, number>;
 };
 
 type WorkoutSessionActions = {
@@ -59,6 +62,7 @@ type WorkoutSessionActions = {
   endRestTimer: () => Promise<void>;
   setWatchDraftReps: (reps: number | null) => void;
   setWatchDraftWeightKg: (weightKg: number | null) => void;
+  setExerciseEffectiveTargetSets: (workoutExerciseId: string, targetSets: number) => void;
 };
 
 type WorkoutSessionContextValue = WorkoutSessionState & WorkoutSessionActions;
@@ -82,6 +86,7 @@ export function WorkoutSessionProvider({
   const [lastLoggedSet, setLastLoggedSet] = useState<WorkoutSet | null>(null);
   const [watchDraftReps, setWatchDraftReps] = useState<number | null>(null);
   const [watchDraftWeightKg, setWatchDraftWeightKg] = useState<number | null>(null);
+  const [exerciseEffectiveTargetSets, setExerciseEffectiveTargetSetsMap] = useState<Record<string, number>>({});
   const [restTimerSound, setRestTimerSound] = useState(true);
   const [restTimerHaptics, setRestTimerHaptics] = useState(true);
   const restEndAtRef = useRef<number | null>(null);
@@ -100,8 +105,11 @@ export function WorkoutSessionProvider({
     setRestTimerPaused(false);
     setWatchDraftReps(null);
     setWatchDraftWeightKg(null);
+    setExerciseEffectiveTargetSetsMap({});
+    setActiveExerciseIndex(0);
     restEndAtRef.current = null;
     pausedRemainingRef.current = null;
+    void clearWorkoutProgress();
   }, []);
 
   const refreshSession = useCallback(async () => {
@@ -144,6 +152,12 @@ export function WorkoutSessionProvider({
       } else if (result.success && result.data) {
         trackedSessionIdRef.current = result.data.id;
         setActiveSession(result.data);
+        const savedIndex = await loadWorkoutProgress(result.data.id);
+        if (savedIndex != null && savedIndex >= 0) {
+          setActiveExerciseIndex(savedIndex);
+        } else {
+          setActiveExerciseIndex(0);
+        }
       } else if (result.success) {
         clearLocalSessionState();
       }
@@ -157,8 +171,9 @@ export function WorkoutSessionProvider({
   }, [clearLocalSessionState, userId]);
 
   useEffect(() => {
-    setActiveExerciseIndex(0);
-  }, [activeSession?.id]);
+    if (!activeSession?.id) return;
+    void saveWorkoutProgress(activeSession.id, activeExerciseIndex);
+  }, [activeSession?.id, activeExerciseIndex]);
 
   useEffect(() => {
     hydrate();
@@ -244,6 +259,8 @@ export function WorkoutSessionProvider({
         sessionEpochRef.current += 1;
         trackedSessionIdRef.current = result.data.id;
         setActiveSession(result.data);
+        const savedIndex = await loadWorkoutProgress(result.data.id);
+        setActiveExerciseIndex(savedIndex ?? 0);
         void watchCompanionService.notifyWatchWorkoutStarted(userId, result.data);
         return result.data;
       }
@@ -262,6 +279,8 @@ export function WorkoutSessionProvider({
         sessionEpochRef.current += 1;
         trackedSessionIdRef.current = result.data.id;
         setActiveSession(result.data);
+        const savedIndex = await loadWorkoutProgress(result.data.id);
+        setActiveExerciseIndex(savedIndex ?? 0);
         void watchCompanionService.notifyWatchWorkoutStarted(userId, result.data);
         return result.data;
       }
@@ -453,6 +472,13 @@ export function WorkoutSessionProvider({
     pausedRemainingRef.current = null;
   }, [activeRestPeriod, userId]);
 
+  const setExerciseEffectiveTargetSets = useCallback((workoutExerciseId: string, targetSets: number) => {
+    setExerciseEffectiveTargetSetsMap((current) => {
+      if (current[workoutExerciseId] === targetSets) return current;
+      return { ...current, [workoutExerciseId]: targetSets };
+    });
+  }, []);
+
   const endRestTimer = useCallback(async () => {
     if (!activeRestPeriod) return;
     const elapsed = Math.floor((Date.now() - new Date(activeRestPeriod.startedAt).getTime()) / 1000);
@@ -478,6 +504,7 @@ export function WorkoutSessionProvider({
       lastLoggedSet,
       watchDraftReps,
       watchDraftWeightKg,
+      exerciseEffectiveTargetSets,
       hydrate,
       refreshSession,
       setActiveExerciseIndex,
@@ -501,6 +528,7 @@ export function WorkoutSessionProvider({
       endRestTimer,
       setWatchDraftReps,
       setWatchDraftWeightKg,
+      setExerciseEffectiveTargetSets,
     }),
     [
       activeSession,
@@ -514,6 +542,7 @@ export function WorkoutSessionProvider({
       lastLoggedSet,
       watchDraftReps,
       watchDraftWeightKg,
+      exerciseEffectiveTargetSets,
       hydrate,
       refreshSession,
       setActiveExerciseIndex,
@@ -534,6 +563,7 @@ export function WorkoutSessionProvider({
       resumeRestTimer,
       skipRestTimer,
       endRestTimer,
+      setExerciseEffectiveTargetSets,
     ],
   );
 

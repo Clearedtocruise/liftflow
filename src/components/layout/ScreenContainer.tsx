@@ -10,6 +10,8 @@ type ScreenContainerProps = ScrollViewProps & {
   padded?: boolean;
   bottomInset?: boolean;
   ambient?: boolean;
+  /** Uniform vertical gap between direct children. */
+  contentGap?: number;
   /** Renders above the scroll area so titles stay visible while scrolling. */
   header?: React.ReactNode;
   /** Extra padding when keyboard is open — keeps submit buttons visible. */
@@ -25,6 +27,7 @@ export function ScreenContainer({
   padded = true,
   bottomInset = true,
   ambient = true,
+  contentGap = Spacing.lg,
   header,
   keyboardExtraPadding = 16,
   enableTabSwipe = true,
@@ -55,22 +58,23 @@ export function ScreenContainer({
 
   const contentTopPadding = header ? Spacing.md : insets.top + Spacing.lg;
 
+  const innerStyle = [
+    styles.inner,
+    padded && styles.padded,
+    contentGap > 0 && { gap: contentGap },
+    { paddingTop: contentTopPadding, paddingBottom: scroll ? undefined : paddingBottom },
+    !scroll && style,
+  ];
+
   const inner = (
-    <View
-      testID={testID}
-      style={[
-        styles.inner,
-        padded && styles.padded,
-        { paddingTop: contentTopPadding, paddingBottom: scroll ? undefined : paddingBottom },
-        !scroll && style,
-      ]}>
+    <View testID={testID} style={innerStyle}>
       {children}
     </View>
   );
 
   const ambientLayer = ambient ? (
     <LinearGradient
-      colors={['rgba(14, 144, 255, 0.07)', 'transparent']}
+      colors={['rgba(14, 144, 255, 0.05)', 'transparent']}
       style={styles.ambient}
       pointerEvents="none"
     />
@@ -108,6 +112,7 @@ export function ScreenContainer({
               style={[
                 styles.inner,
                 padded && styles.padded,
+                contentGap > 0 && { gap: contentGap },
                 { paddingTop: contentTopPadding, paddingBottom },
               ]}>
               {children}

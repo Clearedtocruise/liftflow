@@ -1,13 +1,14 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable } from 'react-native';
 
 import { CardioActivityPicker } from '@/components/cardio/CardioActivityPicker';
 import { CardioSessionPanel } from '@/components/cardio/CardioSessionPanel';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
+import { SectionHeader } from '@/components/layout/SectionHeader';
+import { TabScreenHeader } from '@/components/layout/TabScreenHeader';
 import { AppText } from '@/components/ui/AppText';
 import { CARDIO_ACTIVITIES, cardioActivityById, type CardioActivity } from '@/constants/cardioActivities';
-import { Spacing } from '@/constants/theme';
 
 export default function CardioTrackingScreen() {
   const { activity: activityParam } = useLocalSearchParams<{ activity?: string }>();
@@ -20,47 +21,36 @@ export default function CardioTrackingScreen() {
   const isFocused = Boolean(focusedActivity);
 
   return (
-    <ScreenContainer contentContainerStyle={styles.content}>
-      <Pressable onPress={() => router.back()}>
-        <AppText variant="footnote" color="accent">
-          ← Back
-        </AppText>
-      </Pressable>
-
-      <AppText variant="headline">{isFocused ? active.label : 'Cardio & HIIT'}</AppText>
-      <AppText variant="body" color="textSecondary">
-        {isFocused
-          ? active.mode === 'steady' && (active.type === 'walk' || active.type === 'run' || active.type === 'cycle')
-            ? 'Live distance, pace, speed, and active calories update as you go. GPS tracks outdoors; you can override distance before saving.'
-            : 'Start the timer when you begin. Calories are estimated from your profile weight and pace.'
-          : 'Choose a conditioning session for cardio days, recovery work, or Tabata intervals.'}
-      </AppText>
-
-      {!isFocused ? (
-        <CardioActivityPicker selectedId={selected.id} onSelect={setSelected} />
-      ) : null}
-
-      <View style={styles.sessionBlock}>
-        {!isFocused ? (
-          <AppText variant="label" color="textSecondary">
-            Active Session
-          </AppText>
-        ) : null}
-        <CardioSessionPanel
-          activity={active}
-          activityKind={active.type === 'walk' ? 'walk' : undefined}
+    <ScreenContainer
+      header={
+        <TabScreenHeader
+          showBrand={false}
+          title={isFocused ? active.label : 'Cardio & HIIT'}
+          subtitle={
+            isFocused
+              ? active.mode === 'steady' &&
+                (active.type === 'walk' || active.type === 'run' || active.type === 'cycle')
+                ? 'Live distance, pace, and calories while you move'
+                : 'Timer-based session with calorie estimates'
+              : 'Conditioning for cardio days, recovery, or Tabata'
+          }
+          right={
+            <Pressable onPress={() => router.back()} hitSlop={8}>
+              <AppText variant="caption" color="accent">
+                Back
+              </AppText>
+            </Pressable>
+          }
         />
-      </View>
+      }>
+      {!isFocused ? <CardioActivityPicker selectedId={selected.id} onSelect={setSelected} /> : null}
+
+      {!isFocused ? <SectionHeader title="Active session" variant="secondary" /> : null}
+
+      <CardioSessionPanel
+        activity={active}
+        activityKind={active.type === 'walk' ? 'walk' : undefined}
+      />
     </ScreenContainer>
   );
 }
-
-const styles = StyleSheet.create({
-  content: {
-    gap: Spacing.lg,
-    paddingBottom: Spacing.huge,
-  },
-  sessionBlock: {
-    gap: Spacing.sm,
-  },
-});

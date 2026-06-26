@@ -2,8 +2,8 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 
-import { ErrorStateCard } from '@/components/layout/StateCard';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
+import { ErrorStateCard } from '@/components/layout/StateCard';
 import { WorkoutSummaryScreen } from '@/components/workout/execution/WorkoutSummaryScreen';
 import { LiftFlowColors } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
@@ -33,6 +33,7 @@ export default function WorkoutSummaryRoute() {
   const { user } = useAuth();
   const [session, setSession] = useState<WorkoutSession | null>(null);
   const [coachSummary, setCoachSummary] = useState<PostWorkoutCoachSummary | null>(null);
+  const [coachLoading, setCoachLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -41,6 +42,14 @@ export default function WorkoutSummaryRoute() {
     if (fromParams.length > 0) return fromParams;
     return parseChallengeNotes(session?.notes);
   }, [challengesParam, session?.notes]);
+
+  const loadCoachSummary = useCallback(async (userId: string, id: string) => {
+    setCoachLoading(true);
+    const coachResult = await coachActivationService.getPostWorkoutSummary(userId, id);
+    if (coachResult.success) setCoachSummary(coachResult.data);
+    else setCoachSummary(null);
+    setCoachLoading(false);
+  }, []);
 
   const load = useCallback(async () => {
     if (!sessionId) {
@@ -61,15 +70,12 @@ export default function WorkoutSummaryRoute() {
     }
 
     setSession(sessionResult.data);
+    setLoading(false);
 
     if (user?.id) {
-      const coachResult = await coachActivationService.getPostWorkoutSummary(user.id, sessionId);
-      if (coachResult.success) setCoachSummary(coachResult.data);
-      else setCoachSummary(null);
+      void loadCoachSummary(user.id, sessionId);
     }
-
-    setLoading(false);
-  }, [sessionId, user?.id]);
+  }, [sessionId, user?.id, loadCoachSummary]);
 
   useEffect(() => {
     void load();
@@ -101,6 +107,7 @@ export default function WorkoutSummaryRoute() {
     <WorkoutSummaryScreen
       session={session}
       coachSummary={coachSummary}
+      coachLoading={coachLoading}
       challenges={challenges}
       onDone={() => router.replace('/(tabs)/workout')}
       onShare={() => {

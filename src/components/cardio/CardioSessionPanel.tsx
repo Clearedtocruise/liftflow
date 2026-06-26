@@ -5,6 +5,7 @@ import { Alert, StyleSheet, TextInput, View } from 'react-native';
 import { ActivitySessionSaveCard } from '@/components/cardio/ActivitySessionSaveCard';
 import { IntervalTimerPanel } from '@/components/cardio/IntervalTimerPanel';
 import { SteadyCardioMetrics } from '@/components/cardio/SteadyCardioMetrics';
+import { GradientBorderCard } from '@/components/layout/GradientBorderCard';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { AppText } from '@/components/ui/AppText';
 import type { CardioActivity } from '@/constants/cardioActivities';
@@ -259,8 +260,8 @@ export function CardioSessionPanel({ activity, activityKind }: CardioSessionPane
   const showManualDistance = tracksDistance && !running && elapsed > 0;
 
   return (
-    <View style={styles.steadyCard}>
-      <AppText variant="label" color="textSecondary" align="center" style={styles.activityTitle}>
+    <GradientBorderCard intensity="subtle" innerStyle={styles.steadyCard}>
+      <AppText variant="label" color="accent" align="center" style={styles.activityTitle}>
         {activityTitle}
       </AppText>
 
@@ -316,26 +317,18 @@ export function CardioSessionPanel({ activity, activityKind }: CardioSessionPane
           Tracking continues when your screen locks or you switch apps
         </AppText>
       ) : null}
-    </View>
+    </GradientBorderCard>
   );
 }
 
 const styles = StyleSheet.create({
   steadyCard: {
     gap: Spacing.lg,
-    padding: Spacing.xl,
-    borderRadius: Radius.xl,
-    backgroundColor: LiftFlowColors.surfaceElevated,
-    borderWidth: 1,
-    borderColor: LiftFlowColors.border,
   },
   activityTitle: {
     letterSpacing: 2,
-    fontWeight: '600',
   },
   timer: {
-    fontSize: 64,
-    lineHeight: 72,
     fontVariant: ['tabular-nums'],
   },
   distanceBlock: {

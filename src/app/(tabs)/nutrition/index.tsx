@@ -5,18 +5,21 @@ import { Alert, InteractionManager, Pressable, RefreshControl, StyleSheet, View 
 
 import { api } from '@/api/client';
 import { Card } from '@/components/layout/Card';
+import { HeroPhotoBanner } from '@/components/layout/HeroPhotoBanner';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
+import { SectionHeader } from '@/components/layout/SectionHeader';
 import { SkeletonBlock } from '@/components/layout/SkeletonBlock';
 import { ErrorStateCard } from '@/components/layout/StateCard';
-import { TabScreenHeader } from '@/components/layout/TabScreenHeader';
 import { MealDetailSheet } from '@/components/nutrition/MealDetailSheet';
 import { MealPlanCard } from '@/components/nutrition/MealPlanCard';
 import { MealReplaceSheet, type SmartReplacementPayload } from '@/components/nutrition/MealReplaceSheet';
+import { NutritionMetricsRow } from '@/components/nutrition/NutritionMetricsRow';
 import { NutritionProgressHeader } from '@/components/nutrition/NutritionProgressHeader';
 import { NutritionSectionTabs, type NutritionSection } from '@/components/nutrition/NutritionSectionTabs';
 import { QuickMealLogSheet } from '@/components/nutrition/QuickMealLogSheet';
 import { AppText } from '@/components/ui/AppText';
+import { HeroImages } from '@/constants/imagery';
 import { LiftFlowColors, Spacing } from '@/constants/theme';
 import { usePlanAdjustment } from '@/contexts/PlanAdjustmentContext';
 import { useAppResume } from '@/hooks/useAppResume';
@@ -504,11 +507,10 @@ export default function NutritionScreen() {
 
   if (loading && !refreshing && weekMeals.length === 0 && goals == null) {
     return (
-      <ScreenContainer contentContainerStyle={styles.content}>
-        <SkeletonBlock height={28} width="40%" />
-        <SkeletonBlock height={14} width="60%" />
+      <ScreenContainer>
+        <HeroPhotoBanner uri={HeroImages.dashboard.nutrition} height={152} title="Nutrition" />
         <SkeletonBlock height={120} />
-        <SkeletonBlock height={160} />
+        <SkeletonBlock height={48} />
         <SkeletonBlock height={160} />
       </ScreenContainer>
     );
@@ -531,25 +533,25 @@ export default function NutritionScreen() {
   return (
     <ScreenContainer
       testID="nutrition-screen"
-      header={
-        <TabScreenHeader
-          title="Nutrition"
-          subtitle={formatScheduleSubtitle(schedule)}
-          right={
-            <Pressable onPress={() => router.push('/(features)/nutrition-preferences')} hitSlop={8}>
-              <AppText variant="caption" color="accent">
-                Preferences
-              </AppText>
-            </Pressable>
-          }
-        />
-      }
       contentContainerStyle={styles.content}
       refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={() => void handleRefresh()} tintColor={LiftFlowColors.accent} />
+        <RefreshControl refreshing={refreshing} onRefresh={() => void handleRefresh()} tintColor={LiftFlowColors.primary} />
       }>
+      <HeroPhotoBanner
+        uri={HeroImages.dashboard.nutrition}
+        height={152}
+        title="Fuel the work"
+        subtitle={formatScheduleSubtitle(schedule)}
+      />
+
+      <Pressable onPress={() => router.push('/(features)/nutrition-preferences')} style={styles.prefsRow}>
+        <AppText variant="caption" color="accent">
+          Preferences →
+        </AppText>
+      </Pressable>
+
       <Pressable onPress={() => router.push('/(features)/nutrition-intelligence')}>
-        <Card glow style={styles.intelCard}>
+        <Card style={styles.intelCard}>
           <AppText variant="label" color="accent">
             Nutrition Intelligence
           </AppText>
@@ -594,16 +596,17 @@ export default function NutritionScreen() {
             caloriesConsumed={mealAggregation.caloriesConsumed}
             proteinG={mealAggregation.proteinG}
           />
-          <View style={styles.todayHeader}>
-            <AppText variant="label" color="accent">
-              Today&apos;s Plan
-            </AppText>
-            <Pressable onPress={() => setQuickLogOpen(true)} hitSlop={8}>
-              <AppText variant="caption" color="accent">
-                + Log meal
-              </AppText>
-            </Pressable>
-          </View>
+          <SectionHeader
+            title="Today's Plan"
+            variant="secondary"
+            action={
+              <Pressable onPress={() => setQuickLogOpen(true)} hitSlop={8}>
+                <AppText variant="caption" color="accent">
+                  + Log meal
+                </AppText>
+              </Pressable>
+            }
+          />
           {todayMeals.length === 0 ? (
             <Card style={styles.empty}>
               <AppText variant="body" color="textSecondary">
@@ -612,7 +615,7 @@ export default function NutritionScreen() {
               <PrimaryButton label="Log a Meal" onPress={() => setQuickLogOpen(true)} />
             </Card>
           ) : (
-            <View testID="meal-list">
+            <View testID="meal-list" style={styles.mealList}>
               {todayMeals.map((meal, index) => (
                 <MealPlanCard
                   key={meal.id}
@@ -639,17 +642,15 @@ export default function NutritionScreen() {
 
       {section === 'week' && weekMeals.length > 0 ? (
         <>
-          <Card style={styles.weekSummary}>
-                <AppText variant="label" color="accent">
-                  Week totals
-                </AppText>
-                <AppText variant="body" color="textSecondary">
-                  {weekAggregation.caloriesConsumed} / {weekAggregation.plannedCalories} cal consumed ·{' '}
-                  {Math.round(weekAggregation.proteinG)} / {Math.round(weekAggregation.plannedProteinG)}g protein ·{' '}
-                  {weekAggregation.mealsCompleted} / {weekAggregation.mealsTotal} meals logged
-                </AppText>
-              </Card>
-              {weekDays.map((day) => (
+          <NutritionMetricsRow
+            caloriesValue={String(weekAggregation.caloriesConsumed)}
+            caloriesFooter={`of ${weekAggregation.plannedCalories} planned`}
+            proteinValue={`${Math.round(weekAggregation.proteinG)}g`}
+            proteinFooter={`of ${Math.round(weekAggregation.plannedProteinG)}g planned`}
+            mealsValue={`${weekAggregation.mealsCompleted}/${weekAggregation.mealsTotal}`}
+            mealsFooter="logged this week"
+          />
+          {weekDays.map((day) => (
               <Card key={day.date} style={styles.dayCard}>
                 <Pressable onPress={() => setExpandedDay(expandedDay === day.date ? null : day.date)} style={styles.dayHeader}>
                   <AppText variant="bodyBold">
@@ -695,11 +696,11 @@ export default function NutritionScreen() {
 
       {section === 'shopping' ? (
         <>
-          <Card style={styles.weekSummary}>
+          <Card style={styles.intelCard}>
             <AppText variant="label" color="accent">
               Weekly shopping
             </AppText>
-            <AppText variant="body" color="textSecondary">
+            <AppText variant="footnote" color="textSecondary">
               {weekRange.from} – {weekRange.to} · {weekMeals.length} planned meals · {shoppingItems.length} items
             </AppText>
           </Card>
@@ -782,22 +783,18 @@ export default function NutritionScreen() {
 
 const styles = StyleSheet.create({
   content: {
-    gap: Spacing.lg,
     paddingBottom: Spacing.huge,
   },
   errorContent: {
     flexGrow: 1,
     justifyContent: 'center',
   },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: Spacing.md,
+  prefsRow: {
+    alignSelf: 'flex-end',
+    marginTop: -Spacing.sm,
   },
-  headerText: {
-    flex: 1,
-    gap: Spacing.xs,
+  mealList: {
+    gap: Spacing.md,
   },
   intelCard: {
     gap: Spacing.xs,
@@ -808,27 +805,13 @@ const styles = StyleSheet.create({
   empty: {
     gap: Spacing.md,
   },
-  todayHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
   dayCard: {
     gap: Spacing.sm,
-  },
-  weekSummary: {
-    gap: Spacing.xs,
   },
   dayHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-  },
-  weekMealRow: {
-    gap: Spacing.xs,
-    paddingVertical: Spacing.sm,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: LiftFlowColors.border,
   },
   shoppingCard: {
     gap: Spacing.sm,

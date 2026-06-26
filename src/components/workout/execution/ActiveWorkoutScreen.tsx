@@ -1,9 +1,9 @@
-import { LinearGradient } from 'expo-linear-gradient';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Pressable, StyleSheet, View } from 'react-native';
 
 import { ExerciseMusclePanel } from '@/components/exercise/ExerciseMusclePanel';
 import { Card } from '@/components/layout/Card';
+import { GradientBorderCard } from '@/components/layout/GradientBorderCard';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { TabScreenHeader } from '@/components/layout/TabScreenHeader';
@@ -30,6 +30,7 @@ import {
     formatCoachTargetLine,
 } from '@/lib/activeWorkoutMetrics';
 import {
+    defaultLoadingMethodForExercise,
     inferLoadingMethodFromHistory,
     loadingMethodOptions,
     loadingMethodToLoggingMode,
@@ -148,6 +149,7 @@ export function ActiveWorkoutScreen({
     deleteSet,
     addExerciseByName,
     setActiveExerciseIndex,
+    activeExerciseIndex,
     lastLoggedSet,
     startRestTimer,
     watchDraftReps,
@@ -155,6 +157,7 @@ export function ActiveWorkoutScreen({
     watchDraftWeightKg,
     setWatchDraftWeightKg,
     restTimerHaptics,
+    setExerciseEffectiveTargetSets,
   } = useWorkoutSession();
 
   const { suppressNextWatchRestComplete } = useWatchExecutionRestSync({
@@ -192,10 +195,16 @@ export function ActiveWorkoutScreen({
     [session.exercises],
   );
 
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const currentIndex = activeExerciseIndex;
+  const setCurrentIndex = setActiveExerciseIndex;
+
   useEffect(() => {
-    setActiveExerciseIndex(currentIndex);
-  }, [currentIndex, setActiveExerciseIndex]);
+    if (sortedExercises.length === 0) return;
+    if (currentIndex >= sortedExercises.length) {
+      setActiveExerciseIndex(sortedExercises.length - 1);
+    }
+  }, [currentIndex, sortedExercises.length, setActiveExerciseIndex]);
+
   const [weightKg, setWeightKg] = useState(0);
   const [reps, setReps] = useState(8);
   const [durationSeconds, setDurationSeconds] = useState(30);
@@ -213,6 +222,14 @@ export function ActiveWorkoutScreen({
   const [challengeTargetExerciseName, setChallengeTargetExerciseName] = useState<string | null>(null);
   const [loadingMethod, setLoadingMethod] = useState<LoadingMethod>('external_load');
   const pendingAdvanceRef = useRef<number | null>(null);
+  const applyPendingExerciseIndexAdvance = useCallback(() => {
+    const nextIndex = pendingAdvanceRef.current;
+    if (nextIndex == null) return false;
+    pendingAdvanceRef.current = null;
+    setCurrentIndex(nextIndex);
+    setShowComplete(false);
+    return true;
+  }, []);
   const pendingAdvanceAfterChallengeRef = useRef<(() => void) | null>(null);
   const pendingExerciseAdvanceAfterRestRef = useRef(false);
   const autoAdvanceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -220,7 +237,7 @@ export function ActiveWorkoutScreen({
   const pendingRoundIncrementRef = useRef(false);
   const offeredExerciseCompleteRef = useRef<number | null>(null);
   const [circuitRound, setCircuitRound] = useState(1);
-  const [bonusSets, setBonusSets] = useState(0);
+  const [bonusSetsByExerciseId, setBonusSetsByExerciseId] = useState<Record<string, number>>({});
   const [exercisePickerVisible, setExercisePickerVisible] = useState(false);
   const [exerciseGuideOpen, setExerciseGuideOpen] = useState(false);
   const [intervalOverlayOpen, setIntervalOverlayOpen] = useState(false);
@@ -241,6 +258,7 @@ export function ActiveWorkoutScreen({
     (item) => item.name.toLowerCase() === currentExercise?.exercise?.name?.toLowerCase(),
   );
   const targetSets = planMeta?.sets ?? 3;
+  const bonusSets = currentExercise?.id ? (bonusSetsByExerciseId[currentExercise.id] ?? 0) : 0;
   const coachRecommendedSets = coachPrescription?.targets.sets ?? targetSets;
   const coachExtraSets = Math.max(0, coachRecommendedSets - targetSets);
   const effectiveTargetSets = Math.max(targetSets + bonusSets, coachRecommendedSets);
@@ -294,6 +312,13 @@ export function ActiveWorkoutScreen({
         !executionModeUsesTraditionalRest(executionMode) || flowAction.skipRest;
       const targetForExercise = targetSetsForIndex(exerciseIndex, planExercises);
 
+      if (
+        flowAction.afterRestAdvanceIndex != null &&
+        flowAction.immediateAdvanceIndex == null
+      ) {
+        pendingAdvanceRef.current = flowAction.afterRestAdvanceIndex;
+      }
+
       const logged =
         input.weightKg == null
           ? await logSet({
@@ -328,7 +353,9 @@ export function ActiveWorkoutScreen({
         setCurrentIndex(flowAction.immediateAdvanceIndex);
         setShowComplete(false);
       } else if (flowAction.afterRestAdvanceIndex != null) {
-        pendingAdvanceRef.current = flowAction.afterRestAdvanceIndex;
+        if (skipRest) {
+          applyPendingExerciseIndexAdvance();
+        }
       } else if (
         completedAfterLog >= targetForExercise &&
         executionModeUsesTraditionalRest(executionMode) &&
@@ -348,6 +375,7 @@ export function ActiveWorkoutScreen({
       logSet,
       refreshSession,
       startCircuitTransition,
+      applyPendingExerciseIndexAdvance,
     ],
   );
 
@@ -501,6 +529,10 @@ export function ActiveWorkoutScreen({
     () => computeWorkoutSetProgress(session.exercises, planExercises),
     [session.exercises, planExercises],
   );
+  const loggedSetCount = useMemo(
+    () => sortedExercises.reduce((total, exercise) => total + exercise.sets.length, 0),
+    [sortedExercises],
+  );
   const coachTargetLine = useMemo(() => {
     if (!coachPrescription) return null;
     return formatCoachTargetLine(
@@ -637,6 +669,10 @@ export function ActiveWorkoutScreen({
 
   useEffect(() => {
     if (!user || !currentExercise?.exerciseId) return;
+
+    setLoadingMethod(
+      defaultLoadingMethodForExercise(currentExercise.exercise, currentExercise.exercise?.slug),
+    );
 
     const mode = getExerciseLoggingMode(
       currentExercise.exercise,
@@ -799,20 +835,45 @@ export function ActiveWorkoutScreen({
   }, [circuitTimer, dismissCircuitTimer, startIntervalTimer]);
 
   useEffect(() => {
-    setBonusSets(0);
-  }, [currentExercise?.id]);
+    setBonusSetsByExerciseId({});
+  }, [session.id]);
 
-  useEffect(() => {
-    if (coachExtraSets <= 0) return;
-    setBonusSets((current) => (current >= coachExtraSets ? current : coachExtraSets));
-    setShowComplete(false);
+  const clearExerciseAdvanceState = useCallback(() => {
     pendingExerciseAdvanceAfterRestRef.current = false;
     pendingAdvanceRef.current = null;
+    setPendingAdvanceIndex(null);
+    pendingAdvanceAfterChallengeRef.current = null;
     if (autoAdvanceTimeoutRef.current) {
       clearTimeout(autoAdvanceTimeoutRef.current);
       autoAdvanceTimeoutRef.current = null;
     }
-  }, [coachExtraSets, currentExercise?.id]);
+    setShowComplete(false);
+  }, []);
+
+  const goToExercise = useCallback(
+    (index: number) => {
+      const clamped = Math.max(0, Math.min(index, sortedExercises.length - 1));
+      if (clamped === currentIndex) return;
+      clearExerciseAdvanceState();
+      setCurrentIndex(clamped);
+    },
+    [clearExerciseAdvanceState, currentIndex, sortedExercises.length],
+  );
+
+  useEffect(() => {
+    if (!currentExercise?.id) return;
+    setExerciseEffectiveTargetSets(currentExercise.id, effectiveTargetSets);
+  }, [currentExercise?.id, effectiveTargetSets, setExerciseEffectiveTargetSets]);
+
+  useEffect(() => {
+    if (coachExtraSets <= 0 || !currentExercise?.id) return;
+    setBonusSetsByExerciseId((current) => {
+      const existing = current[currentExercise.id] ?? 0;
+      if (existing >= coachExtraSets) return current;
+      return { ...current, [currentExercise.id]: coachExtraSets };
+    });
+    clearExerciseAdvanceState();
+  }, [coachExtraSets, clearExerciseAdvanceState, currentExercise?.id]);
 
   useEffect(() => {
     if (groupComplete && completedSets.length > 0 && allSetsDone) {
@@ -824,8 +885,12 @@ export function ActiveWorkoutScreen({
   }, [groupComplete, completedSets, allSetsDone]);
 
   function handleAddSet() {
-    setBonusSets((count) => count + 1);
-    setShowComplete(false);
+    if (!currentExercise?.id) return;
+    setBonusSetsByExerciseId((current) => ({
+      ...current,
+      [currentExercise.id]: (current[currentExercise.id] ?? 0) + 1,
+    }));
+    clearExerciseAdvanceState();
   }
 
   async function handleDeleteSet(setId: string) {
@@ -907,11 +972,9 @@ export function ActiveWorkoutScreen({
   );
 
   useEffect(() => {
-    if (restSecondsRemaining !== 0 || pendingAdvanceRef.current === null) return;
-    setCurrentIndex(pendingAdvanceRef.current);
-    pendingAdvanceRef.current = null;
-    setShowComplete(false);
-  }, [restSecondsRemaining]);
+    if (restSecondsRemaining !== 0) return;
+    applyPendingExerciseIndexAdvance();
+  }, [restSecondsRemaining, applyPendingExerciseIndexAdvance]);
 
   useEffect(() => {
     if (restSecondsRemaining !== 0) return;
@@ -967,6 +1030,13 @@ export function ActiveWorkoutScreen({
       const repsToLog = watchPhoneBridge.getPendingWatchReps() ?? watchDraftReps ?? reps;
       const weightToLog = watchPhoneBridge.getPendingWatchWeightKg() ?? watchDraftWeightKg ?? weightKg;
 
+      if (
+        flowAction.afterRestAdvanceIndex != null &&
+        flowAction.immediateAdvanceIndex == null
+      ) {
+        pendingAdvanceRef.current = flowAction.afterRestAdvanceIndex;
+      }
+
       const logged =
         loggingMode === 'cardio'
           ? await logSet({
@@ -1002,7 +1072,9 @@ export function ActiveWorkoutScreen({
         setCurrentIndex(flowAction.immediateAdvanceIndex);
         setShowComplete(false);
       } else if (flowAction.afterRestAdvanceIndex != null) {
-        pendingAdvanceRef.current = flowAction.afterRestAdvanceIndex;
+        if (skipRest) {
+          applyPendingExerciseIndexAdvance();
+        }
       } else if (
         exerciseAdvance &&
         executionModeUsesTraditionalRest(executionMode) &&
@@ -1156,23 +1228,47 @@ export function ActiveWorkoutScreen({
         header={
           <View style={styles.stickyWorkoutHeader}>
             <TabScreenHeader
+              showBrand={false}
               title={session.name}
-              subtitle={`${currentIndex + 1} of ${sortedExercises.length} · ${formatWorkoutClockTime(elapsedSeconds)}`}
+              subtitle={`${currentIndex + 1} of ${sortedExercises.length} · ${formatWorkoutClockTime(elapsedSeconds)}${loggedSetCount > 0 ? ' · In progress' : ''}`}
               right={
                 isPaused ? (
                   <PrimaryButton label="Resume" onPress={resumeSession} />
                 ) : (
-                  <PrimaryButton label="Pause" variant="secondary" onPress={pauseSession} />
+                  <PrimaryButton label="Pause" variant="ghost" onPress={pauseSession} />
                 )
               }
             />
             <WorkoutProgressBar percent={workoutProgress.percent} />
+            <View style={styles.exerciseNavRow}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Previous exercise"
+                onPress={() => goToExercise(currentIndex - 1)}
+                disabled={currentIndex === 0 || isPaused}
+                style={styles.exerciseNavButton}>
+                <AppText variant="caption" color={currentIndex === 0 || isPaused ? 'textTertiary' : 'accent'}>
+                  ← Prev
+                </AppText>
+              </Pressable>
+              <AppText variant="caption" color="textSecondary" numberOfLines={1} style={styles.exerciseNavTitle}>
+                {currentIndex + 1}/{sortedExercises.length}
+              </AppText>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Next exercise"
+                onPress={() => goToExercise(currentIndex + 1)}
+                disabled={isLastExercise || isPaused}
+                style={styles.exerciseNavButton}>
+                <AppText variant="caption" color={isLastExercise || isPaused ? 'textTertiary' : 'accent'}>
+                  Next →
+                </AppText>
+              </Pressable>
+            </View>
           </View>
         }
         contentContainerStyle={styles.content}>
-        <View style={styles.heroOuter}>
-          <LinearGradient colors={['rgba(31, 107, 255, 0.35)', 'rgba(0, 229, 255, 0.12)']} style={styles.heroBorder}>
-            <View style={styles.heroCard}>
+        <GradientBorderCard innerStyle={styles.heroCard}>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={`How to do ${currentExercise.exercise?.name ?? 'exercise'}`}
@@ -1371,9 +1467,7 @@ export function ActiveWorkoutScreen({
                   </View>
                 </>
               ) : null}
-            </View>
-          </LinearGradient>
-        </View>
+        </GradientBorderCard>
 
         <Card style={styles.setProgress}>
           <View style={styles.setChipRow}>
@@ -1515,34 +1609,20 @@ const styles = StyleSheet.create({
     backgroundColor: LiftFlowColors.background,
   },
   content: {
-    paddingBottom: Spacing.huge,
     gap: Spacing.lg,
   },
   stickyWorkoutHeader: {
     gap: Spacing.sm,
   },
-  heroOuter: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    borderRadius: Radius.full,
-    backgroundColor: LiftFlowColors.backgroundSecondary,
-    borderWidth: 1,
-    borderColor: LiftFlowColors.border,
+  heroCard: {
+    gap: Spacing.md,
   },
   timerChip: {
-    borderRadius: Radius.lg,
-    overflow: 'hidden',
-  },
-  heroBorder: {
-    borderRadius: Radius.lg,
-    padding: 1,
-  },
-  heroCard: {
-    backgroundColor: LiftFlowColors.surface,
-    borderRadius: Radius.lg - 1,
-    padding: Spacing.lg,
-    gap: Spacing.lg,
+    borderRadius: Radius.md,
+    backgroundColor: LiftFlowColors.backgroundSecondary,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    alignSelf: 'flex-start',
   },
   exerciseNamePressable: {
     gap: Spacing.xs,
@@ -1584,7 +1664,7 @@ const styles = StyleSheet.create({
   },
   loadingMethodChipActive: {
     borderColor: LiftFlowColors.accent,
-    backgroundColor: 'rgba(31, 107, 255, 0.12)',
+    backgroundColor: LiftFlowColors.primaryGlow,
   },
   setProgress: {
     paddingVertical: Spacing.sm,
@@ -1613,5 +1693,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: Spacing.sm,
+  },
+  exerciseNavRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: Spacing.xs,
+    gap: Spacing.sm,
+  },
+  exerciseNavButton: {
+    minWidth: 56,
+    paddingVertical: Spacing.xs,
+  },
+  exerciseNavTitle: {
+    flex: 1,
+    textAlign: 'center',
   },
 });

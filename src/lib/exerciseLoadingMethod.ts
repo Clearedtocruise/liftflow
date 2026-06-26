@@ -68,6 +68,22 @@ export function loadingMethodOptions(
   }));
 }
 
+/** Immediate default when switching exercises — before async history loads. */
+export function defaultLoadingMethodForExercise(
+  exercise: Exercise | null | undefined,
+  slug?: string | null,
+): LoadingMethod {
+  const supported = supportedLoadingMethods(exercise, slug);
+  if (supported.length === 1) return supported[0]!;
+
+  const mode = getExerciseLoggingMode(exercise, undefined, exercise?.name);
+  if (mode === 'bodyweight' && supported.includes('bodyweight')) return 'bodyweight';
+  if (mode === 'timed' && supported.includes('timed_hold')) return 'timed_hold';
+  if (mode === 'cardio' && supported.includes('distance')) return 'distance';
+  if (supported.includes('external_load')) return 'external_load';
+  return supported[0] ?? 'external_load';
+}
+
 export function inferLoadingMethodFromHistory(
   exercise: Exercise | null | undefined,
   slug: string | undefined,

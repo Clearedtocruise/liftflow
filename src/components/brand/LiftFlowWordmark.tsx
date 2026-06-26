@@ -7,6 +7,8 @@ type LiftFlowWordmarkProps = {
   size?: 'sm' | 'md' | 'lg';
   align?: 'left' | 'center';
   showTagline?: boolean;
+  /** White text for photography overlays. */
+  tone?: 'default' | 'onPhoto';
 };
 
 const SIZES = {
@@ -15,18 +17,30 @@ const SIZES = {
   lg: { fontSize: 28, lineHeight: 34, letterSpacing: 5 },
 } as const;
 
-export function LiftFlowWordmark({ size = 'md', align = 'center', showTagline = false }: LiftFlowWordmarkProps) {
+export function LiftFlowWordmark({
+  size = 'md',
+  align = 'center',
+  showTagline = false,
+  tone = 'default',
+}: LiftFlowWordmarkProps) {
   const scale = SIZES[size];
+  const onPhoto = tone === 'onPhoto';
 
   return (
     <View style={[styles.block, align === 'center' && styles.centered]}>
       <View style={[styles.row, align === 'center' && styles.centered]}>
-        <AppText align={align} style={[styles.word, scale]}>
+        <AppText
+          align={align}
+          style={[styles.word, scale, onPhoto && styles.wordOnPhoto]}>
           {Brand.name}
         </AppText>
       </View>
       {showTagline ? (
-        <AppText variant="label" color="accent" align={align} style={styles.tagline}>
+        <AppText
+          variant="label"
+          color={onPhoto ? undefined : 'accent'}
+          align={align}
+          style={[styles.tagline, onPhoto && styles.taglineOnPhoto]}>
           {Brand.taglinePrimary}
         </AppText>
       ) : null}
@@ -53,8 +67,14 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: LiftFlowColors.textPrimary,
   },
+  wordOnPhoto: {
+    color: '#FFFFFF',
+  },
   tagline: {
     letterSpacing: 2,
     marginTop: 2,
+  },
+  taglineOnPhoto: {
+    color: 'rgba(255,255,255,0.82)',
   },
 });

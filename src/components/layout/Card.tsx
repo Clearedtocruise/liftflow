@@ -59,7 +59,7 @@ const styles = StyleSheet.create({
     backgroundColor: LiftFlowColors.primaryGlow,
   },
   glow: {
-    borderColor: 'rgba(31, 107, 255, 0.35)',
+    borderColor: 'rgba(14, 144, 255, 0.28)',
     ...Shadows.glow,
   },
   pressed: {

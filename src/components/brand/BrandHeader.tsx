@@ -14,7 +14,7 @@ type BrandHeaderProps = {
 export function BrandHeader({ subtitle, compact = false }: BrandHeaderProps) {
   return (
     <View style={styles.row}>
-      <LogoMark size={compact ? 32 : 40} glow={false} animate={false} />
+      <LogoMark size={compact ? 32 : 40} glow={false} animate={false} compact />
       <View style={styles.textBlock}>
         <LiftFlowWordmark size={compact ? 'sm' : 'md'} align="left" />
         {subtitle ? (

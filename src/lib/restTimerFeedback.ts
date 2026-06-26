@@ -1,5 +1,6 @@
-import * as Speech from 'expo-speech';
 import { Platform, Vibration } from 'react-native';
+
+import { speakWithMusicDuck } from '@/lib/iosAudioSession';
 
 export function cueRestTimerComplete(options?: { sound?: boolean; haptics?: boolean }): void {
   if (Platform.OS === 'web') return;
@@ -12,7 +13,6 @@ export function cueRestTimerComplete(options?: { sound?: boolean; haptics?: bool
   }
 
   if (sound) {
-    Speech.stop();
-    Speech.speak('Rest complete', { rate: 1.05, pitch: 1 });
+    speakWithMusicDuck('Rest complete', { rate: 1.05, pitch: 1 });
   }
 }

@@ -1,9 +1,9 @@
 import { Tabs } from 'expo-router';
-import { Platform } from 'react-native';
+import { Platform, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppSymbol, SYMBOL_FALLBACKS } from '@/components/ui/AppSymbol';
-import { LiftFlowColors, Typography } from '@/constants/theme';
+import { LiftFlowColors, Shadows, Typography } from '@/constants/theme';
 
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
@@ -17,17 +17,16 @@ export default function TabsLayout() {
         tabBarInactiveTintColor: LiftFlowColors.tabInactive,
         tabBarStyle: {
           backgroundColor: LiftFlowColors.tabBar,
-          borderTopColor: LiftFlowColors.border,
-          borderTopWidth: 1,
+          borderTopColor: LiftFlowColors.tabBarBorder,
+          borderTopWidth: StyleSheet.hairlineWidth,
           height: 56 + bottomPad,
-          paddingTop: 8,
+          paddingTop: 6,
           paddingBottom: bottomPad,
-          elevation: 0,
-          shadowOpacity: 0,
+          ...Shadows.tabBar,
         },
         tabBarLabelStyle: {
           ...Typography.caption,
-          fontSize: 11,
+          fontSize: 10,
           fontWeight: '600',
           marginTop: 2,
         },

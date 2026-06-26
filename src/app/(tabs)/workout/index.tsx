@@ -3,9 +3,9 @@ import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, StyleSheet } from 'react-native';
 
-import { BrandBootScreen } from '@/components/brand/BrandBootScreen';
 import { ManageDayModal } from '@/components/dashboard/ManageDayModal';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
+import { SkeletonBlock } from '@/components/layout/SkeletonBlock';
 import { TabScreenHeader } from '@/components/layout/TabScreenHeader';
 import { ActiveWorkoutScreen } from '@/components/workout/execution/ActiveWorkoutScreen';
 import { WorkoutWeeklyPlanScreen } from '@/components/workout/execution/WorkoutWeeklyPlanScreen';
@@ -275,7 +275,15 @@ export default function WorkoutScreen() {
   }, []);
 
   if (loading && !session && weekDays.length === 0) {
-    return <BrandBootScreen message="Loading your workout plan…" />;
+    return (
+      <ScreenContainer
+        header={<TabScreenHeader title="Workout" subtitle="This week's plan" />}
+        scroll={false}>
+        <SkeletonBlock height={120} />
+        <SkeletonBlock height={200} />
+        <SkeletonBlock height={200} />
+      </ScreenContainer>
+    );
   }
 
   if (session) {

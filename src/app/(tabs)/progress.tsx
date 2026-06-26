@@ -1,6 +1,6 @@
 import * as ImagePicker from 'expo-image-picker';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { BodyCompositionSummary } from '@/components/body/BodyCompositionSummary';
 import { CoachInsightsPanel } from '@/components/body/CoachInsightsPanel';
@@ -12,6 +12,8 @@ import { TransformationStoryHero } from '@/components/body/TransformationStoryHe
 import { Card } from '@/components/layout/Card';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
+import { SkeletonBlock } from '@/components/layout/SkeletonBlock';
+import { EmptyStateCard } from '@/components/layout/StateCard';
 import { TabScreenHeader } from '@/components/layout/TabScreenHeader';
 import { FeatureGate } from '@/components/subscription/PremiumGate';
 import { AppText } from '@/components/ui/AppText';
@@ -208,22 +210,30 @@ export default function ProgressScreen() {
 
   if (loading && photos.length === 0 && measurements.length === 0) {
     return (
-      <View style={styles.loading}>
-        <ActivityIndicator size="large" color={LiftFlowColors.accent} />
-        <AppText variant="caption" color="textSecondary">
-          Loading your transformation…
-        </AppText>
-      </View>
+      <ScreenContainer
+        header={
+          <TabScreenHeader title="Progress" subtitle="Your transformation journey" />
+        }
+        scroll={false}>
+        <SkeletonBlock height={160} />
+        <SkeletonBlock height={120} />
+        <SkeletonBlock height={88} />
+      </ScreenContainer>
     );
   }
 
   if (!user) {
     return (
-      <View style={styles.loading}>
-        <AppText variant="body" color="textSecondary">
-          Sign in to track your transformation.
-        </AppText>
-      </View>
+      <ScreenContainer
+        header={
+          <TabScreenHeader title="Progress" subtitle="Your transformation journey" />
+        }
+        scroll={false}>
+        <EmptyStateCard
+          title="Sign in required"
+          message="Sign in to track your transformation."
+        />
+      </ScreenContainer>
     );
   }
 
@@ -340,18 +350,7 @@ export default function ProgressScreen() {
 }
 
 const styles = StyleSheet.create({
-  loading: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.md,
-    backgroundColor: LiftFlowColors.background,
-  },
-  header: {
-    gap: Spacing.xs,
-    marginBottom: Spacing.xl,
-  },
-  setupCard: { gap: Spacing.md, marginBottom: Spacing.lg },
+  setupCard: { gap: Spacing.md },
   presets: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
   presetChip: {
     paddingHorizontal: Spacing.md,
@@ -364,11 +363,11 @@ const styles = StyleSheet.create({
     borderColor: LiftFlowColors.accent,
     backgroundColor: LiftFlowColors.accentGlow,
   },
-  refreshLink: { marginBottom: Spacing.lg, textAlign: 'center' },
-  form: { gap: Spacing.md, marginTop: Spacing.md, marginBottom: Spacing.lg },
+  refreshLink: { textAlign: 'center' },
+  form: { gap: Spacing.md },
   input: {
     backgroundColor: LiftFlowColors.background,
-    borderRadius: 8,
+    borderRadius: Radius.md,
     padding: Spacing.md,
     color: LiftFlowColors.textPrimary,
     borderWidth: 1,

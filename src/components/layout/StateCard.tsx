@@ -60,7 +60,7 @@ export function ErrorStateCard({
 const styles = StyleSheet.create({
   card: {
     gap: Spacing.md,
-    marginTop: Spacing.lg,
+    marginTop: 0,
   },
   actions: {
     gap: Spacing.sm,

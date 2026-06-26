@@ -7,13 +7,19 @@ type SectionHeaderProps = {
   title: string;
   subtitle?: string;
   action?: React.ReactNode;
+  /** `secondary` for in-screen sections below the page title. */
+  variant?: 'primary' | 'secondary';
 };
 
-export function SectionHeader({ title, subtitle, action }: SectionHeaderProps) {
+export function SectionHeader({ title, subtitle, action, variant = 'primary' }: SectionHeaderProps) {
+  const isSecondary = variant === 'secondary';
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, isSecondary && styles.containerSecondary]}>
       <View style={styles.textBlock}>
-        <AppText variant="headline">{title}</AppText>
+        <AppText variant={isSecondary ? 'label' : 'headline'} color={isSecondary ? 'accent' : 'textPrimary'}>
+          {title}
+        </AppText>
         {subtitle ? (
           <AppText variant="footnote" color="textSecondary">
             {subtitle}
@@ -32,6 +38,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: Spacing.md,
     gap: Spacing.md,
+  },
+  containerSecondary: {
+    marginBottom: Spacing.sm,
   },
   textBlock: {
     flex: 1,

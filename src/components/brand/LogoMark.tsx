@@ -18,9 +18,17 @@ type LogoMarkProps = {
   variant?: 'primary' | 'white' | 'black' | 'gradient';
   glow?: boolean;
   animate?: boolean;
+  /** Tighter bounds when used inline (no glow halo). */
+  compact?: boolean;
 };
 
-export function LogoMark({ size = 64, variant = 'primary', glow = true, animate = false }: LogoMarkProps) {
+export function LogoMark({
+  size = 64,
+  variant = 'primary',
+  glow = true,
+  animate = false,
+  compact = false,
+}: LogoMarkProps) {
   const scale = useSharedValue(animate ? 0.88 : 1);
   const glowOpacity = useSharedValue(animate ? 0.4 : 0.85);
 
@@ -50,7 +58,7 @@ export function LogoMark({ size = 64, variant = 'primary', glow = true, animate 
     opacity: glowOpacity.value,
   }));
 
-  const pad = Math.round(size * 0.42);
+  const pad = compact ? 0 : Math.round(size * 0.42);
 
   return (
     <View style={[styles.wrap, { width: size + pad, height: size + pad }]}>

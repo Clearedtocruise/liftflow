@@ -1,5 +1,6 @@
 import { StyleSheet, TextInput, View } from 'react-native';
 
+import { GradientBorderCard } from '@/components/layout/GradientBorderCard';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
@@ -27,7 +28,7 @@ type ActivitySessionSaveCardProps = {
 function SummaryMetric({ label, value }: { label: string; value: string }) {
   return (
     <View style={styles.summaryMetric}>
-      <AppText variant="caption" color="textSecondary">
+      <AppText variant="label" color="textTertiary">
         {label}
       </AppText>
       <AppText variant="bodyBold">{value}</AppText>
@@ -53,9 +54,12 @@ export function ActivitySessionSaveCard({
   onDiscard,
 }: ActivitySessionSaveCardProps) {
   return (
-    <View style={styles.card}>
-      <AppText variant="bodyBold" align="center">
-        {activityLabel} complete
+    <GradientBorderCard intensity="bold" innerStyle={styles.card}>
+      <AppText variant="label" color="success" align="center">
+        Session complete
+      </AppText>
+      <AppText variant="headline" align="center">
+        {activityLabel}
       </AppText>
       <AppText variant="footnote" color="textSecondary" align="center">
         {formatCardioDuration(durationSeconds)}
@@ -93,18 +97,13 @@ export function ActivitySessionSaveCard({
       {onDiscard ? (
         <PrimaryButton label="Discard" variant="ghost" onPress={onDiscard} disabled={saving} />
       ) : null}
-    </View>
+    </GradientBorderCard>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
     gap: Spacing.md,
-    padding: Spacing.lg,
-    borderRadius: Radius.lg,
-    backgroundColor: LiftFlowColors.surface,
-    borderWidth: 1,
-    borderColor: LiftFlowColors.accent,
   },
   summaryRow: {
     flexDirection: 'row',

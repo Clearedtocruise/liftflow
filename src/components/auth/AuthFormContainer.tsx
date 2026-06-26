@@ -7,7 +7,7 @@ import { LiftFlowWordmark } from '@/components/brand/LiftFlowWordmark';
 import { LogoMark } from '@/components/brand/LogoMark';
 import { AppText } from '@/components/ui/AppText';
 import { HeroImages } from '@/constants/imagery';
-import { LiftFlowColors, Spacing } from '@/constants/theme';
+import { BrandGradients, LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 
 type AuthFormContainerProps = {
   title: string;
@@ -47,12 +47,18 @@ export function AuthFormContainer({ title, subtitle, children }: AuthFormContain
           </View>
 
           <View style={styles.header}>
-            <AppText variant="title">{title}</AppText>
+            <AppText variant="headline">{title}</AppText>
             {subtitle ? (
-              <AppText variant="body" color="textSecondary">
+              <AppText variant="footnote" color="textSecondary">
                 {subtitle}
               </AppText>
             ) : null}
+            <LinearGradient
+              colors={[...BrandGradients.border.default]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.accentLine}
+            />
           </View>
           <View style={styles.form}>{children}</View>
         </ScrollView>
@@ -71,22 +77,28 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    paddingHorizontal: Spacing.xxl,
+    paddingHorizontal: Spacing.xl,
   },
   brandBlock: {
     alignItems: 'center',
     gap: Spacing.md,
-    marginBottom: Spacing.xxxl,
+    marginBottom: Spacing.xxl,
   },
   heroImage: {
     width: '100%',
     height: 120,
-    borderRadius: 16,
+    borderRadius: Radius.lg,
     opacity: 0.25,
   },
   header: {
     gap: Spacing.sm,
     marginBottom: Spacing.xxl,
+  },
+  accentLine: {
+    width: 48,
+    height: 3,
+    borderRadius: 2,
+    marginTop: Spacing.xs,
   },
   form: {
     gap: Spacing.lg,

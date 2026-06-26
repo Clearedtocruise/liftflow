@@ -1,8 +1,7 @@
 import { useFocusEffect } from '@react-navigation/native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, InteractionManager, Pressable, RefreshControl, StyleSheet, View, type AlertButton } from 'react-native';
+import { Alert, InteractionManager, RefreshControl, StyleSheet, type AlertButton } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { HomeNextUpCard } from '@/components/dashboard/HomeNextUpCard';
@@ -13,13 +12,16 @@ import { RingGauge } from '@/components/dashboard/RingGauge';
 import { WeeklyReviewCard } from '@/components/dashboard/WeeklyReviewCard';
 import { InsightCard } from '@/components/insights/InsightCard';
 import { Card } from '@/components/layout/Card';
+import { HeroPhotoBanner } from '@/components/layout/HeroPhotoBanner';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
+import { SectionHeader } from '@/components/layout/SectionHeader';
 import { SkeletonBlock } from '@/components/layout/SkeletonBlock';
-import { TabScreenHeader } from '@/components/layout/TabScreenHeader';
+import { StatCard } from '@/components/layout/StatCard';
 import { AppText } from '@/components/ui/AppText';
 import { HOME_ACTIVITY_OPTIONS } from '@/constants/activityOptions';
-import { Brand, LiftFlowColors, Radius, Spacing } from '@/constants/theme';
+import { HeroImages } from '@/constants/imagery';
+import { LiftFlowColors, Spacing } from '@/constants/theme';
 import { usePlanAdjustment } from '@/contexts/PlanAdjustmentContext';
 import { useAppResume } from '@/hooks/useAppResume';
 import { useAuth } from '@/hooks/useAuth';
@@ -511,12 +513,6 @@ export default function DashboardScreen() {
   return (
     <ScreenContainer
       testID="home-screen"
-      header={
-        <TabScreenHeader
-          title={user?.displayName ? `Hey, ${user.displayName.split(' ')[0]}` : Brand.heroHeadline}
-          subtitle={coachHeadline}
-        />
-      }
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
@@ -527,6 +523,12 @@ export default function DashboardScreen() {
           tintColor={LiftFlowColors.primary}
         />
       }>
+      <HeroPhotoBanner
+        uri={todaysWorkout ? HeroImages.dashboard.workout : HeroImages.dashboard.rest}
+        title={user?.displayName ? `Hey, ${user.displayName.split(' ')[0]}` : 'Your day'}
+        subtitle={coachHeadline}
+      />
+
       <HomePlanAdjustedBanner />
 
       {!hasRecoveryScore && !summaryLoading ? (
@@ -535,25 +537,20 @@ export default function DashboardScreen() {
 
       <Animated.View entering={FadeInDown.duration(400)}>
         {summaryLoading && !coachMessage ? (
-          <View style={styles.aiOuter}>
-            <LinearGradient colors={['rgba(14, 144, 255, 0.35)', 'rgba(14, 144, 255, 0.12)']} style={styles.aiBorder}>
-              <View style={styles.aiCard}>
-                <SkeletonBlock height={14} width="30%" />
-                <SkeletonBlock height={20} width="70%" />
-                <SkeletonBlock height={14} width="90%" />
-              </View>
-            </LinearGradient>
-          </View>
+          <Card style={styles.coachCard}>
+            <SkeletonBlock height={14} width="30%" />
+            <SkeletonBlock height={20} width="70%" />
+            <SkeletonBlock height={14} width="90%" />
+          </Card>
         ) : (
-          <View style={styles.aiOuter}>
-            <LinearGradient colors={['rgba(14, 144, 255, 0.35)', 'rgba(14, 144, 255, 0.12)']} style={styles.aiBorder}>
-              <View style={styles.aiCard}>
-                <AppText variant="footnote" color="textSecondary">
-                  {coachMessage}
-                </AppText>
-              </View>
-            </LinearGradient>
-          </View>
+          <Card style={styles.coachCard}>
+            <AppText variant="label" color="accent">
+              Coach
+            </AppText>
+            <AppText variant="body" color="textSecondary">
+              {coachMessage}
+            </AppText>
+          </Card>
         )}
       </Animated.View>
 
@@ -597,7 +594,7 @@ export default function DashboardScreen() {
               router.push({ pathname: '/(tabs)/workout/day', params: { id: todaysWorkout.id } });
             }}
             onStartWorkout={() => todaysWorkout && handleStartNextWorkout(todaysWorkout)}
-            onManageDay={showWorkoutSection ? handleManageDay : undefined}
+            onManageDay={handleManageDay}
             onLogActivity={handleLogActivity}
             tabataModeEnabled={tabataModeEnabled}
             showWorkoutSection={showWorkoutSection}
@@ -623,7 +620,7 @@ export default function DashboardScreen() {
 
       {!nextPlanned && !programLoading && user?.onboardingCompleted ? (
         <Animated.View entering={FadeInDown.delay(150).duration(400)}>
-          <Card style={styles.emptyWorkout} glow>
+          <Card glow style={styles.emptyWorkout}>
             <AppText variant="bodyBold">Your coach is syncing</AppText>
             <AppText variant="footnote" color="textSecondary">
               Pull to refresh — your program should appear momentarily.
@@ -635,54 +632,44 @@ export default function DashboardScreen() {
 
       <Animated.View entering={FadeInDown.delay(180).duration(400)} style={styles.statsRow}>
         {summaryLoading && recoveryScore === null ? (
-          <Card style={styles.statCard}>
+          <StatCard label="Recovery">
             <SkeletonBlock height={72} />
-          </Card>
+          </StatCard>
         ) : (
-          <Pressable onPress={handleRecoveryPress} accessibilityRole="button" style={styles.statFlex}>
-            <Card style={styles.statCard}>
-              <AppText variant="caption" color="textTertiary">
-                Recovery
-              </AppText>
-              <RingGauge
-                label=""
-                value={recoveryScore}
-                color={recoveryScoreColor(recoveryScore)}
-                size={64}
-              />
-              <AppText variant="caption" color="accent" align="center">
-                {trainingLabel}
-              </AppText>
-              <AppText variant="caption" color="textTertiary" align="center">
-                Tap for details
-              </AppText>
-            </Card>
-          </Pressable>
+          <StatCard
+            label="Recovery"
+            footer={trainingLabel}
+            footerColor="accent"
+            onPress={handleRecoveryPress}>
+            <RingGauge
+              label=""
+              value={recoveryScore}
+              color={recoveryScoreColor(recoveryScore)}
+              size={64}
+            />
+            <AppText variant="caption" color="textTertiary" align="center">
+              Tap for details
+            </AppText>
+          </StatCard>
         )}
         {summaryLoading && !data ? (
-          <Card style={styles.statCard}>
+          <StatCard label="Progress">
             <SkeletonBlock height={72} />
-          </Card>
+          </StatCard>
         ) : (
-          <Card style={styles.statCard}>
-            <AppText variant="caption" color="textTertiary">
-              Progress
-            </AppText>
+          <StatCard
+            label="Progress"
+            footer={`${data?.weeklyWorkouts ?? 0} workouts · ${data?.streak ?? 0}d streak`}>
             <AppText variant="bodyBold" style={styles.weightMetric}>
               {units.formatWeight(data?.currentWeightKg)}
             </AppText>
-            <AppText variant="caption" color="textSecondary" align="center">
-              {data?.weeklyWorkouts ?? 0} workouts · {data?.streak ?? 0}d streak
-            </AppText>
-          </Card>
+          </StatCard>
         )}
       </Animated.View>
 
       {insight ? (
         <Animated.View entering={FadeInDown.delay(300).duration(400)}>
-          <AppText variant="subhead" color="textSecondary" style={styles.insightLabel}>
-            Today&apos;s Insight
-          </AppText>
+          <SectionHeader title="Today's Insight" variant="secondary" />
           <InsightCard insight={insight} />
         </Animated.View>
       ) : null}
@@ -710,50 +697,18 @@ export default function DashboardScreen() {
 }
 
 const styles = StyleSheet.create({
+  coachCard: {
+    gap: Spacing.sm,
+  },
   statsRow: {
     flexDirection: 'row',
     gap: Spacing.md,
-    marginBottom: Spacing.lg,
-  },
-  statFlex: {
-    flex: 1,
-  },
-  statCard: {
-    flex: 1,
-    alignItems: 'center',
-    gap: Spacing.xs,
-    paddingVertical: Spacing.md,
-  },
-  aiOuter: {
-    marginBottom: Spacing.lg,
-    borderRadius: Radius.lg,
-    overflow: 'hidden',
-  },
-  aiBorder: {
-    borderRadius: Radius.lg,
-    padding: 1,
-  },
-  aiCard: {
-    backgroundColor: LiftFlowColors.surface,
-    borderRadius: Radius.lg - 1,
-    padding: Spacing.lg,
-    gap: Spacing.sm,
   },
   emptyWorkout: {
     gap: Spacing.md,
-    marginBottom: Spacing.lg,
   },
   weightMetric: {
     fontSize: 22,
     lineHeight: 28,
-  },
-  insightLabel: {
-    marginBottom: Spacing.md,
-  },
-  skeleton: {
-    backgroundColor: LiftFlowColors.backgroundSecondary,
-    borderRadius: Radius.sm,
-    borderWidth: 1,
-    borderColor: LiftFlowColors.border,
   },
 });

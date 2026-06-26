@@ -6,6 +6,7 @@ import {
     formatDistance,
     formatHeight,
     formatMeasurement,
+    formatVolume,
     formatWater,
     formatWeight,
     heightInputLabel,
@@ -34,6 +35,7 @@ export function useUnits(override?: Partial<UnitPreferences>) {
     () => ({
       ...prefs,
       formatWeight: (kg?: number) => formatWeight(kg, prefs.preferredWeightUnit),
+      formatVolume: (totalVolumeKg?: number) => formatVolume(totalVolumeKg, prefs.preferredWeightUnit),
       parseWeight: (value?: string) => parseWeightToKg(value, prefs.preferredWeightUnit),
       weightLabel: weightUnitLabel(prefs.preferredWeightUnit),
       weightStepKg: () => weightStepKg(prefs.preferredWeightUnit),

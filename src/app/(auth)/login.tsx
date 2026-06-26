@@ -57,7 +57,7 @@ export default function LoginScreen() {
   if (loading) {
     return (
       <View style={styles.redirecting}>
-        <ActivityIndicator size="large" color={LiftFlowColors.accent} />
+        <ActivityIndicator size="large" color={LiftFlowColors.primary} />
         <AppText variant="body" color="textSecondary">
           Signing in…
         </AppText>
@@ -66,7 +66,7 @@ export default function LoginScreen() {
   }
 
   return (
-    <AuthFormContainer title={Brand.name} subtitle={Brand.taglinePrimary}>
+    <AuthFormContainer title="Log In" subtitle="Welcome back — one more rep starts here.">
       <Pressable onPress={() => router.replace('/welcome')} style={styles.backLink}>
         <AppText variant="footnote" color="accent">
           ← Back to welcome
@@ -147,7 +147,7 @@ const styles = StyleSheet.create({
   },
   forgot: {
     alignSelf: 'flex-end',
-    marginTop: -Spacing.sm,
+    marginTop: Spacing.xs,
   },
   footer: {
     flexDirection: 'row',

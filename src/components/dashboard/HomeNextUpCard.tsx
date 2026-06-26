@@ -1,9 +1,10 @@
-import { LinearGradient } from 'expo-linear-gradient';
 import { Pressable, StyleSheet, View } from 'react-native';
 
+import { Card } from '@/components/layout/Card';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
+import { NutritionMetricsRow } from '@/components/nutrition/NutritionMetricsRow';
 import { AppText } from '@/components/ui/AppText';
-import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
+import { Spacing } from '@/constants/theme';
 import { mealTypeLabel } from '@/lib/mealSchedule';
 import type { MealType } from '@/types/common';
 
@@ -60,113 +61,124 @@ export function HomeNextUpCard({
   adaptingPlan,
 }: HomeNextUpCardProps) {
   return (
-    <View style={styles.outer}>
-      <LinearGradient colors={['rgba(31, 107, 255, 0.28)', 'rgba(0, 229, 255, 0.1)']} style={styles.border}>
-        <View style={styles.card}>
-          {showWorkoutSection && workout && !isRestDay ? (
-            <View style={styles.section} testID="today-workout-card">
-              <Pressable onPress={onViewWorkout} disabled={!onViewWorkout}>
-                <AppText variant="bodyBold">{workout.title}</AppText>
-                <AppText variant="footnote" color="textSecondary">
-                  {workout.startTime ? `${workout.startTime} · ` : ''}
-                  {workout.durationMin ? `${workout.durationMin} min` : workout.trainingLabel}
-                </AppText>
-              </Pressable>
-              <PrimaryButton
-                label={tabataModeEnabled ? 'Start Tabata' : 'Start Workout'}
-                onPress={onStartWorkout}
-                loading={startingWorkout}
-                size="large"
-                testID="start-workout-button"
-              />
-              {onManageDay ? (
-                <PrimaryButton
-                  label="Manage Day"
-                  variant="ghost"
-                  onPress={onManageDay}
-                  loading={adaptingPlan}
-                  disabled={adaptingPlan}
-                  testID="manage-day-button"
-                />
-              ) : null}
-              {onLogActivity ? (
-                <PrimaryButton label="Log Activity" variant="secondary" onPress={onLogActivity} />
-              ) : null}
-            </View>
-          ) : showWorkoutSection && isRestDay ? (
-            <View style={styles.section}>
-              <AppText variant="bodyBold">Rest day</AppText>
-              <AppText variant="footnote" color="textSecondary">
-                Recovery or light activity
+    <View style={styles.stack}>
+      {showWorkoutSection && workout && !isRestDay ? (
+        <View testID="today-workout-card">
+          <Card style={styles.card}>
+            <Pressable onPress={onViewWorkout} disabled={!onViewWorkout} style={styles.section}>
+              <AppText variant="label" color="accent">
+                Today&apos;s workout
               </AppText>
-              {onLogActivity ? (
-                <PrimaryButton label="Log Activity" variant="secondary" onPress={onLogActivity} />
-              ) : null}
-            </View>
-          ) : null}
-
-          {showWorkoutSection && (workout || isRestDay) ? <View style={styles.divider} /> : null}
-
-          <View style={styles.section}>
-            {nextMeal ? (
-              <Pressable onPress={onLogMeal}>
-                <AppText variant="bodyBold">{nextMeal.name}</AppText>
-                <AppText variant="footnote" color="textSecondary">
-                  {mealTypeLabel(nextMeal.mealType)}
-                  {nextMeal.scheduledTime
-                    ? ` · ${nextMeal.overdue ? 'Overdue ' : ''}${nextMeal.scheduledTime}`
-                    : ''}
-                </AppText>
-                <AppText variant="caption" color="textTertiary">
-                  {caloriesRemaining} cal · {Math.round(proteinRemainingG)}g protein · {mealsCompleted}/{mealsTotal}
-                </AppText>
-              </Pressable>
-            ) : (
-              <>
-                <AppText variant="bodyBold">Nutrition</AppText>
-                <AppText variant="footnote" color="textSecondary">
-                  {mealsTotal > 0
-                    ? `${mealsCompleted}/${mealsTotal} meals · ${caloriesRemaining} cal left`
-                    : 'Generate a meal plan or log manually'}
-                </AppText>
-              </>
-            )}
+              <AppText variant="bodyBold">{workout.title}</AppText>
+              <AppText variant="footnote" color="textSecondary">
+                {workout.startTime ? `${workout.startTime} · ` : ''}
+                {workout.durationMin ? `${workout.durationMin} min` : workout.trainingLabel}
+              </AppText>
+            </Pressable>
             <PrimaryButton
-              label={mealsTotal > 0 ? 'Log Meal' : 'Log a Meal'}
-              onPress={mealsTotal > 0 ? onLogMeal : (onQuickLogMeal ?? onLogMeal)}
-              variant="secondary"
+              label={tabataModeEnabled ? 'Start Tabata' : 'Start Workout'}
+              onPress={onStartWorkout}
+              loading={startingWorkout}
+              size="large"
+              testID="start-workout-button"
             />
-            {mealsTotal === 0 && onGenerateMealPlan ? (
-              <PrimaryButton label="Generate Plan" variant="ghost" onPress={onGenerateMealPlan} />
+            {onManageDay ? (
+              <PrimaryButton
+                label="Manage Day"
+                variant="ghost"
+                onPress={onManageDay}
+                loading={adaptingPlan}
+                disabled={adaptingPlan}
+                testID="manage-day-button"
+              />
             ) : null}
-          </View>
+          </Card>
         </View>
-      </LinearGradient>
+      ) : null}
+
+      {showWorkoutSection && isRestDay ? (
+        <Card style={styles.card}>
+          <View style={styles.section}>
+            <AppText variant="label" color="accent">
+              Recovery
+            </AppText>
+            <AppText variant="bodyBold">Rest day</AppText>
+            <AppText variant="footnote" color="textSecondary">
+              Light activity or full recovery — your call.
+            </AppText>
+          </View>
+          {onManageDay ? (
+            <PrimaryButton
+              label="Manage Day"
+              variant="ghost"
+              onPress={onManageDay}
+              loading={adaptingPlan}
+              disabled={adaptingPlan}
+              testID="manage-day-button"
+            />
+          ) : null}
+          {onLogActivity ? (
+            <PrimaryButton label="Log Activity" variant="secondary" onPress={onLogActivity} />
+          ) : null}
+        </Card>
+      ) : null}
+
+      <Card style={styles.card}>
+        <AppText variant="label" color="accent">
+          Nutrition
+        </AppText>
+
+        {mealsTotal > 0 ? (
+          <NutritionMetricsRow
+            caloriesValue={String(Math.max(0, caloriesRemaining))}
+            caloriesFooter="remaining"
+            proteinValue={`${Math.round(proteinRemainingG)}g`}
+            proteinFooter="remaining"
+            mealsValue={`${mealsCompleted}/${mealsTotal}`}
+            mealsFooter="logged today"
+          />
+        ) : null}
+
+        {nextMeal ? (
+          <Pressable onPress={onLogMeal} style={styles.section}>
+            <AppText variant="label" color="textTertiary">
+              Up next
+            </AppText>
+            <AppText variant="bodyBold">{nextMeal.name}</AppText>
+            <AppText variant="footnote" color="textSecondary">
+              {mealTypeLabel(nextMeal.mealType)}
+              {nextMeal.scheduledTime
+                ? ` · ${nextMeal.overdue ? 'Overdue ' : ''}${nextMeal.scheduledTime}`
+                : ''}
+            </AppText>
+          </Pressable>
+        ) : mealsTotal === 0 ? (
+          <AppText variant="footnote" color="textSecondary">
+            Generate a meal plan or log manually
+          </AppText>
+        ) : null}
+
+        <PrimaryButton
+          label={mealsTotal > 0 ? 'Log Meal' : 'Log a Meal'}
+          onPress={mealsTotal > 0 ? onLogMeal : (onQuickLogMeal ?? onLogMeal)}
+          variant={mealsTotal > 0 ? 'secondary' : 'primary'}
+        />
+        {mealsTotal === 0 && onGenerateMealPlan ? (
+          <PrimaryButton label="Generate Plan" variant="ghost" onPress={onGenerateMealPlan} />
+        ) : null}
+      </Card>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  outer: {
-    marginBottom: Spacing.lg,
-    borderRadius: Radius.lg,
-    overflow: 'hidden',
-  },
-  border: {
-    borderRadius: Radius.lg,
-    padding: 1,
+  stack: {
+    gap: Spacing.lg,
   },
   card: {
-    backgroundColor: LiftFlowColors.surface,
-    borderRadius: Radius.lg - 1,
-    padding: Spacing.lg,
     gap: Spacing.md,
   },
   section: {
-    gap: Spacing.sm,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: LiftFlowColors.border,
+    gap: Spacing.xs,
   },
 });

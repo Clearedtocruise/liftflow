@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 
 import { productAnalyticsService } from '@/services/productAnalyticsService';
 import { watchCompanionService } from '@/services/watchCompanionService';
 import { watchPhoneBridge } from '@/state/WatchPhoneBridge';
+import { watchCardioBridge } from '@/state/watchCardioBridge';
 import { useWorkoutSession } from '@/state/workout/WorkoutSessionContext';
 
 const WATCH_COMMANDS_WITHOUT_SESSION_REFRESH = new Set([
@@ -29,9 +30,16 @@ export function useWatchCompanionSync(userId: string | undefined) {
   const watchSyncTracked = useRef(false);
   const exerciseIndexRef = useRef(activeExerciseIndex);
   const restSecondsRef = useRef(restSecondsRemaining);
+  const [cardioWatchEpoch, setCardioWatchEpoch] = useState(0);
 
   exerciseIndexRef.current = activeExerciseIndex;
   restSecondsRef.current = restSecondsRemaining;
+
+  useEffect(() => {
+    return watchCardioBridge.subscribeActive(() => {
+      setCardioWatchEpoch((epoch) => epoch + 1);
+    });
+  }, []);
 
   const sessionStructureKey = useMemo(() => {
     if (!activeSession) return 'none';
@@ -68,7 +76,7 @@ export function useWatchCompanionSync(userId: string | undefined) {
   }, [userId, skipRestTimer, cancelSession, setWatchDraftReps, setWatchDraftWeightKg]);
 
   const pushFullState = () => {
-    if (!userId) return;
+    if (!userId || watchCardioBridge.isWatchOwnedByCardio()) return;
     void watchCompanionService.pushPhoneWorkoutState(userId, {
       session: activeSession,
       restSecondsRemaining,
@@ -94,12 +102,12 @@ export function useWatchCompanionSync(userId: string | undefined) {
       watchSyncTracked.current = true;
       void productAnalyticsService.trackWatchSync(userId!);
     }
-  }, [userId, sessionStructureKey, activeSession]);
+  }, [userId, sessionStructureKey, activeSession, cardioWatchEpoch]);
 
   useEffect(() => {
-    if (!userId || !activeSession) return;
+    if (!userId || !activeSession || watchCardioBridge.isWatchOwnedByCardio()) return;
     void watchCompanionService.pushRestTimerOnly(userId, watchPhoneBridge.getEffectiveRestSecondsRemaining());
-  }, [userId, activeSession?.id, restSecondsRemaining]);
+  }, [userId, activeSession?.id, restSecondsRemaining, cardioWatchEpoch]);
 
   useEffect(() => {
     if (!userId) return;
@@ -112,5 +120,5 @@ export function useWatchCompanionSync(userId: string | undefined) {
       if (state === 'active') pushFullState();
     });
     return () => subscription.remove();
-  }, [userId, activeSession?.id, sessionStructureKey]);
+  }, [userId, activeSession?.id, sessionStructureKey, cardioWatchEpoch]);
 };

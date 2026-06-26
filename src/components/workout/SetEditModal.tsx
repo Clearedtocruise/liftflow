@@ -65,7 +65,7 @@ export function SetEditModal({ visible, set, exerciseName, onSave, onDelete, onC
               automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
               bounces={false}
               showsVerticalScrollIndicator={false}>
-              <AppText variant="title">Edit Set {set?.setNumber}</AppText>
+              <AppText variant="headline">Edit Set {set?.setNumber}</AppText>
           {exerciseName ? (
             <AppText variant="footnote" color="textSecondary">
               {exerciseName}
@@ -101,7 +101,7 @@ export function SetEditModal({ visible, set, exerciseName, onSave, onDelete, onC
 
           <View style={styles.actions}>
             <PrimaryButton label="Save" onPress={handleSave} loading={saving} />
-            <PrimaryButton label="Delete Set" onPress={handleDelete} variant="secondary" loading={saving} />
+            <PrimaryButton label="Delete Set" onPress={handleDelete} variant="destructive" loading={saving} />
             <PrimaryButton label="Cancel" onPress={onClose} variant="secondary" />
           </View>
             </ScrollView>
@@ -118,13 +118,14 @@ const styles = StyleSheet.create({
   },
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: LiftFlowColors.overlay,
     justifyContent: 'flex-end',
-    padding: Spacing.xl,
+    padding: Spacing.lg,
   },
   sheet: {
     backgroundColor: LiftFlowColors.surface,
-    borderRadius: Radius.lg,
+    borderTopLeftRadius: Radius.xxl,
+    borderTopRightRadius: Radius.xxl,
     padding: Spacing.xl,
     gap: Spacing.lg,
     borderWidth: StyleSheet.hairlineWidth,
@@ -139,8 +140,8 @@ const styles = StyleSheet.create({
     gap: Spacing.xs,
   },
   input: {
-    backgroundColor: LiftFlowColors.background,
-    borderRadius: Radius.sm,
+    backgroundColor: LiftFlowColors.backgroundSecondary,
+    borderRadius: Radius.md,
     padding: Spacing.md,
     color: LiftFlowColors.textPrimary,
     borderWidth: 1,

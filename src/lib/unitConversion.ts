@@ -66,6 +66,17 @@ export function formatWeight(kg: number | undefined, unit: WeightUnit): string {
   return `${Math.round(kg * LB_PER_KG)} lb`;
 }
 
+/** Total training volume (sum of weight × reps), stored internally as kg·reps. */
+export function formatVolume(totalVolumeKg: number | undefined, unit: WeightUnit): string {
+  if (totalVolumeKg == null || Number.isNaN(totalVolumeKg) || totalVolumeKg <= 0) return '—';
+  const value = unit === 'kg' ? totalVolumeKg : totalVolumeKg * LB_PER_KG;
+  const suffix = unit === 'kg' ? 'kg' : 'lb';
+  if (value >= 1000) {
+    return `${(value / 1000).toFixed(1)}k ${suffix}`;
+  }
+  return `${Math.round(value).toLocaleString()} ${suffix}`;
+}
+
 export function parseWeightToKg(value: string | undefined, unit: WeightUnit): number | undefined {
   const n = parseNumeric(value);
   if (n == null) return undefined;

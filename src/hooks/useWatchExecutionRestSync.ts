@@ -4,6 +4,7 @@ import type { CircuitTimerState, IntervalTimerState } from '@/lib/timerEngine';
 import { resolveWatchRestSnapshot, type WatchRestSnapshot } from '@/lib/watchRestSync';
 import { watchCompanionService } from '@/services/watchCompanionService';
 import { watchPhoneBridge } from '@/state/WatchPhoneBridge';
+import { watchCardioBridge } from '@/state/watchCardioBridge';
 
 type UseWatchExecutionRestSyncParams = {
   userId?: string;
@@ -27,7 +28,7 @@ export function useWatchExecutionRestSync({
   const suppressWatchRestCompleteRef = useRef(false);
 
   useEffect(() => {
-    if (!userId) return;
+    if (!userId || watchCardioBridge.isWatchOwnedByCardio()) return;
 
     const snapshot = resolveWatchRestSnapshot({
       traditionalSeconds: traditionalRestSeconds,

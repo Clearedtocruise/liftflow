@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 
 import { WorkoutTimerOverlay } from '@/components/workout/execution/WorkoutTimerOverlay';
 import { DEFAULT_REST_SECONDS } from '@/constants/workout';
+import { resolveWorkoutUpNext } from '@/lib/workoutUpNext';
 import { useWorkoutSession } from '@/state/workout/WorkoutSessionContext';
 
 /** Traditional rest timer — mounted at app root so it survives tab navigation. */
@@ -12,6 +13,7 @@ export function GlobalRestTimerOverlay() {
     activeRestPeriod,
     restSecondsRemaining,
     restTimerPaused,
+    exerciseEffectiveTargetSets,
     adjustRestTimer,
     setRestTimer,
     pauseRestTimer,
@@ -19,16 +21,26 @@ export function GlobalRestTimerOverlay() {
     skipRestTimer,
   } = useWorkoutSession();
 
-  const nextExercisePreview = useMemo(() => {
-    if (!activeSession) return { name: null as string | null, detail: null as string | null };
+  const position = useMemo(() => {
+    if (!activeSession) return null;
     const sorted = [...activeSession.exercises].sort((a, b) => a.sortOrder - b.sortOrder);
+    const current = sorted[activeExerciseIndex];
+    if (!current) return null;
+
+    const completedSetsCount = current.sets?.length ?? 0;
+    const targetSets = exerciseEffectiveTargetSets[current.id] ?? Math.max(completedSetsCount + 1, 3);
     const next = sorted[activeExerciseIndex + 1];
-    if (!next) return { name: null, detail: null };
-    return {
-      name: next.exercise?.name ?? null,
-      detail: next.suggestedReps ? `${next.suggestedReps} reps` : null,
-    };
-  }, [activeSession, activeExerciseIndex]);
+    const isLastExercise = activeExerciseIndex >= sorted.length - 1;
+
+    return resolveWorkoutUpNext({
+      exerciseName: current.exercise?.name ?? 'Exercise',
+      targetSets,
+      completedSetsCount,
+      isLastExercise,
+      nextExerciseName: next?.exercise?.name,
+      nextExerciseTargetSets: exerciseEffectiveTargetSets[next.id] ?? 3,
+    });
+  }, [activeSession, activeExerciseIndex, exerciseEffectiveTargetSets]);
 
   const restActive =
     activeSession?.status === 'active' &&
@@ -41,6 +53,7 @@ export function GlobalRestTimerOverlay() {
   return (
     <WorkoutTimerOverlay
       visible
+      position={position}
       traditional={{
         secondsRemaining: restSecondsRemaining,
         recommendedSeconds: activeRestPeriod.recommendedSeconds ?? DEFAULT_REST_SECONDS,
@@ -50,8 +63,6 @@ export function GlobalRestTimerOverlay() {
         onSkip: () => void skipRestTimer(),
         onAdjust: adjustRestTimer,
         onSetRest: setRestTimer,
-        nextExerciseName: nextExercisePreview.name,
-        nextExerciseDetail: nextExercisePreview.detail,
       }}
     />
   );

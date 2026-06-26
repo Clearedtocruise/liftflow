@@ -4,6 +4,23 @@ import { getAccessToken } from '@/supabase/client';
 import type { CoachActivationResult, PostWorkoutCoachSummary } from '@/types/coachActivation';
 import type { ProgramDashboard } from '@/types/training';
 
+const POST_WORKOUT_COACH_TIMEOUT_MS = 12_000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('Coach summary timed out')), ms);
+    promise
+      .then((value) => {
+        clearTimeout(timer);
+        resolve(value);
+      })
+      .catch((error) => {
+        clearTimeout(timer);
+        reject(error);
+      });
+  });
+}
+
 function mapProgramDashboard(raw: Record<string, unknown>): ProgramDashboard | null {
   if (!raw.program) return null;
   const program = raw.program as Record<string, unknown>;
@@ -53,10 +70,13 @@ export const coachActivationService = {
   async getPostWorkoutSummary(userId: string, sessionId: string) {
     try {
       const token = await getAccessToken();
-      const raw = await apiClient.post<PostWorkoutCoachSummary>(
-        '/api/training/coach/post-workout',
-        { userId, sessionId },
-        token,
+      const raw = await withTimeout(
+        apiClient.post<PostWorkoutCoachSummary>(
+          '/api/training/coach/post-workout',
+          { userId, sessionId },
+          token,
+        ),
+        POST_WORKOUT_COACH_TIMEOUT_MS,
       );
       return ok(raw);
     } catch (e) {

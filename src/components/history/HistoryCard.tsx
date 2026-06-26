@@ -19,7 +19,7 @@ function formatDate(dateStr: string): string {
 }
 
 export function HistoryCard({ item, onPress, onLongPress }: HistoryCardProps) {
-  const { preferredDistanceUnit } = useUnits();
+  const units = useUnits();
   const isCardio = item.sessionKind === 'cardio';
 
   return (
@@ -48,7 +48,7 @@ export function HistoryCard({ item, onPress, onLongPress }: HistoryCardProps) {
             label="Distance"
             value={
               item.distanceMeters && item.distanceMeters > 0
-                ? formatLiveDistance(item.distanceMeters, preferredDistanceUnit)
+                ? formatLiveDistance(item.distanceMeters, units.preferredDistanceUnit)
                 : '—'
             }
           />
@@ -58,7 +58,7 @@ export function HistoryCard({ item, onPress, onLongPress }: HistoryCardProps) {
         <View style={styles.statsRow}>
           <Stat label="Exercises" value={String(item.exerciseCount)} />
           <Stat label="Sets" value={String(item.totalSets)} />
-          <Stat label="Volume" value={`${(item.totalVolume / 1000).toFixed(1)}k`} />
+          <Stat label="Volume" value={units.formatVolume(item.totalVolume)} />
         </View>
       )}
     </Card>
@@ -78,7 +78,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 const styles = StyleSheet.create({
   card: {
-    marginBottom: Spacing.md,
+    gap: Spacing.sm,
   },
   header: {
     flexDirection: 'row',

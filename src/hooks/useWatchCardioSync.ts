@@ -23,6 +23,7 @@ type CardioSyncInput = {
 export function useWatchCardioSync(input: CardioSyncInput) {
   const [heartRateBpm, setHeartRateBpm] = useState<number | undefined>();
   const heartRateRef = useRef<number | undefined>(undefined);
+  const presentedWorkoutRef = useRef(false);
   const {
     sessionId,
     activityLabel,
@@ -48,6 +49,7 @@ export function useWatchCardioSync(input: CardioSyncInput) {
 
   useEffect(() => {
     if (!enabled) {
+      presentedWorkoutRef.current = false;
       watchCardioBridge.setActive(null);
       void pushCardioStateToWatch(null);
       return;
@@ -70,7 +72,13 @@ export function useWatchCardioSync(input: CardioSyncInput) {
     };
 
     watchCardioBridge.setActive(state);
-    void pushCardioStateToWatch(state, { presentWorkout: running && elapsedSeconds <= 1 });
+
+    const shouldPresent = !presentedWorkoutRef.current && running;
+    if (shouldPresent) {
+      presentedWorkoutRef.current = true;
+    }
+
+    void pushCardioStateToWatch(state, { presentWorkout: shouldPresent });
   }, [
     enabled,
     sessionId,
@@ -89,6 +97,7 @@ export function useWatchCardioSync(input: CardioSyncInput) {
   useEffect(() => {
     if (!enabled) return;
     return () => {
+      presentedWorkoutRef.current = false;
       watchCardioBridge.setActive(null);
       void pushCardioStateToWatch(null);
     };

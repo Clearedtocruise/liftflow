@@ -11,6 +11,12 @@ import {
 import { Platform } from 'react-native';
 
 import { enrichParsedCommand, parseVoiceCommandLocal } from '@/lib/voice/parseVoiceCommand';
+import {
+  rememberIosAudioSessionBeforeVoiceCapture,
+  restoreIosAudioSessionAfterVoiceCapture,
+  speakWithMusicDuck,
+  voiceCaptureIosCategory,
+} from '@/lib/iosAudioSession';
 import { productAnalyticsService } from '@/services/productAnalyticsService';
 import { processVoiceTranscript } from '@/services/voiceService';
 
@@ -125,8 +131,7 @@ export function VoiceWorkoutProvider({
   const speak = useCallback(
     (message: string) => {
       if (!voiceFeedbackEnabled || Platform.OS === 'web') return;
-      Speech.stop();
-      Speech.speak(message, { language: 'en-US', rate: 0.95, pitch: 1 });
+      speakWithMusicDuck(message, { language: 'en-US', rate: 0.95, pitch: 1 });
     },
     [voiceFeedbackEnabled],
   );
@@ -166,6 +171,7 @@ export function VoiceWorkoutProvider({
         console.warn('[voice] stop speech failed', error);
       }
     }
+    restoreIosAudioSessionAfterVoiceCapture();
     setState((prev) => ({ ...prev, listeningForCommand: false }));
     if (voiceScopeActiveRef.current && wakePhraseEnabledRef.current) {
       void startWakeWordRef.current();
@@ -351,6 +357,7 @@ export function VoiceWorkoutProvider({
         error: undefined,
       }));
 
+      rememberIosAudioSessionBeforeVoiceCapture();
       await speech.ExpoSpeechRecognitionModule.start({
         lang: 'en-US',
         interimResults: true,
@@ -358,9 +365,11 @@ export function VoiceWorkoutProvider({
         maxAlternatives: 3,
         // Cloud recognition is more reliable in gyms; on-device often fails silently.
         requiresOnDeviceRecognition: false,
+        iosCategory: voiceCaptureIosCategory(),
       });
     } catch (error) {
       commandListeningRef.current = false;
+      restoreIosAudioSessionAfterVoiceCapture();
       const message = error instanceof Error ? error.message : 'Failed to start command listening';
       console.warn('[voice] startCommandListening failed', message);
       setState((prev) => ({
@@ -493,6 +502,7 @@ export function VoiceWorkoutProvider({
         }
         commandListeningRef.current = false;
         pendingTranscriptRef.current = '';
+        restoreIosAudioSessionAfterVoiceCapture();
         setState((prev) => ({
           ...prev,
           listeningForCommand: false,
@@ -516,6 +526,7 @@ export function VoiceWorkoutProvider({
           return;
         }
 
+        restoreIosAudioSessionAfterVoiceCapture();
         setState((prev) => ({
           ...prev,
           listeningForCommand: false,
@@ -547,6 +558,7 @@ export function VoiceWorkoutProvider({
     return () => {
       void stopCommandListening();
       porcupineRef.current?.delete?.().catch(() => undefined);
+      restoreIosAudioSessionAfterVoiceCapture();
       Speech.stop();
     };
   }, [stopCommandListening]);

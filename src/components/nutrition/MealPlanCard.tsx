@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { Card } from '@/components/layout/Card';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { AppText } from '@/components/ui/AppText';
-import { Spacing } from '@/constants/theme';
+import { LiftFlowColors, Spacing } from '@/constants/theme';
 import { enrichMealMeta } from '@/lib/mealIngredients';
 import { mealTypeLabel } from '@/lib/mealSchedule';
 import type { Meal } from '@/types';
@@ -27,48 +27,52 @@ export function MealPlanCard({
 }: MealPlanCardProps) {
   const meta = enrichMealMeta(meal.name, meal.instructions);
   const completed = meta.status === 'completed';
+  const ingredients = meta.ingredients ?? [];
 
   return (
     <Pressable onPress={onOpenDetail}>
-      <Card style={styles.card}>
+      <Card style={[styles.card, completed && styles.cardComplete]}>
         <View style={styles.header}>
           <View style={styles.titleBlock}>
-            <AppText variant="caption" color="accent">
-              {scheduledTime ?? 'Scheduled'} · {mealTypeLabel(meal.mealType)}
+            <AppText variant="label" color={completed ? 'success' : 'accent'}>
+              {mealTypeLabel(meal.mealType)}
+              {scheduledTime ? ` · ${scheduledTime}` : ''}
             </AppText>
             <AppText variant="bodyBold">{meal.name}</AppText>
           </View>
           {completed ? (
             <AppText variant="caption" color="success">
-              Complete
+              Logged
             </AppText>
           ) : null}
         </View>
 
-        <View style={styles.ingredients}>
-          {(meta.ingredients ?? []).map((ingredient) => (
-            <View key={`${meal.id}-${ingredient.name}`} style={styles.ingredientRow}>
-              <AppText variant="footnote" color="textSecondary" style={styles.ingredientText}>
-                {ingredient.name} · {ingredient.serving}
-              </AppText>
-              {!completed && onReplaceIngredient ? (
-                <Pressable
-                  hitSlop={8}
-                  onPress={(event) => {
-                    event.stopPropagation?.();
-                    onReplaceIngredient(ingredient.name);
-                  }}>
-                  <AppText variant="caption" color="accent">
-                    Replace
-                  </AppText>
-                </Pressable>
-              ) : null}
-            </View>
-          ))}
-        </View>
+        {ingredients.length > 0 ? (
+          <View style={styles.ingredients}>
+            {ingredients.map((ingredient) => (
+              <View key={`${meal.id}-${ingredient.name}`} style={styles.ingredientRow}>
+                <AppText variant="footnote" color="textSecondary" style={styles.ingredientText}>
+                  {ingredient.name} · {ingredient.serving}
+                </AppText>
+                {!completed && onReplaceIngredient ? (
+                  <Pressable
+                    hitSlop={8}
+                    onPress={(event) => {
+                      event.stopPropagation?.();
+                      onReplaceIngredient(ingredient.name);
+                    }}>
+                    <AppText variant="caption" color="accent">
+                      Replace
+                    </AppText>
+                  </Pressable>
+                ) : null}
+              </View>
+            ))}
+          </View>
+        ) : null}
 
-        <AppText variant="footnote" color="textSecondary">
-          {meal.calories ?? 0} cal · {Math.round(meal.proteinG ?? 0)}P · {Math.round(meal.carbsG ?? 0)}C · {Math.round(meal.fatG ?? 0)}F
+        <AppText variant="caption" color="textTertiary">
+          {meal.calories ?? 0} cal · {Math.round(meal.proteinG ?? 0)}g protein · {Math.round(meal.carbsG ?? 0)}g carbs
         </AppText>
 
         {!completed ? (
@@ -108,10 +112,15 @@ const styles = StyleSheet.create({
   card: {
     gap: Spacing.sm,
   },
+  cardComplete: {
+    borderColor: LiftFlowColors.border,
+    opacity: 0.92,
+  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: Spacing.md,
+    alignItems: 'flex-start',
   },
   titleBlock: {
     flex: 1,

@@ -1,8 +1,4 @@
-import { StyleSheet, View } from 'react-native';
-
-import { Card } from '@/components/layout/Card';
-import { AppText } from '@/components/ui/AppText';
-import { Spacing } from '@/constants/theme';
+import { NutritionMetricsRow } from '@/components/nutrition/NutritionMetricsRow';
 import type { DailyNutritionSummary, NutritionGoals } from '@/types';
 
 type NutritionProgressHeaderProps = {
@@ -26,17 +22,13 @@ export function NutritionProgressHeader({
   const proteinGoal = goals?.proteinG ?? 0;
 
   return (
-    <Card style={styles.card}>
-      <AppText variant="body" color="textSecondary">
-        {caloriesConsumed} / {calorieGoal || '—'} cal · {Math.round(proteinG)} / {proteinGoal || '—'}g protein ·{' '}
-        {mealsCompleted} / {mealsTotal} meals
-      </AppText>
-    </Card>
+    <NutritionMetricsRow
+      caloriesValue={String(caloriesConsumed)}
+      caloriesFooter={calorieGoal ? `of ${calorieGoal} goal` : undefined}
+      proteinValue={`${Math.round(proteinG)}g`}
+      proteinFooter={proteinGoal ? `of ${proteinGoal}g goal` : undefined}
+      mealsValue={`${mealsCompleted}/${mealsTotal || '—'}`}
+      mealsFooter="logged today"
+    />
   );
 }
-
-const styles = StyleSheet.create({
-  card: {
-    gap: Spacing.sm,
-  },
-});

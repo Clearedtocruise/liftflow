@@ -324,7 +324,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: LiftFlowColors.border,
   },
-  compact: { gap: Spacing.xs },
+  compact: {
+    gap: Spacing.xs,
+    padding: Spacing.md,
+    borderRadius: Radius.md,
+    backgroundColor: LiftFlowColors.primaryGlow,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: LiftFlowColors.border,
+  },
   compactRow: {
     flexDirection: 'row',
     alignItems: 'center',
