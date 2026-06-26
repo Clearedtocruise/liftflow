@@ -4,7 +4,12 @@ import test from 'node:test';
 import { applyBlockSupersets, enrichWithSmartSupersetGroups } from './applyReferenceSupersets.js';
 import { SPLIT_VOLUME_TARGETS } from './liftingProgrammingRules.js';
 import { MONTH1_WORKOUTS, MONTH1_WORKOUT_COUNT } from './month1Workouts.js';
-import { getMonth1Workout, shouldUseReferenceLiftingProgram } from './referenceProgramLoader.js';
+import {
+  getMonth1Workout,
+  resolveMonth1Workout,
+  shouldUseReferenceLiftingProgram,
+  slotLabelKey,
+} from './referenceProgramLoader.js';
 
 test('Month 1 contains exactly 24 unique workouts', () => {
   assert.equal(MONTH1_WORKOUTS.length, MONTH1_WORKOUT_COUNT);
@@ -68,6 +73,25 @@ test('smart supersets skip heavy compound pairs', () => {
   assert.equal(grouped[1].supersetGroupId, undefined);
   assert.equal(grouped[2].supersetGroupId, 'ss-1');
   assert.equal(grouped[3].supersetGroupId, 'ss-1');
+});
+
+test('slotLabelKey matches schedule labels to Month 1 slot labels', () => {
+  assert.equal(
+    slotLabelKey('Chest, Shoulders & Triceps'),
+    slotLabelKey('Chest / Triceps / Shoulders'),
+  );
+  assert.equal(slotLabelKey('Back, Biceps & Core'), slotLabelKey('Back / Biceps / Core'));
+  assert.equal(slotLabelKey('Legs & Core'), slotLabelKey('Legs / Core'));
+});
+
+test('resolveMonth1Workout matches by slot label when day order differs', () => {
+  const backOnMonday = resolveMonth1Workout(1, 0, 'Back, Biceps & Core');
+  assert.ok(backOnMonday);
+  assert.match(backOnMonday!.slotLabel, /Back/i);
+
+  const chestOnTuesday = resolveMonth1Workout(1, 1, 'Chest, Shoulders & Triceps');
+  assert.ok(chestOnTuesday);
+  assert.match(chestOnTuesday!.slotLabel, /Chest/i);
 });
 
 test('shouldUseReferenceLiftingProgram for body part split 3–7 days', () => {

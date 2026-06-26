@@ -1,7 +1,7 @@
 -- Glute kickback rows were mis-tagged as triceps (push-day eligible). Restore glute isolation metadata.
 update public.exercises
 set
-  category = 'legs'::movement_category,
+  category = 'hinge'::movement_category,
   muscle_groups = array['glutes'],
   secondary_muscles = array['hamstrings'],
   metadata = coalesce(metadata, '{}'::jsonb) || jsonb_build_object(
