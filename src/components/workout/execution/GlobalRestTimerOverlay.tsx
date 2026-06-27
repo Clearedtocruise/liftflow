@@ -38,7 +38,7 @@ export function GlobalRestTimerOverlay() {
       completedSetsCount,
       isLastExercise,
       nextExerciseName: next?.exercise?.name,
-      nextExerciseTargetSets: exerciseEffectiveTargetSets[next.id] ?? 3,
+      nextExerciseTargetSets: next ? (exerciseEffectiveTargetSets[next.id] ?? 3) : undefined,
     });
   }, [activeSession, activeExerciseIndex, exerciseEffectiveTargetSets]);
 

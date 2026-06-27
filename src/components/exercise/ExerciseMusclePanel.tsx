@@ -4,7 +4,8 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { MuscleMapFigure } from '@/components/exercise/anatomy/MuscleMapFigure';
 import { MuscleProfileLabels } from '@/components/exercise/anatomy/MuscleProfileLabels';
 import { AppText } from '@/components/ui/AppText';
-import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
+import type { AppTheme } from '@/constants/themes';
+import { useThemedStyles } from '@/hooks/useLiftFlowTheme';
 import {
     buildBodyHighlightData,
     filterProfileForSide,
@@ -29,6 +30,7 @@ export function ExerciseMusclePanel({
   variant = 'hero',
   profile: profileOverride,
 }: ExerciseMusclePanelProps) {
+  const styles = useThemedStyles(createStyles);
   const profile = useMemo(
     () => profileOverride ?? resolveExerciseMuscles(exerciseName, muscleGroups),
     [exerciseName, muscleGroups, profileOverride],
@@ -57,6 +59,7 @@ export function ExerciseMusclePanel({
         side={preferredSide}
         gender={gender}
         size={variant === 'compact' ? 'active' : 'exercise'}
+        styles={styles}
       />
     );
   }
@@ -66,17 +69,11 @@ export function ExerciseMusclePanel({
   return (
     <View style={styles.workoutPanel}>
       <View style={styles.toggleRow}>
-        <SideChip label="Front" active={side === 'front'} onPress={() => setSide('front')} />
-        <SideChip label="Back" active={side === 'back'} onPress={() => setSide('back')} />
+        <SideChip label="Front" active={side === 'front'} onPress={() => setSide('front')} styles={styles} />
+        <SideChip label="Back" active={side === 'back'} onPress={() => setSide('back')} styles={styles} />
       </View>
 
-      <MuscleMapFigure
-        data={bodyData}
-        side={side}
-        gender={gender}
-        size="workout"
-        framed
-      />
+      <MuscleMapFigure data={bodyData} side={side} gender={gender} size="workout" framed />
 
       <MuscleProfileLabels profile={sideProfile} layout="grouped" />
     </View>
@@ -90,6 +87,7 @@ function ExerciseMuscleRow({
   side,
   gender,
   size,
+  styles,
 }: {
   profile: ExerciseMuscleProfile;
   sideProfile: ExerciseMuscleProfile;
@@ -97,6 +95,7 @@ function ExerciseMuscleRow({
   side: 'front' | 'back';
   gender: 'male' | 'female';
   size: 'active' | 'exercise';
+  styles: ReturnType<typeof createStyles>;
 }) {
   if (bodyData.length === 0) {
     return (
@@ -120,10 +119,12 @@ function SideChip({
   label,
   active,
   onPress,
+  styles,
 }: {
   label: string;
   active: boolean;
   onPress: () => void;
+  styles: ReturnType<typeof createStyles>;
 }) {
   return (
     <Pressable onPress={onPress} style={[styles.sideChip, active && styles.sideChipActive]}>
@@ -134,42 +135,44 @@ function SideChip({
   );
 }
 
-const styles = StyleSheet.create({
-  workoutPanel: {
-    width: '100%',
-    gap: Spacing.md,
-    alignItems: 'center',
-  },
-  toggleRow: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
-  },
-  sideChip: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs,
-    borderRadius: Radius.full,
-    borderWidth: 1,
-    borderColor: LiftFlowColors.border,
-  },
-  sideChipActive: {
-    borderColor: LiftFlowColors.accent,
-    backgroundColor: LiftFlowColors.accentGlow,
-  },
-  exerciseRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-    marginTop: Spacing.sm,
-    paddingTop: Spacing.sm,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: LiftFlowColors.borderSubtle,
-  },
-  exerciseRowActive: {
-    marginTop: 0,
-    paddingTop: 0,
-    borderTopWidth: 0,
-  },
-  thumbnail: {
-    flexShrink: 0,
-  },
-});
+function createStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    workoutPanel: {
+      width: '100%',
+      gap: theme.spacing.md,
+      alignItems: 'center',
+    },
+    toggleRow: {
+      flexDirection: 'row',
+      gap: theme.spacing.sm,
+    },
+    sideChip: {
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: theme.spacing.xs,
+      borderRadius: theme.radius.full,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    sideChipActive: {
+      borderColor: theme.colors.accent,
+      backgroundColor: theme.colors.accentGlow,
+    },
+    exerciseRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.md,
+      marginTop: theme.spacing.sm,
+      paddingTop: theme.spacing.sm,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: theme.colors.borderSubtle,
+    },
+    exerciseRowActive: {
+      marginTop: 0,
+      paddingTop: 0,
+      borderTopWidth: 0,
+    },
+    thumbnail: {
+      flexShrink: 0,
+    },
+  });
+}

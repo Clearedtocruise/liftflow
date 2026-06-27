@@ -66,7 +66,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 }
 
 export function useAppTheme(): AppTheme {
-  return useContext(ThemeContext).theme;
+  return useContext(ThemeContext).theme ?? darkClassicTheme;
 }
 
 export function useThemeId(): ThemeId {

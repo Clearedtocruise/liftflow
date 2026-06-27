@@ -196,6 +196,11 @@ const REQUIRED = [
     label: 'Settings useAuth import',
     patterns: ["import { useAuth } from '@/hooks/useAuth'", 'useAuth()'],
   },
+  {
+    file: 'src/components/workout/execution/GlobalRestTimerOverlay.tsx',
+    label: 'Rest overlay last-exercise guard',
+    patterns: ['next ? (exerciseEffectiveTargetSets[next.id]', 'next?.exercise?.name'],
+  },
 ];
 
 let fail = 0;

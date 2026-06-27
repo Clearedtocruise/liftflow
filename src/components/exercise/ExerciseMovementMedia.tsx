@@ -1,10 +1,11 @@
 import { ResizeMode, Video } from 'expo-av';
 import { Image } from 'expo-image';
 import { useEffect, useRef, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View, type ViewStyle } from 'react-native';
 
 import { AppText } from '@/components/ui/AppText';
-import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
+import type { AppTheme } from '@/constants/themes';
+import { useThemedStyles } from '@/hooks/useLiftFlowTheme';
 import { guideHasStructure, type ExerciseFormGuide } from '@/lib/exerciseGuideTypes';
 
 type ExerciseMovementMediaProps = {
@@ -12,7 +13,13 @@ type ExerciseMovementMediaProps = {
   exerciseName: string;
 };
 
-function IllustratedMovementCard({ guide }: { guide: ExerciseFormGuide }) {
+function IllustratedMovementCard({
+  guide,
+  styles,
+}: {
+  guide: ExerciseFormGuide;
+  styles: ReturnType<typeof createStyles>;
+}) {
   if (guideHasStructure(guide)) return null;
 
   const steps = guide.illustratedSteps ?? [];
@@ -44,18 +51,26 @@ function IllustratedMovementCard({ guide }: { guide: ExerciseFormGuide }) {
   );
 }
 
-function GifMedia({ url }: { url: string }) {
+function GifMedia({ url, frameStyle }: { url: string; frameStyle: ViewStyle }) {
   return (
     <Image
       source={{ uri: url }}
-      style={styles.mediaFrame}
+      style={frameStyle}
       contentFit="contain"
       accessibilityLabel="Exercise demonstration"
     />
   );
 }
 
-function Mp4Media({ url, posterUrl }: { url: string; posterUrl?: string }) {
+function Mp4Media({
+  url,
+  posterUrl,
+  frameStyle,
+}: {
+  url: string;
+  posterUrl?: string;
+  frameStyle: ViewStyle;
+}) {
   const ref = useRef<Video>(null);
 
   useEffect(() => {
@@ -69,7 +84,7 @@ function Mp4Media({ url, posterUrl }: { url: string; posterUrl?: string }) {
     <Video
       ref={ref}
       source={{ uri: url }}
-      style={styles.mediaFrame}
+      style={frameStyle}
       resizeMode={ResizeMode.CONTAIN}
       isLooping
       isMuted
@@ -80,7 +95,7 @@ function Mp4Media({ url, posterUrl }: { url: string; posterUrl?: string }) {
   );
 }
 
-function ImageSequenceMedia({ frames }: { frames: string[] }) {
+function ImageSequenceMedia({ frames, frameStyle }: { frames: string[]; frameStyle: ViewStyle }) {
   const [frameIndex, setFrameIndex] = useState(0);
 
   useEffect(() => {
@@ -97,7 +112,7 @@ function ImageSequenceMedia({ frames }: { frames: string[] }) {
   return (
     <Image
       source={{ uri }}
-      style={styles.mediaFrame}
+      style={frameStyle}
       contentFit="contain"
       accessibilityLabel="Exercise movement sequence"
     />
@@ -105,10 +120,11 @@ function ImageSequenceMedia({ frames }: { frames: string[] }) {
 }
 
 export function ExerciseMovementMedia({ guide, exerciseName }: ExerciseMovementMediaProps) {
+  const styles = useThemedStyles(createStyles);
   const media = guide.media;
 
   if (!media) {
-    return <IllustratedMovementCard guide={guide} />;
+    return <IllustratedMovementCard guide={guide} styles={styles} />;
   }
 
   return (
@@ -116,56 +132,60 @@ export function ExerciseMovementMedia({ guide, exerciseName }: ExerciseMovementM
       <AppText variant="label" color="textSecondary">
         Demo — {exerciseName}
       </AppText>
-      {media.type === 'gif' ? <GifMedia url={media.url} /> : null}
-      {media.type === 'mp4' ? <Mp4Media url={media.url} posterUrl={media.posterUrl} /> : null}
+      {media.type === 'gif' ? <GifMedia url={media.url} frameStyle={styles.mediaFrame} /> : null}
+      {media.type === 'mp4' ? (
+        <Mp4Media url={media.url} posterUrl={media.posterUrl} frameStyle={styles.mediaFrame} />
+      ) : null}
       {media.type === 'image-sequence' && media.frames?.length ? (
-        <ImageSequenceMedia frames={media.frames} />
+        <ImageSequenceMedia frames={media.frames} frameStyle={styles.mediaFrame} />
       ) : null}
       {!media.frames?.length && media.type === 'image-sequence' ? (
-        <IllustratedMovementCard guide={guide} />
+        <IllustratedMovementCard guide={guide} styles={styles} />
       ) : null}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  mediaCard: {
-    gap: Spacing.sm,
-    padding: Spacing.md,
-    borderRadius: Radius.md,
-    backgroundColor: LiftFlowColors.surface,
-    borderWidth: 1,
-    borderColor: LiftFlowColors.border,
-  },
-  mediaFrame: {
-    width: '100%',
-    height: 220,
-    borderRadius: Radius.sm,
-    backgroundColor: LiftFlowColors.background,
-  },
-  illustratedCard: {
-    gap: Spacing.sm,
-    padding: Spacing.md,
-    borderRadius: Radius.md,
-    backgroundColor: LiftFlowColors.surface,
-    borderWidth: 1,
-    borderColor: LiftFlowColors.border,
-  },
-  illustratedStep: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
-    alignItems: 'flex-start',
-  },
-  illustratedBadge: {
-    width: 24,
-    height: 24,
-    borderRadius: Radius.full,
-    backgroundColor: 'rgba(31, 107, 255, 0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  illustratedCopy: {
-    flex: 1,
-    gap: 2,
-  },
-});
+function createStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    mediaCard: {
+      gap: theme.spacing.sm,
+      padding: theme.spacing.md,
+      borderRadius: theme.radius.md,
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    mediaFrame: {
+      width: '100%',
+      height: 220,
+      borderRadius: theme.radius.sm,
+      backgroundColor: theme.colors.backgroundSecondary,
+    },
+    illustratedCard: {
+      gap: theme.spacing.sm,
+      padding: theme.spacing.md,
+      borderRadius: theme.radius.md,
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    illustratedStep: {
+      flexDirection: 'row',
+      gap: theme.spacing.sm,
+      alignItems: 'flex-start',
+    },
+    illustratedBadge: {
+      width: 24,
+      height: 24,
+      borderRadius: theme.radius.full,
+      backgroundColor: theme.colors.primaryGlow,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    illustratedCopy: {
+      flex: 1,
+      gap: 2,
+    },
+  });
+}

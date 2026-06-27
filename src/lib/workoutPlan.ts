@@ -1,8 +1,109 @@
 import { enrichWithSupersetGroups } from '@/lib/supersetFlow';
+import { isConditioningWorkout } from '@/lib/weekPlan';
 import { normalizeExecutionMode, prescribeExerciseExecution } from '@/lib/workoutExecutionMode';
+import type { WorkoutSession, WorkoutExercise } from '@/types';
 import type { PlannedWorkout, TemplateExercise } from '@/types/training';
 import type { EditableWorkoutExercise } from '@/types/workoutExecution';
 import type { WorkoutExecutionMode } from '@/types/workoutExecutionMode';
+
+function normalizeExerciseName(name: string): string {
+  return name.trim().toLowerCase();
+}
+
+function fallbackPlanExerciseFromSession(
+  sessionEx: WorkoutExercise,
+  index: number,
+  tabataMode: boolean,
+): EditableWorkoutExercise {
+  const name = sessionEx.exercise?.name ?? 'Exercise';
+  return {
+    id: `session-${index}-${normalizeExerciseName(name).replace(/\s+/g, '-')}`,
+    exerciseId: sessionEx.exerciseId,
+    name,
+    sets: tabataMode ? 10 : Math.max(3, sessionEx.sets?.length ?? 3),
+    repRange: sessionEx.suggestedReps ?? '8-10',
+    restSeconds: tabataMode ? 20 : 90,
+    executionMode: tabataMode ? ('tabata' as const) : undefined,
+  };
+}
+
+function matchTemplateForSessionExercise(
+  sessionEx: WorkoutExercise,
+  templateExercises: EditableWorkoutExercise[],
+  index: number,
+): EditableWorkoutExercise | null {
+  const sessionName = normalizeExerciseName(sessionEx.exercise?.name ?? '');
+
+  const byIndex = templateExercises[index];
+  if (byIndex && normalizeExerciseName(byIndex.name) === sessionName) {
+    return byIndex;
+  }
+
+  if (sessionEx.exerciseId) {
+    const byId = templateExercises.find((item) => item.exerciseId === sessionEx.exerciseId);
+    if (byId) return byId;
+  }
+
+  const byName = templateExercises.find((item) => normalizeExerciseName(item.name) === sessionName);
+  if (byName) return byName;
+
+  return byIndex ?? null;
+}
+
+/** Resolve planned workout metadata for an in-progress session. */
+export function resolvePlannedWorkoutForSession(
+  session: WorkoutSession,
+  candidates: PlannedWorkout[],
+  draftWorkout: PlannedWorkout | null,
+): PlannedWorkout | null {
+  if (session.plannedWorkoutId) {
+    const fromCandidates = candidates.find((workout) => workout.id === session.plannedWorkoutId);
+    if (fromCandidates) return fromCandidates;
+  }
+  if (draftWorkout?.id === session.plannedWorkoutId) return draftWorkout;
+  return draftWorkout;
+}
+
+/**
+ * Build plan metadata aligned to the live session exercise order.
+ * Prevents draft/week-plan refreshes from desyncing sets, supersets, and advance logic.
+ */
+export function buildPlanExercisesFromSession(
+  session: WorkoutSession,
+  plannedWorkout: PlannedWorkout | null,
+  tabataModeEnabled: boolean,
+): EditableWorkoutExercise[] {
+  const sessionSorted = [...session.exercises].sort((a, b) => a.sortOrder - b.sortOrder);
+  const tabataMode =
+    tabataModeEnabled && plannedWorkout != null && !isConditioningWorkout(plannedWorkout);
+
+  const plannedMatchesSession =
+    plannedWorkout != null &&
+    (!session.plannedWorkoutId || plannedWorkout.id === session.plannedWorkoutId);
+
+  const templatePlan = plannedMatchesSession
+    ? exercisesForSessionStart(plannedWorkout, tabataMode)
+    : [];
+
+  const orderAligned =
+    templatePlan.length === sessionSorted.length &&
+    templatePlan.every(
+      (template, index) =>
+        normalizeExerciseName(template.name) ===
+        normalizeExerciseName(sessionSorted[index]?.exercise?.name ?? ''),
+    );
+
+  if (orderAligned) {
+    return templatePlan;
+  }
+
+  const merged = sessionSorted.map((sessionEx, index) => {
+    const matched = matchTemplateForSessionExercise(sessionEx, templatePlan, index);
+    return matched ?? fallbackPlanExerciseFromSession(sessionEx, index, tabataMode);
+  });
+
+  return enrichWithSupersetGroups(merged);
+}
 
 function setsFromPrescription(
   prescription: ReturnType<typeof prescribeExerciseExecution>,

@@ -11,6 +11,19 @@ import {
 export const MUSCLE_HIGHLIGHT_PRIMARY = '#FF4D5A';
 export const MUSCLE_HIGHLIGHT_SECONDARY = '#0E90FF';
 
+/** Body-highlighter silhouette colors tuned per theme. */
+export function muscleFigureBodyColors(isDark: boolean): { fill: string; stroke: string } {
+  return isDark
+    ? { fill: '#3A4556', stroke: 'rgba(255, 255, 255, 0.22)' }
+    : { fill: '#D8DCE3', stroke: 'rgba(58, 66, 80, 0.55)' };
+}
+
+export function muscleFigureFrameGradient(isDark: boolean, surfaceColor: string): readonly [string, string] {
+  return isDark
+    ? ['rgba(14, 144, 255, 0.12)', 'rgba(8, 11, 16, 0.98)']
+    : ['rgba(22, 119, 255, 0.08)', surfaceColor];
+}
+
 export type ExerciseMuscleProfile = {
   primary: MuscleId[];
   secondary: MuscleId[];

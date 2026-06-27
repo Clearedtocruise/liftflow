@@ -4,7 +4,8 @@ import { ExerciseMovementMedia } from '@/components/exercise/ExerciseMovementMed
 import { ExerciseMusclePanel } from '@/components/exercise/ExerciseMusclePanel';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { AppText } from '@/components/ui/AppText';
-import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
+import type { AppTheme } from '@/constants/themes';
+import { useThemedStyles } from '@/hooks/useLiftFlowTheme';
 import { inferExerciseMetadata } from '@/lib/exerciseEducation/inferExerciseMetadata';
 import { guideHasStructure, guideSections, resolveExerciseFormGuide } from '@/lib/exerciseFormGuides';
 import type { Exercise } from '@/types';
@@ -22,6 +23,7 @@ export function ExerciseGuideSheet({
   exerciseName,
   onClose,
 }: ExerciseGuideSheetProps) {
+  const styles = useThemedStyles(createStyles);
   const name = exercise?.name ?? exerciseName ?? 'Exercise';
   const guide = resolveExerciseFormGuide(exercise, exerciseName);
   const sections = guide ? guideSections(guide) : [];
@@ -76,7 +78,7 @@ export function ExerciseGuideSheet({
                     {index + 1}
                   </AppText>
                 </View>
-                <AppText variant="body" style={styles.stepText}>
+                <AppText variant="body" color="textPrimary" style={styles.stepText}>
                   {step}
                 </AppText>
               </View>
@@ -162,67 +164,69 @@ export function ExerciseGuideSheet({
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flexGrow: 1,
-    backgroundColor: LiftFlowColors.background,
-    padding: Spacing.lg,
-    gap: Spacing.md,
-    paddingBottom: Spacing.huge,
-  },
-  sectionList: {
-    gap: Spacing.sm,
-  },
-  sectionCard: {
-    gap: Spacing.xs,
-    padding: Spacing.md,
-    borderRadius: Radius.md,
-    backgroundColor: LiftFlowColors.surface,
-    borderWidth: 1,
-    borderColor: LiftFlowColors.border,
-  },
-  sectionBody: {
-    lineHeight: 22,
-  },
-  section: {
-    gap: Spacing.sm,
-  },
-  stepRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: Spacing.sm,
-  },
-  stepBadge: {
-    width: 24,
-    height: 24,
-    borderRadius: Radius.full,
-    backgroundColor: 'rgba(31, 107, 255, 0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stepText: {
-    flex: 1,
-  },
-  feelCard: {
-    gap: Spacing.sm,
-    padding: Spacing.md,
-    borderRadius: Radius.md,
-    backgroundColor: LiftFlowColors.surface,
-    borderWidth: 1,
-    borderColor: LiftFlowColors.border,
-  },
-  feelBlock: {
-    gap: 4,
-  },
-  tipsCard: {
-    gap: Spacing.xs,
-    padding: Spacing.md,
-    borderRadius: Radius.md,
-    backgroundColor: LiftFlowColors.surface,
-    borderWidth: 1,
-    borderColor: LiftFlowColors.border,
-  },
-  tutorialLink: {
-    paddingVertical: Spacing.sm,
-  },
-});
+function createStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    container: {
+      flexGrow: 1,
+      backgroundColor: theme.colors.background,
+      padding: theme.spacing.lg,
+      gap: theme.spacing.md,
+      paddingBottom: theme.spacing.huge,
+    },
+    sectionList: {
+      gap: theme.spacing.sm,
+    },
+    sectionCard: {
+      gap: theme.spacing.xs,
+      padding: theme.spacing.md,
+      borderRadius: theme.radius.md,
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    sectionBody: {
+      lineHeight: 22,
+    },
+    section: {
+      gap: theme.spacing.sm,
+    },
+    stepRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: theme.spacing.sm,
+    },
+    stepBadge: {
+      width: 24,
+      height: 24,
+      borderRadius: theme.radius.full,
+      backgroundColor: theme.colors.primaryGlow,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    stepText: {
+      flex: 1,
+    },
+    feelCard: {
+      gap: theme.spacing.sm,
+      padding: theme.spacing.md,
+      borderRadius: theme.radius.md,
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    feelBlock: {
+      gap: 4,
+    },
+    tipsCard: {
+      gap: theme.spacing.xs,
+      padding: theme.spacing.md,
+      borderRadius: theme.radius.md,
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    tutorialLink: {
+      paddingVertical: theme.spacing.sm,
+    },
+  });
+}

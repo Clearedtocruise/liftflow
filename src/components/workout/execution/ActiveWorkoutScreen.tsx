@@ -18,10 +18,9 @@ import { WorkoutChallengeModal } from '@/components/workout/execution/WorkoutCha
 import { WorkoutTimerOverlay } from '@/components/workout/execution/WorkoutTimerOverlay';
 import { WorkoutUpNextCard } from '@/components/workout/execution/WorkoutUpNextCard';
 import { ExerciseCoachCard } from '@/components/workout/ExerciseCoachCard';
-import type { AppTheme } from '@/constants/themes';
+import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import { useAppResume } from '@/hooks/useAppResume';
 import { useAuth } from '@/hooks/useAuth';
-import { useThemedStyles } from '@/hooks/useLiftFlowTheme';
 import { useUnits } from '@/hooks/useUnits';
 import { useWatchExecutionRestSync } from '@/hooks/useWatchExecutionRestSync';
 import { formatWorkoutClockTime, useWorkoutElapsedSeconds } from '@/hooks/useWorkoutElapsedSeconds';
@@ -107,7 +106,6 @@ export function ActiveWorkoutScreen({
   onFinish,
   onCancel,
 }: ActiveWorkoutScreenProps) {
-  const styles = useThemedStyles(createActiveWorkoutStyles);
   const executionMode = normalizeExecutionMode(executionModeProp);
   const {
     intervalTimer,
@@ -212,6 +210,7 @@ export function ActiveWorkoutScreen({
   const [durationSeconds, setDurationSeconds] = useState(30);
   const [distanceKm, setDistanceKm] = useState(0);
   const [logging, setLogging] = useState(false);
+  const loggingInFlightRef = useRef(false);
   const [historySets, setHistorySets] = useState<ExerciseHistorySet[]>([]);
   const [coachPrescription, setCoachPrescription] = useState<ExerciseCoachPrescription | null>(null);
   const [showComplete, setShowComplete] = useState(false);
@@ -991,8 +990,9 @@ export function ActiveWorkoutScreen({
   }, 0);
 
   async function handleLogSet() {
-    if (!currentExercise || isPaused) return;
+    if (!currentExercise || isPaused || loggingInFlightRef.current) return;
 
+    loggingInFlightRef.current = true;
     setLogging(true);
     try {
       const base = {
@@ -1058,8 +1058,6 @@ export function ActiveWorkoutScreen({
         setExerciseHadPr(true);
       }
 
-      await refreshSession();
-
       if (flowAction.circuitTimer && flowAction.circuitTimer.seconds > 0) {
         pendingAdvanceRef.current = flowAction.circuitTimer.advanceIndex;
         pendingRoundIncrementRef.current = flowAction.circuitTimer.phase === 'round_rest';
@@ -1094,6 +1092,7 @@ export function ActiveWorkoutScreen({
       setWatchDraftWeightKg(null);
       watchPhoneBridge.clearPendingWatchWeightKg();
     } finally {
+      loggingInFlightRef.current = false;
       setLogging(false);
     }
   }
@@ -1605,112 +1604,110 @@ export function ActiveWorkoutScreen({
   );
 }
 
-function createActiveWorkoutStyles(theme: AppTheme) {
-  return StyleSheet.create({
+const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: theme.colors.background,
+    backgroundColor: LiftFlowColors.background,
   },
   content: {
-    gap: theme.spacing.lg,
+    gap: Spacing.lg,
   },
   stickyWorkoutHeader: {
-    gap: theme.spacing.sm,
+    gap: Spacing.sm,
   },
   heroCard: {
-    gap: theme.spacing.md,
+    gap: Spacing.md,
   },
   timerChip: {
-    borderRadius: theme.radius.md,
-    backgroundColor: theme.colors.backgroundSecondary,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
+    borderRadius: Radius.md,
+    backgroundColor: LiftFlowColors.backgroundSecondary,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
     alignSelf: 'flex-start',
   },
   exerciseNamePressable: {
-    gap: theme.spacing.xs,
+    gap: Spacing.xs,
   },
   exerciseName: {
     letterSpacing: 0.25,
   },
   nextPreview: {
-    gap: theme.spacing.xs,
+    gap: Spacing.xs,
   },
   restPresetRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: theme.spacing.md,
+    gap: Spacing.md,
   },
   intervalBanner: {
-    gap: theme.spacing.sm,
-    padding: theme.spacing.md,
-    borderRadius: theme.radius.md,
-    backgroundColor: theme.colors.backgroundSecondary,
+    gap: Spacing.sm,
+    padding: Spacing.md,
+    borderRadius: Radius.md,
+    backgroundColor: LiftFlowColors.backgroundSecondary,
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: LiftFlowColors.border,
   },
   loadingMethodRow: {
-    gap: theme.spacing.sm,
+    gap: Spacing.sm,
   },
   loadingMethodChoices: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: theme.spacing.sm,
+    gap: Spacing.sm,
   },
   loadingMethodChip: {
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
-    borderRadius: theme.radius.full,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.full,
     borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.backgroundSecondary,
+    borderColor: LiftFlowColors.border,
+    backgroundColor: LiftFlowColors.backgroundSecondary,
   },
   loadingMethodChipActive: {
-    borderColor: theme.colors.accent,
-    backgroundColor: theme.colors.primaryGlow,
+    borderColor: LiftFlowColors.accent,
+    backgroundColor: LiftFlowColors.primaryGlow,
   },
   setProgress: {
-    paddingVertical: theme.spacing.sm,
+    paddingVertical: Spacing.sm,
   },
   setChipRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: theme.spacing.sm,
+    gap: Spacing.sm,
   },
   setChip: {
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
-    borderRadius: theme.radius.full,
-    backgroundColor: theme.colors.backgroundSecondary,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.full,
+    backgroundColor: LiftFlowColors.backgroundSecondary,
     borderWidth: 1,
-    borderColor: theme.colors.accent,
+    borderColor: LiftFlowColors.accent,
   },
   setChipPending: {
-    borderColor: theme.colors.border,
+    borderColor: LiftFlowColors.border,
     opacity: 0.6,
   },
   footerActions: {
-    gap: theme.spacing.sm,
+    gap: Spacing.sm,
   },
   extraActions: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: theme.spacing.sm,
+    gap: Spacing.sm,
   },
   exerciseNavRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: theme.spacing.xs,
-    gap: theme.spacing.sm,
+    marginTop: Spacing.xs,
+    gap: Spacing.sm,
   },
   exerciseNavButton: {
     minWidth: 56,
-    paddingVertical: theme.spacing.xs,
+    paddingVertical: Spacing.xs,
   },
   exerciseNavTitle: {
     flex: 1,
     textAlign: 'center',
   },
-  });
-}
+});

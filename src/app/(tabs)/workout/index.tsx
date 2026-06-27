@@ -24,11 +24,11 @@ import { planDataCache } from '@/lib/planDataCache';
 import { warmWeekPlanData } from '@/lib/planDataPrefetch';
 import { buildEditDayMenu, type ManageDayMenuContent } from '@/lib/planDayActions';
 import { logStartup } from '@/lib/startupLogger';
-import { enrichWithSupersetGroups, inferExecutionModeFromPlan } from '@/lib/supersetFlow';
+import { inferExecutionModeFromPlan } from '@/lib/supersetFlow';
 import { buildWeekPlan, getWeekRange, isConditioningWorkout, type WeekDayPlan } from '@/lib/weekPlan';
 import { serializeChallengeNotes } from '@/lib/workoutChallengeFlow';
 import { normalizeExecutionMode } from '@/lib/workoutExecutionMode';
-import { exercisesForSessionStart } from '@/lib/workoutPlan';
+import { buildPlanExercisesFromSession, resolvePlannedWorkoutForSession } from '@/lib/workoutPlan';
 import { productAnalyticsService } from '@/services/productAnalyticsService';
 import { trainingService } from '@/services/trainingService';
 import { workoutService } from '@/services/workoutService';
@@ -82,7 +82,7 @@ export default function WorkoutScreen() {
 
         const todayKey = localDateString(new Date(), user?.timezone);
         const today = days.find((day) => day.date === todayKey);
-        if (today?.workout) setPlannedWorkout(today.workout);
+        if (today?.workout && !session) setPlannedWorkout(today.workout);
       } catch (error) {
         console.warn('[workout] week plan load failed', error);
         if (!silent) setWeekDays([]);
@@ -93,7 +93,7 @@ export default function WorkoutScreen() {
         }
       }
     },
-    [user?.id, user?.timezone, setPlannedWorkout, weekDays.length],
+    [user?.id, user?.timezone, setPlannedWorkout, weekDays.length, session],
   );
 
   useLocalDayRollover(user?.timezone, () => {
@@ -129,7 +129,7 @@ export default function WorkoutScreen() {
 
         const todayKey = localDateString(new Date(), user?.timezone);
         const today = days.find((day) => day.date === todayKey);
-        if (today?.workout) setPlannedWorkout(today.workout);
+        if (today?.workout && !session) setPlannedWorkout(today.workout);
       }
 
       void warmWeekPlanData(user.id, user?.timezone);
@@ -139,7 +139,7 @@ export default function WorkoutScreen() {
     return () => {
       cancelled = true;
     };
-  }, [user?.id, user?.timezone, loadWeekPlan, setPlannedWorkout]);
+  }, [user?.id, user?.timezone, loadWeekPlan, setPlannedWorkout, session]);
 
   useFocusEffect(
     useCallback(() => {
@@ -165,6 +165,11 @@ export default function WorkoutScreen() {
     () => weekDays.map((day) => day.workout).filter(Boolean) as PlannedWorkout[],
     [weekDays],
   );
+
+  const plannedForActiveSession = useMemo(() => {
+    if (!session) return null;
+    return resolvePlannedWorkoutForSession(session, weekWorkouts, plannedWorkout);
+  }, [session, weekWorkouts, plannedWorkout]);
 
   useEffect(() => {
     if (!__DEV__ || !user?.id) return;
@@ -277,7 +282,7 @@ export default function WorkoutScreen() {
   if (loading && !session && weekDays.length === 0) {
     return (
       <ScreenContainer
-        header={<TabScreenHeader title="Workout" subtitle="This week's plan" />}
+        header={<TabScreenHeader title="Workout" subtitle="This week's plan" showBrand={false} />}
         scroll={false}>
         <SkeletonBlock height={120} />
         <SkeletonBlock height={200} />
@@ -288,36 +293,21 @@ export default function WorkoutScreen() {
 
   if (session) {
     const sessionTabata =
-      tabataModeEnabled && plannedWorkout != null && !isConditioningWorkout(plannedWorkout);
+      tabataModeEnabled &&
+      plannedForActiveSession != null &&
+      !isConditioningWorkout(plannedForActiveSession);
 
-    const draftMatchesMode =
-      exercises.length > 0 &&
-      (sessionTabata ? exercises[0]?.executionMode === 'tabata' : exercises[0]?.executionMode !== 'tabata');
-
-    const draftExercises = draftMatchesMode
-      ? exercises
-      : exercisesForSessionStart(plannedWorkout, sessionTabata);
-
-    const planForSession = enrichWithSupersetGroups(
-      draftExercises.length > 0
-        ? draftExercises
-        : [...session.exercises]
-            .sort((a, b) => a.sortOrder - b.sortOrder)
-            .map((exercise) => ({
-              id: exercise.id,
-              name: exercise.exercise?.name ?? 'Exercise',
-              sets: sessionTabata ? 10 : 3,
-              repRange: exercise.suggestedReps ?? '8-10',
-              restSeconds: sessionTabata ? 20 : 90,
-              executionMode: sessionTabata ? ('tabata' as const) : undefined,
-            })),
+    const planForSession = buildPlanExercisesFromSession(
+      session,
+      plannedForActiveSession,
+      sessionTabata,
     );
 
     const executionMode = inferExecutionModeFromPlan(
       planForSession,
       normalizeExecutionMode(
-        draftExercises[0]?.executionMode ??
-          plannedWorkout?.metadata?.executionMode ??
+        planForSession[0]?.executionMode ??
+          plannedForActiveSession?.metadata?.executionMode ??
           (sessionTabata ? 'tabata' : undefined),
       ),
     );
@@ -337,7 +327,7 @@ export default function WorkoutScreen() {
 
   return (
     <ScreenContainer
-      header={<TabScreenHeader title="Workout" subtitle="This week's plan" />}
+      header={<TabScreenHeader title="Workout" subtitle="This week's plan" showBrand={false} />}
       contentContainerStyle={styles.content}>
       <WorkoutWeeklyPlanScreen
         days={weekDays}

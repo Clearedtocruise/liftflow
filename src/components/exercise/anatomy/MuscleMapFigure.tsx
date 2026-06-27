@@ -3,10 +3,14 @@ import { Component, type ErrorInfo, type ReactNode, useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Body, { type ExtendedBodyPart } from 'react-native-body-highlighter';
 
-import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
+import type { AppTheme } from '@/constants/themes';
+import { useAppTheme } from '@/contexts/ThemeContext';
+import { useThemedStyles } from '@/hooks/useLiftFlowTheme';
 import {
     MUSCLE_HIGHLIGHT_PRIMARY,
     MUSCLE_HIGHLIGHT_SECONDARY,
+    muscleFigureBodyColors,
+    muscleFigureFrameGradient,
 } from '@/lib/exerciseMuscleMap';
 
 /** SVG native size is 200×400 at scale 1. */
@@ -73,6 +77,14 @@ export function MuscleMapFigure({
   scale: scaleOverride,
   framed = false,
 }: MuscleMapFigureProps) {
+  const theme = useAppTheme();
+  const styles = useThemedStyles(createStyles);
+  const bodyColors = useMemo(() => muscleFigureBodyColors(theme.isDark), [theme.isDark]);
+  const frameGradient = useMemo(
+    () => muscleFigureFrameGradient(theme.isDark, theme.colors.surface),
+    [theme.isDark, theme.colors.surface],
+  );
+
   const { scale, width, height } = useMemo(
     () => muscleFigureDimensions(size, scaleOverride),
     [size, scaleOverride],
@@ -89,8 +101,8 @@ export function MuscleMapFigure({
         scale={scale}
         colors={[MUSCLE_HIGHLIGHT_SECONDARY, MUSCLE_HIGHLIGHT_PRIMARY]}
         border="none"
-        defaultFill="#161C28"
-        defaultStroke="rgba(255, 255, 255, 0.12)"
+        defaultFill={bodyColors.fill}
+        defaultStroke={bodyColors.stroke}
         defaultStrokeWidth={0.4}
       />
     </View>
@@ -100,7 +112,7 @@ export function MuscleMapFigure({
     <MuscleMapErrorBoundary>
       {framed ? (
         <LinearGradient
-          colors={['rgba(14, 144, 255, 0.12)', 'rgba(8, 11, 16, 0.98)']}
+          colors={[...frameGradient]}
           start={{ x: 0.5, y: 0 }}
           end={{ x: 0.5, y: 1 }}
           style={styles.frame}>
@@ -113,21 +125,23 @@ export function MuscleMapFigure({
   );
 }
 
-const styles = StyleSheet.create({
-  frame: {
-    width: '100%',
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: LiftFlowColors.border,
-    overflow: 'visible',
-  },
-  frameInner: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: Spacing.md,
-  },
-  figureSlot: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
+function createStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    frame: {
+      width: '100%',
+      borderRadius: theme.radius.lg,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      overflow: 'visible',
+    },
+    frameInner: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: theme.spacing.md,
+    },
+    figureSlot: {
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+  });
+}
