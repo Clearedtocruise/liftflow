@@ -32,8 +32,11 @@ export const HeroImages = {
     recovery: 'https://images.unsplash.com/photo-1541781774459-bb2af2f05b55?w=600&q=80&auto=format&fit=crop',
   },
   dashboard: {
-    workout: 'https://images.unsplash.com/photo-1583454110551-21f2fa2afe61?w=800&q=80&auto=format&fit=crop',
+    workout: 'https://images.unsplash.com/photo-1571019614242-c5c5dee9f50b?w=800&q=80&auto=format&fit=crop',
+    workoutLift: 'https://images.unsplash.com/photo-1583454110551-21f2fa2afe61?w=800&q=80&auto=format&fit=crop',
     rest: 'https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?w=800&q=80&auto=format&fit=crop',
-    nutrition: 'https://images.unsplash.com/photo-1490645935967-10de28ba6953?w=800&q=80&auto=format&fit=crop',
+    nutrition: 'https://images.unsplash.com/photo-1498837167922-ddd27584619e?w=800&q=80&auto=format&fit=crop',
+    nutritionPrep: 'https://images.unsplash.com/photo-1490645935967-10de28ba6953?w=800&q=80&auto=format&fit=crop',
+    coach: 'https://images.unsplash.com/photo-1594381898411-846e997d6008?w=800&q=80&auto=format&fit=crop',
   },
 } as const;

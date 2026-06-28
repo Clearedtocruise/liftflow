@@ -28,9 +28,13 @@ export default function TabsLayout() {
         },
         tabBarLabelStyle: {
           ...Typography.caption,
-          fontSize: 10,
+          fontSize: 9,
           fontWeight: '600',
           marginTop: 2,
+        },
+        tabBarItemStyle: {
+          flex: 1,
+          minWidth: 0,
         },
         sceneStyle: {
           backgroundColor: theme.colors.background,
@@ -69,7 +73,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="nutrition"
         options={{
-          title: 'Nutrition',
+          title: 'Meals',
           tabBarButtonTestID: 'nutrition-tab',
           tabBarIcon: ({ color, focused }) => (
             <AppSymbol

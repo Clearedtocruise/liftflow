@@ -539,7 +539,9 @@ export default function NutritionScreen() {
       }>
       <HeroPhotoBanner
         uri={HeroImages.dashboard.nutrition}
-        height={152}
+        height={168}
+        showBrand={false}
+        eyebrow="Meals"
         title="Fuel the work"
         subtitle={formatScheduleSubtitle(schedule)}
       />
@@ -643,10 +645,14 @@ export default function NutritionScreen() {
       {section === 'week' && weekMeals.length > 0 ? (
         <>
           <NutritionMetricsRow
+            layout="rows"
+            caloriesLabel="Calories"
             caloriesValue={String(weekAggregation.caloriesConsumed)}
             caloriesFooter={`of ${weekAggregation.plannedCalories} planned`}
+            proteinLabel="Protein"
             proteinValue={`${Math.round(weekAggregation.proteinG)}g`}
             proteinFooter={`of ${Math.round(weekAggregation.plannedProteinG)}g planned`}
+            mealsLabel="Meals"
             mealsValue={`${weekAggregation.mealsCompleted}/${weekAggregation.mealsTotal}`}
             mealsFooter="logged this week"
           />

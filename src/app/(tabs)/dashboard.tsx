@@ -12,6 +12,7 @@ import { RingGauge } from '@/components/dashboard/RingGauge';
 import { WeeklyReviewCard } from '@/components/dashboard/WeeklyReviewCard';
 import { InsightCard } from '@/components/insights/InsightCard';
 import { Card } from '@/components/layout/Card';
+import { CardLifestyleBanner } from '@/components/layout/CardLifestyleBanner';
 import { HeroPhotoBanner } from '@/components/layout/HeroPhotoBanner';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
@@ -526,7 +527,10 @@ export default function DashboardScreen() {
         />
       }>
       <HeroPhotoBanner
-        uri={todaysWorkout ? HeroImages.dashboard.workout : HeroImages.dashboard.rest}
+        uri={todaysWorkout ? HeroImages.dashboard.workoutLift : HeroImages.dashboard.rest}
+        height={192}
+        showBrand={false}
+        eyebrow="Today"
         title={user?.displayName ? `Hey, ${user.displayName.split(' ')[0]}` : 'Your day'}
         subtitle={coachHeadline}
       />
@@ -546,6 +550,7 @@ export default function DashboardScreen() {
           </Card>
         ) : (
           <Card style={styles.coachCard}>
+            <CardLifestyleBanner uri={HeroImages.dashboard.coach} height={80} />
             <AppText variant="label" color="accent">
               Coach
             </AppText>
@@ -640,6 +645,7 @@ export default function DashboardScreen() {
         ) : (
           <StatCard
             label="Recovery"
+            density="compact"
             footer={trainingLabel}
             footerColor="accent"
             onPress={handleRecoveryPress}>
@@ -661,7 +667,8 @@ export default function DashboardScreen() {
         ) : (
           <StatCard
             label="Progress"
-            footer={`${data?.weeklyWorkouts ?? 0} workouts · ${data?.streak ?? 0}d streak`}>
+            density="compact"
+            footer={`${data?.weeklyWorkouts ?? 0} wk · ${data?.streak ?? 0}d streak`}>
             <AppText variant="bodyBold" style={styles.weightMetric}>
               {units.formatWeight(data?.currentWeightKg)}
             </AppText>
@@ -701,6 +708,7 @@ export default function DashboardScreen() {
 const styles = StyleSheet.create({
   coachCard: {
     gap: Spacing.sm,
+    overflow: 'hidden',
   },
   statsRow: {
     flexDirection: 'row',

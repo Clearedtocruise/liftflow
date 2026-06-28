@@ -23,10 +23,14 @@ export function NutritionProgressHeader({
 
   return (
     <NutritionMetricsRow
+      layout="rows"
+      caloriesLabel="Calories"
       caloriesValue={String(caloriesConsumed)}
       caloriesFooter={calorieGoal ? `of ${calorieGoal} goal` : undefined}
+      proteinLabel="Protein"
       proteinValue={`${Math.round(proteinG)}g`}
       proteinFooter={proteinGoal ? `of ${proteinGoal}g goal` : undefined}
+      mealsLabel="Meals"
       mealsValue={`${mealsCompleted}/${mealsTotal || '—'}`}
       mealsFooter="logged today"
     />

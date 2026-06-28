@@ -1,9 +1,11 @@
 import { Pressable, StyleSheet } from 'react-native';
 
 import { Card } from '@/components/layout/Card';
+import { CardLifestyleBanner } from '@/components/layout/CardLifestyleBanner';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { AppText } from '@/components/ui/AppText';
-import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
+import { HeroImages } from '@/constants/imagery';
+import { Spacing } from '@/constants/theme';
 
 type RecoveryCheckInCueProps = {
   onPress: () => void;
@@ -13,6 +15,7 @@ export function RecoveryCheckInCue({ onPress }: RecoveryCheckInCueProps) {
   return (
     <Pressable onPress={onPress} accessibilityRole="button">
       <Card accent style={styles.card}>
+        <CardLifestyleBanner uri={HeroImages.dashboard.coach} height={72} />
         <AppText variant="label" color="accent">
           Daily check-in
         </AppText>
@@ -30,7 +33,6 @@ const styles = StyleSheet.create({
   card: {
     gap: Spacing.sm,
     marginBottom: Spacing.lg,
-    borderColor: LiftFlowColors.primaryGlow,
-    borderRadius: Radius.lg,
+    overflow: 'hidden',
   },
 });

@@ -1,9 +1,11 @@
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Card } from '@/components/layout/Card';
+import { CardLifestyleBanner } from '@/components/layout/CardLifestyleBanner';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { NutritionMetricsRow } from '@/components/nutrition/NutritionMetricsRow';
 import { AppText } from '@/components/ui/AppText';
+import { HeroImages } from '@/constants/imagery';
 import { Spacing } from '@/constants/theme';
 import { mealTypeLabel } from '@/lib/mealSchedule';
 import type { MealType } from '@/types/common';
@@ -64,7 +66,8 @@ export function HomeNextUpCard({
     <View style={styles.stack}>
       {showWorkoutSection && workout && !isRestDay ? (
         <View testID="today-workout-card">
-          <Card style={styles.card}>
+          <Card style={styles.card} glow>
+            <CardLifestyleBanner uri={HeroImages.dashboard.workoutLift} height={96} />
             <Pressable onPress={onViewWorkout} disabled={!onViewWorkout} style={styles.section}>
               <AppText variant="label" color="accent">
                 Today&apos;s workout
@@ -98,6 +101,7 @@ export function HomeNextUpCard({
 
       {showWorkoutSection && isRestDay ? (
         <Card style={styles.card}>
+          <CardLifestyleBanner uri={HeroImages.dashboard.rest} height={88} />
           <View style={styles.section}>
             <AppText variant="label" color="accent">
               Recovery
@@ -124,18 +128,20 @@ export function HomeNextUpCard({
       ) : null}
 
       <Card style={styles.card}>
+        <CardLifestyleBanner uri={HeroImages.dashboard.nutrition} height={88} />
         <AppText variant="label" color="accent">
           Nutrition
         </AppText>
 
         {mealsTotal > 0 ? (
           <NutritionMetricsRow
+            layout="tiles"
+            caloriesLabel="Calories"
             caloriesValue={String(Math.max(0, caloriesRemaining))}
-            caloriesFooter="remaining"
+            proteinLabel="Protein"
             proteinValue={`${Math.round(proteinRemainingG)}g`}
-            proteinFooter="remaining"
+            mealsLabel="Meals"
             mealsValue={`${mealsCompleted}/${mealsTotal}`}
-            mealsFooter="logged today"
           />
         ) : null}
 
@@ -144,8 +150,10 @@ export function HomeNextUpCard({
             <AppText variant="label" color="textTertiary">
               Up next
             </AppText>
-            <AppText variant="bodyBold">{nextMeal.name}</AppText>
-            <AppText variant="footnote" color="textSecondary">
+            <AppText variant="bodyBold" numberOfLines={2}>
+              {nextMeal.name}
+            </AppText>
+            <AppText variant="footnote" color="textSecondary" numberOfLines={1}>
               {mealTypeLabel(nextMeal.mealType)}
               {nextMeal.scheduledTime
                 ? ` · ${nextMeal.overdue ? 'Overdue ' : ''}${nextMeal.scheduledTime}`
@@ -177,6 +185,7 @@ const styles = StyleSheet.create({
   },
   card: {
     gap: Spacing.md,
+    overflow: 'hidden',
   },
   section: {
     gap: Spacing.xs,
