@@ -10,6 +10,7 @@ import { StatCard } from '@/components/layout/StatCard';
 import { EmptyStateCard } from '@/components/layout/StateCard';
 import { TabScreenHeader } from '@/components/layout/TabScreenHeader';
 import { AppText } from '@/components/ui/AppText';
+import { HeroImages } from '@/constants/imagery';
 import { LiftFlowColors, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 import { screenDataCache } from '@/lib/screenDataCache';
@@ -103,7 +104,7 @@ export default function HistoryScreen() {
   if (loading && history.length === 0) {
     return (
       <ScreenContainer
-        header={<TabScreenHeader title="History" subtitle="Track progression over time" />}
+        header={<TabScreenHeader title="History" subtitle="Track progression over time" bannerUri={HeroImages.tabs.history} />}
         scroll={false}>
         <View style={styles.statsRow}>
           <StatCard label="Day Streak">
@@ -122,7 +123,7 @@ export default function HistoryScreen() {
 
   return (
     <ScreenContainer
-      header={<TabScreenHeader title="History" subtitle="Track progression over time" />}
+      header={<TabScreenHeader title="History" subtitle="Track progression over time" bannerUri={HeroImages.tabs.history} />}
       refreshControl={
         <RefreshControl
           refreshing={refreshing}

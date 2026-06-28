@@ -9,6 +9,7 @@ import { SkeletonBlock } from '@/components/layout/SkeletonBlock';
 import { TabScreenHeader } from '@/components/layout/TabScreenHeader';
 import { ActiveWorkoutScreen } from '@/components/workout/execution/ActiveWorkoutScreen';
 import { WorkoutWeeklyPlanScreen } from '@/components/workout/execution/WorkoutWeeklyPlanScreen';
+import { HeroImages } from '@/constants/imagery';
 import { usePlanAdjustment } from '@/contexts/PlanAdjustmentContext';
 import { useAppResume } from '@/hooks/useAppResume';
 import { useAuth } from '@/hooks/useAuth';
@@ -282,7 +283,7 @@ export default function WorkoutScreen() {
   if (loading && !session && weekDays.length === 0) {
     return (
       <ScreenContainer
-        header={<TabScreenHeader title="Workout" subtitle="This week's plan" showBrand={false} />}
+        header={<TabScreenHeader title="Workout" subtitle="This week's plan" showBrand={false} bannerUri={HeroImages.tabs.workout} />}
         scroll={false}>
         <SkeletonBlock height={120} />
         <SkeletonBlock height={200} />
@@ -327,7 +328,7 @@ export default function WorkoutScreen() {
 
   return (
     <ScreenContainer
-      header={<TabScreenHeader title="Workout" subtitle="This week's plan" showBrand={false} />}
+      header={<TabScreenHeader title="Workout" subtitle="This week's plan" showBrand={false} bannerUri={HeroImages.tabs.workout} />}
       contentContainerStyle={styles.content}>
       <WorkoutWeeklyPlanScreen
         days={weekDays}

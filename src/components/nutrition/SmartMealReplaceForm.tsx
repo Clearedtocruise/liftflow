@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
@@ -11,6 +11,8 @@ import type { FoodMacroEstimate, MealReplacementScope } from '@/types/nutrition'
 
 type SmartMealReplaceFormProps = {
   replacingLabel: string;
+  initialFoodName?: string;
+  initialServingSize?: string;
   onConfirm: (payload: {
     foodName: string;
     servingSize: string;
@@ -25,13 +27,25 @@ const SCOPE_OPTIONS: Array<{ id: MealReplacementScope; label: string }> = [
   { id: 'week', label: 'Entire week' },
 ];
 
-export function SmartMealReplaceForm({ replacingLabel, onConfirm }: SmartMealReplaceFormProps) {
-  const [foodName, setFoodName] = useState('');
-  const [servingSize, setServingSize] = useState('');
+export function SmartMealReplaceForm({
+  replacingLabel,
+  initialFoodName = '',
+  initialServingSize = '',
+  onConfirm,
+}: SmartMealReplaceFormProps) {
+  const [foodName, setFoodName] = useState(initialFoodName);
+  const [servingSize, setServingSize] = useState(initialServingSize);
   const [scope, setScope] = useState<MealReplacementScope>('meal');
   const [loading, setLoading] = useState(false);
   const [macros, setMacros] = useState<FoodMacroEstimate | null>(null);
   const [reasoning, setReasoning] = useState<string | null>(null);
+
+  useEffect(() => {
+    setFoodName(initialFoodName);
+    setServingSize(initialServingSize);
+    setMacros(null);
+    setReasoning(null);
+  }, [initialFoodName, initialServingSize, replacingLabel]);
 
   async function handleCalculate() {
     if (!foodName.trim() || !servingSize.trim()) return;
@@ -50,7 +64,7 @@ export function SmartMealReplaceForm({ replacingLabel, onConfirm }: SmartMealRep
   return (
     <View style={styles.container} testID="smart-replace-form">
       <AppText variant="footnote" color="textSecondary">
-        Replacing: {replacingLabel}
+        What are you eating instead of {replacingLabel}?
       </AppText>
 
       <TextField

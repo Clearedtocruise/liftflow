@@ -22,7 +22,7 @@ export function WorkoutHeroCard({
   subtitle,
   onStart,
   loading,
-  imageUri = HeroImages.dashboard.workout,
+  imageUri = HeroImages.dashboard.cardWorkout,
 }: WorkoutHeroCardProps) {
   return (
     <View style={styles.outer}>

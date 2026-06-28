@@ -67,7 +67,7 @@ export function HomeNextUpCard({
       {showWorkoutSection && workout && !isRestDay ? (
         <View testID="today-workout-card">
           <Card style={styles.card} glow>
-            <CardLifestyleBanner uri={HeroImages.dashboard.workoutLift} height={96} />
+            <CardLifestyleBanner uri={HeroImages.dashboard.cardWorkout} height={96} />
             <Pressable onPress={onViewWorkout} disabled={!onViewWorkout} style={styles.section}>
               <AppText variant="label" color="accent">
                 Today&apos;s workout
@@ -101,7 +101,7 @@ export function HomeNextUpCard({
 
       {showWorkoutSection && isRestDay ? (
         <Card style={styles.card}>
-          <CardLifestyleBanner uri={HeroImages.dashboard.rest} height={88} />
+          <CardLifestyleBanner uri={HeroImages.dashboard.cardRest} height={88} />
           <View style={styles.section}>
             <AppText variant="label" color="accent">
               Recovery

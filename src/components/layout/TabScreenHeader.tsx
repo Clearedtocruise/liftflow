@@ -2,6 +2,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { StyleSheet, View, type ViewStyle } from 'react-native';
 
 import { BrandHeader } from '@/components/brand/BrandHeader';
+import { CardLifestyleBanner } from '@/components/layout/CardLifestyleBanner';
 import { AppText } from '@/components/ui/AppText';
 import type { AppTheme } from '@/constants/themes';
 import { useAppTheme } from '@/contexts/ThemeContext';
@@ -12,6 +13,7 @@ type TabScreenHeaderProps = {
   subtitle?: string;
   right?: React.ReactNode;
   showBrand?: boolean;
+  bannerUri?: string;
   style?: ViewStyle;
 };
 
@@ -20,6 +22,7 @@ export function TabScreenHeader({
   subtitle,
   right,
   showBrand = true,
+  bannerUri,
   style,
 }: TabScreenHeaderProps) {
   const theme = useAppTheme();
@@ -27,6 +30,7 @@ export function TabScreenHeader({
 
   return (
     <View style={[styles.wrap, style]}>
+      {bannerUri ? <CardLifestyleBanner uri={bannerUri} height={76} bleed={false} /> : null}
       <View style={styles.row}>
         <View style={styles.textBlock}>
           {showBrand ? <BrandHeader compact /> : null}

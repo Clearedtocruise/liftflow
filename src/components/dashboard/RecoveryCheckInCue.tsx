@@ -15,7 +15,7 @@ export function RecoveryCheckInCue({ onPress }: RecoveryCheckInCueProps) {
   return (
     <Pressable onPress={onPress} accessibilityRole="button">
       <Card accent style={styles.card}>
-        <CardLifestyleBanner uri={HeroImages.dashboard.coach} height={72} />
+        <CardLifestyleBanner uri={HeroImages.dashboard.checkIn} height={72} />
         <AppText variant="label" color="accent">
           Daily check-in
         </AppText>

@@ -527,7 +527,7 @@ export default function DashboardScreen() {
         />
       }>
       <HeroPhotoBanner
-        uri={todaysWorkout ? HeroImages.dashboard.workoutLift : HeroImages.dashboard.rest}
+        uri={todaysWorkout ? HeroImages.dashboard.heroWorkout : HeroImages.dashboard.heroRest}
         height={192}
         showBrand={false}
         eyebrow="Today"

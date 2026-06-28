@@ -1,15 +1,15 @@
 import { apiClient } from '@/api/client';
 import { estimateFoodMacrosLocal } from '@/lib/foodMacroLookup';
 import {
-  alternativesForIngredient,
-  buildLocalMealAlternatives,
-  enrichMealMeta,
-  type MealReplacementReason,
+    alternativesForIngredient,
+    buildLocalMealAlternatives,
+    enrichMealMeta,
+    type MealReplacementReason,
 } from '@/lib/mealIngredients';
-import { fromError, ok } from '@/lib/serviceResult';
+import { ok } from '@/lib/serviceResult';
 import { getAccessToken } from '@/supabase/client';
-import type { FoodMacroEstimate } from '@/types/nutrition';
 import type { Meal } from '@/types';
+import type { FoodMacroEstimate } from '@/types/nutrition';
 
 export type MealAlternativeOption = {
   name: string;
@@ -50,6 +50,13 @@ export const nutritionAdvisoryService = {
 
       if (raw.data?.alternatives?.length) {
         return ok(raw.data);
+      }
+      if (raw.data?.ingredientAlternatives?.length) {
+        return ok({
+          reasoning: raw.data.reasoning ?? 'Coach suggestions for your meal.',
+          alternatives: raw.data.alternatives ?? [],
+          ingredientAlternatives: raw.data.ingredientAlternatives,
+        });
       }
     } catch (e) {
       // Fall through to local templates when API unavailable.

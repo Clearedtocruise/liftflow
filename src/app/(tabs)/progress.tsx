@@ -17,6 +17,7 @@ import { EmptyStateCard } from '@/components/layout/StateCard';
 import { TabScreenHeader } from '@/components/layout/TabScreenHeader';
 import { FeatureGate } from '@/components/subscription/PremiumGate';
 import { AppText } from '@/components/ui/AppText';
+import { HeroImages } from '@/constants/imagery';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 import { useEntitlement } from '@/hooks/useEntitlement';
@@ -212,7 +213,7 @@ export default function ProgressScreen() {
     return (
       <ScreenContainer
         header={
-          <TabScreenHeader title="Progress" subtitle="Your transformation journey" />
+          <TabScreenHeader title="Progress" subtitle="Your transformation journey" bannerUri={HeroImages.tabs.progress} />
         }
         scroll={false}>
         <SkeletonBlock height={160} />
@@ -226,7 +227,7 @@ export default function ProgressScreen() {
     return (
       <ScreenContainer
         header={
-          <TabScreenHeader title="Progress" subtitle="Your transformation journey" />
+          <TabScreenHeader title="Progress" subtitle="Your transformation journey" bannerUri={HeroImages.tabs.progress} />
         }
         scroll={false}>
         <EmptyStateCard
@@ -243,6 +244,7 @@ export default function ProgressScreen() {
         <TabScreenHeader
           title="Progress"
           subtitle="Your transformation journey"
+          bannerUri={HeroImages.tabs.progress}
         />
       }>
       <FeatureGate featureId="transformation-engine">

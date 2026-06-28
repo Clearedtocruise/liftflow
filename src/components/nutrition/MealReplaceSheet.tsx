@@ -1,26 +1,35 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { SmartMealReplaceForm } from '@/components/nutrition/SmartMealReplaceForm';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
-import { enrichMealMeta, type MealReplacementReason } from '@/lib/mealIngredients';
+import {
+    alternativesForIngredient,
+    enrichMealMeta,
+    type MealReplacementReason,
+} from '@/lib/mealIngredients';
 import { mealTypeLabel } from '@/lib/mealSchedule';
 import {
     nutritionAdvisoryService,
     type MealAlternativeOption,
 } from '@/services/nutritionAdvisoryService';
 import type { Meal } from '@/types';
-import type { FoodMacroEstimate, MealReplacementScope } from '@/types/nutrition';
 
-export type ReplacementMethod = 'smart' | 'ai';
+export type ReplacementMethod = 'custom' | 'ai';
 
 export type SmartReplacementPayload = {
   foodName: string;
   servingSize: string;
-  macros: FoodMacroEstimate;
-  scope: MealReplacementScope;
+  macros: import('@/types/nutrition').FoodMacroEstimate;
+  scope: import('@/types/nutrition').MealReplacementScope;
+};
+
+type IngredientSwap = {
+  from: string;
+  to: string;
+  reason: string;
 };
 
 type MealReplaceSheetProps = {
@@ -44,6 +53,28 @@ const MEAL_REASONS: Array<{ id: MealReplacementReason; label: string }> = [
   { id: 'lower_calorie', label: 'Need lower calories' },
 ];
 
+function buildLocalIngredientSwaps(ingredientName: string): IngredientSwap[] {
+  return alternativesForIngredient(ingredientName).map((to) => ({
+    from: ingredientName,
+    to,
+    reason: 'On-device substitute suggestion',
+  }));
+}
+
+function mergeIngredientSwaps(primary: IngredientSwap[], secondary: IngredientSwap[]): IngredientSwap[] {
+  const seen = new Set<string>();
+  const merged: IngredientSwap[] = [];
+
+  for (const item of [...primary, ...secondary]) {
+    const key = item.to.trim().toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    merged.push(item);
+  }
+
+  return merged;
+}
+
 export function MealReplaceSheet({
   visible,
   meal,
@@ -56,13 +87,11 @@ export function MealReplaceSheet({
   onReplaceIngredient,
   onSmartReplace,
 }: MealReplaceSheetProps) {
-  const [replacementMethod, setReplacementMethod] = useState<ReplacementMethod>('smart');
+  const [replacementMethod, setReplacementMethod] = useState<ReplacementMethod>('custom');
   const [reason, setReason] = useState<MealReplacementReason>('default');
   const [loading, setLoading] = useState(false);
   const [alternatives, setAlternatives] = useState<MealAlternativeOption[]>([]);
-  const [ingredientAlternatives, setIngredientAlternatives] = useState<
-    Array<{ from: string; to: string; reason: string }>
-  >([]);
+  const [ingredientSwaps, setIngredientSwaps] = useState<IngredientSwap[]>([]);
   const [reasoning, setReasoning] = useState<string | null>(null);
   const [offlineSuggestions, setOfflineSuggestions] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -70,43 +99,74 @@ export function MealReplaceSheet({
 
   useEffect(() => {
     if (!visible) {
-      setReplacementMethod('smart');
+      setReplacementMethod('custom');
       setFetchError(null);
       setOfflineSuggestions(false);
-      return;
+      setAlternatives([]);
+      setIngredientSwaps([]);
+      setReasoning(null);
     }
   }, [visible]);
 
   useEffect(() => {
-    if (!visible || !meal || mode !== 'meal' || replacementMethod !== 'ai') return;
+    if (!visible || !meal || replacementMethod !== 'ai') return;
 
     let cancelled = false;
     setLoading(true);
     setFetchError(null);
 
+    if (mode === 'ingredient' && ingredientName) {
+      setIngredientSwaps(buildLocalIngredientSwaps(ingredientName));
+    }
+
     void nutritionAdvisoryService.getMealAlternatives(meal, reason, dietaryRestrictions).then((result) => {
       if (cancelled) return;
+
       if (result.success) {
         setAlternatives(result.data.alternatives);
-        setIngredientAlternatives(result.data.ingredientAlternatives);
         setReasoning(result.data.reasoning);
         setOfflineSuggestions(Boolean(result.data.offline));
+
+        if (mode === 'ingredient' && ingredientName) {
+          const fromApi = result.data.ingredientAlternatives.filter(
+            (item) => item.from.trim().toLowerCase() === ingredientName.trim().toLowerCase() && item.to.trim(),
+          );
+          setIngredientSwaps((current) => mergeIngredientSwaps(fromApi, current.length ? current : buildLocalIngredientSwaps(ingredientName)));
+        } else {
+          setIngredientSwaps(result.data.ingredientAlternatives.filter((item) => item.to.trim() && item.to !== item.from));
+        }
       } else {
         setFetchError(result.error);
         setAlternatives([]);
+        if (mode === 'ingredient' && ingredientName) {
+          setIngredientSwaps(buildLocalIngredientSwaps(ingredientName));
+        }
       }
+
       setLoading(false);
     });
 
     return () => {
       cancelled = true;
     };
-  }, [visible, meal, mode, reason, dietaryRestrictions, replacementMethod, refreshKey]);
+  }, [visible, meal, mode, ingredientName, reason, dietaryRestrictions, replacementMethod, refreshKey]);
+
+  const visibleIngredientSwaps = useMemo(() => {
+    if (mode !== 'ingredient' || !ingredientName) return ingredientSwaps;
+    return ingredientSwaps.filter(
+      (item) => item.to.trim().toLowerCase() !== ingredientName.trim().toLowerCase(),
+    );
+  }, [ingredientSwaps, ingredientName, mode]);
 
   if (!meal) return null;
 
   const meta = enrichMealMeta(meal.name, meal.instructions);
   const replacingLabel = mode === 'ingredient' && ingredientName ? ingredientName : meal.name;
+  const replacingServing =
+    mode === 'ingredient' && ingredientName
+      ? meta.ingredients?.find((item) => item.name.trim().toLowerCase() === ingredientName.trim().toLowerCase())
+          ?.serving ?? ''
+      : '';
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
@@ -119,25 +179,27 @@ export function MealReplaceSheet({
 
         <View style={styles.methodRow}>
           <Pressable
-            style={[styles.methodChip, replacementMethod === 'smart' && styles.methodChipActive]}
-            onPress={() => setReplacementMethod('smart')}
-            testID="smart-replace-button">
-            <AppText variant="caption" color={replacementMethod === 'smart' ? 'accent' : 'textSecondary'}>
-              Smart Replacement
+            style={[styles.methodChip, replacementMethod === 'custom' && styles.methodChipActive]}
+            onPress={() => setReplacementMethod('custom')}
+            testID="custom-replace-button">
+            <AppText variant="caption" color={replacementMethod === 'custom' ? 'accent' : 'textSecondary'}>
+              Custom
             </AppText>
           </Pressable>
           <Pressable
             style={[styles.methodChip, replacementMethod === 'ai' && styles.methodChipActive]}
-            onPress={() => setReplacementMethod('ai')}>
+            onPress={() => setReplacementMethod('ai')}
+            testID="ai-replace-button">
             <AppText variant="caption" color={replacementMethod === 'ai' ? 'accent' : 'textSecondary'}>
-              AI Replacement
+              AI suggestions
             </AppText>
           </Pressable>
         </View>
 
-        {replacementMethod === 'smart' ? (
+        {replacementMethod === 'custom' ? (
           <SmartMealReplaceForm
             replacingLabel={replacingLabel}
+            initialServingSize={replacingServing}
             onConfirm={(payload) => {
               onSmartReplace(payload);
               onClose();
@@ -158,9 +220,13 @@ export function MealReplaceSheet({
                   </Pressable>
                 ))}
               </ScrollView>
-            ) : null}
+            ) : (
+              <AppText variant="footnote" color="textSecondary">
+                Coach picks for swapping {ingredientName}
+              </AppText>
+            )}
 
-            {offlineSuggestions && mode === 'meal' ? (
+            {offlineSuggestions ? (
               <View style={styles.offlineBadge}>
                 <AppText variant="caption" color="warning">
                   Offline suggestions
@@ -168,7 +234,7 @@ export function MealReplaceSheet({
               </View>
             ) : null}
 
-            {fetchError && mode === 'meal' ? (
+            {fetchError ? (
               <View style={styles.errorRow}>
                 <AppText variant="footnote" color="textSecondary">
                   {fetchError}
@@ -181,60 +247,88 @@ export function MealReplaceSheet({
               </View>
             ) : null}
 
-            {reasoning && mode === 'meal' ? (
+            {reasoning ? (
               <AppText variant="footnote" color="textTertiary">
                 {reasoning}
               </AppText>
             ) : null}
 
-            {loading && mode === 'meal' ? (
+            {loading ? (
               <View style={styles.loading}>
                 <ActivityIndicator color={LiftFlowColors.accent} />
               </View>
+            ) : mode === 'ingredient' ? (
+              <View style={styles.list}>
+                {visibleIngredientSwaps.length === 0 ? (
+                  <AppText variant="footnote" color="textSecondary">
+                    No AI swaps for this food yet. Use Custom to log a replacement and calculate macros.
+                  </AppText>
+                ) : (
+                  visibleIngredientSwaps.map((item) => (
+                    <Pressable
+                      key={`${item.from}-${item.to}`}
+                      style={styles.option}
+                      onPress={() => {
+                        onReplaceIngredient(item.from, item.to);
+                        onClose();
+                      }}>
+                      <AppText variant="body">{item.to}</AppText>
+                      {item.reason ? (
+                        <AppText variant="caption" color="textSecondary">
+                          {item.reason}
+                        </AppText>
+                      ) : null}
+                    </Pressable>
+                  ))
+                )}
+              </View>
             ) : (
               <View style={styles.list}>
-                {mode === 'meal'
-                  ? alternatives.map((option) => (
-                      <Pressable
-                        key={option.name}
-                        style={styles.option}
-                        onPress={() => {
-                          onReplaceMeal(option, reason);
-                          onClose();
-                        }}>
-                        <AppText variant="body">{option.name}</AppText>
-                        <AppText variant="caption" color="textSecondary">
-                          {option.calories} cal · {Math.round(option.proteinG)}P · {Math.round(option.carbsG)}C ·{' '}
-                          {Math.round(option.fatG)}F
-                        </AppText>
-                      </Pressable>
-                    ))
-                  : null}
+                {alternatives.length === 0 ? (
+                  <AppText variant="footnote" color="textSecondary">
+                    No meal suggestions right now. Try Custom or pick another reason above.
+                  </AppText>
+                ) : (
+                  alternatives.map((option) => (
+                    <Pressable
+                      key={option.name}
+                      style={styles.option}
+                      onPress={() => {
+                        onReplaceMeal(option, reason);
+                        onClose();
+                      }}>
+                      <AppText variant="body">{option.name}</AppText>
+                      <AppText variant="caption" color="textSecondary">
+                        {option.calories} cal · {Math.round(option.proteinG)}P · {Math.round(option.carbsG)}C ·{' '}
+                        {Math.round(option.fatG)}F
+                      </AppText>
+                    </Pressable>
+                  ))
+                )}
               </View>
             )}
 
-            {mode === 'meal' ? (
+            {mode === 'meal' && ingredientSwaps.length > 0 ? (
               <View style={styles.ingredientSection}>
                 <AppText variant="label" color="textSecondary">
-                  Replace ingredient
+                  Swap an ingredient
                 </AppText>
-                {(ingredientAlternatives.length > 0 ? ingredientAlternatives : (meta.ingredients ?? []).map((item) => ({
-                  from: item.name,
-                  to: item.name,
-                  reason: '',
-                }))).map((item) => (
+                {ingredientSwaps.map((item) => (
                   <Pressable
-                    key={item.from}
+                    key={`${item.from}-${item.to}`}
                     style={styles.option}
                     onPress={() => {
-                      if (item.to && item.to !== item.from) {
-                        onReplaceIngredient(item.from, item.to);
-                        onClose();
-                      }
+                      onReplaceIngredient(item.from, item.to);
+                      onClose();
                     }}>
                     <AppText variant="footnote">
                       {item.from} → {item.to}
                     </AppText>
+                    {item.reason ? (
+                      <AppText variant="caption" color="textTertiary">
+                        {item.reason}
+                      </AppText>
+                    ) : null}
                   </Pressable>
                 ))}
               </View>

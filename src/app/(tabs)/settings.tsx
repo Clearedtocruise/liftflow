@@ -13,6 +13,7 @@ import { AppearanceThemePicker } from '@/components/settings/AppearanceThemePick
 import { ConfirmationModePicker, SettingsRow } from '@/components/settings/SettingsRow';
 import { AppSymbol, SYMBOL_FALLBACKS } from '@/components/ui/AppSymbol';
 import { AppText } from '@/components/ui/AppText';
+import { HeroImages } from '@/constants/imagery';
 import {
     isWorkoutLocationDetectionEnabled,
     PRIVACY_WORKOUT_LOCATION_DETECTION,
@@ -263,6 +264,7 @@ export default function SettingsScreen() {
         <TabScreenHeader
           title="Settings"
           subtitle={user ? (user.displayName ?? user.email) : undefined}
+          bannerUri={HeroImages.tabs.settings}
         />
       }>
       {isFounder || isBetaTester ? (
