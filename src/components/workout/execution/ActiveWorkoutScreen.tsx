@@ -909,6 +909,40 @@ export function ActiveWorkoutScreen({
     ]);
   }
 
+  const handleSkipCurrentExercise = useCallback(() => {
+    if (!currentExercise?.id || isPaused) return;
+    const name = currentExercise.exercise?.name ?? 'this exercise';
+    Alert.alert(
+      'Skip exercise?',
+      `Remove ${name} from this workout. Any sets you already logged are kept.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Skip',
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              const result = await workoutService.removeExercise(currentExercise.id);
+              if (!result.success) {
+                Alert.alert('Could not skip exercise', result.error);
+                return;
+              }
+              const refreshed = await workoutService.getSession(session.id);
+              await refreshSession();
+              const remaining = refreshed.success ? refreshed.data.exercises.length : sortedExercises.length - 1;
+              if (remaining <= 0) {
+                onFinish();
+                return;
+              }
+              setCurrentIndex((index) => Math.min(index, remaining - 1));
+              setShowComplete(false);
+            })();
+          },
+        },
+      ],
+    );
+  }, [currentExercise, isPaused, onFinish, refreshSession, session.id, sortedExercises.length]);
+
   async function handleAddExercise(exercise: Exercise) {
     const workoutExerciseId = await addExerciseByName(exercise.name);
     if (!workoutExerciseId) return;
@@ -1280,6 +1314,14 @@ export function ActiveWorkoutScreen({
                 </AppText>
               </Pressable>
 
+              {!showComplete && sortedExercises.length > 1 ? (
+                <Pressable onPress={handleSkipCurrentExercise} hitSlop={8} disabled={isPaused}>
+                  <AppText variant="caption" color="textSecondary">
+                    Skip this exercise
+                  </AppText>
+                </Pressable>
+              ) : null}
+
               {!showComplete ? (
                 <WorkoutUpNextCard
                   position={workoutPosition}
@@ -1345,7 +1387,7 @@ export function ActiveWorkoutScreen({
                 <ExerciseCoachCard
                   variant="compact"
                   showPerformanceSummary={false}
-                  showReason={false}
+                  showReason
                   loggingMode={loggingMode}
                   userId={user.id}
                   exerciseId={currentExercise.exerciseId}

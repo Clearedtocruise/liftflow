@@ -98,10 +98,6 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     let removeListener: (() => void) | undefined;
 
     void (async () => {
-      const { notificationService } = await import('@/services/notificationService');
-      await notificationService.initializeNotificationsSafely();
-      notificationService.scheduleWorkoutReminder(18, 0).catch(() => undefined);
-
       const config = await subscriptionService.configurePurchases(user.id);
       if (cancelled || !config.success) return;
 

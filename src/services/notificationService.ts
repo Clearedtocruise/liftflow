@@ -3,7 +3,6 @@ import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 
 import { fail, fromError, ok } from '@/lib/serviceResult';
-import { getAccessToken, supabase } from '@/supabase/client';
 import type { ServiceResult } from '@/types/common';
 
 type NotificationsModule = typeof import('expo-notifications');
@@ -116,6 +115,8 @@ export const notificationService = {
       const Notifications = await loadNotificationsModule();
       if (!ready || !Notifications) return fail('Notifications unavailable');
 
+      await this.cancelWorkoutReminders();
+
       const id = await Notifications.scheduleNotificationAsync({
         content: {
           title: 'Time to train',
@@ -132,6 +133,32 @@ export const notificationService = {
     } catch (e) {
       return fromError(e);
     }
+  },
+
+  async cancelWorkoutReminders(): Promise<void> {
+    try {
+      const Notifications = await loadNotificationsModule();
+      if (!Notifications) return;
+
+      const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+      await Promise.all(
+        scheduled
+          .filter((item) => (item.content.data as { type?: string })?.type === 'workout_reminder')
+          .map((item) => Notifications.cancelScheduledNotificationAsync(item.identifier)),
+      );
+    } catch {
+      // Non-fatal
+    }
+  },
+
+  async syncWorkoutReminder(enabled: boolean, hour = 18, minute = 0): Promise<ServiceResult<void>> {
+    if (!enabled) {
+      await this.cancelWorkoutReminders();
+      return ok(undefined);
+    }
+    const result = await this.scheduleWorkoutReminder(hour, minute);
+    if (!result.success) return fail(result.error);
+    return ok(undefined);
   },
 
   async addNotificationReceivedListener(listener: (notification: unknown) => void) {

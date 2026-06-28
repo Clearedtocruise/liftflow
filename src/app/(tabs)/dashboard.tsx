@@ -8,6 +8,7 @@ import { HomeNextUpCard } from '@/components/dashboard/HomeNextUpCard';
 import { HomePlanAdjustedBanner } from '@/components/dashboard/HomePlanAdjustedBanner';
 import { ManageDayModal } from '@/components/dashboard/ManageDayModal';
 import { RecoveryCheckInCue } from '@/components/dashboard/RecoveryCheckInCue';
+import { RecoveryModeNotice } from '@/components/dashboard/RecoveryModeNotice';
 import { RingGauge } from '@/components/dashboard/RingGauge';
 import { WeeklyReviewCard } from '@/components/dashboard/WeeklyReviewCard';
 import { InsightCard } from '@/components/insights/InsightCard';
@@ -80,6 +81,7 @@ export default function DashboardScreen() {
   const { locations, selectedId } = useWorkoutLocations(user?.id);
   const [data, setData] = useState<DashboardSummary | null>(null);
   const [recoveryScore, setRecoveryScore] = useState<number | null>(null);
+  const [recoveryModeActive, setRecoveryModeActive] = useState(false);
   const [recoveryIntel, setRecoveryIntel] = useState<RecoveryIntelligenceReport | null>(null);
   const [program, setProgram] = useState<ProgramDashboard | null>(null);
   const [weekWorkouts, setWeekWorkouts] = useState<PlannedWorkout[]>([]);
@@ -225,17 +227,21 @@ export default function DashboardScreen() {
             if (intelResult.success) {
               setRecoveryIntel(intelResult.data);
               setRecoveryScore(intelResult.data.recoveryScore);
+              setRecoveryModeActive(intelResult.data.recoveryScore < 40);
             } else {
               setRecoveryIntel(null);
               setRecoveryScore(null);
+              setRecoveryModeActive(false);
             }
           } else {
             const todayResult = recoveryResult as Awaited<ReturnType<typeof recoveryService.getToday>>;
             setRecoveryIntel(null);
             if (todayResult.success && todayResult.data) {
               setRecoveryScore(todayResult.data.recoveryScore);
+              setRecoveryModeActive(todayResult.data.recoveryModeActive);
             } else {
               setRecoveryScore(null);
+              setRecoveryModeActive(false);
             }
           }
           logStartup('RECOVERY_LOADED');
@@ -536,6 +542,8 @@ export default function DashboardScreen() {
       />
 
       <HomePlanAdjustedBanner />
+
+      <RecoveryModeNotice recoveryScore={recoveryScore} recoveryModeActive={recoveryModeActive} />
 
       {!hasRecoveryScore && !summaryLoading ? (
         <RecoveryCheckInCue onPress={handleRecoveryPress} />

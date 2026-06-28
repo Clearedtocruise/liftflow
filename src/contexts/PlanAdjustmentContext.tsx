@@ -7,6 +7,8 @@ type PlanAdjustmentContextValue = {
   /** Increments on each adaptation so tabs can reload plan data. */
   revision: number;
   setFromAdaptation: (result: PlanAdaptationResult) => void;
+  /** Restore banner after app restart from profile metadata. */
+  hydrateFromProfile: (stored: PlanAdjustment | null | undefined) => void;
   bumpRevision: () => void;
   dismiss: () => void;
 };
@@ -27,13 +29,18 @@ export function PlanAdjustmentProvider({ children }: { children: ReactNode }) {
     setRevision((n) => n + 1);
   }, []);
 
+  const hydrateFromProfile = useCallback((stored: PlanAdjustment | null | undefined) => {
+    if (!stored?.headline || !stored.rationale) return;
+    setAdjustment((current) => current ?? stored);
+  }, []);
+
   const bumpRevision = useCallback(() => setRevision((n) => n + 1), []);
 
   const dismiss = useCallback(() => setAdjustment(null), []);
 
   const value = useMemo(
-    () => ({ adjustment, revision, setFromAdaptation, bumpRevision, dismiss }),
-    [adjustment, revision, setFromAdaptation, bumpRevision, dismiss],
+    () => ({ adjustment, revision, setFromAdaptation, hydrateFromProfile, bumpRevision, dismiss }),
+    [adjustment, revision, setFromAdaptation, hydrateFromProfile, bumpRevision, dismiss],
   );
 
   return <PlanAdjustmentContext.Provider value={value}>{children}</PlanAdjustmentContext.Provider>;

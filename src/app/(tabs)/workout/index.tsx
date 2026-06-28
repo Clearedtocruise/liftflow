@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, StyleSheet } from 'react-native';
 
+import { HomePlanAdjustedBanner } from '@/components/dashboard/HomePlanAdjustedBanner';
 import { ManageDayModal } from '@/components/dashboard/ManageDayModal';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { SkeletonBlock } from '@/components/layout/SkeletonBlock';
@@ -330,6 +331,7 @@ export default function WorkoutScreen() {
     <ScreenContainer
       header={<TabScreenHeader title="Workout" subtitle="This week's plan" showBrand={false} bannerUri={HeroImages.tabs.workout} />}
       contentContainerStyle={styles.content}>
+      <HomePlanAdjustedBanner />
       <WorkoutWeeklyPlanScreen
         days={weekDays}
         loading={loadingPlan}

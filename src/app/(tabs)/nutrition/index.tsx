@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, InteractionManager, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 
 import { api } from '@/api/client';
+import { HomePlanAdjustedBanner } from '@/components/dashboard/HomePlanAdjustedBanner';
 import { Card } from '@/components/layout/Card';
 import { HeroPhotoBanner } from '@/components/layout/HeroPhotoBanner';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
@@ -18,6 +19,7 @@ import { NutritionMetricsRow } from '@/components/nutrition/NutritionMetricsRow'
 import { NutritionProgressHeader } from '@/components/nutrition/NutritionProgressHeader';
 import { NutritionSectionTabs, type NutritionSection } from '@/components/nutrition/NutritionSectionTabs';
 import { QuickMealLogSheet } from '@/components/nutrition/QuickMealLogSheet';
+import { FeatureGate } from '@/components/subscription/PremiumGate';
 import { AppText } from '@/components/ui/AppText';
 import { HeroImages } from '@/constants/imagery';
 import { LiftFlowColors, Spacing } from '@/constants/theme';
@@ -546,22 +548,42 @@ export default function NutritionScreen() {
         subtitle={formatScheduleSubtitle(schedule)}
       />
 
+      <HomePlanAdjustedBanner />
+
       <Pressable onPress={() => router.push('/(features)/nutrition-preferences')} style={styles.prefsRow}>
         <AppText variant="caption" color="accent">
           Preferences →
         </AppText>
       </Pressable>
 
-      <Pressable onPress={() => router.push('/(features)/nutrition-intelligence')}>
-        <Card style={styles.intelCard}>
-          <AppText variant="label" color="accent">
-            Nutrition Intelligence
-          </AppText>
-          <AppText variant="footnote" color="textSecondary">
-            Personalized insights from your logs, plan, and recovery
-          </AppText>
-        </Card>
-      </Pressable>
+      <FeatureGate
+        featureId="nutrition-intelligence"
+        fallback={
+          <Pressable onPress={() => router.push('/(features)/upgrade')}>
+            <Card style={styles.intelCard}>
+              <AppText variant="label" color="accent">
+                Nutrition Intelligence
+              </AppText>
+              <AppText variant="footnote" color="textSecondary">
+                Pro insights from your logs, plan, and recovery — see macro gaps and coach tips tailored to today.
+              </AppText>
+              <AppText variant="caption" color="accent">
+                View with Pro →
+              </AppText>
+            </Card>
+          </Pressable>
+        }>
+        <Pressable onPress={() => router.push('/(features)/nutrition-intelligence')}>
+          <Card style={styles.intelCard}>
+            <AppText variant="label" color="accent">
+              Nutrition Intelligence
+            </AppText>
+            <AppText variant="footnote" color="textSecondary">
+              Personalized insights from your logs, plan, and recovery
+            </AppText>
+          </Card>
+        </Pressable>
+      </FeatureGate>
 
       {loadError ? (
         <Card style={styles.loadWarning}>

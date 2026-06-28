@@ -30,6 +30,7 @@ import { useLiftFlowTheme, useThemedStyles } from '@/hooks/useLiftFlowTheme';
 import { useSubscription } from '@/hooks/useSubscription';
 import { useUnits } from '@/hooks/useUnits';
 import { loadRolloverValidationState, type RolloverValidationState } from '@/lib/rolloverDebug';
+import { openSupportEmail } from '@/lib/supportMail';
 import {
     isTabataModeEnabled,
     TABATA_MODE_PREF_KEY,
@@ -42,6 +43,7 @@ import { dataResetService, formatResetConfirmation, type DataResetType } from '@
 import { deviceLocationService } from '@/services/deviceLocationService';
 import { exportService } from '@/services/exportService';
 import { feedbackService } from '@/services/feedbackService';
+import { notificationService } from '@/services/notificationService';
 import { userService } from '@/services/userService';
 import { useWorkoutSession } from '@/state/workout/WorkoutSessionContext';
 import type { ConfirmationMode } from '@/types/common';
@@ -73,6 +75,7 @@ export default function SettingsScreen() {
   const [tabataMode, setTabataMode] = useState(false);
   const [restTimerSound, setRestTimerSound] = useState(true);
   const [restTimerHaptics, setRestTimerHaptics] = useState(true);
+  const [workoutReminderEnabled, setWorkoutReminderEnabled] = useState(false);
   const [validationState, setValidationState] = useState<RolloverValidationState | null>(null);
 
   const refreshValidationState = useCallback(async () => {
@@ -109,6 +112,7 @@ export default function SettingsScreen() {
         setTabataMode(isTabataModeEnabled(result.data));
         setRestTimerSound(result.data.restTimerSound !== false);
         setRestTimerHaptics(result.data.restTimerHaptics !== false);
+        setWorkoutReminderEnabled(result.data.notificationPreferences?.workoutReminder === true);
       }
     });
     deviceLocationService.getPermissionStatus().then((status) => {
@@ -391,6 +395,37 @@ export default function SettingsScreen() {
       </Card>
 
       <View style={styles.sectionGap}>
+        <SectionHeader title="Notifications" subtitle="Opt in — we never spam" variant="secondary" />
+      </View>
+      <Card style={styles.group}>
+        <SettingsRow
+          label="Daily workout reminder"
+          value={workoutReminderEnabled ? '6:00 PM' : 'Off'}
+          icon={
+            <AppSymbol name="bell.fill" fallback={SYMBOL_FALLBACKS['bell.fill']} size={20} tintColor={colors.textSecondary} />
+          }
+          onPress={async () => {
+            if (!user) return;
+            const next = !workoutReminderEnabled;
+            if (next) {
+              const perm = await notificationService.requestPermissions();
+              if (!perm.success) {
+                Alert.alert('Notifications off', 'Enable notifications in Settings to get a daily workout reminder.');
+                return;
+              }
+            }
+            setWorkoutReminderEnabled(next);
+            const prefs = await userService.getPreferences(user.id);
+            const notificationPreferences = prefs.success ? prefs.data.notificationPreferences ?? {} : {};
+            await userService.updatePreferences(user.id, {
+              notificationPreferences: { ...notificationPreferences, workoutReminder: next },
+            });
+            await notificationService.syncWorkoutReminder(next, 18, 0);
+          }}
+        />
+      </Card>
+
+      <View style={styles.sectionGap}>
         <SectionHeader
           title="Workout style"
           subtitle="Tabata only when enabled — work and rest timers adjustable 10–45s in workout"
@@ -647,7 +682,10 @@ export default function SettingsScreen() {
           icon={
             <AppSymbol name="envelope.fill" fallback={SYMBOL_FALLBACKS['envelope.fill']} size={20} tintColor={colors.textSecondary} />
           }
-          onPress={() => router.push('/legal/support')}
+          onPress={async () => {
+            const opened = await openSupportEmail('ONE MORE Support');
+            if (!opened) router.push('/legal/support');
+          }}
         />
         <SettingsRow
           label="Report a bug"
