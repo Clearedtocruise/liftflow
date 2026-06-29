@@ -162,6 +162,8 @@ export function ActiveWorkoutScreen({
     setWatchDraftWeightKg,
     restTimerHaptics,
     setExerciseEffectiveTargetSets,
+    pendingSetCount,
+    flushPendingSets,
   } = useWorkoutSession();
 
   const { suppressNextWatchRestComplete } = useWatchExecutionRestSync({
@@ -1371,6 +1373,16 @@ export function ActiveWorkoutScreen({
               }
             />
             <WorkoutProgressBar percent={workoutProgress.percent} />
+            {pendingSetCount > 0 ? (
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => void flushPendingSets()}
+                style={styles.pendingSyncBanner}>
+                <AppText variant="caption" color="warning">
+                  {pendingSetCount} set{pendingSetCount === 1 ? '' : 's'} waiting to sync — tap to retry
+                </AppText>
+              </Pressable>
+            ) : null}
             <View style={styles.exerciseNavRow}>
               <Pressable
                 accessibilityRole="button"
@@ -1890,6 +1902,15 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginTop: Spacing.xs,
     gap: Spacing.sm,
+  },
+  pendingSyncBanner: {
+    marginTop: Spacing.xs,
+    paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.sm,
+    borderRadius: Radius.md,
+    backgroundColor: 'rgba(255, 193, 7, 0.12)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255, 193, 7, 0.35)',
   },
   exerciseNavButton: {
     minWidth: 56,

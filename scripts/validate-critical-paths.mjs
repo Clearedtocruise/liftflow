@@ -201,6 +201,38 @@ const REQUIRED = [
     label: 'Rest overlay last-exercise guard',
     patterns: ['next ? (exerciseEffectiveTargetSets[next.id]', 'next?.exercise?.name'],
   },
+  {
+    file: 'src/state/workout/WorkoutSessionContext.tsx',
+    label: 'Sprint B offline set retry',
+    patterns: [
+      'pendingSetQueue',
+      'mergePendingSetsIntoSession',
+      'flushInFlightRef',
+      'countForSession',
+      'purgeSession',
+    ],
+    forbidden: ['!sessionId || item.sessionId === sessionId'],
+  },
+  {
+    file: 'src/lib/pendingSetSync.ts',
+    label: 'Sprint B pending set merge',
+    patterns: ['mergePendingSetsIntoSession', 'pendingSync: true', 'clearLocalRestTimerState'],
+  },
+  {
+    file: 'src/services/exerciseCoachService.ts',
+    label: 'Sprint B coach prescription timeout',
+    patterns: ['COACH_PRESCRIPTION_TIMEOUT_MS', 'withTimeout'],
+  },
+  {
+    file: 'src/components/workout/ExerciseCoachCard.tsx',
+    label: 'Sprint B coach flicker guard',
+    patterns: ['coachPrescriptionsEqual', 'sessionSetsSignature', 'onPrescriptionRef'],
+  },
+  {
+    file: 'src/app/(tabs)/workout/index.tsx',
+    label: 'Sprint B workout tab spinner guard',
+    patterns: ['loading && !session && loadingPlan && weekDays.length === 0'],
+  },
 ];
 
 let fail = 0;

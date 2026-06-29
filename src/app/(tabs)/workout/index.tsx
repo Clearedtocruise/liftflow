@@ -282,7 +282,7 @@ export default function WorkoutScreen() {
     setChallengeRecords((current) => [...current, record]);
   }, []);
 
-  if (loading && !session && weekDays.length === 0) {
+  if (loading && !session && loadingPlan && weekDays.length === 0) {
     return (
       <ScreenContainer
         header={<TabScreenHeader title="Workout" subtitle="This week's plan" showBrand={false} bannerUri={HeroImages.tabs.workout} />}

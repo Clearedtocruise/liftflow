@@ -1,8 +1,11 @@
 import { apiClient } from '@/api/client';
 import { fail, fromError, ok } from '@/lib/serviceResult';
+import { withTimeout } from '@/lib/withTimeout';
 import { getAccessToken } from '@/supabase/client';
-import type { ExerciseCoachPrescription, ExercisePrescriptionPlanInput } from '@/types/exerciseCoach';
 import type { ServiceResult } from '@/types/common';
+import type { ExerciseCoachPrescription, ExercisePrescriptionPlanInput } from '@/types/exerciseCoach';
+
+const COACH_PRESCRIPTION_TIMEOUT_MS = 12_000;
 
 export const exerciseCoachService = {
   async getPrescription(
@@ -12,10 +15,14 @@ export const exerciseCoachService = {
   ): Promise<ServiceResult<ExerciseCoachPrescription>> {
     try {
       const token = await getAccessToken();
-      const prescription = await apiClient.post<ExerciseCoachPrescription>(
-        '/api/training/coaching/exercise-prescription',
-        { userId, exerciseId, plan },
-        token,
+      const prescription = await withTimeout(
+        apiClient.post<ExerciseCoachPrescription>(
+          '/api/training/coaching/exercise-prescription',
+          { userId, exerciseId, plan },
+          token,
+        ),
+        COACH_PRESCRIPTION_TIMEOUT_MS,
+        'exercise coach prescription',
       );
       return ok(prescription);
     } catch (e) {
@@ -29,10 +36,14 @@ export const exerciseCoachService = {
   ): Promise<ServiceResult<ExerciseCoachPrescription[]>> {
     try {
       const token = await getAccessToken();
-      const prescriptions = await apiClient.post<ExerciseCoachPrescription[]>(
-        '/api/training/coaching/workout-prescriptions',
-        { userId, exercises },
-        token,
+      const prescriptions = await withTimeout(
+        apiClient.post<ExerciseCoachPrescription[]>(
+          '/api/training/coaching/workout-prescriptions',
+          { userId, exercises },
+          token,
+        ),
+        COACH_PRESCRIPTION_TIMEOUT_MS,
+        'workout coach prescriptions',
       );
       return ok(prescriptions);
     } catch (e) {

@@ -11,8 +11,15 @@ import {
 import { AppState } from 'react-native';
 
 import { DEFAULT_REST_SECONDS } from '@/constants/workout';
+import { pendingSetQueue } from '@/lib/pendingSetQueue';
+import {
+    applyOptimisticSetToSession,
+    clearLocalRestTimerState,
+    mergePendingSetsIntoSession,
+} from '@/lib/pendingSetSync';
 import { cueRestTimerComplete } from '@/lib/restTimerFeedback';
 import { isStaleWorkoutSession } from '@/lib/staleWorkoutSession';
+import { withTimeout } from '@/lib/withTimeout';
 import { clearWorkoutProgress, loadWorkoutProgress, saveWorkoutProgress } from '@/lib/workoutSessionPersistence';
 import { peakMusicService } from '@/services/peakMusicService';
 import { userService } from '@/services/userService';
@@ -36,6 +43,7 @@ type WorkoutSessionState = {
   watchDraftWeightKg: number | null;
   /** Per-exercise target sets (plan + manual bonus + coach) for global rest UI. */
   exerciseEffectiveTargetSets: Record<string, number>;
+  pendingSetCount: number;
 };
 
 type WorkoutSessionActions = {
@@ -63,6 +71,7 @@ type WorkoutSessionActions = {
   setWatchDraftReps: (reps: number | null) => void;
   setWatchDraftWeightKg: (weightKg: number | null) => void;
   setExerciseEffectiveTargetSets: (workoutExerciseId: string, targetSets: number) => void;
+  flushPendingSets: () => Promise<void>;
 };
 
 type WorkoutSessionContextValue = WorkoutSessionState & WorkoutSessionActions;
@@ -87,6 +96,7 @@ export function WorkoutSessionProvider({
   const [watchDraftReps, setWatchDraftReps] = useState<number | null>(null);
   const [watchDraftWeightKg, setWatchDraftWeightKg] = useState<number | null>(null);
   const [exerciseEffectiveTargetSets, setExerciseEffectiveTargetSetsMap] = useState<Record<string, number>>({});
+  const [pendingSetCount, setPendingSetCount] = useState(0);
   const [restTimerSound, setRestTimerSound] = useState(true);
   const [restTimerHaptics, setRestTimerHaptics] = useState(true);
   const restEndAtRef = useRef<number | null>(null);
@@ -97,6 +107,7 @@ export function WorkoutSessionProvider({
   const sessionEpochRef = useRef(0);
   const trackedSessionIdRef = useRef<string | null>(null);
   const dismissedSessionIdsRef = useRef<Set<string>>(new Set());
+  const flushInFlightRef = useRef(false);
   const clearLocalSessionState = useCallback(() => {
     trackedSessionIdRef.current = null;
     setActiveSession(null);
@@ -124,7 +135,11 @@ export function WorkoutSessionProvider({
       setActiveSession(null);
       return;
     }
-    setActiveSession(result.data);
+
+    const pending = (await pendingSetQueue.list()).filter((item) => item.sessionId === sessionId);
+    setActiveSession(
+      pending.length > 0 ? mergePendingSetsIntoSession(result.data, pending) : result.data,
+    );
   }, []);
 
   const hydrate = useCallback(async () => {
@@ -136,7 +151,11 @@ export function WorkoutSessionProvider({
     const epoch = sessionEpochRef.current;
     setIsLoading(true);
     try {
-      const result = await workoutService.getActiveSession(userId);
+      const result = await withTimeout(
+        workoutService.getActiveSession(userId),
+        8_000,
+        'active session hydrate',
+      );
       if (epoch !== sessionEpochRef.current) return;
 
       if (result.success && result.data && dismissedSessionIdsRef.current.has(result.data.id)) {
@@ -169,6 +188,51 @@ export function WorkoutSessionProvider({
       }
     }
   }, [clearLocalSessionState, userId]);
+
+  const syncPendingSetCount = useCallback(async (sessionId: string | null) => {
+    setPendingSetCount(sessionId ? await pendingSetQueue.countForSession(sessionId) : 0);
+  }, []);
+
+  const flushPendingSets = useCallback(async () => {
+    const sessionId = trackedSessionIdRef.current;
+    if (!sessionId || flushInFlightRef.current) return;
+
+    flushInFlightRef.current = true;
+    try {
+      const items = (await pendingSetQueue.list()).filter((item) => item.sessionId === sessionId);
+      if (items.length === 0) {
+        await syncPendingSetCount(sessionId);
+        return;
+      }
+
+      let synced = 0;
+      for (const item of items) {
+        const result = await workoutService.logSet(item.payload);
+        if (result.success) {
+          await pendingSetQueue.remove(item.id);
+          synced += 1;
+        } else {
+          await pendingSetQueue.markAttempt(item.id);
+        }
+      }
+
+      await syncPendingSetCount(sessionId);
+      if (synced > 0 && trackedSessionIdRef.current === sessionId) {
+        await refreshSession();
+      }
+    } finally {
+      flushInFlightRef.current = false;
+    }
+  }, [refreshSession, syncPendingSetCount]);
+
+  useEffect(() => {
+    if (!activeSession?.id) {
+      void syncPendingSetCount(null);
+      return;
+    }
+    void syncPendingSetCount(activeSession.id);
+    void flushPendingSets();
+  }, [activeSession?.id, flushPendingSets, syncPendingSetCount]);
 
   useEffect(() => {
     if (!activeSession?.id) return;
@@ -203,11 +267,12 @@ export function WorkoutSessionProvider({
 
       if (activeSession?.id) {
         void refreshSession();
+        void flushPendingSets();
       }
     });
 
     return () => subscription.remove();
-  }, [activeSession?.id, refreshSession]);
+  }, [activeSession?.id, flushPendingSets, refreshSession]);
 
   useEffect(() => {
     if (restSecondsRemaining === null || restSecondsRemaining > 0) return;
@@ -225,13 +290,17 @@ export function WorkoutSessionProvider({
     suppressWatchRestCompleteRef.current = false;
 
     const finish = async () => {
-      if (!activeRestPeriod) return;
-      const recommended = activeRestPeriod.recommendedSeconds ?? DEFAULT_REST_SECONDS;
-      await workoutService.endRestTimer(activeRestPeriod.id, recommended, false);
-      setActiveRestPeriod(null);
-      setRestSecondsRemaining(null);
-      setRestTimerPaused(false);
-      restEndAtRef.current = null;
+      if (activeRestPeriod) {
+        const recommended = activeRestPeriod.recommendedSeconds ?? DEFAULT_REST_SECONDS;
+        await workoutService.endRestTimer(activeRestPeriod.id, recommended, false);
+      }
+      clearLocalRestTimerState({
+        setActiveRestPeriod,
+        setRestSecondsRemaining,
+        setRestTimerPaused,
+        restEndAtRef,
+        pausedRemainingRef,
+      });
     };
 
     finish();
@@ -292,16 +361,19 @@ export function WorkoutSessionProvider({
   const endSession = useCallback(async () => {
     if (!activeSession) return null;
     const sessionId = activeSession.id;
+    await flushPendingSets();
     sessionEpochRef.current += 1;
     clearLocalSessionState();
     setIsLoading(true);
     const result = await workoutService.endSession(sessionId);
     setIsLoading(false);
     if (result.success) {
+      await pendingSetQueue.purgeSession(sessionId);
+      await syncPendingSetCount(null);
       return result.data;
     }
     return null;
-  }, [activeSession, clearLocalSessionState]);
+  }, [activeSession, clearLocalSessionState, flushPendingSets, syncPendingSetCount]);
 
   const pauseSession = useCallback(async () => {
     if (!activeSession) return;
@@ -321,47 +393,77 @@ export function WorkoutSessionProvider({
     dismissedSessionIdsRef.current.add(sessionId);
     sessionEpochRef.current += 1;
     clearLocalSessionState();
+    await pendingSetQueue.purgeSession(sessionId);
+    await syncPendingSetCount(null);
 
     const result = await workoutService.cancelSession(sessionId);
     if (!result.success) {
       console.warn('[workoutSession] cancel failed', result.error);
     }
-  }, [activeSession, clearLocalSessionState]);
+  }, [activeSession, clearLocalSessionState, syncPendingSetCount]);
 
   const logSet = useCallback(
     async (payload: CreateSetPayload) => {
       const result = await workoutService.logSet(payload);
-      if (!result.success) return null;
 
-      setLastLoggedSet(result.data);
-      await refreshSession();
+      const beginRest = async (loggedSet: WorkoutSet, useServerRest: boolean) => {
+        if (activeSession?.status !== 'active' || payload.skipRest) return;
 
-      if (activeSession?.status === 'active' && !payload.skipRest) {
         const restSeconds = payload.restSeconds ?? DEFAULT_REST_SECONDS;
-        const restResult = await workoutService.startRestTimer(
-          activeSession.id,
-          result.data.id,
-          restSeconds,
-        );
-        if (restResult.success) {
-          hapticFiredRef.current = false;
-          setRestTimerPaused(false);
-          setActiveRestPeriod(restResult.data);
-          const seconds = restResult.data.recommendedSeconds ?? DEFAULT_REST_SECONDS;
-          restEndAtRef.current = Date.now() + seconds * 1000;
-          setRestSecondsRemaining(seconds);
-          if (userId) {
-            void peakMusicService.triggerRestPeakSync(userId, seconds * 1000, {
-              isHeavySet: result.data.weight != null && result.data.weight >= 100,
-              isPrAttempt: result.data.isPr === true || result.data.type === 'failure',
-            });
+        if (useServerRest) {
+          const restResult = await workoutService.startRestTimer(
+            activeSession.id,
+            loggedSet.id,
+            restSeconds,
+          );
+          if (restResult.success) {
+            hapticFiredRef.current = false;
+            setRestTimerPaused(false);
+            setActiveRestPeriod(restResult.data);
+            const seconds = restResult.data.recommendedSeconds ?? DEFAULT_REST_SECONDS;
+            restEndAtRef.current = Date.now() + seconds * 1000;
+            setRestSecondsRemaining(seconds);
+            if (userId) {
+              void peakMusicService.triggerRestPeakSync(userId, seconds * 1000, {
+                isHeavySet: loggedSet.weight != null && loggedSet.weight >= 100,
+                isPrAttempt: loggedSet.isPr === true || loggedSet.type === 'failure',
+              });
+            }
           }
+          return;
         }
+
+        hapticFiredRef.current = false;
+        setRestTimerPaused(false);
+        setActiveRestPeriod(null);
+        restEndAtRef.current = Date.now() + restSeconds * 1000;
+        setRestSecondsRemaining(restSeconds);
+        if (userId) {
+          void peakMusicService.triggerRestPeakSync(userId, restSeconds * 1000, {
+            isHeavySet: loggedSet.weight != null && loggedSet.weight >= 100,
+            isPrAttempt: loggedSet.isPr === true || loggedSet.type === 'failure',
+          });
+        }
+      };
+
+      if (result.success) {
+        setLastLoggedSet(result.data);
+        await refreshSession();
+        await beginRest(result.data, true);
+        return result.data;
       }
 
-      return result.data;
+      if (!activeSession) return null;
+
+      const pendingId = await pendingSetQueue.enqueue(activeSession.id, payload);
+      await syncPendingSetCount(activeSession.id);
+      const optimistic = applyOptimisticSetToSession(activeSession, payload, pendingId);
+      setActiveSession(optimistic.session);
+      setLastLoggedSet(optimistic.set);
+      await beginRest(optimistic.set, false);
+      return optimistic.set;
     },
-    [activeSession, refreshSession, userId],
+    [activeSession, refreshSession, syncPendingSetCount, userId],
   );
 
   const updateSet = useCallback(
@@ -376,13 +478,30 @@ export function WorkoutSessionProvider({
 
   const deleteSet = useCallback(
     async (setId: string) => {
+      if (setId.startsWith('pending-')) {
+        const queueId = setId.replace(/^pending-/, '');
+        await pendingSetQueue.remove(queueId);
+        await syncPendingSetCount(activeSession?.id ?? null);
+        if (activeSession) {
+          setActiveSession({
+            ...activeSession,
+            exercises: activeSession.exercises.map((exercise) => ({
+              ...exercise,
+              sets: exercise.sets.filter((set) => set.id !== setId),
+            })),
+          });
+        }
+        setLastLoggedSet((current) => (current?.id === setId ? null : current));
+        return true;
+      }
+
       const result = await workoutService.deleteSet(setId);
       if (!result.success) return false;
       setLastLoggedSet((current) => (current?.id === setId ? null : current));
       await refreshSession();
       return true;
     },
-    [refreshSession],
+    [activeSession, refreshSession, syncPendingSetCount],
   );
 
   const addExerciseByName = useCallback(
@@ -460,16 +579,19 @@ export function WorkoutSessionProvider({
   }, []);
 
   const skipRestTimer = useCallback(async () => {
-    if (!activeRestPeriod) return;
     suppressWatchRestCompleteRef.current = true;
-    const elapsed = Math.floor((Date.now() - new Date(activeRestPeriod.startedAt).getTime()) / 1000);
-    await workoutService.endRestTimer(activeRestPeriod.id, elapsed, true);
+    if (activeRestPeriod) {
+      const elapsed = Math.floor((Date.now() - new Date(activeRestPeriod.startedAt).getTime()) / 1000);
+      await workoutService.endRestTimer(activeRestPeriod.id, elapsed, true);
+    }
     if (userId) void peakMusicService.onSetCompleted(userId);
-    setActiveRestPeriod(null);
-    setRestSecondsRemaining(0);
-    setRestTimerPaused(false);
-    restEndAtRef.current = null;
-    pausedRemainingRef.current = null;
+    clearLocalRestTimerState({
+      setActiveRestPeriod,
+      setRestSecondsRemaining,
+      setRestTimerPaused,
+      restEndAtRef,
+      pausedRemainingRef,
+    });
   }, [activeRestPeriod, userId]);
 
   const setExerciseEffectiveTargetSets = useCallback((workoutExerciseId: string, targetSets: number) => {
@@ -505,6 +627,7 @@ export function WorkoutSessionProvider({
       watchDraftReps,
       watchDraftWeightKg,
       exerciseEffectiveTargetSets,
+      pendingSetCount,
       hydrate,
       refreshSession,
       setActiveExerciseIndex,
@@ -529,6 +652,7 @@ export function WorkoutSessionProvider({
       setWatchDraftReps,
       setWatchDraftWeightKg,
       setExerciseEffectiveTargetSets,
+      flushPendingSets,
     }),
     [
       activeSession,
@@ -543,6 +667,7 @@ export function WorkoutSessionProvider({
       watchDraftReps,
       watchDraftWeightKg,
       exerciseEffectiveTargetSets,
+      pendingSetCount,
       hydrate,
       refreshSession,
       setActiveExerciseIndex,
@@ -564,6 +689,7 @@ export function WorkoutSessionProvider({
       skipRestTimer,
       endRestTimer,
       setExerciseEffectiveTargetSets,
+      flushPendingSets,
     ],
   );
 

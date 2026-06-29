@@ -7,6 +7,7 @@ import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import { useUnits } from '@/hooks/useUnits';
 import { formatCoachTargetLine } from '@/lib/activeWorkoutMetrics';
 import { coachAdjustmentColor, coachAdjustmentLabel } from '@/lib/coachAdjustmentLabels';
+import { coachPrescriptionsEqual, sessionSetsSignature } from '@/lib/coachPrescriptionSync';
 import type { ExerciseLoggingMode } from '@/lib/exerciseModality';
 import { defaultTimedDurationSeconds } from '@/lib/exerciseModality';
 import { kgToDisplayWeight } from '@/lib/smartProgressionEngine';
@@ -77,6 +78,15 @@ export function ExerciseCoachCard({
   const [prescription, setPrescription] = useState<ExerciseCoachPrescription | null>(null);
   const prescriptionRef = useRef<ExerciseCoachPrescription | null>(null);
   prescriptionRef.current = prescription;
+  const onPrescriptionRef = useRef(onPrescription);
+  onPrescriptionRef.current = onPrescription;
+
+  const planRef = useRef(plan);
+  planRef.current = plan;
+  const setsRef = useRef(currentSessionSets);
+  setsRef.current = currentSessionSets;
+  const setsSignature = sessionSetsSignature(currentSessionSets);
+  const lastFetchedSignatureRef = useRef<string | null>(null);
 
   const fetchPrescription = useCallback(
     async (options?: { showSpinner?: boolean }) => {
@@ -85,32 +95,40 @@ export function ExerciseCoachCard({
       setFetchError(false);
 
       const result = await exerciseCoachService.getPrescription(userId, exerciseId, {
-        ...plan,
+        ...planRef.current,
         sessionId,
         loggingMode,
-        currentSessionSets,
+        currentSessionSets: setsRef.current,
       });
 
       const next = result.success ? result.data : null;
-      setPrescription(next);
-      onPrescription?.(next);
+      if (!coachPrescriptionsEqual(prescriptionRef.current, next)) {
+        setPrescription(next);
+        onPrescriptionRef.current?.(next);
+      }
       if (!result.success) setFetchError(true);
+      if (result.success) {
+        lastFetchedSignatureRef.current = sessionSetsSignature(setsRef.current);
+      }
       setInitialLoading(false);
     },
-    [userId, exerciseId, plan, sessionId, loggingMode, currentSessionSets, onPrescription],
+    [userId, exerciseId, sessionId, loggingMode],
   );
 
   useEffect(() => {
+    lastFetchedSignatureRef.current = null;
     void fetchPrescription({ showSpinner: true });
-  }, [userId, exerciseId, sessionId, loggingMode, plan?.plannedReps, plan?.plannedSets, plan?.plannedRestSeconds]);
+  }, [userId, exerciseId, sessionId, loggingMode, plan?.plannedReps, plan?.plannedSets, plan?.plannedRestSeconds, fetchPrescription]);
 
   useEffect(() => {
     if (prescriptionRef.current == null) return;
+    if (setsSignature === lastFetchedSignatureRef.current) return;
+
     const timer = setTimeout(() => {
       void fetchPrescription({ showSpinner: false });
-    }, 800);
+    }, 1_200);
     return () => clearTimeout(timer);
-  }, [currentSessionSets, fetchPrescription]);
+  }, [setsSignature, fetchPrescription]);
 
   if (initialLoading && !prescription) {
     return (

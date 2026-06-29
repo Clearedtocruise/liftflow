@@ -56,7 +56,10 @@ export default function CoachingScreen() {
   const [nutritionIntelError, setNutritionIntelError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    if (!user) return;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
 
     const [today, trendRes, macros] = await Promise.all([
       recoveryService.getToday(user.id),

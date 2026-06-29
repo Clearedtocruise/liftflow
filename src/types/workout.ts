@@ -35,6 +35,8 @@ export type WorkoutSet = BaseEntity & {
   isPr?: boolean;
   notes?: string;
   loggedAt: string;
+  /** Optimistic local set — queued for server sync after network failure. */
+  pendingSync?: boolean;
 };
 
 export type WorkoutExercise = BaseEntity & {

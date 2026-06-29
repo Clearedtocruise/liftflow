@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
 import { Card } from '@/components/layout/Card';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import { useUnits } from '@/hooks/useUnits';
+import { sessionSetsSignature } from '@/lib/coachPrescriptionSync';
 import type { ExerciseLoggingMode } from '@/lib/exerciseModality';
 import { kgToDisplayWeight } from '@/lib/smartProgressionEngine';
 import { progressionService } from '@/services/progressionService';
@@ -38,11 +39,16 @@ export function SmartProgressionCard({
   const units = useUnits();
   const [loading, setLoading] = useState(true);
   const [rec, setRec] = useState<SmartProgressionRecommendation | null>(null);
+  const recRef = useRef<SmartProgressionRecommendation | null>(null);
+  recRef.current = rec;
   const inline = variant === 'inline';
+  const setsSignature = sessionSetsSignature(currentSessionSets);
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
+    const showSpinner = recRef.current == null;
+    if (showSpinner) setLoading(true);
+
     progressionService
       .getSmartProgression(userId, exerciseId, {
         exerciseName,
@@ -54,10 +60,10 @@ export function SmartProgressionCard({
       .then((result) => {
         if (cancelled) return;
         if (result.success) setRec(result.data);
-        else setRec(null);
+        else if (!recRef.current) setRec(null);
       })
       .catch(() => {
-        if (!cancelled) setRec(null);
+        if (!cancelled && !recRef.current) setRec(null);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -65,7 +71,7 @@ export function SmartProgressionCard({
     return () => {
       cancelled = true;
     };
-  }, [userId, exerciseId, exerciseName, sessionId, currentSessionSets, recoveryScore, recoveryVolumeMultiplier]);
+  }, [userId, exerciseId, exerciseName, sessionId, setsSignature, recoveryScore, recoveryVolumeMultiplier]);
 
   if (loading) {
     if (inline) {

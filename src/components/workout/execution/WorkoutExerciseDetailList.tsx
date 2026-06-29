@@ -52,6 +52,7 @@ export function WorkoutExerciseDetailList({
   useEffect(() => {
     if (!userId || coachInputs.length === 0) {
       setPrescriptions([]);
+      setLoading(false);
       return;
     }
 
@@ -62,6 +63,9 @@ export function WorkoutExerciseDetailList({
       .then((result) => {
         if (cancelled) return;
         setPrescriptions(result.success ? result.data : []);
+      })
+      .catch(() => {
+        if (!cancelled) setPrescriptions([]);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -79,7 +83,7 @@ export function WorkoutExerciseDetailList({
 
   return (
     <Card style={styles.card}>
-      {loading ? (
+      {loading && prescriptions.length === 0 ? (
         <View style={styles.loadingRow}>
           <ActivityIndicator color={LiftFlowColors.accent} size="small" />
           <AppText variant="caption" color="textSecondary">
