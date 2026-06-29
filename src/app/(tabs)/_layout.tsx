@@ -28,7 +28,7 @@ export default function TabsLayout() {
         },
         tabBarLabelStyle: {
           ...Typography.caption,
-          fontSize: 9,
+          fontSize: 10,
           fontWeight: '600',
           marginTop: 2,
         },
@@ -83,6 +83,12 @@ export default function TabsLayout() {
               tintColor={color}
             />
           ),
+        }}
+      />
+      <Tabs.Screen
+        name="nutrition/index"
+        options={{
+          href: null,
         }}
       />
       <Tabs.Screen

@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { SplashController } from '@/components/brand/SplashController';
 import { SentryBootstrap } from '@/components/observability/SentryBootstrap';
 import { PlanAdjustmentHydrator } from '@/components/plan/PlanAdjustmentHydrator';
+import { PlanRevisionCacheInvalidator } from '@/components/plan/PlanRevisionCacheInvalidator';
 import { GlobalRestTimerOverlay } from '@/components/workout/execution/GlobalRestTimerOverlay';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { PlanAdjustmentProvider } from '@/contexts/PlanAdjustmentContext';
@@ -48,6 +49,7 @@ function AuthenticatedShell({ children }: { children: ReactNode }) {
       <SubscriptionProvider>
         <PlanAdjustmentProvider>
           <PlanAdjustmentHydrator />
+          <PlanRevisionCacheInvalidator />
           <WorkoutSessionBridge>{children}</WorkoutSessionBridge>
         </PlanAdjustmentProvider>
       </SubscriptionProvider>

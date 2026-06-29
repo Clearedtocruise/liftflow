@@ -97,6 +97,22 @@ export const planDataCache = {
     await AsyncStorage.removeItem(key);
   },
 
+  async clearWeekMeals(userId: string, weekFrom: string, weekTo: string): Promise<void> {
+    const key = cacheKey(userId, weekFrom, weekTo, 'meals');
+    memory.delete(key);
+    await AsyncStorage.removeItem(key);
+  },
+
+  async clearWeekPlan(userId: string, weekFrom: string, weekTo: string): Promise<void> {
+    await Promise.all([
+      this.clearWeekWorkouts(userId, weekFrom, weekTo),
+      this.clearWeekMeals(userId, weekFrom, weekTo),
+    ]);
+    const programKey = cacheKey(userId, weekFrom, weekTo, 'program');
+    memory.delete(programKey);
+    await AsyncStorage.removeItem(programKey);
+  },
+
   /** Warm AsyncStorage → memory for the current week (call as early as auth allows). */
   prefetchWeek(userId: string, weekFrom: string, weekTo: string): void {
     void this.readWeek(userId, weekFrom, weekTo);

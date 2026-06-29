@@ -9,6 +9,7 @@ import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { SkeletonBlock } from '@/components/layout/SkeletonBlock';
 import { TabScreenHeader } from '@/components/layout/TabScreenHeader';
 import { ActiveWorkoutScreen } from '@/components/workout/execution/ActiveWorkoutScreen';
+import { WorkoutExecutionErrorBoundary } from '@/components/workout/execution/WorkoutExecutionErrorBoundary';
 import { WorkoutWeeklyPlanScreen } from '@/components/workout/execution/WorkoutWeeklyPlanScreen';
 import { HeroImages } from '@/constants/imagery';
 import { usePlanAdjustment } from '@/contexts/PlanAdjustmentContext';
@@ -315,15 +316,19 @@ export default function WorkoutScreen() {
     );
 
     return (
-      <ActiveWorkoutScreen
-        session={session}
-        planExercises={planForSession}
-        executionMode={executionMode}
-        challengeRecords={challengeRecords}
-        onChallengeRecord={handleChallengeRecord}
-        onFinish={handleFinishWorkout}
-        onCancel={cancelSession}
-      />
+      <WorkoutExecutionErrorBoundary
+        onResume={() => void refreshSession()}
+        onEndWorkout={handleFinishWorkout}>
+        <ActiveWorkoutScreen
+          session={session}
+          planExercises={planForSession}
+          executionMode={executionMode}
+          challengeRecords={challengeRecords}
+          onChallengeRecord={handleChallengeRecord}
+          onFinish={handleFinishWorkout}
+          onCancel={cancelSession}
+        />
+      </WorkoutExecutionErrorBoundary>
     );
   }
 

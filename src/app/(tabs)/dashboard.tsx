@@ -347,6 +347,10 @@ export default function DashboardScreen() {
   }, [adjustment?.id, revision, user, today]);
 
   useEffect(() => {
+    if (revision > 0 && user) void load({ silent: true });
+  }, [revision, user, load]);
+
+  useEffect(() => {
     if (!user || !showWeeklyReview) return;
     void weeklyCloseoutService.prepare(user.id).then((result) => {
       if (result.success) setWeeklyCloseoutId(result.data.id);
