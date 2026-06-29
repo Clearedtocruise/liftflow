@@ -1,6 +1,7 @@
 import { requireAdmin } from './supabase.js';
 import { recommendSupplements } from './supplementGuidance.js';
 import { resolveRankedGoals, toNutritionGoal } from './trainingGoals.js';
+import { formatProgressionIncrease, formatVolumeLabel, resolveWeightUnit } from './weightUnits.js';
 
 export type PostWorkoutCoachSummary = {
   workoutSummary: string;
@@ -8,6 +9,10 @@ export type PostWorkoutCoachSummary = {
   nutritionRecommendation: string;
   progressionRecommendations: string[];
 };
+
+function goalTargetsWeightLoss(ranked: string[]): boolean {
+  return ranked.some((goal) => goal === 'fat_loss' || goal === 'weight_loss' || goal === 'endurance');
+}
 
 export async function generatePostWorkoutCoachSummary(
   userId: string,
@@ -41,7 +46,7 @@ export async function generatePostWorkoutCoachSummary(
 
   const { data: profile } = await db
     .from('profiles')
-    .select('weight_kg, fitness_goals, primary_training_goal, metadata')
+    .select('weight_kg, fitness_goals, primary_training_goal, metadata, preferred_weight_unit, preferred_units')
     .eq('id', userId)
     .maybeSingle();
 
@@ -72,8 +77,10 @@ export async function generatePostWorkoutCoachSummary(
 
   const durationMin = Math.round((session.duration_seconds ?? 0) / 60);
   const prCount = (sets ?? []).filter((s) => s.is_pr).length;
+  const weightUnit = resolveWeightUnit(profile);
+  const volumeLabel = formatVolumeLabel(session.total_volume ?? 0, weightUnit);
 
-  const workoutSummary = `Completed ${session.name}: ${session.total_sets ?? 0} sets, ${Math.round(session.total_volume ?? 0)} total volume in ${durationMin} min${prCount ? ` — ${prCount} PR${prCount > 1 ? 's' : ''}!` : '.'}`;
+  const workoutSummary = `Completed ${session.name}: ${session.total_sets ?? 0} sets, ${volumeLabel} total volume in ${durationMin} min${prCount ? ` — ${prCount} PR${prCount > 1 ? 's' : ''}!` : '.'}`;
 
   const recoveryRecommendation =
     recoveryScore < 50 || recovery?.recovery_mode_active
@@ -100,9 +107,9 @@ export async function generatePostWorkoutCoachSummary(
     const hitTarget = (lastSet.reps ?? 0) >= targetReps;
 
     if (hitTarget && ex.suggested_weight) {
-      const increase = Math.max(2.5, Math.round(ex.suggested_weight * 0.025 * 2) / 2);
+      const increase = formatProgressionIncrease(Number(ex.suggested_weight), weightUnit);
       progressionRecommendations.push(
-        `${exName}: increase by ${increase} ${ex.suggested_weight > 50 ? 'lbs' : 'kg'} next session if you hit ${targetReps} reps again.`,
+        `${exName}: increase by ${increase} next session if you hit ${targetReps} reps again.`,
       );
     } else if ((lastSet.reps ?? 0) < targetReps - 2) {
       progressionRecommendations.push(
@@ -116,6 +123,13 @@ export async function generatePostWorkoutCoachSummary(
   }
 
   const ranked = resolveRankedGoals(profile?.fitness_goals, profile?.primary_training_goal);
+
+  if (goalTargetsWeightLoss(ranked)) {
+    progressionRecommendations.unshift(
+      'Weight-loss focus: add 20–30 minutes of low-impact cardio (brisk walk, bike, or incline treadmill) on 2–3 days this week — separate from lifting or as a short finisher after upper-body days.',
+    );
+  }
+
   const supplements = recommendSupplements({
     goal: toNutritionGoal(ranked[0]),
     bodyWeightKg: profile?.weight_kg ?? undefined,

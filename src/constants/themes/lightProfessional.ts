@@ -1,5 +1,5 @@
-import type { AppTheme } from './types';
 import { lightRadius, lightSpacing } from './shared';
+import type { AppTheme } from './types';
 
 const colors = {
   background: '#F7FAFF',
@@ -87,8 +87,8 @@ export const lightProfessionalTheme: AppTheme = {
     },
     button: [colors.primary, colors.primaryMuted],
     insightFill: ['rgba(22, 119, 255, 0.06)', '#FFFFFF'],
-    photoOverlay: ['transparent', 'rgba(15, 23, 42, 0.68)'],
-    ambient: ['rgba(22, 119, 255, 0.05)', 'transparent'],
+    photoOverlay: ['transparent', 'rgba(15, 23, 42, 0.3)'],
+    ambient: ['rgba(22, 119, 255, 0.1)', 'rgba(18, 185, 129, 0.05)'],
   },
   navigationTheme: {
     dark: false,

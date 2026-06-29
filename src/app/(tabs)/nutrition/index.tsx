@@ -510,7 +510,7 @@ export default function NutritionScreen() {
   if (loading && !refreshing && weekMeals.length === 0 && goals == null) {
     return (
       <ScreenContainer>
-        <HeroPhotoBanner uri={HeroImages.dashboard.nutritionPrep} height={152} title="Nutrition" />
+        <HeroPhotoBanner sources={HeroImages.dashboard.nutritionPrep} height={152} title="Nutrition" />
         <SkeletonBlock height={120} />
         <SkeletonBlock height={48} />
         <SkeletonBlock height={160} />
@@ -540,7 +540,7 @@ export default function NutritionScreen() {
         <RefreshControl refreshing={refreshing} onRefresh={() => void handleRefresh()} tintColor={LiftFlowColors.primary} />
       }>
       <HeroPhotoBanner
-        uri={HeroImages.dashboard.nutritionPrep}
+        sources={HeroImages.dashboard.nutritionPrep}
         height={168}
         showBrand={false}
         eyebrow="Meals"

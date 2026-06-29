@@ -32,7 +32,7 @@ const config: ExpoConfig = {
   ios: {
     icon: './assets/branding/one-more-icon-1024.png',
     bundleIdentifier: 'com.liftflow.app',
-    buildNumber: '16',
+    buildNumber: '17',
     appleTeamId: 'DZXP5Q6649',
     entitlements: {
       'com.apple.security.application-groups': ['group.com.liftflow.app'],

@@ -1,3 +1,4 @@
+import type { ImageSource } from 'expo-image';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StyleSheet, View } from 'react-native';
@@ -13,7 +14,7 @@ type WorkoutHeroCardProps = {
   subtitle?: string;
   onStart: () => void;
   loading?: boolean;
-  imageUri?: string;
+  imageSources?: readonly ImageSource[];
 };
 
 export function WorkoutHeroCard({
@@ -22,7 +23,7 @@ export function WorkoutHeroCard({
   subtitle,
   onStart,
   loading,
-  imageUri = HeroImages.dashboard.cardWorkout,
+  imageSources = HeroImages.dashboard.cardWorkout,
 }: WorkoutHeroCardProps) {
   return (
     <View style={styles.outer}>
@@ -31,7 +32,7 @@ export function WorkoutHeroCard({
         style={styles.border}>
         <View style={styles.card}>
           <View style={styles.heroWrap}>
-            <Image source={{ uri: imageUri }} style={styles.hero} contentFit="cover" />
+            <Image source={imageSources[0]} style={styles.hero} contentFit="cover" />
             <LinearGradient colors={['transparent', LiftFlowColors.surface]} style={styles.fade} />
             <View style={styles.heroBadge}>
               <AppText variant="label" color="textPrimary">

@@ -1,11 +1,12 @@
 import {
-  computeSmartProgression,
-  resolveGoalFocus,
-  type ProgressionSessionHistory,
-  type ProgressionSetRecord,
-  type SmartProgressionRecommendation,
+    computeSmartProgression,
+    resolveGoalFocus,
+    type ProgressionSessionHistory,
+    type ProgressionSetRecord,
+    type SmartProgressionRecommendation,
 } from './smartProgressionEngine.js';
 import { requireAdmin } from './supabase.js';
+import { resolveWeightUnit } from './weightUnits.js';
 
 type SetRow = {
   weight: number | null;
@@ -31,7 +32,7 @@ export async function loadSmartProgression(
   const db = requireAdmin();
 
   const [profileRes, recoveryRes, setsRes, exerciseRes] = await Promise.all([
-    db.from('profiles').select('fitness_goals, preferred_weight_unit').eq('id', userId).maybeSingle(),
+    db.from('profiles').select('fitness_goals, preferred_weight_unit, preferred_units').eq('id', userId).maybeSingle(),
     db
       .from('recovery_assessments')
       .select('recovery_score, metadata')
@@ -54,7 +55,7 @@ export async function loadSmartProgression(
 
   const exerciseName = exerciseRes.data?.name ?? 'Exercise';
   const goalFocus = resolveGoalFocus(profileRes.data?.fitness_goals as string[] | undefined);
-  const weightUnit = (profileRes.data?.preferred_weight_unit as 'lb' | 'kg' | undefined) ?? 'lb';
+  const weightUnit = resolveWeightUnit(profileRes.data);
   const recoveryScore = recoveryRes.data?.recovery_score ?? 72;
   const recoveryVolumeMultiplier =
     (recoveryRes.data?.metadata as { volumeMultiplier?: number } | null)?.volumeMultiplier ?? 1;

@@ -1,20 +1,23 @@
-import { Image } from 'expo-image';
+import { Image, type ImageSource } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import type { ReactNode } from 'react';
+import { useMemo, useState } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { LiftFlowWordmark } from '@/components/brand/LiftFlowWordmark';
 import { LogoMark } from '@/components/brand/LogoMark';
 import { AppText } from '@/components/ui/AppText';
+import { BundledLifestyle } from '@/constants/lifestyleAssets';
 import type { AppTheme } from '@/constants/themes';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { useThemedStyles } from '@/hooks/useLiftFlowTheme';
 
 type HeroPhotoBannerProps = {
-  uri: string;
+  sources?: readonly ImageSource[];
+  /** @deprecated Prefer `sources`. */
+  uri?: string;
   height?: number;
   style?: StyleProp<ViewStyle>;
-  /** ONE MORE logo lockup at top of the photo. */
   showBrand?: boolean;
   eyebrow?: string;
   title?: string;
@@ -22,8 +25,15 @@ type HeroPhotoBannerProps = {
   children?: ReactNode;
 };
 
-/** Lifestyle photography strip with brand lockup — athletes + ONE MORE identity. */
+function resolveSources(sources: readonly ImageSource[] | undefined, uri: string | undefined): ImageSource[] {
+  if (sources?.length) return [...sources];
+  if (uri) return [{ uri }, BundledLifestyle.heroWorkout];
+  return [BundledLifestyle.heroWorkout, BundledLifestyle.workoutTraining];
+}
+
+/** Lifestyle photography strip with greeting — bundled photos always load. */
 export function HeroPhotoBanner({
+  sources,
   uri,
   height = 168,
   style,
@@ -35,11 +45,24 @@ export function HeroPhotoBanner({
 }: HeroPhotoBannerProps) {
   const theme = useAppTheme();
   const styles = useThemedStyles(createStyles);
+  const candidates = useMemo(() => resolveSources(sources, uri), [sources, uri]);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const activeSource = candidates[Math.min(activeIndex, candidates.length - 1)];
 
   return (
     <View style={[styles.wrap, { height }, style]}>
-      <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="cover" transition={200} />
-      <LinearGradient colors={['rgba(15, 23, 42, 0.5)', 'transparent', 'transparent']} style={styles.topFade} />
+      <Image
+        key={typeof activeSource === 'number' ? `asset-${activeSource}` : JSON.stringify(activeSource)}
+        source={activeSource}
+        style={StyleSheet.absoluteFill}
+        contentFit="cover"
+        transition={240}
+        cachePolicy="memory-disk"
+        onError={() => {
+          setActiveIndex((index) => (index < candidates.length - 1 ? index + 1 : index));
+        }}
+      />
+      <LinearGradient colors={['rgba(15, 23, 42, 0.35)', 'transparent', 'transparent']} style={styles.topFade} />
       <LinearGradient colors={[...theme.brandGradients.photoOverlay]} style={StyleSheet.absoluteFill} />
       {showBrand ? (
         <View style={styles.brandRow}>
@@ -77,6 +100,7 @@ function createStyles(theme: AppTheme) {
       borderRadius: theme.radius.xl,
       overflow: 'hidden',
       width: '100%',
+      backgroundColor: theme.colors.surfaceSoft,
     },
     topFade: {
       position: 'absolute',

@@ -26,6 +26,7 @@ type ActiveWorkoutVoiceHandlerParams = {
   goToExerciseIndex: (index: number) => void;
   startRestSeconds: (seconds: number) => Promise<void>;
   finishWorkout: () => void;
+  replaceExerciseInSession: (newExerciseName: string) => Promise<boolean>;
 };
 
 function findExerciseIndexByName(
@@ -70,6 +71,7 @@ export function useActiveWorkoutVoiceHandlers(
     goToExerciseIndex,
     startRestSeconds,
     finishWorkout,
+    replaceExerciseInSession,
   } = params;
 
   return useMemo(
@@ -167,10 +169,24 @@ export function useActiveWorkoutVoiceHandlers(
         return { ok: true, message: 'Removed last set.' };
       },
 
-      replaceExercise: async (fromName, toName) => {
+      replaceExercise: async (_fromName, toName) => {
+        if (isPaused) {
+          return { ok: false, message: 'Workout is paused.' };
+        }
+
+        const targetName = toName?.trim();
+        if (!targetName) {
+          return { ok: false, message: 'Say which exercise to switch to.' };
+        }
+
+        const replaced = await replaceExerciseInSession(targetName);
+        if (!replaced) {
+          return { ok: false, message: `Could not replace with ${targetName}.` };
+        }
+
         return {
-          ok: false,
-          message: `Replace ${fromName} with ${toName} is not supported by voice yet. Use the workout editor.`,
+          ok: true,
+          message: `Swapped to ${targetName}. Logged sets are still saved.`,
         };
       },
     }),
@@ -189,6 +205,7 @@ export function useActiveWorkoutVoiceHandlers(
       goToExerciseIndex,
       startRestSeconds,
       finishWorkout,
+      replaceExerciseInSession,
     ],
   );
 }

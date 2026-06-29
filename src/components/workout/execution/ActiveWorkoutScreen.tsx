@@ -11,6 +11,7 @@ import { AppText } from '@/components/ui/AppText';
 import { ExerciseCompleteCard } from '@/components/workout/execution/ExerciseCompleteCard';
 import { ExerciseGuideSheet } from '@/components/workout/execution/ExerciseGuideSheet';
 import { ExercisePickerModal } from '@/components/workout/execution/ExercisePickerModal';
+import { ExerciseReplaceSheet } from '@/components/workout/execution/ExerciseReplaceSheet';
 import { GuidedWorkoutMetrics, WorkoutProgressBar } from '@/components/workout/execution/GuidedWorkoutMetrics';
 import { SetLoggingControls } from '@/components/workout/execution/SetLoggingControls';
 import { SupersetPrepBanner } from '@/components/workout/execution/SupersetPrepBanner';
@@ -61,11 +62,14 @@ import {
 } from '@/lib/timerEngine';
 import { TABATA_BETWEEN_EXERCISE_REST_BOUNDS, TABATA_BETWEEN_EXERCISE_REST_DEFAULT, TABATA_INTERVAL_BOUNDS, TABATA_PREP_SECONDS_DEFAULT, clampTabataBetweenExerciseRest, clampTabataIntervalSeconds } from '@/lib/trainingPreferences';
 import { formatWorkoutWeightForInput } from '@/lib/unitConversion';
+import { getWeekRange } from '@/lib/weekPlan';
 import { pickWorkoutChallenge } from '@/lib/workoutChallengeFlow';
 import { normalizeExecutionMode } from '@/lib/workoutExecutionMode';
-import { parseTargetReps } from '@/lib/workoutPlan';
+import { buildPlanExercisesFromSession, parseTargetReps } from '@/lib/workoutPlan';
 import { logWorkoutProgressionDecision } from '@/lib/workoutProgressionDebug';
 import { resolveBetweenExerciseUpNext, resolveTabataPrepUpNext, resolveWorkoutUpNext } from '@/lib/workoutUpNext';
+import type { ExerciseAlternativeOption } from '@/services/exerciseAdvisoryService';
+import { trainingService } from '@/services/trainingService';
 import { workoutService } from '@/services/workoutService';
 import { watchPhoneBridge } from '@/state/WatchPhoneBridge';
 import { useWorkoutSession } from '@/state/workout/WorkoutSessionContext';
@@ -240,6 +244,9 @@ export function ActiveWorkoutScreen({
   const [circuitRound, setCircuitRound] = useState(1);
   const [bonusSetsByExerciseId, setBonusSetsByExerciseId] = useState<Record<string, number>>({});
   const [exercisePickerVisible, setExercisePickerVisible] = useState(false);
+  const [exercisePickerMode, setExercisePickerMode] = useState<'add' | 'replace'>('add');
+  const [replaceSheetOpen, setReplaceSheetOpen] = useState(false);
+  const [replacingExercise, setReplacingExercise] = useState(false);
   const [exerciseGuideOpen, setExerciseGuideOpen] = useState(false);
   const [intervalOverlayOpen, setIntervalOverlayOpen] = useState(false);
   const [circuitOverlayOpen, setCircuitOverlayOpen] = useState(false);
@@ -408,6 +415,57 @@ export function ActiveWorkoutScreen({
     return removed;
   }, [activeRestPeriod, deleteSet, lastLoggedSet, refreshSession, session.exercises, skipRestTimer]);
 
+  const syncPlannedWorkoutAfterSwap = useCallback(
+    async (updatedSession: WorkoutSession) => {
+      if (!user?.id || !updatedSession.plannedWorkoutId) return;
+      const { from, to } = getWeekRange();
+      const week = await trainingService.getPlannedWorkouts(user.id, from, to);
+      if (!week.success) return;
+      const planned = week.data.find((item) => item.id === updatedSession.plannedWorkoutId);
+      if (!planned) return;
+      const nextExercises = buildPlanExercisesFromSession(updatedSession, planned, false);
+      await trainingService.updatePlannedWorkoutExercises(planned.id, nextExercises, planned.metadata);
+    },
+    [user?.id],
+  );
+
+  const applyExerciseReplacement = useCallback(
+    async (newName: string) => {
+      if (!user?.id || !currentExercise?.id || isPaused || replacingExercise) return false;
+      const trimmed = newName.trim();
+      if (!trimmed) return false;
+
+      setReplacingExercise(true);
+      try {
+        const result = await workoutService.replaceSessionExercise(
+          currentExercise.id,
+          trimmed,
+          user.id,
+        );
+        if (!result.success) {
+          Alert.alert('Could not replace exercise', result.error);
+          return false;
+        }
+
+        await refreshSession();
+        setShowComplete(false);
+        setReplaceSheetOpen(false);
+        void syncPlannedWorkoutAfterSwap(result.data);
+        return true;
+      } finally {
+        setReplacingExercise(false);
+      }
+    },
+    [
+      user?.id,
+      currentExercise?.id,
+      isPaused,
+      replacingExercise,
+      refreshSession,
+      syncPlannedWorkoutAfterSwap,
+    ],
+  );
+
   const voiceHandlers = useActiveWorkoutVoiceHandlers({
     session,
     sortedExerciseIds: sortedExercises.map((exercise) => exercise.id),
@@ -423,6 +481,7 @@ export function ActiveWorkoutScreen({
     goToExerciseIndex: setCurrentIndex,
     startRestSeconds,
     finishWorkout: onFinish,
+    replaceExerciseInSession: applyExerciseReplacement,
   });
 
   useVoiceWorkoutActivation({
@@ -943,7 +1002,44 @@ export function ActiveWorkoutScreen({
     );
   }, [currentExercise, isPaused, onFinish, refreshSession, session.id, sortedExercises.length]);
 
+  const replaceableExercise = useMemo((): EditableWorkoutExercise | null => {
+    if (!currentExercise?.exercise?.name) return null;
+    return {
+      id: currentExercise.id,
+      name: currentExercise.exercise.name,
+      sets: effectiveTargetSets,
+      repRange,
+      restSeconds: planMeta?.restSeconds,
+      supersetGroupId: planMeta?.supersetGroupId,
+      executionMode: planMeta?.executionMode,
+    };
+  }, [currentExercise, effectiveTargetSets, repRange, planMeta]);
+
+  const handleReplaceWithAlternative = useCallback(
+    (option: ExerciseAlternativeOption) => {
+      void applyExerciseReplacement(option.name);
+    },
+    [applyExerciseReplacement],
+  );
+
+  const openReplaceSheet = useCallback(() => {
+    if (isPaused || !currentExercise) return;
+    setReplaceSheetOpen(true);
+  }, [currentExercise, isPaused]);
+
+  const openManualReplacePicker = useCallback(() => {
+    setReplaceSheetOpen(false);
+    setExercisePickerMode('replace');
+    setExercisePickerVisible(true);
+  }, []);
+
   async function handleAddExercise(exercise: Exercise) {
+    if (exercisePickerMode === 'replace') {
+      await applyExerciseReplacement(exercise.name);
+      setExercisePickerMode('add');
+      return;
+    }
+
     const workoutExerciseId = await addExerciseByName(exercise.name);
     if (!workoutExerciseId) return;
     await refreshSession();
@@ -1314,12 +1410,29 @@ export function ActiveWorkoutScreen({
                 </AppText>
               </Pressable>
 
-              {!showComplete && sortedExercises.length > 1 ? (
-                <Pressable onPress={handleSkipCurrentExercise} hitSlop={8} disabled={isPaused}>
-                  <AppText variant="caption" color="textSecondary">
-                    Skip this exercise
-                  </AppText>
-                </Pressable>
+              {!showComplete && sortedExercises.length > 0 ? (
+                <View style={styles.exerciseActionRow}>
+                  <View style={styles.exerciseActionButton}>
+                    <PrimaryButton
+                      label={replacingExercise ? 'Swapping…' : 'Swap exercise'}
+                      variant="secondary"
+                      onPress={openReplaceSheet}
+                      disabled={isPaused || replacingExercise}
+                      testID="replace-exercise-button"
+                    />
+                  </View>
+                  {sortedExercises.length > 1 ? (
+                    <View style={styles.exerciseActionButton}>
+                      <PrimaryButton
+                        label="Skip exercise"
+                        variant="ghost"
+                        onPress={handleSkipCurrentExercise}
+                        disabled={isPaused}
+                        testID="skip-exercise-button"
+                      />
+                    </View>
+                  ) : null}
+                </View>
               ) : null}
 
               {!showComplete ? (
@@ -1395,6 +1508,7 @@ export function ActiveWorkoutScreen({
                   sessionId={session.id}
                   currentSessionSets={currentSessionSets}
                   setNumber={nextSetNumber}
+                  onReplaceRequest={openReplaceSheet}
                   onPrescription={setCoachPrescription}
                   onApplyTarget={handleApplyCoachTarget}
                 />
@@ -1492,11 +1606,21 @@ export function ActiveWorkoutScreen({
                   <VoiceMicButton disabled={isPaused || logging} />
                   <VoiceDebugPanel />
                   <View style={styles.extraActions}>
+                    <PrimaryButton
+                      label="Swap"
+                      variant="secondary"
+                      onPress={openReplaceSheet}
+                      disabled={isPaused || replacingExercise}
+                      testID="replace-exercise-quick-button"
+                    />
                     <PrimaryButton label="+ Set" variant="secondary" onPress={handleAddSet} disabled={isPaused} />
                     <PrimaryButton
                       label="+ Exercise"
                       variant="secondary"
-                      onPress={() => setExercisePickerVisible(true)}
+                      onPress={() => {
+                        setExercisePickerMode('add');
+                        setExercisePickerVisible(true);
+                      }}
                       disabled={isPaused}
                     />
                     {completedSets.length > 0 ? (
@@ -1631,9 +1755,24 @@ export function ActiveWorkoutScreen({
 
       <ExercisePickerModal
         visible={exercisePickerVisible}
-        onClose={() => setExercisePickerVisible(false)}
+        onClose={() => {
+          setExercisePickerVisible(false);
+          setExercisePickerMode('add');
+        }}
         onSelect={handleAddExercise}
-        title="Add Exercise"
+        title={exercisePickerMode === 'replace' ? 'Replace Exercise' : 'Add Exercise'}
+      />
+
+      <ExerciseReplaceSheet
+        visible={replaceSheetOpen}
+        exercise={replaceableExercise}
+        userId={user?.id}
+        goal={user?.fitnessGoals?.[0]}
+        programType={user?.metadata?.coachActivation?.programType as string | undefined}
+        availableEquipment={user?.availableEquipment}
+        onClose={() => setReplaceSheetOpen(false)}
+        onReplace={handleReplaceWithAlternative}
+        onManualSearch={openManualReplacePicker}
       />
 
       <ExerciseGuideSheet
@@ -1669,6 +1808,14 @@ const styles = StyleSheet.create({
   },
   exerciseNamePressable: {
     gap: Spacing.xs,
+  },
+  exerciseActionRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: Spacing.sm,
+  },
+  exerciseActionButton: {
+    flex: 1,
   },
   exerciseName: {
     letterSpacing: 0.25,

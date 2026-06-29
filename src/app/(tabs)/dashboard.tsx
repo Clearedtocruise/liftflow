@@ -13,7 +13,6 @@ import { RingGauge } from '@/components/dashboard/RingGauge';
 import { WeeklyReviewCard } from '@/components/dashboard/WeeklyReviewCard';
 import { InsightCard } from '@/components/insights/InsightCard';
 import { Card } from '@/components/layout/Card';
-import { CardLifestyleBanner } from '@/components/layout/CardLifestyleBanner';
 import { HeroPhotoBanner } from '@/components/layout/HeroPhotoBanner';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
@@ -41,6 +40,7 @@ import {
   resolveCoachTrainingGuidance,
   validateWorkoutAssignmentConsistency,
 } from '@/lib/activeTrainingDay';
+import { formatHomeCoachMessage } from '@/lib/homeCoachMessage';
 import { deviceTimeZone, formatScheduledDbTime } from '@/lib/localDate';
 import {
   aggregateDailyMeals,
@@ -454,10 +454,11 @@ export default function DashboardScreen() {
 
   const coachHeadline = coachGuidance.coachHeadline;
 
-  const coachMessage =
-    coachGuidance.coachMessage ||
-    user?.metadata?.coachActivation?.coachMessage ||
-    'Complete today\'s recovery check-in for an accurate score and training guidance.';
+  const coachMessage = formatHomeCoachMessage(coachGuidance, {
+    scheduledWorkout: todaysWorkout,
+    recoveryIntel,
+    recoveryScore,
+  });
 
   const workoutDurationMin = todaysWorkout
     ? estimateWorkoutDurationMinutes(exercisesFromPlannedWorkout(todaysWorkout)) ||
@@ -537,8 +538,8 @@ export default function DashboardScreen() {
         />
       }>
       <HeroPhotoBanner
-        uri={todaysWorkout ? HeroImages.dashboard.heroWorkout : HeroImages.dashboard.heroRest}
-        height={192}
+        sources={todaysWorkout ? HeroImages.dashboard.heroWorkout : HeroImages.dashboard.heroRest}
+        height={todaysWorkout ? 200 : 192}
         showBrand={false}
         eyebrow="Today"
         title={user?.displayName ? `Hey, ${user.displayName.split(' ')[0]}` : 'Your day'}
@@ -552,26 +553,6 @@ export default function DashboardScreen() {
       {!hasRecoveryScore && !summaryLoading ? (
         <RecoveryCheckInCue onPress={handleRecoveryPress} />
       ) : null}
-
-      <Animated.View entering={FadeInDown.duration(400)}>
-        {summaryLoading && !coachMessage ? (
-          <Card style={styles.coachCard}>
-            <SkeletonBlock height={14} width="30%" />
-            <SkeletonBlock height={20} width="70%" />
-            <SkeletonBlock height={14} width="90%" />
-          </Card>
-        ) : (
-          <Card style={styles.coachCard}>
-            <CardLifestyleBanner uri={HeroImages.dashboard.coach} height={80} />
-            <AppText variant="label" color="accent">
-              Coach
-            </AppText>
-            <AppText variant="body" color="textSecondary">
-              {coachMessage}
-            </AppText>
-          </Card>
-        )}
-      </Animated.View>
 
       <Animated.View entering={FadeInDown.delay(120).duration(400)}>
         {programLoading ? (
@@ -602,6 +583,7 @@ export default function DashboardScreen() {
                     startTime: workoutStartTime,
                     trainingLabel,
                     recoveryScore: hasRecoveryScore ? recoveryScore : null,
+                    coachMessage,
                   }
                 : null
             }
@@ -618,6 +600,7 @@ export default function DashboardScreen() {
             tabataModeEnabled={tabataModeEnabled}
             showWorkoutSection={showWorkoutSection}
             isRestDay={!todaysWorkout}
+            showWorkoutBanner={!todaysWorkout}
             startingWorkout={startingWorkout}
             adaptingPlan={adaptingPlan}
           />
@@ -718,10 +701,6 @@ export default function DashboardScreen() {
 }
 
 const styles = StyleSheet.create({
-  coachCard: {
-    gap: Spacing.sm,
-    overflow: 'hidden',
-  },
   statsRow: {
     flexDirection: 'row',
     gap: Spacing.md,

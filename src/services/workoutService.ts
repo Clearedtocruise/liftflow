@@ -873,6 +873,39 @@ export const workoutService: IWorkoutService = {
     }
   },
 
+  /** Swap the movement on an in-progress exercise row — logged sets stay attached. */
+  async replaceSessionExercise(workoutExerciseId: string, newExerciseName: string, userId: string) {
+    try {
+      const normalized = newExerciseName.trim();
+      if (!normalized) return fail('Exercise name is required');
+
+      const exerciseId = await findOrCreateExerciseByNameInternal(normalized, userId);
+      if (!exerciseId) return fail('Could not find or create exercise');
+
+      const { data: row, error: loadError } = await supabase
+        .from('workout_exercises')
+        .select('session_id')
+        .eq('id', workoutExerciseId)
+        .maybeSingle();
+
+      if (loadError) return fail(loadError.message);
+      if (!row?.session_id) return fail('Exercise not found');
+
+      const { error } = await supabase
+        .from('workout_exercises')
+        .update({ exercise_id: exerciseId })
+        .eq('id', workoutExerciseId);
+
+      if (error) return fail(error.message);
+
+      const session = await loadSession(row.session_id);
+      if (!session) return fail('Session not found');
+      return ok(session);
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
   async updateExerciseSortOrders(updates: Array<{ id: string; sortOrder: number }>) {
     try {
       for (const update of updates) {

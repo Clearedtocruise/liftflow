@@ -1,5 +1,6 @@
 import { Pressable, StyleSheet, View } from 'react-native';
 
+import { HomeTodayCard } from '@/components/dashboard/HomeTodayCard';
 import { Card } from '@/components/layout/Card';
 import { CardLifestyleBanner } from '@/components/layout/CardLifestyleBanner';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
@@ -27,6 +28,7 @@ type HomeNextUpCardProps = {
     startTime?: string;
     trainingLabel: string;
     recoveryScore?: number | null;
+    coachMessage?: string;
   } | null;
   onLogMeal: () => void;
   onGenerateMealPlan?: () => void;
@@ -38,6 +40,7 @@ type HomeNextUpCardProps = {
   tabataModeEnabled?: boolean;
   showWorkoutSection?: boolean;
   isRestDay?: boolean;
+  showWorkoutBanner?: boolean;
   startingWorkout?: boolean;
   adaptingPlan?: boolean;
 };
@@ -59,32 +62,48 @@ export function HomeNextUpCard({
   tabataModeEnabled = false,
   showWorkoutSection = false,
   isRestDay = false,
+  showWorkoutBanner = true,
   startingWorkout,
   adaptingPlan,
 }: HomeNextUpCardProps) {
   return (
     <View style={styles.stack}>
       {showWorkoutSection && workout && !isRestDay ? (
-        <View testID="today-workout-card">
-          <Card style={styles.card} glow>
-            <CardLifestyleBanner uri={HeroImages.dashboard.cardWorkout} height={96} />
-            <Pressable onPress={onViewWorkout} disabled={!onViewWorkout} style={styles.section}>
-              <AppText variant="label" color="accent">
-                Today&apos;s workout
-              </AppText>
-              <AppText variant="bodyBold">{workout.title}</AppText>
-              <AppText variant="footnote" color="textSecondary">
-                {workout.startTime ? `${workout.startTime} · ` : ''}
-                {workout.durationMin ? `${workout.durationMin} min` : workout.trainingLabel}
-              </AppText>
-            </Pressable>
-            <PrimaryButton
-              label={tabataModeEnabled ? 'Start Tabata' : 'Start Workout'}
-              onPress={onStartWorkout}
-              loading={startingWorkout}
-              size="large"
-              testID="start-workout-button"
-            />
+        <HomeTodayCard
+          workoutTitle={workout.title}
+          coachMessage={workout.coachMessage ?? 'Complete today\'s recovery check-in for personalized guidance.'}
+          trainingLabel={workout.trainingLabel}
+          startTime={workout.startTime}
+          durationMin={workout.durationMin}
+          recoveryScore={workout.recoveryScore}
+          bannerSources={HeroImages.dashboard.cardWorkout}
+          showBanner={showWorkoutBanner}
+          onStartWorkout={onStartWorkout}
+          onViewWorkout={onViewWorkout}
+          onManageDay={onManageDay}
+          tabataModeEnabled={tabataModeEnabled}
+          startingWorkout={startingWorkout}
+          adaptingPlan={adaptingPlan}
+        />
+      ) : null}
+
+      {showWorkoutSection && isRestDay ? (
+        <Card style={[styles.card, styles.mediaCard]} glow>
+          <CardLifestyleBanner
+            sources={HeroImages.dashboard.cardRest}
+            height={116}
+            vibrant
+            accentLine
+            bleed={false}
+          />
+          <View style={styles.cardBody}>
+            <AppText variant="label" color="accent">
+              Recovery
+            </AppText>
+            <AppText variant="bodyBold">Rest day</AppText>
+            <AppText variant="footnote" color="textSecondary">
+              Light activity or full recovery — your call.
+            </AppText>
             {onManageDay ? (
               <PrimaryButton
                 label="Manage Day"
@@ -95,43 +114,25 @@ export function HomeNextUpCard({
                 testID="manage-day-button"
               />
             ) : null}
-          </Card>
-        </View>
-      ) : null}
-
-      {showWorkoutSection && isRestDay ? (
-        <Card style={styles.card}>
-          <CardLifestyleBanner uri={HeroImages.dashboard.cardRest} height={88} />
-          <View style={styles.section}>
-            <AppText variant="label" color="accent">
-              Recovery
-            </AppText>
-            <AppText variant="bodyBold">Rest day</AppText>
-            <AppText variant="footnote" color="textSecondary">
-              Light activity or full recovery — your call.
-            </AppText>
+            {onLogActivity ? (
+              <PrimaryButton label="Log Activity" variant="secondary" onPress={onLogActivity} />
+            ) : null}
           </View>
-          {onManageDay ? (
-            <PrimaryButton
-              label="Manage Day"
-              variant="ghost"
-              onPress={onManageDay}
-              loading={adaptingPlan}
-              disabled={adaptingPlan}
-              testID="manage-day-button"
-            />
-          ) : null}
-          {onLogActivity ? (
-            <PrimaryButton label="Log Activity" variant="secondary" onPress={onLogActivity} />
-          ) : null}
         </Card>
       ) : null}
 
-      <Card style={styles.card}>
-        <CardLifestyleBanner uri={HeroImages.dashboard.nutrition} height={88} />
-        <AppText variant="label" color="accent">
-          Nutrition
-        </AppText>
+      <Card style={[styles.card, styles.mediaCard]} glow>
+        <CardLifestyleBanner
+          sources={HeroImages.dashboard.nutrition}
+          height={116}
+          vibrant
+          accentLine
+          bleed={false}
+        />
+        <View style={styles.cardBody}>
+          <AppText variant="label" color="accent">
+            Nutrition
+          </AppText>
 
         {mealsTotal > 0 ? (
           <NutritionMetricsRow
@@ -174,6 +175,7 @@ export function HomeNextUpCard({
         {mealsTotal === 0 && onGenerateMealPlan ? (
           <PrimaryButton label="Generate Plan" variant="ghost" onPress={onGenerateMealPlan} />
         ) : null}
+        </View>
       </Card>
     </View>
   );
@@ -186,6 +188,14 @@ const styles = StyleSheet.create({
   card: {
     gap: Spacing.md,
     overflow: 'hidden',
+  },
+  mediaCard: {
+    padding: 0,
+    gap: 0,
+  },
+  cardBody: {
+    padding: Spacing.lg,
+    gap: Spacing.md,
   },
   section: {
     gap: Spacing.xs,

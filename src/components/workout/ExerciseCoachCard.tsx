@@ -26,6 +26,8 @@ type ExerciseCoachCardProps = {
   showPerformanceSummary?: boolean;
   /** Compact variant only — hide the coach reason sentence. */
   showReason?: boolean;
+  /** Compact variant — open equipment-aware swap sheet (e.g. machine taken). */
+  onReplaceRequest?: () => void;
   onPrescription?: (prescription: ExerciseCoachPrescription | null) => void;
   onApplyTarget?: (recommended: { weightKg: number; reps: number; durationSeconds?: number }) => void;
 };
@@ -64,6 +66,7 @@ export function ExerciseCoachCard({
   titleLabel = 'Coach prescription',
   showPerformanceSummary = true,
   showReason = true,
+  onReplaceRequest,
   onPrescription,
   onApplyTarget,
 }: ExerciseCoachCardProps) {
@@ -156,6 +159,13 @@ export function ExerciseCoachCard({
           <AppText variant="footnote" color="textSecondary">
             Plan target · {fallbackLine}
           </AppText>
+          {onReplaceRequest ? (
+            <Pressable onPress={onReplaceRequest} hitSlop={8}>
+              <AppText variant="caption" color="accent">
+                Equipment taken? Swap exercise
+              </AppText>
+            </Pressable>
+          ) : null}
         </View>
       );
     }
@@ -288,6 +298,13 @@ export function ExerciseCoachCard({
           <AppText variant="footnote" color="textTertiary">
             {prescription.reason}
           </AppText>
+        ) : null}
+        {onReplaceRequest ? (
+          <Pressable onPress={onReplaceRequest} hitSlop={8}>
+            <AppText variant="caption" color="accent">
+              Equipment taken? Swap exercise
+            </AppText>
+          </Pressable>
         ) : null}
         {onApplyTarget ? (
           <Pressable

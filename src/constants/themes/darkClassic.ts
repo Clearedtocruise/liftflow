@@ -1,5 +1,5 @@
-import type { AppTheme } from './types';
 import { darkRadius, darkSpacing } from './shared';
+import type { AppTheme } from './types';
 
 const colors = {
   background: '#080B10',
@@ -87,8 +87,8 @@ export const darkClassicTheme: AppTheme = {
     },
     button: [colors.primary, colors.primaryMuted],
     insightFill: ['rgba(14, 144, 255, 0.08)', colors.surface],
-    photoOverlay: ['transparent', 'rgba(8, 11, 16, 0.82)'],
-    ambient: ['rgba(14, 144, 255, 0.06)', 'transparent'],
+    photoOverlay: ['transparent', 'rgba(8, 11, 16, 0.42)'],
+    ambient: ['rgba(14, 144, 255, 0.14)', 'rgba(0, 229, 168, 0.06)'],
   },
   navigationTheme: {
     dark: true,
