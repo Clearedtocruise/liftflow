@@ -48,7 +48,7 @@ export const FEATURES: FeatureDefinition[] = [
 
   // Phase 2
   { id: 'peak-music', title: 'Peak Music Sync', description: 'Sync song peaks with rest timers', phase: 'phase2', category: 'integrations', route: '/(features)/peak-music-settings', icon: 'music.note' },
-  { id: 'cardio-tracking', title: 'Cardio Tracking', description: 'Run, cycle, HIIT, and more', phase: 'phase2', category: 'workout', route: '/(features)/cardio-tracking', icon: 'figure.run' },
+  { id: 'cardio-tracking', title: 'Cardio Tracking', description: 'Run, cycle, HIIT, and more', phase: 'phase1', category: 'workout', route: '/(features)/cardio-tracking', icon: 'figure.run' },
   { id: 'heart-rate', title: 'Heart Rate Tracking', description: 'HR during workouts and rest', phase: 'phase2', category: 'integrations', route: '/(features)/heart-rate', icon: 'heart.fill' },
   { id: 'healthkit', title: 'Apple HealthKit', description: 'Sync health and fitness data', phase: 'phase2', category: 'integrations', route: '/(features)/healthkit', icon: 'heart.text.square.fill' },
   { id: 'apple-watch', title: 'Apple Watch', description: 'Workout companion on wrist', phase: 'phase2', category: 'integrations', route: '/(features)/apple-watch', icon: 'applewatch' },

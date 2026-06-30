@@ -103,22 +103,28 @@ export function inferLoadingMethodFromHistory(
   ) {
     return 'external_load';
   }
-  if (
-    supported.includes('bodyweight') &&
-    (label.includes('lunge') || label.includes('pull-up') || label.includes('pull up') || label.includes('chin-up') || label.includes('chin up') || label.includes('dip'))
-  ) {
-    return 'bodyweight';
-  }
-  if (supported.includes('timed_hold') && !label.includes('farmer')) {
-    return 'timed_hold';
-  }
-  if (supported.includes('distance')) return 'distance';
   if (lastDurationSeconds != null && lastDurationSeconds > 0 && supported.includes('timed_hold')) {
     return 'timed_hold';
   }
   if (lastWeightKg != null && lastWeightKg > 0) {
     if (supported.includes('bodyweight_plus_weight')) return 'bodyweight_plus_weight';
     if (supported.includes('external_load')) return 'external_load';
+  }
+  if (supported.includes('timed_hold') && !label.includes('farmer')) {
+    return 'timed_hold';
+  }
+  if (supported.includes('distance')) return 'distance';
+  if (
+    supported.includes('bodyweight') &&
+    !supported.includes('external_load') &&
+    (label.includes('lunge') ||
+      label.includes('pull-up') ||
+      label.includes('pull up') ||
+      label.includes('chin-up') ||
+      label.includes('chin up') ||
+      label.includes('dip'))
+  ) {
+    return 'bodyweight';
   }
   if (supported.includes('external_load') && exercise?.exerciseType === 'strength') {
     return 'external_load';

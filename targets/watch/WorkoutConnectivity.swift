@@ -3,7 +3,7 @@ import WatchConnectivity
 import WatchKit
 
 final class WorkoutConnectivity: NSObject, ObservableObject, WCSessionDelegate {
-  @Published var exerciseName = "Start on iPhone"
+  @Published var exerciseName = "ONE MORE"
   @Published var setLabel = ""
   @Published var statusLine = ""
   @Published var stationLabel = ""
@@ -197,8 +197,8 @@ final class WorkoutConnectivity: NSObject, ObservableObject, WCSessionDelegate {
     cardioPhaseLabel = ""
     lastHeartRateSentAt = nil
     phase = "idle"
-    exerciseName = "Start on iPhone"
-    setLabel = "Open ONE MORE on iPhone"
+    exerciseName = "ONE MORE"
+    setLabel = ""
     statusLine = ""
     stopCalorieTimer()
     sessionCalories = 0
@@ -385,8 +385,8 @@ final class WorkoutConnectivity: NSObject, ObservableObject, WCSessionDelegate {
           setLabel = "Start Today's Workout"
         }
       } else {
-        exerciseName = "Start on iPhone"
-        setLabel = "Open ONE MORE on iPhone"
+        exerciseName = "ONE MORE"
+        setLabel = ""
       }
       phase = "idle"
       previousPhase = "idle"

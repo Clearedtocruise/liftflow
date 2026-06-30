@@ -29,6 +29,10 @@ import { useWorkoutTimerEngine } from '@/hooks/useWorkoutTimerEngine';
 import {
     computeWorkoutSetProgress,
     formatCoachTargetLine,
+    performanceBaselineFromHistorySet,
+    performanceBaselineFromSessionSet,
+    pickLastPerformanceSet,
+    type PerformanceBaseline,
 } from '@/lib/activeWorkoutMetrics';
 import {
     defaultLoadingMethodForExercise,
@@ -229,6 +233,8 @@ export function ActiveWorkoutScreen({
   const [challengeTargetExerciseName, setChallengeTargetExerciseName] = useState<string | null>(null);
   const [loadingMethod, setLoadingMethod] = useState<LoadingMethod>('external_load');
   const pendingAdvanceRef = useRef<number | null>(null);
+  const lastCoachAppliedRef = useRef<string | null>(null);
+  const completedSetCountRef = useRef(0);
   const applyPendingExerciseIndexAdvance = useCallback(() => {
     const nextIndex = pendingAdvanceRef.current;
     if (nextIndex == null) return false;
@@ -653,12 +659,49 @@ export function ActiveWorkoutScreen({
         setReps(recommended.reps);
         return;
       }
-      if (loggingMode === 'weighted' && recommended.weightKg > 0) {
-        setWeightKg(recommended.weightKg);
+      if (loggingMode === 'weighted') {
+        if (recommended.weightKg > 0) {
+          setWeightKg(recommended.weightKg);
+        }
         setReps(recommended.reps);
       }
     },
     [loggingMode, durationSeconds],
+  );
+
+  const applyPerformanceBaseline = useCallback(
+    (baseline: PerformanceBaseline, mode: typeof loggingMode) => {
+      if (mode === 'timed') {
+        setReps(1);
+        if (baseline.durationSeconds != null) {
+          setDurationSeconds(baseline.durationSeconds);
+        }
+        return;
+      }
+      if (mode === 'cardio') {
+        setReps(1);
+        if (baseline.durationSeconds != null) {
+          setDurationSeconds(baseline.durationSeconds);
+        }
+        if (baseline.distanceKm != null) {
+          setDistanceKm(baseline.distanceKm);
+        }
+        return;
+      }
+      if (mode === 'bodyweight') {
+        if (baseline.reps != null) {
+          setReps(baseline.reps);
+        }
+        return;
+      }
+      if (baseline.weightKg != null) {
+        setWeightKg(baseline.weightKg);
+      }
+      if (baseline.reps != null) {
+        setReps(baseline.reps);
+      }
+    },
+    [],
   );
 
   useEffect(() => {
@@ -732,6 +775,9 @@ export function ActiveWorkoutScreen({
   useEffect(() => {
     if (!user || !currentExercise?.exerciseId) return;
 
+    lastCoachAppliedRef.current = null;
+    completedSetCountRef.current = completedSets.length;
+
     setLoadingMethod(
       defaultLoadingMethodForExercise(currentExercise.exercise, currentExercise.exercise?.slug),
     );
@@ -741,21 +787,41 @@ export function ActiveWorkoutScreen({
       repRange,
       currentExercise.exercise?.name,
     );
-    const historyMode =
-      loadingMethodOptions(currentExercise.exercise, currentExercise.exercise?.slug).length > 1
-        ? ('any' as const)
-        : mode;
     setDurationSeconds(defaultTimedDurationSeconds(repRange));
     setCoachPrescription(null);
 
+    const sessionLastSet = completedSets[completedSets.length - 1];
+    if (sessionLastSet) {
+      const inferredMethod = inferLoadingMethodFromHistory(
+        currentExercise.exercise,
+        currentExercise.exercise?.slug,
+        sessionLastSet.weight,
+        sessionLastSet.durationSeconds,
+      );
+      setLoadingMethod(inferredMethod);
+      const sessionMode = loadingMethodToLoggingMode(inferredMethod);
+      applyPerformanceBaseline(
+        performanceBaselineFromSessionSet(sessionLastSet, sessionMode, repRange),
+        sessionMode,
+      );
+      void workoutService
+        .getRecentSetsForExercise(user.id, currentExercise.exerciseId, 5, 'any')
+        .then((result) => {
+          if (result.success) setHistorySets(result.data);
+        });
+      setShowComplete(false);
+      setExerciseHadPr(false);
+      return;
+    }
+
     let cancelled = false;
     void workoutService
-      .getRecentSetsForExercise(user.id, currentExercise.exerciseId, 5, historyMode)
+      .getRecentSetsForExercise(user.id, currentExercise.exerciseId, 5, 'any')
       .then((result: Awaited<ReturnType<typeof workoutService.getRecentSetsForExercise>>) => {
       if (cancelled || !result.success) return;
       setHistorySets(result.data);
 
-      const last = result.data[0];
+      const last = pickLastPerformanceSet(result.data, mode);
       const inferredMethod = inferLoadingMethodFromHistory(
         currentExercise.exercise,
         currentExercise.exercise?.slug,
@@ -764,32 +830,18 @@ export function ActiveWorkoutScreen({
       );
       setLoadingMethod(inferredMethod);
 
-      if (mode === 'timed') {
-        setReps(1);
-        if (last?.durationSeconds) {
-          setDurationSeconds(last.durationSeconds);
-        }
-        return;
-      }
-      if (mode === 'cardio') {
-        setReps(1);
-        if (last?.durationSeconds) {
-          setDurationSeconds(last.durationSeconds);
-        }
-        if (last?.distanceMeters) {
-          setDistanceKm(last.distanceMeters / 1000);
-        }
-        return;
-      }
-      if (mode === 'bodyweight') {
-        setReps(last?.reps ?? parseTargetReps(repRange));
-        return;
-      }
-      if (last?.weightKg != null && last.reps != null) {
-        setWeightKg(last.weightKg);
-        setReps(last.reps);
-      } else if (currentExercise.suggestedWeight) {
+      const resolvedMode = loadingMethodToLoggingMode(inferredMethod);
+      const baselineSet = pickLastPerformanceSet(result.data, resolvedMode) ?? last;
+
+      if (baselineSet) {
+        applyPerformanceBaseline(
+          performanceBaselineFromHistorySet(baselineSet, resolvedMode, repRange),
+          resolvedMode,
+        );
+      } else if (resolvedMode === 'weighted' && currentExercise.suggestedWeight) {
         setWeightKg(currentExercise.suggestedWeight);
+        setReps(parseTargetReps(repRange));
+      } else if (resolvedMode !== 'weighted') {
         setReps(parseTargetReps(repRange));
       } else {
         setReps(parseTargetReps(repRange));
@@ -809,7 +861,50 @@ export function ActiveWorkoutScreen({
     return () => {
       cancelled = true;
     };
-  }, [currentExercise?.id, currentExercise?.exerciseId, currentExercise?.exercise, currentExercise?.suggestedWeight, repRange, user]);
+  }, [
+    applyPerformanceBaseline,
+    currentExercise?.id,
+    currentExercise?.exerciseId,
+    currentExercise?.exercise,
+    currentExercise?.suggestedWeight,
+    repRange,
+    user,
+  ]);
+
+  useEffect(() => {
+    if (!currentExercise) return;
+    const count = completedSets.length;
+    if (count <= completedSetCountRef.current) {
+      completedSetCountRef.current = count;
+      return;
+    }
+
+    const lastSet = completedSets[count - 1];
+    if (!lastSet) return;
+
+    applyPerformanceBaseline(
+      performanceBaselineFromSessionSet(lastSet, loggingMode, repRange),
+      loggingMode,
+    );
+    completedSetCountRef.current = count;
+  }, [applyPerformanceBaseline, completedSets, currentExercise, loggingMode, repRange]);
+
+  useEffect(() => {
+    if (!coachPrescription || !currentExercise?.id) return;
+
+    const { targets, adjustmentLabel } = coachPrescription;
+    if (adjustmentLabel === 'maintain' || adjustmentLabel === 'increase_sets') return;
+
+    const applyKey = `${currentExercise.id}-${nextSetNumber}-${adjustmentLabel}-${targets.weightKg}-${targets.reps}-${targets.durationSeconds ?? 0}`;
+    if (lastCoachAppliedRef.current === applyKey) return;
+
+    handleApplyCoachTarget({
+      weightKg: targets.weightKg,
+      reps: targets.reps,
+      durationSeconds: targets.durationSeconds,
+    });
+    lastCoachAppliedRef.current = applyKey;
+  }, [coachPrescription, currentExercise?.id, handleApplyCoachTarget, nextSetNumber]);
 
   useEffect(() => {
     if (!executionModeUsesIntervalTimer(executionMode) || showComplete) return;

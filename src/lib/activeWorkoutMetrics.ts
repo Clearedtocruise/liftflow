@@ -1,10 +1,103 @@
 import type { ExerciseLoggingMode } from '@/lib/exerciseModality';
 import { defaultTimedDurationSeconds, formatCardioDuration } from '@/lib/exerciseModality';
 import { formatDistance } from '@/lib/unitConversion';
-import type { WorkoutSession } from '@/types';
+import type { WorkoutSession, WorkoutSet } from '@/types';
 import type { DistanceUnit } from '@/types/common';
 import type { ExerciseCoachPrescription } from '@/types/exerciseCoach';
-import type { EditableWorkoutExercise } from '@/types/workoutExecution';
+import type { EditableWorkoutExercise, ExerciseHistorySet } from '@/types/workoutExecution';
+
+export type PerformanceBaseline = {
+  weightKg?: number;
+  reps?: number;
+  durationSeconds?: number;
+  distanceKm?: number;
+};
+
+export function pickLastPerformanceSet(
+  sets: ExerciseHistorySet[],
+  loggingMode: ExerciseLoggingMode,
+): ExerciseHistorySet | undefined {
+  if (sets.length === 0) return undefined;
+
+  if (loggingMode === 'cardio' || loggingMode === 'timed') {
+    return sets.find((set) => set.durationSeconds != null && set.durationSeconds > 0) ?? sets[0];
+  }
+
+  if (loggingMode === 'bodyweight') {
+    return (
+      sets.find((set) => set.reps != null && (!set.weightKg || set.weightKg <= 0)) ??
+      sets.find((set) => set.reps != null) ??
+      sets[0]
+    );
+  }
+
+  return (
+    sets.find((set) => set.weightKg != null && set.weightKg > 0 && set.reps != null) ??
+    sets.find((set) => set.reps != null) ??
+    sets[0]
+  );
+}
+
+export function performanceBaselineFromHistorySet(
+  set: ExerciseHistorySet,
+  loggingMode: ExerciseLoggingMode,
+  repRange: string,
+): PerformanceBaseline {
+  if (loggingMode === 'timed') {
+    return {
+      reps: 1,
+      durationSeconds: set.durationSeconds ?? defaultTimedDurationSeconds(repRange),
+    };
+  }
+  if (loggingMode === 'cardio') {
+    return {
+      reps: 1,
+      durationSeconds: set.durationSeconds ?? 0,
+      distanceKm: set.distanceMeters != null ? set.distanceMeters / 1000 : 0,
+    };
+  }
+  if (loggingMode === 'bodyweight') {
+    return { reps: set.reps ?? parseTargetRepsFromRange(repRange) };
+  }
+  return {
+    weightKg: set.weightKg ?? 0,
+    reps: set.reps ?? parseTargetRepsFromRange(repRange),
+  };
+}
+
+export function performanceBaselineFromSessionSet(
+  set: WorkoutSet,
+  loggingMode: ExerciseLoggingMode,
+  repRange: string,
+): PerformanceBaseline {
+  if (loggingMode === 'timed') {
+    return {
+      reps: 1,
+      durationSeconds: set.durationSeconds ?? defaultTimedDurationSeconds(repRange),
+    };
+  }
+  if (loggingMode === 'cardio') {
+    return {
+      reps: 1,
+      durationSeconds: set.durationSeconds ?? 0,
+      distanceKm: set.distanceMeters != null ? set.distanceMeters / 1000 : 0,
+    };
+  }
+  if (loggingMode === 'bodyweight') {
+    return { reps: set.reps ?? parseTargetRepsFromRange(repRange) };
+  }
+  return {
+    weightKg: set.weight ?? 0,
+    reps: set.reps ?? parseTargetRepsFromRange(repRange),
+  };
+}
+
+function parseTargetRepsFromRange(repRange: string): number {
+  const match = repRange.match(/(\d+)/);
+  if (!match) return 8;
+  const parsed = Number.parseInt(match[1]!, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 8;
+}
 
 export type WorkoutSetProgress = {
   completedSets: number;

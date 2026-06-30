@@ -32,7 +32,7 @@ const config: ExpoConfig = {
   ios: {
     icon: './assets/branding/one-more-icon-1024.png',
     bundleIdentifier: 'com.liftflow.app',
-    buildNumber: '17',
+    buildNumber: '18',
     appleTeamId: 'DZXP5Q6649',
     entitlements: {
       'com.apple.security.application-groups': ['group.com.liftflow.app'],
@@ -53,7 +53,7 @@ const config: ExpoConfig = {
   },
   android: {
     package: 'com.liftflow.app',
-    versionCode: 15,
+    versionCode: 16,
     softwareKeyboardLayoutMode: 'resize',
     permissions: [
       'android.permission.ACCESS_COARSE_LOCATION',

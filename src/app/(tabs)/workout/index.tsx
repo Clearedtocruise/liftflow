@@ -346,6 +346,7 @@ export default function WorkoutScreen() {
         onSelectDay={handleSelectDay}
         onEditDay={handleEditDay}
         onManualLog={() => router.push('/(tabs)/workout/manual-log')}
+        onCardio={() => router.push('/(features)/cardio-tracking')}
       />
 
       {editDayMenu ? (

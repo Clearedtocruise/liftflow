@@ -81,6 +81,7 @@ export function HomeNextUpCard({
           onStartWorkout={onStartWorkout}
           onViewWorkout={onViewWorkout}
           onManageDay={onManageDay}
+          onLogActivity={onLogActivity}
           tabataModeEnabled={tabataModeEnabled}
           startingWorkout={startingWorkout}
           adaptingPlan={adaptingPlan}
@@ -174,6 +175,9 @@ export function HomeNextUpCard({
         />
         {mealsTotal === 0 && onGenerateMealPlan ? (
           <PrimaryButton label="Generate Plan" variant="ghost" onPress={onGenerateMealPlan} />
+        ) : null}
+        {onLogActivity ? (
+          <PrimaryButton label="+ Activity" variant="ghost" onPress={onLogActivity} testID="log-activity-nutrition-button" />
         ) : null}
         </View>
       </Card>

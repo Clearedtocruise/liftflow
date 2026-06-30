@@ -1,36 +1,23 @@
 import SwiftUI
 
 private let accent = Color(red: 0.05, green: 0.56, blue: 1.0)
+private let accentMuted = Color(red: 0.09, green: 0.45, blue: 0.82)
 
 struct ContentView: View {
   @StateObject private var connectivity = WorkoutConnectivity()
   @StateObject private var heartRate = HeartRateReader()
 
+  private var isHomeScreen: Bool {
+    !connectivity.isCardioMode && connectivity.workoutSessionId == nil && !connectivity.isRestPhase
+  }
+
   var body: some View {
-    ScrollView {
-      VStack(alignment: .leading, spacing: 10) {
-        statusRow
-        workoutStatusCard
-        metricsRow
-
-        if connectivity.isCardioMode {
-          cardioPanel
-        } else if connectivity.isRestPhase {
-          restPanel
-        } else if connectivity.workoutSessionId != nil {
-          activeSetPanel
-        } else {
-          idlePanel
-        }
-
-        if !connectivity.lastSpokenResponse.isEmpty {
-          Text(connectivity.lastSpokenResponse)
-            .font(.caption2)
-            .foregroundStyle(connectivity.lastSpokenResponse.contains("iPhone") ? .orange : .secondary)
-            .lineLimit(3)
-        }
+    Group {
+      if isHomeScreen {
+        WatchHomeScreen(connectivity: connectivity, heartRate: heartRate)
+      } else {
+        activeWorkoutScreen
       }
-      .padding(.horizontal, 6)
     }
     .onAppear {
       heartRate.requestAuthorization()
@@ -44,6 +31,32 @@ struct ContentView: View {
       if let newValue {
         connectivity.recordHeartRate(newValue)
       }
+    }
+  }
+
+  private var activeWorkoutScreen: some View {
+    ScrollView {
+      VStack(alignment: .leading, spacing: 10) {
+        statusRow
+        workoutStatusCard
+        metricsRow
+
+        if connectivity.isCardioMode {
+          cardioPanel
+        } else if connectivity.isRestPhase {
+          restPanel
+        } else if connectivity.workoutSessionId != nil {
+          activeSetPanel
+        }
+
+        if !connectivity.lastSpokenResponse.isEmpty {
+          Text(connectivity.lastSpokenResponse)
+            .font(.caption2)
+            .foregroundStyle(connectivity.lastSpokenResponse.contains("iPhone") ? .orange : .secondary)
+            .lineLimit(3)
+        }
+      }
+      .padding(.horizontal, 6)
     }
   }
 
@@ -240,25 +253,112 @@ struct ContentView: View {
     }
   }
 
-  private var idlePanel: some View {
-    VStack(spacing: 8) {
-      if !connectivity.workoutRecommendation.isEmpty {
-        Text(connectivity.workoutRecommendation)
-          .font(.caption)
-          .foregroundStyle(.secondary)
-          .multilineTextAlignment(.center)
-          .lineLimit(3)
-      }
-      Button("Start Today's Workout") { connectivity.startTodaysWorkout() }
-        .buttonStyle(.borderedProminent)
-        .tint(accent)
-    }
-  }
-
   private func formatRest(_ seconds: Int) -> String {
     let m = seconds / 60
     let s = seconds % 60
     return String(format: "%d:%02d", m, s)
+  }
+}
+
+private struct WatchHomeScreen: View {
+  @ObservedObject var connectivity: WorkoutConnectivity
+  @ObservedObject var heartRate: HeartRateReader
+
+  var body: some View {
+    ScrollView {
+      VStack(spacing: 14) {
+        VStack(spacing: 4) {
+          Text("ONE MORE")
+            .font(.system(size: 22, weight: .bold, design: .rounded))
+            .foregroundStyle(accent)
+          Text("Workout companion")
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+        }
+        .padding(.top, 4)
+
+        HStack(spacing: 6) {
+          Circle()
+            .fill(connectivity.isReachable ? Color.green : Color.orange)
+            .frame(width: 8, height: 8)
+          Text(connectivity.isReachable ? "iPhone connected" : "Open ONE MORE on iPhone")
+            .font(.caption2)
+            .foregroundStyle(connectivity.isReachable ? Color.green : .orange)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(Color.white.opacity(0.08))
+        .clipShape(Capsule())
+
+        if let hr = heartRate.bpm ?? connectivity.heartRateBpm {
+          Label("\(hr) bpm", systemImage: "heart.fill")
+            .font(.caption)
+            .foregroundStyle(.pink)
+        }
+
+        if !connectivity.workoutRecommendation.isEmpty {
+          Text(connectivity.workoutRecommendation)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+            .lineLimit(4)
+            .padding(.horizontal, 4)
+        } else {
+          Text("Start a lift, run, or cardio session on your phone. Your sets, rest timer, and heart rate show up here.")
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+            .lineLimit(5)
+            .padding(.horizontal, 4)
+        }
+
+        VStack(spacing: 8) {
+          featureRow(icon: "figure.strengthtraining.traditional", label: "Log sets & rest")
+          featureRow(icon: "figure.run", label: "Cardio & HIIT")
+          featureRow(icon: "heart.fill", label: "Heart rate")
+        }
+        .padding(.vertical, 4)
+
+        Button("Sync with iPhone") {
+          connectivity.requestPhoneSync()
+        }
+        .buttonStyle(.bordered)
+        .tint(accentMuted)
+
+        Button("Start Today's Workout") {
+          connectivity.startTodaysWorkout()
+        }
+        .buttonStyle(.borderedProminent)
+        .tint(accent)
+
+        if !connectivity.lastSpokenResponse.isEmpty {
+          Text(connectivity.lastSpokenResponse)
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+            .lineLimit(2)
+        }
+      }
+      .padding(.horizontal, 8)
+      .padding(.bottom, 8)
+    }
+  }
+
+  private func featureRow(icon: String, label: String) -> some View {
+    HStack(spacing: 8) {
+      Image(systemName: icon)
+        .font(.caption)
+        .foregroundStyle(accent)
+        .frame(width: 18)
+      Text(label)
+        .font(.caption2)
+        .foregroundStyle(.primary)
+      Spacer()
+    }
+    .padding(.horizontal, 10)
+    .padding(.vertical, 8)
+    .background(Color.white.opacity(0.06))
+    .clipShape(RoundedRectangle(cornerRadius: 10))
   }
 }
 

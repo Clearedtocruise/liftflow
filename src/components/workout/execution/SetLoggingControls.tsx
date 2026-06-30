@@ -2,10 +2,11 @@ import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { AppText } from '@/components/ui/AppText';
-import { LiftFlowColors, Radius, Spacing, TouchTarget } from '@/constants/theme';
+import { TouchTarget } from '@/constants/theme';
+import { useThemedStyles } from '@/hooks/useLiftFlowTheme';
 import { useUnits } from '@/hooks/useUnits';
 import type { ExerciseLoggingMode } from '@/lib/exerciseModality';
-import { formatWorkoutWeightForInput, parseDistanceToKm, parseWeightToKg, weightStepDisplay, adjustWeightKg } from '@/lib/unitConversion';
+import { adjustWeightKg, formatWorkoutWeightForInput, parseDistanceToKm, parseWeightToKg, weightStepDisplay } from '@/lib/unitConversion';
 
 type SetLoggingControlsProps = {
   mode: ExerciseLoggingMode;
@@ -28,9 +29,10 @@ type NumericFieldProps = {
   onIncrease: () => void;
   stepLabel: string;
   disabled?: boolean;
+  styles: ReturnType<typeof createStyles>;
 };
 
-function NumericField({ label, value, onChangeText, onDecrease, onIncrease, stepLabel, disabled }: NumericFieldProps) {
+function NumericField({ label, value, onChangeText, onDecrease, onIncrease, stepLabel, disabled, styles }: NumericFieldProps) {
   return (
     <View style={styles.field}>
       <AppText variant="caption" color="textSecondary">
@@ -75,6 +77,7 @@ export function SetLoggingControls({
   disabled,
 }: SetLoggingControlsProps) {
   const units = useUnits();
+  const styles = useThemedStyles(createStyles);
   const weightStepLabel = String(weightStepDisplay(units.preferredWeightUnit));
   const distanceUnitLabel = units.preferredDistanceUnit === 'km' ? 'km' : 'mi';
   const distanceStep = units.preferredDistanceUnit === 'km' ? 0.1 : 0.1;
@@ -135,6 +138,7 @@ export function SetLoggingControls({
           onIncrease={() => onChangeDuration(durationSeconds + 15)}
           stepLabel="15"
           disabled={disabled}
+          styles={styles}
         />
         <NumericField
           label={`DISTANCE (${distanceUnitLabel})`}
@@ -144,6 +148,7 @@ export function SetLoggingControls({
           onIncrease={() => onChangeDistance(distanceKm + distanceStep)}
           stepLabel={String(distanceStep)}
           disabled={disabled}
+          styles={styles}
         />
       </View>
     );
@@ -159,6 +164,7 @@ export function SetLoggingControls({
         onIncrease={() => onChangeDuration(durationSeconds + 5)}
         stepLabel="5"
         disabled={disabled}
+        styles={styles}
       />
     );
   }
@@ -173,6 +179,7 @@ export function SetLoggingControls({
         onIncrease={() => onChangeReps(reps + 1)}
         stepLabel="1"
         disabled={disabled}
+        styles={styles}
       />
     );
   }
@@ -187,6 +194,7 @@ export function SetLoggingControls({
         onIncrease={() => onChangeWeight(adjustWeightKg(weightKg, units.preferredWeightUnit, 1))}
         stepLabel={weightStepLabel}
         disabled={disabled}
+        styles={styles}
       />
       <NumericField
         label="REPS"
@@ -196,51 +204,54 @@ export function SetLoggingControls({
         onIncrease={() => onChangeReps(reps + 1)}
         stepLabel="1"
         disabled={disabled}
+        styles={styles}
       />
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    gap: Spacing.md,
-  },
-  field: {
-    flex: 1,
-    gap: Spacing.sm,
-  },
-  stepper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: LiftFlowColors.backgroundSecondary,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: LiftFlowColors.border,
-    padding: Spacing.sm,
-    minHeight: TouchTarget.large,
-    gap: Spacing.xs,
-  },
-  stepButton: {
-    minWidth: TouchTarget.min,
-    height: TouchTarget.min,
-    borderRadius: Radius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: LiftFlowColors.surfaceElevated,
-    paddingHorizontal: Spacing.xs,
-  },
-  stepButtonPressed: {
-    backgroundColor: LiftFlowColors.surfaceHighlight,
-  },
-  input: {
-    flex: 1,
-    minWidth: 48,
-    textAlign: 'center',
-    color: LiftFlowColors.textPrimary,
-    fontSize: 22,
-    fontWeight: '700',
-    paddingVertical: Spacing.xs,
-  },
-});
+function createStyles(theme: import('@/constants/themes').AppTheme) {
+  return StyleSheet.create({
+    row: {
+      flexDirection: 'row',
+      gap: theme.spacing.md,
+    },
+    field: {
+      flex: 1,
+      gap: theme.spacing.sm,
+    },
+    stepper: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      backgroundColor: theme.colors.backgroundSecondary,
+      borderRadius: theme.radius.lg,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      padding: theme.spacing.sm,
+      minHeight: TouchTarget.large,
+      gap: theme.spacing.xs,
+    },
+    stepButton: {
+      minWidth: TouchTarget.min,
+      height: TouchTarget.min,
+      borderRadius: theme.radius.md,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.surfaceElevated,
+      paddingHorizontal: theme.spacing.xs,
+    },
+    stepButtonPressed: {
+      backgroundColor: theme.colors.surfaceHighlight,
+    },
+    input: {
+      flex: 1,
+      minWidth: 48,
+      textAlign: 'center',
+      color: theme.colors.textPrimary,
+      fontSize: 22,
+      fontWeight: '700',
+      paddingVertical: theme.spacing.xs,
+    },
+  });
+}

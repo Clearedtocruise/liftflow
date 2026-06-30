@@ -19,6 +19,7 @@ type HomeTodayCardProps = {
   onStartWorkout: () => void;
   onViewWorkout?: () => void;
   onManageDay?: () => void;
+  onLogActivity?: () => void;
   tabataModeEnabled?: boolean;
   startingWorkout?: boolean;
   adaptingPlan?: boolean;
@@ -38,6 +39,7 @@ export function HomeTodayCard({
   onStartWorkout,
   onViewWorkout,
   onManageDay,
+  onLogActivity,
   tabataModeEnabled = false,
   startingWorkout,
   adaptingPlan,
@@ -113,6 +115,9 @@ export function HomeTodayCard({
               disabled={adaptingPlan}
               testID="manage-day-button"
             />
+          ) : null}
+          {onLogActivity ? (
+            <PrimaryButton label="+ Activity" variant="secondary" onPress={onLogActivity} testID="log-activity-button" />
           ) : null}
         </View>
       </Card>

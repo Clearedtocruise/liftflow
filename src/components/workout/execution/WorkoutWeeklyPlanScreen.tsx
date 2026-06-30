@@ -27,6 +27,7 @@ type WorkoutWeeklyPlanScreenProps = {
   onSelectDay: (day: WeekDayPlan) => void;
   onEditDay: (day: WeekDayPlan) => void;
   onManualLog: () => void;
+  onCardio?: () => void;
 };
 
 function DayCard({
@@ -115,6 +116,7 @@ export function WorkoutWeeklyPlanScreen({
   onSelectDay,
   onEditDay,
   onManualLog,
+  onCardio,
 }: WorkoutWeeklyPlanScreenProps) {
   return (
     <View style={styles.container} testID="weekly-plan">
@@ -151,7 +153,12 @@ export function WorkoutWeeklyPlanScreen({
           ))
         : null}
 
-      <PrimaryButton label="Quick log" variant="ghost" onPress={onManualLog} />
+      <View style={styles.quickActions}>
+        {onCardio ? (
+          <PrimaryButton label="Cardio & HIIT" variant="secondary" onPress={onCardio} testID="workout-cardio-button" />
+        ) : null}
+        <PrimaryButton label="Quick log" variant="ghost" onPress={onManualLog} />
+      </View>
     </View>
   );
 }
@@ -184,5 +191,8 @@ const styles = StyleSheet.create({
   dayHeaderText: {
     flex: 1,
     gap: Spacing.xs,
+  },
+  quickActions: {
+    gap: Spacing.sm,
   },
 });

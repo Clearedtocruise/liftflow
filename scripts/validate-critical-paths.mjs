@@ -187,6 +187,32 @@ const REQUIRED = [
     patterns: ["id: 'equestrian'", 'cardio-tracking?activity=walk'],
   },
   {
+    file: 'src/app/(features)/_layout.tsx',
+    label: 'Cardio routes registered in features stack',
+    patterns: ["name=\"cardio-tracking\"", "name=\"log-activity\""],
+  },
+  {
+    file: 'src/components/dashboard/HomeNextUpCard.tsx',
+    label: 'Home + Activity entry point',
+    patterns: ['+ Activity', 'onLogActivity'],
+  },
+  {
+    file: 'src/components/workout/execution/WorkoutWeeklyPlanScreen.tsx',
+    label: 'Workout tab cardio entry',
+    patterns: ['Cardio & HIIT', 'onCardio'],
+  },
+  {
+    file: '.easignore',
+    label: 'EAS must not exclude cardio from builds',
+    patterns: ['ios/', 'android/'],
+    forbidden: ['cardio-tracking', 'src/components/cardio'],
+  },
+  {
+    file: 'targets/watch/content.swift',
+    label: 'Watch home screen when idle',
+    patterns: ['WatchHomeScreen', 'Workout companion', 'Sync with iPhone'],
+  },
+  {
     file: 'src/app/(tabs)/settings.tsx',
     label: 'Settings tabata preference imports',
     patterns: ['isTabataModeEnabled', 'TABATA_MODE_PREF_KEY', 'tabataModeSummary'],
