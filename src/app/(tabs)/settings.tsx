@@ -31,6 +31,7 @@ import { useSubscription } from '@/hooks/useSubscription';
 import { useUnits } from '@/hooks/useUnits';
 import { loadRolloverValidationState, type RolloverValidationState } from '@/lib/rolloverDebug';
 import { openSupportEmail } from '@/lib/supportMail';
+import { ageFromDateOfBirth } from '@/lib/heartRateZones';
 import {
     isJointFriendlyTrainingEnabled,
     isTabataModeEnabled,
