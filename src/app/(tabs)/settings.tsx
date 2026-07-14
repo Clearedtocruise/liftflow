@@ -114,7 +114,9 @@ export default function SettingsScreen() {
         setWakePhraseSettingEnabled(coaching.wakePhraseEnabled === true);
         setGymModeActive(coaching.gymModeEnabled === true);
         setTabataMode(isTabataModeEnabled(result.data));
-        setJointFriendlyTraining(isJointFriendlyTrainingEnabled(result.data));
+        setJointFriendlyTraining(
+          isJointFriendlyTrainingEnabled(result.data, ageFromDateOfBirth(user.dateOfBirth)),
+        );
         setRestTimerSound(result.data.restTimerSound !== false);
         setRestTimerHaptics(result.data.restTimerHaptics !== false);
         setWorkoutReminderEnabled(result.data.notificationPreferences?.workoutReminder === true);
