@@ -192,8 +192,10 @@ export const trainingService: ITrainingService = {
     }
   },
 
-  async getPlannedWorkouts(userId, from, to, timeZone?: string | null) {
-    const fromSupabase = async () => {
+  async getPlannedWorkouts(userId, from, to, timeZone?: string | null): Promise<
+    import('@/types/common').ServiceResult<PlannedWorkout[]>
+  > {
+    const fromSupabase = async (): Promise<import('@/types/common').ServiceResult<PlannedWorkout[]>> => {
       const { data, error } = await supabase
         .from('planned_workouts')
         .select('*')
@@ -208,7 +210,7 @@ export const trainingService: ITrainingService = {
       );
     };
 
-    const fromApi = async () => {
+    const fromApi = async (): Promise<import('@/types/common').ServiceResult<PlannedWorkout[]>> => {
       const token = await getAccessToken();
       const remote = await withTimeout(
         apiClient.get<PlannedRow[]>(

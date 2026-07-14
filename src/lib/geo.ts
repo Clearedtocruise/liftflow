@@ -26,6 +26,8 @@ export function isWithinRadius(
   return distanceMeters(user, target) <= radiusMeters;
 }
 
-export function defaultRadiusForLocationType(locationType: 'home_gym' | 'commercial_gym'): number {
+export function defaultRadiusForLocationType(
+  locationType: 'home_gym' | 'commercial_gym' | 'full_gym' | 'garage_gym' | 'planet_fitness' | string,
+): number {
   return locationType === 'home_gym' ? 100 : 150;
 }

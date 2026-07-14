@@ -85,10 +85,10 @@ export async function loadRolloverValidationState(
     mealPlans[0] ??
     null;
 
-  const trainingWeekNumber = dashboardRes.success ? dashboardRes.data.currentWeek : null;
+  const trainingWeekNumber = dashboardRes.success ? dashboardRes.data?.currentWeek ?? null : null;
   const activeWorkoutPlanId =
     (activeProgramRes.data?.id as string | undefined) ??
-    (dashboardRes.success ? dashboardRes.data.program.id : null);
+    (dashboardRes.success ? dashboardRes.data?.program?.id ?? null : null);
 
   return {
     ...timestamps,

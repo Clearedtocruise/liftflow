@@ -12,16 +12,19 @@ type SelectableChipProps = {
   selected: boolean;
   onPress: () => void;
   icon?: string;
+  disabled?: boolean;
 };
 
-export function SelectableChip({ label, selected, onPress, icon }: SelectableChipProps) {
+export function SelectableChip({ label, selected, onPress, icon, disabled }: SelectableChipProps) {
   const scale = useSharedValue(1);
   const anim = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
 
   return (
     <AnimatedPressable
       onPress={onPress}
+      disabled={disabled}
       onPressIn={() => {
+        if (disabled) return;
         scale.value = withSpring(0.96, { damping: 15 });
       }}
       onPressOut={() => {
@@ -30,10 +33,11 @@ export function SelectableChip({ label, selected, onPress, icon }: SelectableChi
       style={[
         styles.chip,
         selected && styles.chipSelected,
+        disabled && styles.chipDisabled,
         anim,
       ]}
       accessibilityRole="button"
-      accessibilityState={{ selected }}>
+      accessibilityState={{ selected, disabled: Boolean(disabled) }}>
       {icon ? (
         <AppText variant="body" style={styles.icon}>
           {icon}
@@ -72,6 +76,9 @@ const styles = StyleSheet.create({
     backgroundColor: LiftFlowColors.primary,
     borderColor: LiftFlowColors.primary,
     ...Shadows.glow,
+  },
+  chipDisabled: {
+    opacity: 0.45,
   },
   selectedText: {
     fontWeight: '600',

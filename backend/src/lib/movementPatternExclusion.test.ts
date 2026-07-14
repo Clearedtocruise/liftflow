@@ -42,10 +42,12 @@ test('pattern exclusion groups dedupe squat and deadlift families', () => {
   assert.ok(sharesPatternFamily('walking-lunge', 'bulgarian-split-squat'));
 });
 
-test('pallof press catalog variants share one pattern group', () => {
-  assert.equal(patternExclusionGroupId('pallof-press'), 'pallof-press');
-  assert.equal(patternExclusionGroupId('pallof-press-ch0046'), 'pallof-press');
-  assert.ok(sharesPatternFamily('trap-bar-close-grip-press', 'trap-bar-floor-press'));
+test('pull-up catalog variants share one pattern group', () => {
+  assert.equal(patternExclusionGroupId('wide-pull-up'), 'pull-up');
+  assert.equal(patternExclusionGroupId('archer-pull-up-ba0422'), 'pull-up');
+  assert.equal(patternExclusionGroupId('typewriter-pull-up'), 'pull-up');
+  assert.equal(patternExclusionGroupId('chin-up'), 'pull-up');
+  assert.ok(sharesPatternFamily('pull-up', 'lat-pulldown-la0048'));
 });
 
 test('20 generated lower workouts avoid duplicate pattern families', () => {

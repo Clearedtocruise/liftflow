@@ -80,6 +80,7 @@ export type PlannedWorkout = BaseEntity & {
   suggestedMuscleGroups: string[];
   aiRationale?: string;
   metadata?: PlannedWorkoutMetadata;
+  updatedAt?: string;
 };
 
 export type ProgramType =

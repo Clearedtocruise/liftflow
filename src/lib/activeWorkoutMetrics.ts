@@ -138,6 +138,72 @@ export function computeWorkoutSetProgress(
   return { completedSets, totalSets, percent: Math.min(100, percent) };
 }
 
+export type UseLastPerformanceSource = {
+  baseline: PerformanceBaseline;
+  lineSet: {
+    weightKg?: number;
+    reps?: number;
+    durationSeconds?: number;
+    distanceMeters?: number;
+  };
+  origin: 'session' | 'history';
+};
+
+/** Prefer this session's last set; otherwise last matching history set. */
+export function resolveUseLastPerformance(
+  sessionSets: WorkoutSet[],
+  historySets: ExerciseHistorySet[],
+  loggingMode: ExerciseLoggingMode,
+  repRange: string,
+): UseLastPerformanceSource | null {
+  const sessionLast = sessionSets[sessionSets.length - 1];
+  if (sessionLast) {
+    return {
+      origin: 'session',
+      baseline: performanceBaselineFromSessionSet(sessionLast, loggingMode, repRange),
+      lineSet: {
+        weightKg: sessionLast.weight,
+        reps: sessionLast.reps,
+        durationSeconds: sessionLast.durationSeconds,
+        distanceMeters: sessionLast.distanceMeters,
+      },
+    };
+  }
+
+  const historyLast = pickLastPerformanceSet(historySets, loggingMode);
+  if (!historyLast) return null;
+
+  return {
+    origin: 'history',
+    baseline: performanceBaselineFromHistorySet(historyLast, loggingMode, repRange),
+    lineSet: historyLast,
+  };
+}
+
+export function performanceBaselineMatchesInputs(
+  baseline: PerformanceBaseline,
+  mode: ExerciseLoggingMode,
+  inputs: { weightKg: number; reps: number; durationSeconds: number; distanceKm: number },
+): boolean {
+  if (mode === 'timed') {
+    return baseline.durationSeconds != null && baseline.durationSeconds === inputs.durationSeconds;
+  }
+  if (mode === 'cardio') {
+    const durationMatch =
+      baseline.durationSeconds != null && baseline.durationSeconds === inputs.durationSeconds;
+    const distanceMatch =
+      baseline.distanceKm != null && Math.abs(baseline.distanceKm - inputs.distanceKm) < 0.005;
+    return durationMatch && distanceMatch;
+  }
+  if (mode === 'bodyweight') {
+    return baseline.reps != null && baseline.reps === inputs.reps;
+  }
+  const weightMatch =
+    baseline.weightKg != null && Math.abs(baseline.weightKg - inputs.weightKg) < 0.05;
+  const repsMatch = baseline.reps != null && baseline.reps === inputs.reps;
+  return weightMatch && repsMatch;
+}
+
 export function formatPreviousPerformanceLine(
   set: { weightKg?: number; reps?: number; durationSeconds?: number; distanceMeters?: number },
   mode: ExerciseLoggingMode,

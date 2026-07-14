@@ -23,6 +23,11 @@ export type SmartReplacementPayload = {
   foodName: string;
   servingSize: string;
   macros: import('@/types/nutrition').FoodMacroEstimate;
+  items: Array<{
+    foodName: string;
+    servingSize: string;
+    macros: import('@/types/nutrition').FoodMacroEstimate;
+  }>;
   scope: import('@/types/nutrition').MealReplacementScope;
 };
 
@@ -200,6 +205,7 @@ export function MealReplaceSheet({
           <SmartMealReplaceForm
             replacingLabel={replacingLabel}
             initialServingSize={replacingServing}
+            allowMultiple={mode === 'meal'}
             onConfirm={(payload) => {
               onSmartReplace(payload);
               onClose();

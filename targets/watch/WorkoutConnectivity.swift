@@ -1,8 +1,9 @@
 import Foundation
+import HealthKit
 import WatchConnectivity
 import WatchKit
 
-final class WorkoutConnectivity: NSObject, ObservableObject, WCSessionDelegate {
+final class WorkoutConnectivity: NSObject, ObservableObject, WCSessionDelegate, HKWorkoutSessionDelegate, HKLiveWorkoutBuilderDelegate {
   @Published var exerciseName = "ONE MORE"
   @Published var setLabel = ""
   @Published var statusLine = ""
@@ -49,8 +50,13 @@ final class WorkoutConnectivity: NSObject, ObservableObject, WCSessionDelegate {
   private var restTimer: Timer?
   private var calorieTimer: Timer?
   private var workoutRuntimeSession: WKExtendedRuntimeSession?
+  private var healthStore = HKHealthStore()
+  private var hkWorkoutSession: HKWorkoutSession?
+  private var hkWorkoutBuilder: HKLiveWorkoutBuilder?
   private var lastHrSampleAt: Date?
   private var restingHeartRate = 65
+  /// Keeps Watch on workout UI across brief sync gaps until phone clears the session.
+  private var sessionLatchActive = false
 
   override init() {
     super.init()
@@ -168,11 +174,21 @@ final class WorkoutConnectivity: NSObject, ObservableObject, WCSessionDelegate {
     }
 
     if previousSession == nil, cardioSessionId != nil {
-      beginWorkoutRuntime()
+      let activity: HKWorkoutActivityType = {
+        let label = cardioActivityLabel.lowercased()
+        if label.contains("run") { return .running }
+        if label.contains("bike") || label.contains("cycle") { return .cycling }
+        if label.contains("walk") { return .walking }
+        if label.contains("row") { return .rowing }
+        return .mixedCardio
+      }()
+      beginWorkoutRuntime(activityType: activity)
       if shouldPresent {
         WKInterfaceDevice.current().play(.start)
         lastSpokenResponse = "Cardio started on iPhone"
       }
+    } else if cardioSessionId != nil {
+      sessionLatchActive = true
     }
 
     if cardioRunning {
@@ -312,7 +328,10 @@ final class WorkoutConnectivity: NSObject, ObservableObject, WCSessionDelegate {
     }
   }
 
-  private func beginWorkoutRuntime() {
+  private func beginWorkoutRuntime(activityType: HKWorkoutActivityType = .traditionalStrengthTraining) {
+    sessionLatchActive = true
+    startHealthKitWorkout(activityType: activityType)
+
     guard workoutRuntimeSession == nil else { return }
     let session = WKExtendedRuntimeSession()
     session.start()
@@ -320,9 +339,115 @@ final class WorkoutConnectivity: NSObject, ObservableObject, WCSessionDelegate {
   }
 
   private func endWorkoutRuntime() {
+    sessionLatchActive = false
+    stopHealthKitWorkout()
     workoutRuntimeSession?.invalidate()
     workoutRuntimeSession = nil
   }
+
+  /** Always release latch, clear rest, and show idle/home UI. */
+  private func teardownToIdle(spoken: String? = nil) {
+    clearRestCountdown(announceComplete: false)
+    stopCalorieTimer()
+    sessionCalories = 0
+    activeCalories = 0
+    didPlayRestWarning = false
+    currentRepCount = 0
+    targetReps = 0
+    motionTrackingEnabled = false
+    workoutSessionId = nil
+    weightLbs = nil
+    stationLabel = ""
+    statusLine = ""
+    supersetHint = ""
+    progressionLine = ""
+    phase = "idle"
+    previousPhase = "idle"
+    if let spoken, !spoken.isEmpty {
+      lastSpokenResponse = spoken
+    }
+    if !workoutRecommendation.isEmpty {
+      let parts = workoutRecommendation.components(separatedBy: " · ")
+      if parts.count >= 2 {
+        exerciseName = parts[0]
+        setLabel = parts.dropFirst().joined(separator: " · ")
+      } else {
+        exerciseName = workoutRecommendation
+        setLabel = "Start Today's Workout"
+      }
+    } else {
+      exerciseName = "ONE MORE"
+      setLabel = ""
+    }
+    endWorkoutRuntime()
+    WKInterfaceDevice.current().play(.stop)
+  }
+
+  private func startHealthKitWorkout(activityType: HKWorkoutActivityType) {
+    guard HKHealthStore.isHealthDataAvailable() else { return }
+    if hkWorkoutSession != nil { return }
+
+    let configuration = HKWorkoutConfiguration()
+    configuration.activityType = activityType
+    configuration.locationType = activityType == .running || activityType == .cycling
+      ? .outdoor
+      : .indoor
+
+    do {
+      let session = try HKWorkoutSession(healthStore: healthStore, configuration: configuration)
+      let builder = session.associatedWorkoutBuilder()
+      builder.dataSource = HKLiveWorkoutDataSource(healthStore: healthStore, workoutConfiguration: configuration)
+      session.delegate = self
+      builder.delegate = self
+      hkWorkoutSession = session
+      hkWorkoutBuilder = builder
+      session.startActivity(with: Date())
+      builder.beginCollection(withStart: Date()) { _, _ in }
+    } catch {
+      print("[ONEMOREWatch] HKWorkoutSession failed: \(error.localizedDescription)")
+    }
+  }
+
+  private func stopHealthKitWorkout() {
+    let end = Date()
+    hkWorkoutSession?.end()
+    hkWorkoutBuilder?.endCollection(withEnd: end) { [weak self] _, _ in
+      self?.hkWorkoutBuilder?.finishWorkout { _, _ in }
+      DispatchQueue.main.async {
+        self?.hkWorkoutSession = nil
+        self?.hkWorkoutBuilder = nil
+      }
+    }
+    if hkWorkoutBuilder == nil {
+      hkWorkoutSession = nil
+    }
+  }
+
+  func workoutSession(
+    _ workoutSession: HKWorkoutSession,
+    didChangeTo toState: HKWorkoutSessionState,
+    from fromState: HKWorkoutSessionState,
+    date: Date
+  ) {
+    DispatchQueue.main.async {
+      if toState == .ended || toState == .stopped {
+        self.sessionLatchActive = false
+        return
+      }
+      // Keep UI latched while HealthKit considers the workout running/paused.
+      if toState == .running || toState == .paused {
+        self.sessionLatchActive = true
+      }
+    }
+  }
+
+  func workoutSession(_ workoutSession: HKWorkoutSession, didFailWithError error: Error) {
+    print("[ONEMOREWatch] HKWorkoutSession error: \(error.localizedDescription)")
+  }
+
+  func workoutBuilder(_ workoutBuilder: HKLiveWorkoutBuilder, didCollectDataOf collectedTypes: Set<HKSampleType>) {}
+
+  func workoutBuilderDidCollectEvent(_ workoutBuilder: HKLiveWorkoutBuilder) {}
 
   private func applyWorkoutState(_ state: [String: Any], shouldPresent: Bool = false) {
     // Cardio owns the Watch while a run/ride is active on iPhone — ignore strength pushes.
@@ -331,7 +456,6 @@ final class WorkoutConnectivity: NSObject, ObservableObject, WCSessionDelegate {
     }
 
     isCardioMode = false
-    cardioSessionId = nil
     let previousSessionId = workoutSessionId
     let previousStatePhase = phase
     recoveryScore = state["recoveryScore"] as? Int
@@ -368,13 +492,31 @@ final class WorkoutConnectivity: NSObject, ObservableObject, WCSessionDelegate {
       }
 
       if previousSessionId == nil, workoutSessionId != nil {
-        beginWorkoutRuntime()
+        beginWorkoutRuntime(activityType: .traditionalStrengthTraining)
         if shouldPresent {
           WKInterfaceDevice.current().play(.start)
           lastSpokenResponse = "Workout started on iPhone"
         }
+      } else if workoutSessionId != nil {
+        sessionLatchActive = true
+        if hkWorkoutSession == nil {
+          beginWorkoutRuntime(activityType: .traditionalStrengthTraining)
+        }
       }
     } else {
+      // Idle preview / recommendation — do not tear down an in-progress session on sync gaps.
+      let explicitlyEnded = state["sessionEnded"] as? Bool == true
+      if explicitlyEnded {
+        self.teardownToIdle(spoken: state["lastSpokenResponse"] as? String)
+        return
+      }
+      if sessionLatchActive, previousSessionId != nil {
+        if !workoutRecommendation.isEmpty {
+          lastSpokenResponse = workoutRecommendation
+        }
+        return
+      }
+
       if !workoutRecommendation.isEmpty {
         let parts = workoutRecommendation.components(separatedBy: " · ")
         if parts.count >= 2 {
@@ -403,7 +545,7 @@ final class WorkoutConnectivity: NSObject, ObservableObject, WCSessionDelegate {
       stopCalorieTimer()
       sessionCalories = 0
       activeCalories = 0
-      if previousSessionId != nil {
+      if previousSessionId != nil || sessionLatchActive {
         endWorkoutRuntime()
       }
     }
@@ -551,6 +693,8 @@ final class WorkoutConnectivity: NSObject, ObservableObject, WCSessionDelegate {
   }
 
   func cancelWorkout() {
+    // Tear down immediately so Watch doesn't stay stuck if phone reply is slow/lost.
+    teardownToIdle(spoken: "Ending workout…")
     sendToPhone(type: "cancel_workout")
   }
 

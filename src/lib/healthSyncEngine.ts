@@ -1,5 +1,5 @@
-import type { HealthMetricSample } from '@/integrations/types';
 import type { HealthSyncConflictPolicy } from '@/integrations/healthConstants';
+import type { HealthMetricSample } from '@/integrations/types';
 
 export type StoredHealthSample = {
   id?: string;
@@ -19,7 +19,11 @@ export type SyncMergeResult = {
   conflicts: number;
 };
 
-function sampleKey(sample: Pick<HealthMetricSample, 'dataType' | 'externalId' | 'recordedAt'>): string {
+function sampleKey(sample: {
+  dataType: string;
+  externalId?: string | null;
+  recordedAt: string;
+}): string {
   if (sample.externalId) return `${sample.dataType}:${sample.externalId}`;
   return `${sample.dataType}:${sample.recordedAt}`;
 }

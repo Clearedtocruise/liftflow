@@ -114,8 +114,36 @@ export interface IWorkoutService {
     limit?: number,
     mode?: import('@/lib/exerciseModality').ExerciseLoggingMode,
   ): Promise<ServiceResult<import('@/types/workoutExecution').ExerciseHistorySet[]>>;
+  /** Per-lift progress: recent tracked exercises + deeper set history for charts */
+  listTrackedLiftExercises(
+    userId: string,
+    limit?: number,
+  ): Promise<ServiceResult<import('@/lib/exerciseProgress').TrackedLiftExercise[]>>;
+  getExerciseProgressSets(
+    userId: string,
+    exerciseId: string,
+    limit?: number,
+  ): Promise<ServiceResult<import('@/types/workoutExecution').ExerciseHistorySet[]>>;
   /** Density tracking */
   calculateDensity(sessionId: string): Promise<ServiceResult<WorkoutDensityMetrics>>;
+  skipActiveRestTimer(userId: string): Promise<ServiceResult<void>>;
+  removeExercise(workoutExerciseId: string): Promise<ServiceResult<boolean>>;
+  replaceSessionExercise(
+    workoutExerciseId: string,
+    newExerciseName: string,
+    userId: string,
+  ): Promise<ServiceResult<WorkoutSession>>;
+  updateExerciseSortOrders(updates: Array<{ id: string; sortOrder: number }>): Promise<ServiceResult<boolean>>;
+  applySessionExercisePlan(
+    sessionId: string,
+    userId: string,
+    exercises: import('@/types/workoutExecution').EditableWorkoutExercise[],
+  ): Promise<ServiceResult<WorkoutSession>>;
+  searchExercises(
+    query: string,
+    userId: string,
+    limit?: number,
+  ): Promise<ServiceResult<import('@/types').Exercise[]>>;
 }
 
 // =============================================================================
@@ -152,6 +180,11 @@ export interface ITrainingService {
     userId: string,
     change: import('@/types/planAdaptation').ScheduleChange,
   ): Promise<ServiceResult<import('@/types/planAdaptation').PlanAdaptationResult>>;
+  updatePlannedWorkoutExercises(
+    plannedWorkoutId: string,
+    exercises: import('@/types/workoutExecution').EditableWorkoutExercise[],
+    existingMetadata?: PlannedWorkout['metadata'],
+  ): Promise<ServiceResult<PlannedWorkout>>;
 }
 
 // =============================================================================
@@ -213,14 +246,38 @@ export interface INutritionService {
       instructions?: string;
     },
   ): Promise<ServiceResult<import('@/types').Meal>>;
+  updateMeal(
+    mealId: string,
+    updates: Partial<
+      Pick<
+        import('@/types').Meal,
+        'name' | 'calories' | 'proteinG' | 'carbsG' | 'fatG' | 'instructions' | 'mealType'
+      >
+    >,
+  ): Promise<ServiceResult<import('@/types').Meal>>;
+  markMealStatus(
+    mealId: string,
+    name: string,
+    instructions: string | undefined,
+    status: 'completed' | 'skipped' | 'modified' | 'planned',
+  ): Promise<ServiceResult<import('@/types').Meal>>;
   getMealsForDate(userId: string, date: string): Promise<ServiceResult<import('@/types').Meal[]>>;
   getDailySummary(userId: string, date?: string): Promise<ServiceResult<import('@/types').DailyNutritionSummary>>;
   getMealPlans(userId: string): Promise<ServiceResult<MealPlan[]>>;
   generateWeeklyMealPlan(userId: string, timeZone?: string | null): Promise<ServiceResult<MealPlan>>;
+  ensureWeekMealCoverage(
+    userId: string,
+    timeZone?: string | null,
+  ): Promise<ServiceResult<number>>;
   pruneDuplicateMeals(userId: string, range?: { from?: string; to?: string }): Promise<ServiceResult<number>>;
   getMealsForWeek(userId: string, from: string, to: string): Promise<ServiceResult<import('@/types').Meal[]>>;
   removePlannedMealsForWeek(userId: string, weekStart: string): Promise<ServiceResult<number>>;
   generateGroceryList(userId: string, mealPlanId?: string): Promise<ServiceResult<GroceryList>>;
+  syncGroceryListFromMeals(
+    userId: string,
+    from: string,
+    to: string,
+  ): Promise<ServiceResult<GroceryList | null>>;
   getGroceryLists(userId: string): Promise<ServiceResult<GroceryList[]>>;
   logHydration(userId: string, amountMl: number): Promise<ServiceResult<HydrationLog>>;
   getAdaptiveTargets(userId: string): Promise<ServiceResult<import('@/types/coaching').AdaptiveMacroTargets>>;
@@ -248,6 +305,10 @@ export interface IBodyService {
     options?: { beforePhotoId?: string; currentPhotoId?: string },
   ): Promise<ServiceResult<import('@/types/transformation').TransformationProjection>>;
   getLatestTransformation(userId: string): Promise<ServiceResult<import('@/types/transformation').TransformationProjection | null>>;
+  getTransformationHistory(
+    userId: string,
+    limit?: number,
+  ): Promise<ServiceResult<import('@/types/transformation').TransformationProjection[]>>;
 }
 
 // =============================================================================

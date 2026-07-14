@@ -81,7 +81,7 @@ export const analyticsService: IAnalyticsService = {
         supabase.from('goals').select('*').eq('user_id', userId).eq('status', 'active'),
         supabase
           .from('meals')
-          .select('id, user_id, meal_type, meal_plan_id, name, calories, protein_g, carbs_g, fat_g, instructions, created_at')
+          .select('id, user_id, meal_type, meal_plan_id, name, calories, protein_g, carbs_g, fat_g, instructions, created_at, scheduled_date')
           .eq('user_id', userId)
           .eq('scheduled_date', today),
         supabase

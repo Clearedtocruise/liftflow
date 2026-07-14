@@ -36,16 +36,16 @@ import { useUnits } from '@/hooks/useUnits';
 import { closingWeekStart, useWeeklyReviewWindow } from '@/hooks/useWeeklyReviewPrompt';
 import { useWorkoutLocations } from '@/hooks/useWorkoutLocations';
 import {
-  resolveActiveTrainingDay,
-  resolveCoachTrainingGuidance,
-  validateWorkoutAssignmentConsistency,
+    resolveActiveTrainingDay,
+    resolveCoachTrainingGuidance,
+    validateWorkoutAssignmentConsistency,
 } from '@/lib/activeTrainingDay';
-import { formatHomeCoachMessage } from '@/lib/homeCoachMessage';
+import { formatHomeCoachMessage, formatWhyTodayRationale } from '@/lib/homeCoachMessage';
 import { deviceTimeZone, formatScheduledDbTime } from '@/lib/localDate';
 import {
-  aggregateDailyMeals,
-  findNextMeal,
-  mealsForCalendarDay,
+    aggregateDailyMeals,
+    findNextMeal,
+    mealsForCalendarDay,
 } from '@/lib/mealAggregation';
 import { formatWorkoutTime, scheduleFromProfile, scheduledTimesForDay } from '@/lib/mealSchedule';
 import { planDataCache } from '@/lib/planDataCache';
@@ -459,6 +459,7 @@ export default function DashboardScreen() {
     recoveryIntel,
     recoveryScore,
   });
+  const whyToday = formatWhyTodayRationale(todaysWorkout?.aiRationale);
 
   const workoutDurationMin = todaysWorkout
     ? estimateWorkoutDurationMinutes(exercisesFromPlannedWorkout(todaysWorkout)) ||
@@ -584,6 +585,7 @@ export default function DashboardScreen() {
                     trainingLabel,
                     recoveryScore: hasRecoveryScore ? recoveryScore : null,
                     coachMessage,
+                    whyToday,
                   }
                 : null
             }

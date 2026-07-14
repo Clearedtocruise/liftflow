@@ -9,7 +9,8 @@ import {
     selectTrackForSet,
 } from '@/integrations/music/playlistContinuityEngine';
 import { playlistStateStore } from '@/integrations/music/playlistStateStore';
-import { fail, ok, type ServiceResult } from '@/lib/serviceResult';
+import { fail, ok } from '@/lib/serviceResult';
+import type { ServiceResult } from '@/types/common';
 import type {
     MusicProviderId,
     PeakMoment,
@@ -140,7 +141,7 @@ export const peakMusicService = {
 
     let snapshot = await playlistStateStore.getSnapshot(userId);
     if (!snapshot && provider.capturePlaylistSnapshot) {
-      snapshot = (await provider.capturePlaylistSnapshot()) ?? undefined;
+      snapshot = (await provider.capturePlaylistSnapshot()) ?? null;
       if (snapshot) await playlistStateStore.saveSnapshot(userId, snapshot);
     }
 

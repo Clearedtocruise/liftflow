@@ -111,10 +111,7 @@ export const watchCompanionService = {
     const presentWorkout = params.presentWorkout === true;
 
     if (!session) {
-      const cleared = watchWorkoutService.getState(userId);
-      const enriched = await this.enrichState(userId, { ...cleared, activeSet: null });
-      watchWorkoutService.loadState(userId, enriched);
-      await pushWorkoutStateToWatch(enriched, { presentWorkout });
+      await this.notifyWatchSessionEnded(userId);
       return;
     }
 
@@ -140,7 +137,7 @@ export const watchCompanionService = {
 
     state = this.applyDisplayContext(state, watchPhoneBridge.getDisplayContext());
 
-    const enriched = await this.enrichState(userId, state);
+    const enriched = await this.enrichState(userId, { ...state, sessionEnded: false });
     watchWorkoutService.loadState(userId, enriched);
     await pushWorkoutStateToWatch(enriched, { presentWorkout });
   },
@@ -155,12 +152,28 @@ export const watchCompanionService = {
     });
   },
 
+  /** Force Watch back to idle when phone finishes or cancels — always send sessionEnded. */
+  async notifyWatchSessionEnded(userId: string, spoken?: string): Promise<void> {
+    const cleared = watchWorkoutService.getState(userId);
+    const ended: WatchWorkoutAssistantState = {
+      ...cleared,
+      activeSet: null,
+      sessionEnded: true,
+      progressionLine: undefined,
+      lastSpokenResponse: spoken ?? 'Workout ended',
+      updatedAt: new Date().toISOString(),
+    };
+    watchWorkoutService.loadState(userId, ended);
+    // Skip enrich (network) so teardown is immediate; idle preview can arrive on next sync.
+    await pushWorkoutStateToWatch(ended, { force: true });
+  },
+
   /** Rest tick only — avoids re-syncing exercise/set state every second. */
   async pushRestTimerOnly(userId: string, restSecondsRemaining: number | null): Promise<void> {
     if (watchCardioBridge.isWatchOwnedByCardio()) return;
 
     const assistantState = watchWorkoutService.getState(userId);
-    if (!assistantState.activeSet) return;
+    if (!assistantState.activeSet || assistantState.sessionEnded) return;
 
     const restSeconds = restSecondsRemaining ?? 0;
     const state = watchWorkoutService.updateRestTimer(userId, restSeconds);
@@ -322,8 +335,14 @@ export const watchCompanionService = {
       }
 
       const sessionResult = await workoutService.getActiveSession(userId);
+      const session = sessionResult.success ? sessionResult.data : null;
+      if (!session || session.status !== 'active') {
+        await this.notifyWatchSessionEnded(userId);
+        return this.replyWithCurrentState(userId);
+      }
+
       await this.pushPhoneWorkoutState(userId, {
-        session: sessionResult.success ? sessionResult.data : null,
+        session,
         restSecondsRemaining: watchPhoneBridge.getRestSecondsRemaining(),
         activeExerciseIndex: watchPhoneBridge.getExerciseIndex(),
       });
@@ -338,18 +357,12 @@ export const watchCompanionService = {
           await workoutService.cancelSession(active.data.id);
         }
       }
-      await this.pushPhoneWorkoutState(userId, {
-        session: null,
-        restSecondsRemaining: null,
-        forceClear: true,
-      });
-      const cleared = watchWorkoutService.getState(userId);
-      const enriched = await this.enrichState(userId, { ...cleared, activeSet: null });
-      watchWorkoutService.loadState(userId, enriched);
+      await this.notifyWatchSessionEnded(userId, 'Workout cancelled.');
+      const ended = watchWorkoutService.getState(userId);
       return {
         reply: {
           type: 'workout_state',
-          state: { ...enriched, lastSpokenResponse: 'Workout cancelled.' },
+          state: { ...ended, sessionEnded: true, activeSet: null, lastSpokenResponse: 'Workout cancelled.' },
         },
       };
     }

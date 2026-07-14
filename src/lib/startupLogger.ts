@@ -11,7 +11,10 @@ export type StartupMilestone =
   | 'NUTRITION_PLAN_LOADED'
   | 'RECOVERY_LOADED'
   | 'AI_COACH_LOADED'
-  | 'APP_READY';
+  | 'APP_READY'
+  | 'SPLASH_HIDDEN'
+  | 'PLAN_PREFETCH_START'
+  | 'PLAN_PREFETCH_DONE';
 
 const logged = new Set<StartupMilestone>();
 const timeline: Array<{ milestone: StartupMilestone; elapsedMs: number; detail?: Record<string, unknown> }> =

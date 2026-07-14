@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
@@ -9,16 +9,35 @@ import { nutritionAdvisoryService } from '@/services/nutritionAdvisoryService';
 import { sumMealMacros } from '@/services/nutritionService';
 import type { FoodMacroEstimate, MealReplacementScope } from '@/types/nutrition';
 
+export type SmartReplaceItemPayload = {
+  foodName: string;
+  servingSize: string;
+  macros: FoodMacroEstimate;
+};
+
+export type SmartMealReplaceConfirmPayload = {
+  foodName: string;
+  servingSize: string;
+  macros: FoodMacroEstimate;
+  items: SmartReplaceItemPayload[];
+  scope: MealReplacementScope;
+};
+
+type ItemRow = {
+  id: string;
+  foodName: string;
+  servingSize: string;
+  macros: FoodMacroEstimate | null;
+  reasoning: string | null;
+};
+
 type SmartMealReplaceFormProps = {
   replacingLabel: string;
   initialFoodName?: string;
   initialServingSize?: string;
-  onConfirm: (payload: {
-    foodName: string;
-    servingSize: string;
-    macros: FoodMacroEstimate;
-    scope: MealReplacementScope;
-  }) => void;
+  /** When false (ingredient mode), only a single item row is allowed. */
+  allowMultiple?: boolean;
+  onConfirm: (payload: SmartMealReplaceConfirmPayload) => void;
 };
 
 const SCOPE_OPTIONS: Array<{ id: MealReplacementScope; label: string }> = [
@@ -27,39 +46,113 @@ const SCOPE_OPTIONS: Array<{ id: MealReplacementScope; label: string }> = [
   { id: 'week', label: 'Entire week' },
 ];
 
+let nextRowId = 1;
+function createRow(foodName = '', servingSize = ''): ItemRow {
+  return {
+    id: `item-${nextRowId++}`,
+    foodName,
+    servingSize,
+    macros: null,
+    reasoning: null,
+  };
+}
+
+function defaultMealTitle(rows: ItemRow[]): string {
+  return rows
+    .map((row) => row.foodName.trim())
+    .filter(Boolean)
+    .join(', ');
+}
+
 export function SmartMealReplaceForm({
   replacingLabel,
   initialFoodName = '',
   initialServingSize = '',
+  allowMultiple = true,
   onConfirm,
 }: SmartMealReplaceFormProps) {
-  const [foodName, setFoodName] = useState(initialFoodName);
-  const [servingSize, setServingSize] = useState(initialServingSize);
+  const [rows, setRows] = useState<ItemRow[]>(() => [createRow(initialFoodName, initialServingSize)]);
+  const [mealTitle, setMealTitle] = useState(initialFoodName);
+  const [titleTouched, setTitleTouched] = useState(Boolean(initialFoodName.trim()));
   const [scope, setScope] = useState<MealReplacementScope>('meal');
   const [loading, setLoading] = useState(false);
-  const [macros, setMacros] = useState<FoodMacroEstimate | null>(null);
-  const [reasoning, setReasoning] = useState<string | null>(null);
+  const [totals, setTotals] = useState<FoodMacroEstimate | null>(null);
 
   useEffect(() => {
-    setFoodName(initialFoodName);
-    setServingSize(initialServingSize);
-    setMacros(null);
-    setReasoning(null);
-  }, [initialFoodName, initialServingSize, replacingLabel]);
+    setRows([createRow(initialFoodName, initialServingSize)]);
+    setMealTitle(initialFoodName);
+    setTitleTouched(Boolean(initialFoodName.trim()));
+    setTotals(null);
+  }, [initialFoodName, initialServingSize, replacingLabel, allowMultiple]);
+
+  const filledRows = useMemo(
+    () => rows.filter((row) => row.foodName.trim() && row.servingSize.trim()),
+    [rows],
+  );
+
+  const allRowsComplete = rows.length > 0 && rows.every((row) => row.foodName.trim() && row.servingSize.trim());
+  const canCalculate = filledRows.length > 0 && allRowsComplete;
+
+  function updateRow(id: string, patch: Partial<Pick<ItemRow, 'foodName' | 'servingSize'>>) {
+    setRows((current) =>
+      current.map((row) =>
+        row.id === id
+          ? { ...row, ...patch, macros: null, reasoning: null }
+          : row,
+      ),
+    );
+    setTotals(null);
+  }
+
+  function addRow() {
+    if (!allowMultiple) return;
+    setRows((current) => [...current, createRow()]);
+    setTotals(null);
+  }
+
+  function removeRow(id: string) {
+    setRows((current) => {
+      if (current.length <= 1) return current;
+      return current.filter((row) => row.id !== id);
+    });
+    setTotals(null);
+  }
 
   async function handleCalculate() {
-    if (!foodName.trim() || !servingSize.trim()) return;
+    if (!canCalculate) return;
     setLoading(true);
-    setMacros(null);
-    const result = await nutritionAdvisoryService.estimateFoodMacros(foodName.trim(), servingSize.trim());
-    if (result.success) {
-      const results = [{ macros: result.data }];
-      sumMealMacros(results.map((item) => item.macros));
-      setMacros(result.data);
-      setReasoning(result.data.reasoning ?? null);
+    setTotals(null);
+
+    const estimated: ItemRow[] = [];
+    for (const row of rows) {
+      const result = await nutritionAdvisoryService.estimateFoodMacros(
+        row.foodName.trim(),
+        row.servingSize.trim(),
+      );
+      if (!result.success) {
+        setLoading(false);
+        return;
+      }
+      estimated.push({
+        ...row,
+        macros: result.data,
+        reasoning: result.data.reasoning ?? null,
+      });
+    }
+
+    const results = estimated.map((item) => ({ macros: item.macros! }));
+    const summed = sumMealMacros(results.map((item) => item.macros));
+    setRows(estimated);
+    setTotals(summed);
+    if (!titleTouched) {
+      setMealTitle(defaultMealTitle(estimated));
     }
     setLoading(false);
   }
+
+  const resolvedTitle = (mealTitle.trim() || defaultMealTitle(rows)).trim();
+  const confirmServing =
+    rows.length === 1 ? rows[0]!.servingSize.trim() : `${rows.length} items`;
 
   return (
     <View style={styles.container} testID="smart-replace-form">
@@ -67,24 +160,66 @@ export function SmartMealReplaceForm({
         What are you eating instead of {replacingLabel}?
       </AppText>
 
-      <TextField
-        label="Food"
-        value={foodName}
-        onChangeText={setFoodName}
-        placeholder="Lean Ground Beef"
-      />
-      <TextField
-        label="Serving size"
-        value={servingSize}
-        onChangeText={setServingSize}
-        placeholder="6 oz"
-      />
+      {rows.map((row, index) => (
+        <View key={row.id} style={styles.itemCard}>
+          <View style={styles.itemHeader}>
+            <AppText variant="label" color="textSecondary">
+              {allowMultiple ? `Item ${index + 1}` : 'Food'}
+            </AppText>
+            {allowMultiple && rows.length > 1 ? (
+              <Pressable onPress={() => removeRow(row.id)} hitSlop={8}>
+                <AppText variant="caption" color="accent">
+                  Remove
+                </AppText>
+              </Pressable>
+            ) : null}
+          </View>
+          <TextField
+            label="Food"
+            value={row.foodName}
+            onChangeText={(value) => updateRow(row.id, { foodName: value })}
+            placeholder="Greek yogurt"
+          />
+          <TextField
+            label="Serving size"
+            value={row.servingSize}
+            onChangeText={(value) => updateRow(row.id, { servingSize: value })}
+            placeholder="1 cup"
+          />
+          {row.macros ? (
+            <AppText variant="caption" color="textTertiary">
+              {row.macros.calories} cal · {row.macros.proteinG}P · {row.macros.carbsG}C · {row.macros.fatG}F
+              {row.reasoning ? ` · ${row.reasoning}` : ''}
+            </AppText>
+          ) : null}
+        </View>
+      ))}
+
+      {allowMultiple ? (
+        <Pressable style={styles.addItem} onPress={addRow} testID="add-replace-item-button">
+          <AppText variant="caption" color="accent">
+            + Add item
+          </AppText>
+        </Pressable>
+      ) : null}
+
+      {allowMultiple ? (
+        <TextField
+          label="Meal title"
+          value={mealTitle}
+          onChangeText={(value) => {
+            setTitleTouched(true);
+            setMealTitle(value);
+          }}
+          placeholder={defaultMealTitle(rows) || 'Greek yogurt, granola, honey'}
+        />
+      ) : null}
 
       <PrimaryButton
         label={loading ? 'Calculating…' : 'Calculate Macros'}
         variant="secondary"
         loading={loading}
-        disabled={!foodName.trim() || !servingSize.trim()}
+        disabled={!canCalculate}
         onPress={handleCalculate}
       />
 
@@ -94,22 +229,17 @@ export function SmartMealReplaceForm({
         </View>
       ) : null}
 
-      {macros ? (
+      {totals ? (
         <View style={styles.preview}>
           <AppText variant="label" color="accent">
-            Estimated nutrition
+            {rows.length > 1 ? 'Total estimated nutrition' : 'Estimated nutrition'}
           </AppText>
           <View style={styles.macroGrid}>
-            <MacroCell label="Calories" value={String(macros.calories)} />
-            <MacroCell label="Protein" value={`${macros.proteinG}g`} />
-            <MacroCell label="Carbs" value={`${macros.carbsG}g`} />
-            <MacroCell label="Fat" value={`${macros.fatG}g`} />
+            <MacroCell label="Calories" value={String(Math.round(totals.calories))} />
+            <MacroCell label="Protein" value={`${Math.round(totals.proteinG * 10) / 10}g`} />
+            <MacroCell label="Carbs" value={`${Math.round(totals.carbsG * 10) / 10}g`} />
+            <MacroCell label="Fat" value={`${Math.round(totals.fatG * 10) / 10}g`} />
           </View>
-          {reasoning ? (
-            <AppText variant="caption" color="textTertiary">
-              {reasoning}
-            </AppText>
-          ) : null}
         </View>
       ) : null}
 
@@ -131,14 +261,20 @@ export function SmartMealReplaceForm({
 
       <PrimaryButton
         label="Confirm Replacement"
-        disabled={!macros || !foodName.trim() || !servingSize.trim()}
+        disabled={!totals || !allRowsComplete || !resolvedTitle}
         testID="confirm-replacement-button"
         onPress={() => {
-          if (!macros) return;
+          if (!totals || !allRowsComplete) return;
+          const items: SmartReplaceItemPayload[] = rows.map((row) => ({
+            foodName: row.foodName.trim(),
+            servingSize: row.servingSize.trim(),
+            macros: row.macros!,
+          }));
           onConfirm({
-            foodName: foodName.trim(),
-            servingSize: servingSize.trim(),
-            macros,
+            foodName: allowMultiple ? resolvedTitle : items[0]!.foodName,
+            servingSize: confirmServing,
+            macros: totals,
+            items,
             scope,
           });
         }}
@@ -161,6 +297,23 @@ function MacroCell({ label, value }: { label: string; value: string }) {
 const styles = StyleSheet.create({
   container: {
     gap: Spacing.md,
+  },
+  itemCard: {
+    gap: Spacing.sm,
+    padding: Spacing.md,
+    borderRadius: Radius.md,
+    backgroundColor: LiftFlowColors.surface,
+    borderWidth: 1,
+    borderColor: LiftFlowColors.border,
+  },
+  itemHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  addItem: {
+    alignSelf: 'flex-start',
+    paddingVertical: Spacing.xs,
   },
   loading: {
     alignItems: 'center',

@@ -9,6 +9,7 @@ import {
 import { ok } from '@/lib/serviceResult';
 import { getAccessToken } from '@/supabase/client';
 import type { Meal } from '@/types';
+import type { ServiceResult } from '@/types/common';
 import type { FoodMacroEstimate } from '@/types/nutrition';
 
 export type MealAlternativeOption = {
@@ -32,7 +33,7 @@ export const nutritionAdvisoryService = {
     meal: Meal,
     reason: MealReplacementReason,
     dietaryRestrictions: string[] = [],
-  ) {
+  ): Promise<ServiceResult<MealAlternativesResult>> {
     const meta = enrichMealMeta(meal.name, meal.instructions);
     try {
       const token = await getAccessToken();
@@ -56,6 +57,7 @@ export const nutritionAdvisoryService = {
           reasoning: raw.data.reasoning ?? 'Coach suggestions for your meal.',
           alternatives: raw.data.alternatives ?? [],
           ingredientAlternatives: raw.data.ingredientAlternatives,
+          offline: false,
         });
       }
     } catch (e) {
@@ -77,7 +79,7 @@ export const nutritionAdvisoryService = {
       alternatives: local,
       ingredientAlternatives,
       offline: true,
-    } satisfies MealAlternativesResult);
+    });
   },
 
   async estimateFoodMacros(foodName: string, servingSize: string) {

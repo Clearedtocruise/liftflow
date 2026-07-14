@@ -1,0 +1,62 @@
+appId: com.liftflow.app
+---
+# Prerequisites: today has a planned lifting workout; user signed in.
+# Run: npm run qa:workout
+
+- launchApp:
+    clearState: false
+
+- extendedWaitUntil:
+    visible:
+      id: home-screen
+    timeout: 45000
+
+- tapOn:
+    id: workout-tab
+
+- extendedWaitUntil:
+    visible:
+      id: weekly-plan
+    timeout: 30000
+
+- tapOn:
+    id: today-workout-card
+
+- extendedWaitUntil:
+    visible:
+      id: start-workout-button
+    timeout: 20000
+
+- tapOn:
+    id: start-workout-button
+
+- extendedWaitUntil:
+    visible:
+      id: active-workout-screen
+    timeout: 30000
+
+- assertVisible:
+    id: active-workout-screen
+
+- tapOn:
+    id: log-set-button
+
+- extendedWaitUntil:
+    visible:
+      id: rest-timer
+    timeout: 15000
+
+- assertVisible:
+    id: rest-timer
+
+- tapOn:
+    id: rest-timer-skip
+    optional: true
+
+- extendedWaitUntil:
+    visible:
+      id: log-set-button
+    timeout: 15000
+
+- assertVisible:
+    id: log-set-button

@@ -51,7 +51,9 @@ export function maxPatternUsesForDayFocus(dayFocusKey: string | undefined, patte
     return 1;
   }
   if (dayFocusKey === 'back_biceps_core') {
-    if (patternGroupId === 'barbell-row' || patternGroupId === 'pull-up') return 2;
+    // One vertical-pull pattern max (prevents 5 pull-up variants in one session).
+    if (patternGroupId === 'pull-up') return 1;
+    if (patternGroupId === 'barbell-row') return 2;
     if (
       patternGroupId === 'plank' ||
       patternGroupId === 'side-plank' ||
@@ -74,8 +76,57 @@ export function maxPatternUsesForDayFocus(dayFocusKey: string | undefined, patte
 export function patternExclusionGroupId(slug: string): string | null {
   const direct = slugToPatternGroup.get(slug);
   if (direct) return direct;
-  if (slug === 'pallof-press' || slug.startsWith('pallof-press-')) return 'pallof-press';
-  if (slug.includes('half-kneeling-pallof') || slug.includes('anti-rotation')) return 'pallof-press';
+
+  const n = slug.toLowerCase();
+
+  if (n === 'pallof-press' || n.startsWith('pallof-press-')) return 'pallof-press';
+  if (n.includes('half-kneeling-pallof') || n.includes('anti-rotation')) return 'pallof-press';
+
+  // Catalog variants (wide-pull-up, archer-pull-up-ba0422, typewriter-pull-up, etc.)
+  if (/\bpull[\s-]?up\b/.test(n) || n.includes('pullup') || /\bchin[\s-]?up\b/.test(n) || n.includes('chinup')) {
+    return 'pull-up';
+  }
+  if (n.includes('lat-pulldown') || n.includes('lat_pulldown') || n.includes('pulldown')) {
+    return 'pull-up';
+  }
+  if (/\bpush[\s-]?up\b/.test(n) || n.includes('pushup')) {
+    return 'bench-press';
+  }
+  if (/\bdip\b/.test(n) && !n.includes('shoulder')) {
+    return 'tricep-pushdown';
+  }
+  if (n.includes('squat') && !n.includes('split')) {
+    return 'squat';
+  }
+  if (n.includes('lunge') || n.includes('split-squat') || n.includes('step-up')) {
+    return 'walking-lunge';
+  }
+  if (n.includes('deadlift') || n.includes('-rdl') || n.endsWith('rdl')) {
+    return 'deadlift';
+  }
+  if (n.includes('hip-thrust') || n.includes('glute-bridge')) {
+    return 'hip-thrust';
+  }
+  if (n.includes('row') && !n.includes('throw')) {
+    return 'barbell-row';
+  }
+  if (n.includes('overhead-press') || n.includes('shoulder-press') || n.includes('military-press')) {
+    return 'overhead-press';
+  }
+  if (n.includes('bench-press') || n.includes('chest-press') || n.includes('cable-fly') || n.includes('pec-deck')) {
+    return 'bench-press';
+  }
+  if (n.includes('curl') && !n.includes('leg')) {
+    return 'dumbbell-curl';
+  }
+  if (n.includes('pushdown') || n.includes('skull') || n.includes('tricep')) {
+    return 'tricep-pushdown';
+  }
+  if (n.includes('plank') && n.includes('side')) return 'side-plank';
+  if (n.includes('plank')) return 'plank';
+  if (n.includes('crunch')) return 'crunch';
+  if (n.includes('calf')) return 'calf-raise';
+
   return null;
 }
 

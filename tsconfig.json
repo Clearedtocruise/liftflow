@@ -13,6 +13,7 @@
   },
   "exclude": [
     "backend/**/*",
+    "scripts/**/*",
     "node_modules"
   ],
   "include": [

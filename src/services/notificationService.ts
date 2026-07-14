@@ -52,7 +52,7 @@ async function getProjectId(): Promise<string | undefined> {
 
 function permissionsGranted(
   Notifications: NotificationsModule,
-  perm: NotificationsModule['NotificationPermissionsStatus'],
+  perm: Awaited<ReturnType<NotificationsModule['getPermissionsAsync']>>,
 ): boolean {
   if (Platform.OS === 'android') return true;
   const status = perm.ios?.status;

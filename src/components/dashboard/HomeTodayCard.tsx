@@ -12,6 +12,8 @@ import { useAppTheme } from '@/contexts/ThemeContext';
 type HomeTodayCardProps = {
   workoutTitle: string;
   coachMessage: string;
+  /** When set, shown instead of generic coach copy with a “Why today” label. */
+  whyToday?: string | null;
   trainingLabel?: string;
   startTime?: string;
   durationMin?: number;
@@ -32,6 +34,7 @@ type HomeTodayCardProps = {
 export function HomeTodayCard({
   workoutTitle,
   coachMessage,
+  whyToday,
   trainingLabel = 'Train',
   startTime,
   durationMin,
@@ -48,6 +51,8 @@ export function HomeTodayCard({
 }: HomeTodayCardProps) {
   const theme = useAppTheme();
   const meta = [trainingLabel, startTime, durationMin ? `${durationMin} min` : null].filter(Boolean).join(' · ');
+  const coachBody = whyToday?.trim() || coachMessage;
+  const coachLabel = whyToday?.trim() ? 'Why today' : 'Coach';
 
   return (
     <View testID="today-workout-card">
@@ -92,10 +97,10 @@ export function HomeTodayCard({
 
           <View style={[styles.coachRow, { borderTopColor: theme.colors.borderSubtle }]}>
             <AppText variant="caption" color="textTertiary" style={styles.coachLabel}>
-              Coach
+              {coachLabel}
             </AppText>
             <AppText variant="footnote" color="textSecondary">
-              {coachMessage}
+              {coachBody}
             </AppText>
           </View>
 

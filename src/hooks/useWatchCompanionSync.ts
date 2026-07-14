@@ -77,11 +77,15 @@ export function useWatchCompanionSync(userId: string | undefined) {
 
   const pushFullState = () => {
     if (!userId || watchCardioBridge.isWatchOwnedByCardio()) return;
+    if (!activeSession) {
+      void watchCompanionService.notifyWatchSessionEnded(userId);
+      return;
+    }
     void watchCompanionService.pushPhoneWorkoutState(userId, {
       session: activeSession,
       restSecondsRemaining,
       activeExerciseIndex,
-      forceClear: !activeSession,
+      forceClear: false,
     });
   };
 
@@ -97,10 +101,16 @@ export function useWatchCompanionSync(userId: string | undefined) {
   }, [userId, refreshSession, activeSession?.id]);
 
   useEffect(() => {
+    if (!userId) return;
+    if (!activeSession) {
+      void watchCompanionService.notifyWatchSessionEnded(userId);
+      watchSyncTracked.current = false;
+      return;
+    }
     pushFullState();
-    if (activeSession && !watchSyncTracked.current) {
+    if (!watchSyncTracked.current) {
       watchSyncTracked.current = true;
-      void productAnalyticsService.trackWatchSync(userId!);
+      void productAnalyticsService.trackWatchSync(userId);
     }
   }, [userId, sessionStructureKey, activeSession, cardioWatchEpoch]);
 

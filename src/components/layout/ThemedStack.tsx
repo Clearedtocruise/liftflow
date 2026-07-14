@@ -1,8 +1,10 @@
-import { Stack, type StackProps } from 'expo-router';
+import { Stack } from 'expo-router';
+import type { ComponentProps } from 'react';
 
 import { useAppTheme } from '@/contexts/ThemeContext';
 
-type ThemedStackProps = StackProps & {
+type StackComponent = typeof Stack;
+type ThemedStackProps = ComponentProps<StackComponent> & {
   showHeader?: boolean;
 };
 
@@ -25,3 +27,5 @@ export function ThemedStack({ showHeader = false, screenOptions, ...rest }: Them
     />
   );
 }
+
+ThemedStack.Screen = Stack.Screen;

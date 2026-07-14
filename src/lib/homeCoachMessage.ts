@@ -39,3 +39,12 @@ export function formatHomeCoachMessage(
 
   return guidance.coachMessage || `Complete today's recovery check-in for personalized guidance.`;
 }
+
+/** Trim planner rationale for Home “Why today” — null when empty. */
+export function formatWhyTodayRationale(rationale?: string | null, maxLength = 160): string | null {
+  if (!rationale) return null;
+  const cleaned = rationale.replace(/\s+/g, ' ').trim();
+  if (!cleaned) return null;
+  if (cleaned.length <= maxLength) return cleaned;
+  return `${cleaned.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
+}

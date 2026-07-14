@@ -38,6 +38,10 @@ export type ExerciseFormGuide = {
   /** Legacy numbered steps (shown only if structured fields are missing) */
   steps?: string[];
   tips?: string[];
+  /** Easier variations when scaling down */
+  regressions?: string[];
+  /** Harder variations when progressing */
+  progressions?: string[];
 };
 
 export type GuideSection = {

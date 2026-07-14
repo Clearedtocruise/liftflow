@@ -1,0 +1,38 @@
+appId: com.liftflow.app
+---
+# Verifies reset controls exist — does NOT confirm destructive dialogs.
+# Run: npm run qa:reset
+
+- launchApp:
+    clearState: false
+
+- extendedWaitUntil:
+    visible:
+      id: home-screen
+    timeout: 45000
+
+- tapOn:
+    id: settings-tab
+
+- extendedWaitUntil:
+    visible:
+      id: settings-screen
+    timeout: 30000
+
+- scrollUntilVisible:
+    element:
+      id: settings-reset-button
+    direction: DOWN
+    timeout: 30000
+
+- assertVisible:
+    id: settings-reset-button
+
+- assertVisible:
+    id: reset-workouts-button
+
+- assertVisible:
+    id: reset-nutrition-button
+
+- assertVisible:
+    id: reset-all-button

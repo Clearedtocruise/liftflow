@@ -17,7 +17,7 @@ import { subscriptionService } from '@/services/subscriptionService';
 export default function UpgradeScreen() {
   const { user } = useAuth();
   const { isPremium, isTrialing, refresh } = useSubscription();
-  const [price, setPrice] = useState(SUBSCRIPTION.displayPrice);
+  const [price, setPrice] = useState<string>(SUBSCRIPTION.displayPrice);
   const [hasTrial, setHasTrial] = useState(SUBSCRIPTION.trialDays > 0);
   const [purchasing, setPurchasing] = useState(false);
 

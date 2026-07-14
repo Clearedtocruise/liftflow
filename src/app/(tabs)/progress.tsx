@@ -15,6 +15,7 @@ import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { SkeletonBlock } from '@/components/layout/SkeletonBlock';
 import { EmptyStateCard } from '@/components/layout/StateCard';
 import { TabScreenHeader } from '@/components/layout/TabScreenHeader';
+import { LiftProgressSection } from '@/components/progress/LiftProgressSection';
 import { FeatureGate } from '@/components/subscription/PremiumGate';
 import { AppText } from '@/components/ui/AppText';
 import { HeroImages } from '@/constants/imagery';
@@ -22,10 +23,12 @@ import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 import { useEntitlement } from '@/hooks/useEntitlement';
 import { useUnits } from '@/hooks/useUnits';
+import type { TrackedLiftExercise } from '@/lib/exerciseProgress';
 import { screenDataCache } from '@/lib/screenDataCache';
 import { buildTransformationStory, normalizeBodyCompositionSnapshot } from '@/lib/transformation/transformationStory';
 import { bodyService } from '@/services/bodyService';
 import { productAnalyticsService } from '@/services/productAnalyticsService';
+import { workoutService } from '@/services/workoutService';
 import type { BodyCompositionRecord, PhotoAngle, ProgressPhoto } from '@/types';
 import { TRANSFORMATION_BF_PRESETS, type TransformationProjection } from '@/types/transformation';
 
@@ -53,6 +56,8 @@ export default function ProgressScreen() {
   const [bodyFat, setBodyFat] = useState('');
   const [targetBf, setTargetBf] = useState('12');
   const [uploadAngle, setUploadAngle] = useState<PhotoAngle>('front');
+  const [trackedLifts, setTrackedLifts] = useState<TrackedLiftExercise[]>([]);
+  const [liftsLoading, setLiftsLoading] = useState(true);
   const loadGenerationRef = useRef(0);
   const hydratedFromCacheRef = useRef(false);
 
@@ -68,6 +73,7 @@ export default function ProgressScreen() {
   const load = useCallback(async (options?: { silent?: boolean }) => {
     if (!user) {
       setLoading(false);
+      setLiftsLoading(false);
       return;
     }
 
@@ -75,9 +81,10 @@ export default function ProgressScreen() {
     const silent = options?.silent ?? hydratedFromCacheRef.current;
     if (!silent) setLoading(true);
 
-    const [photosRes, bodyRes] = await Promise.all([
+    const [photosRes, bodyRes, liftsRes] = await Promise.all([
       bodyService.getProgressPhotos(user.id),
       bodyService.getCompositionHistory(user.id),
+      workoutService.listTrackedLiftExercises(user.id, 12),
     ]);
 
     if (generation !== loadGenerationRef.current) return;
@@ -86,6 +93,8 @@ export default function ProgressScreen() {
     const nextMeasurements = bodyRes.success ? bodyRes.data : [];
     if (photosRes.success) setPhotos(nextPhotos);
     if (bodyRes.success) setMeasurements(nextMeasurements);
+    if (liftsRes.success) setTrackedLifts(liftsRes.data);
+    setLiftsLoading(false);
     setLoading(false);
 
     let nextTransformation: TransformationProjection | null = null;
@@ -247,6 +256,8 @@ export default function ProgressScreen() {
           bannerUri={HeroImages.tabs.progress}
         />
       }>
+      <LiftProgressSection lifts={trackedLifts} loading={liftsLoading} />
+
       <FeatureGate featureId="transformation-engine">
         {story ? (
           <>

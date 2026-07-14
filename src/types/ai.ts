@@ -3,6 +3,7 @@ import type {
     BaseEntity,
     ResearchCitation
 } from './common';
+import type { ParsedVoiceCommandExtended } from './voice';
 
 export type AICoachingSession = BaseEntity & {
   userId: string;
@@ -65,7 +66,7 @@ export type ParseVoiceRequest = {
 };
 
 export type ParseVoiceResponse = {
-  parsed: import('./workout').ParsedVoiceCommand;
+  parsed: ParsedVoiceCommandExtended;
   confidence: number;
   requiresConfirmation: boolean;
   confirmationReason?: string;

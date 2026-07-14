@@ -52,6 +52,7 @@ function run() {
         recordedAt: '2026-01-01T00:00:00Z',
         weightKg: 88,
         bodyFatPct: 28,
+        createdAt: '2026-01-01T00:00:00Z',
       },
     ],
   );

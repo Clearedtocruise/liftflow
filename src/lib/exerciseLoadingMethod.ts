@@ -77,10 +77,12 @@ export function defaultLoadingMethodForExercise(
   if (supported.length === 1) return supported[0]!;
 
   const mode = getExerciseLoggingMode(exercise, undefined, exercise?.name);
+  // Prefer bodyweight first-time for dual BW/added-weight movements; history overrides later.
   if (mode === 'bodyweight' && supported.includes('bodyweight')) return 'bodyweight';
   if (mode === 'timed' && supported.includes('timed_hold')) return 'timed_hold';
   if (mode === 'cardio' && supported.includes('distance')) return 'distance';
   if (supported.includes('external_load')) return 'external_load';
+  if (supported.includes('bodyweight')) return 'bodyweight';
   return supported[0] ?? 'external_load';
 }
 
@@ -106,6 +108,7 @@ export function inferLoadingMethodFromHistory(
   if (lastDurationSeconds != null && lastDurationSeconds > 0 && supported.includes('timed_hold')) {
     return 'timed_hold';
   }
+  // Prior weighted set wins — belt/vest work should reopen as added weight.
   if (lastWeightKg != null && lastWeightKg > 0) {
     if (supported.includes('bodyweight_plus_weight')) return 'bodyweight_plus_weight';
     if (supported.includes('external_load')) return 'external_load';
@@ -114,18 +117,7 @@ export function inferLoadingMethodFromHistory(
     return 'timed_hold';
   }
   if (supported.includes('distance')) return 'distance';
-  if (
-    supported.includes('bodyweight') &&
-    !supported.includes('external_load') &&
-    (label.includes('lunge') ||
-      label.includes('pull-up') ||
-      label.includes('pull up') ||
-      label.includes('chin-up') ||
-      label.includes('chin up') ||
-      label.includes('dip'))
-  ) {
-    return 'bodyweight';
-  }
+  if (supported.includes('bodyweight')) return 'bodyweight';
   if (supported.includes('external_load') && exercise?.exerciseType === 'strength') {
     return 'external_load';
   }

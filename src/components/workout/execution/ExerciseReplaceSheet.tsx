@@ -17,6 +17,8 @@ type ExerciseReplaceSheetProps = {
   goal?: string;
   programType?: string;
   availableEquipment?: string[];
+  /** Primary muscles for smarter alternatives (from current exercise / plan). */
+  muscleGroups?: string[];
   onClose: () => void;
   onReplace: (option: ExerciseAlternativeOption) => void;
   onManualSearch?: () => void;
@@ -29,6 +31,7 @@ export function ExerciseReplaceSheet({
   goal,
   programType,
   availableEquipment = [],
+  muscleGroups = [],
   onClose,
   onReplace,
   onManualSearch,
@@ -49,7 +52,7 @@ export function ExerciseReplaceSheet({
       .getExerciseAlternatives({
         userId: userId ?? '',
         exerciseName: exercise.name,
-        muscleGroups: [],
+        muscleGroups,
         goal,
         programType,
         availableEquipment,
@@ -69,7 +72,7 @@ export function ExerciseReplaceSheet({
     return () => {
       cancelled = true;
     };
-  }, [visible, exercise, userId, goal, programType, availableEquipment]);
+  }, [visible, exercise, userId, goal, programType, availableEquipment, muscleGroups]);
 
   if (!exercise) return null;
 
@@ -110,7 +113,7 @@ export function ExerciseReplaceSheet({
                   {index + 1}. {option.name}
                 </AppText>
                 <AppText variant="caption" color="textSecondary">
-                  {option.equipment} · {option.muscleGroups.slice(0, 2).join(', ')}
+                  {option.equipment} · {(option.muscleGroups ?? []).slice(0, 2).join(', ')}
                 </AppText>
                 <AppText variant="caption" color="accent">
                   {option.reason}

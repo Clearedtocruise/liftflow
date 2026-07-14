@@ -36,6 +36,13 @@ function matches(name: string, keywords: string[]): boolean {
 }
 
 function equipmentDefaultFromName(name: string): string | null {
+  if (matches(name, ['face pull'])) return 'cable';
+  if (matches(name, ['lat pulldown', 'pulldown']) && !matches(name, ['band'])) return 'cable';
+  if (matches(name, ['pallof'])) return 'cable';
+  if (matches(name, ['nordic'])) return 'bodyweight';
+  if (matches(name, ['running', 'sprint', 'jog']) && !matches(name, ['dumbbell', 'db ', 'farmer'])) {
+    return 'bodyweight';
+  }
   if (matches(name, ['lateral raise', 'front raise', 'rear delt raise'])) {
     return 'dumbbell';
   }
@@ -101,7 +108,13 @@ function musclesFromName(name: string): { primary: string[]; secondary: string[]
   if (matches(name, ['farmer carry', 'farmer walk', 'farmer'])) {
     return { primary: ['grip', 'traps'], secondary: ['core', 'forearms'] };
   }
-  if (matches(name, ['curl']) && !matches(name, ['leg curl', 'hamstring curl', 'neck harness curl'])) {
+  if (matches(name, ['glute kickback', 'glute kick-back', 'donkey kick'])) {
+    return { primary: ['glutes'], secondary: ['hamstrings', 'core'] };
+  }
+  if (matches(name, ['leg curl', 'hamstring curl', 'nordic'])) {
+    return { primary: ['hamstrings'], secondary: ['glutes', 'calves'] };
+  }
+  if (matches(name, ['curl']) && !matches(name, ['leg curl', 'hamstring curl', 'neck harness curl', 'nordic'])) {
     return { primary: ['biceps'], secondary: ['forearms'] };
   }
   if (matches(name, ['tricep', 'triceps', 'pushdown', 'skull crusher', 'dip', 'kickback'])) {
@@ -112,9 +125,6 @@ function musclesFromName(name: string): { primary: string[]; secondary: string[]
   }
   if (matches(name, ['deadlift', 'rdl', 'romanian', 'good morning', 'hip thrust', 'glute bridge', 'swing', 'hinge'])) {
     return { primary: ['hamstrings', 'glutes'], secondary: ['lower back', 'core'] };
-  }
-  if (matches(name, ['leg curl', 'hamstring curl', 'nordic'])) {
-    return { primary: ['hamstrings'], secondary: ['glutes', 'calves'] };
   }
   if (matches(name, ['leg extension'])) {
     return { primary: ['quads'], secondary: [] };

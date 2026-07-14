@@ -4,6 +4,7 @@ import { Platform } from 'react-native';
 
 import { fail, fromError, ok } from '@/lib/serviceResult';
 import { getAccessToken } from '@/supabase/client';
+import type { ServiceResult } from '@/types/common';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'https://liftflow-api.onrender.com';
 
@@ -53,7 +54,7 @@ function appVersion(): string {
 }
 
 export const feedbackService = {
-  async submit(input: SubmitFeedbackInput) {
+  async submit(input: SubmitFeedbackInput): Promise<ServiceResult<{ id: string; message: string }>> {
     try {
       const token = await getAccessToken();
       const deviceMetadata = await collectDeviceMetadata();
@@ -113,21 +114,29 @@ export const feedbackService = {
     }
   },
 
-  async getReleaseNotes() {
+  async getReleaseNotes(): Promise<
+    ServiceResult<{ notes: Array<{ version: string; title: string; body: string; published_at?: string }> }>
+  > {
     try {
       const response = await fetch(`${API_BASE_URL}/api/beta/release-notes`);
       if (!response.ok) return fail('Failed to load release notes');
-      return ok((await response.json()) as { notes: Array<{ version: string; title: string; body: string }> });
+      return ok((await response.json()) as {
+        notes: Array<{ version: string; title: string; body: string; published_at?: string }>;
+      });
     } catch (e) {
       return fromError(e);
     }
   },
 
-  async getChangelog() {
+  async getChangelog(): Promise<
+    ServiceResult<{ entries: Array<{ version: string; category: string; summary: string }> }>
+  > {
     try {
       const response = await fetch(`${API_BASE_URL}/api/beta/changelog`);
       if (!response.ok) return fail('Failed to load changelog');
-      return ok((await response.json()) as { entries: Array<{ version: string; category: string; summary: string }> });
+      return ok((await response.json()) as {
+        entries: Array<{ version: string; category: string; summary: string }>;
+      });
     } catch (e) {
       return fromError(e);
     }

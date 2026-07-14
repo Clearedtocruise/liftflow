@@ -131,7 +131,42 @@ def pick_template(name: str, category: str, family: str) -> tuple[list[str], lis
             ["Avoid shrugging; keep chest lifted throughout."],
         )
 
-    if any(k in n for k in ("fly", "crossover", "pec deck", "raise")) and "face pull" not in n:
+    if any(k in n for k in ("reverse fly", "rear delt fly", "rear-delt fly")):
+        return (
+            [
+                f"Hinge forward or use a reverse fly machine for {name}.",
+                "Arms hang with a soft bend in elbows — lead the lift with elbows.",
+                "Raise arms out to the sides, squeezing shoulder blades together.",
+                "Pause when rear delts contract; lower slowly without swinging.",
+            ],
+            ["This is a rear-delt exercise — not a chest fly."],
+        )
+
+    if "neck" in n:
+        return (
+            [
+                f"Set up {name} with tall posture and very light resistance.",
+                "Move through a small, controlled range — no jerking.",
+                "Keep breathing steady and stop if you feel sharp pain.",
+                "Return to neutral alignment between reps.",
+            ],
+            ["Use light load only; stop immediately if dizzy or in pain."],
+        )
+
+    if any(k in n for k in ("thruster", "man maker", "clean and press", "squat to press")) or (
+        "interval" in n and any(k in n for k in ("thruster", "dumbbell", "db"))
+    ):
+        return (
+            [
+                f"Hold weight at shoulders for {name}. Feet shoulder-width, core braced.",
+                "Squat to depth, then drive up and press overhead in one motion.",
+                "Finish standing tall with arms locked over mid-foot.",
+                "Lower weight to shoulders before the next rep or interval.",
+            ],
+            ["Legs initiate — do not press before hips extend."],
+        )
+
+    if any(k in n for k in ("fly", "crossover", "pec deck", "raise")) and "face pull" not in n and "reverse fly" not in n:
         return (
             [
                 f"Set up for {name} with a slight bend in your elbows that stays fixed.",

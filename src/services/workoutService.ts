@@ -779,7 +779,9 @@ export const workoutService: IWorkoutService = {
         0,
         Math.floor((Date.now() - new Date(rest.started_at).getTime()) / 1000),
       );
-      return this.endRestTimer(rest.id, elapsed, true);
+      const ended = await this.endRestTimer(rest.id, elapsed, true);
+      if (!ended.success) return ended;
+      return ok(undefined);
     } catch (e) {
       return fromError(e);
     }
@@ -942,6 +944,7 @@ export const workoutService: IWorkoutService = {
         name: row.name,
         slug: row.slug ?? undefined,
         category: row.category as Exercise['category'],
+        exerciseType: 'strength',
         equipment: row.equipment,
         muscleGroups: row.muscle_groups ?? [],
         isSystem: row.is_system ?? false,
@@ -1020,6 +1023,92 @@ export const workoutService: IWorkoutService = {
     } catch (e) {
       return fromError(e);
     }
+  },
+
+  async listTrackedLiftExercises(userId: string, limit = 20) {
+    try {
+      const { data, error } = await supabase
+        .from('workout_sessions')
+        .select(
+          'started_at, workout_exercises(exercise_id, exercises(id, name), workout_sets(weight, reps, logged_at))',
+        )
+        .eq('user_id', userId)
+        .eq('status', 'completed')
+        .order('started_at', { ascending: false })
+        .limit(40);
+
+      if (error) return fail(error.message);
+
+      type SetRow = { weight: number | null; reps: number | null; logged_at: string | null };
+      type ExerciseRow = {
+        exercise_id: string | null;
+        exercises: { id: string; name: string } | { id: string; name: string }[] | null;
+        workout_sets: SetRow[] | null;
+      };
+
+      const byExercise = new Map<
+        string,
+        {
+          exerciseId: string;
+          name: string;
+          lastLoggedAt: string;
+          setCount: number;
+          lastWeightKg?: number;
+          lastReps?: number;
+        }
+      >();
+
+      for (const session of data ?? []) {
+        for (const row of (session.workout_exercises ?? []) as ExerciseRow[]) {
+          const exerciseId = row.exercise_id;
+          if (!exerciseId) continue;
+          const exerciseRel = Array.isArray(row.exercises) ? row.exercises[0] : row.exercises;
+          const name = exerciseRel?.name?.trim() || 'Exercise';
+          const sets = [...(row.workout_sets ?? [])].sort((a, b) =>
+            String(b.logged_at ?? '').localeCompare(String(a.logged_at ?? '')),
+          );
+          const weighted = sets.filter((s) => (s.weight ?? 0) > 0 && (s.reps ?? 0) > 0);
+          const countable = weighted.length > 0 ? weighted : sets.filter((s) => (s.reps ?? 0) > 0);
+          if (countable.length === 0) continue;
+
+          const newest = countable[0]!;
+          const loggedAt =
+            newest.logged_at ?? (session as { started_at?: string }).started_at ?? new Date(0).toISOString();
+          const existing = byExercise.get(exerciseId);
+          if (!existing) {
+            byExercise.set(exerciseId, {
+              exerciseId,
+              name,
+              lastLoggedAt: loggedAt,
+              setCount: countable.length,
+              lastWeightKg: newest.weight != null && newest.weight > 0 ? newest.weight : undefined,
+              lastReps: newest.reps ?? undefined,
+            });
+            continue;
+          }
+          existing.setCount += countable.length;
+          if (loggedAt > existing.lastLoggedAt) {
+            existing.lastLoggedAt = loggedAt;
+            existing.lastWeightKg =
+              newest.weight != null && newest.weight > 0 ? newest.weight : undefined;
+            existing.lastReps = newest.reps ?? undefined;
+            existing.name = name;
+          }
+        }
+      }
+
+      const ranked = [...byExercise.values()]
+        .sort((a, b) => b.lastLoggedAt.localeCompare(a.lastLoggedAt))
+        .slice(0, Math.max(1, limit));
+
+      return ok(ranked);
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
+  async getExerciseProgressSets(userId: string, exerciseId: string, limit = 80) {
+    return this.getRecentSetsForExercise(userId, exerciseId, limit, 'any');
   },
 
   async applySessionExercisePlan(sessionId: string, userId: string, exercises: EditableWorkoutExercise[]) {

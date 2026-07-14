@@ -1,11 +1,11 @@
 import type {
-  MusicProviderId,
-  PeakMusicSettings,
-  PeakPlaybackMode,
-  PeakPlaybackRequest,
-  PlaylistContinuityPlan,
-  PlaylistSnapshot,
-  WorkoutQueueTrack,
+    MusicProviderId,
+    PeakMusicSettings,
+    PeakPlaybackMode,
+    PeakPlaybackRequest,
+    PlaylistContinuityPlan,
+    PlaylistSnapshot,
+    WorkoutQueueTrack,
 } from '@/types/peakMusic';
 import { computePeakPlaybackPlan } from './peakPlaybackEngine';
 
@@ -73,11 +73,13 @@ export function buildDefaultWorkoutQueue(userId: string, provider: MusicProvider
     userId,
     name: 'ONE MORE Workout Mode',
     currentIndex: 0,
-    tracks: [
-      { trackId: 'rest-ambient', name: 'Rest — ambient', role: 'rest', peakOffsetMs: 0 },
-      { trackId: 'build-up', name: 'Build-up track', role: 'build_up', peakOffsetMs: 45000 },
-      { trackId: 'peak-track', name: 'Peak track', role: 'peak', peakOffsetMs: 90000 },
-      { trackId: 'pr-track', name: 'PR hype track', role: 'pr', peakOffsetMs: 75000 },
-    ].map((t) => ({ ...t, artist: 'Placeholder — assign in Workout Mode' })),
+    tracks: (
+      [
+        { trackId: 'rest-ambient', name: 'Rest — ambient', role: 'rest' as const, peakOffsetMs: 0 },
+        { trackId: 'build-up', name: 'Build-up track', role: 'build_up' as const, peakOffsetMs: 45000 },
+        { trackId: 'peak-track', name: 'Peak track', role: 'peak' as const, peakOffsetMs: 90000 },
+        { trackId: 'pr-track', name: 'PR hype track', role: 'pr' as const, peakOffsetMs: 75000 },
+      ] as const
+    ).map((t) => ({ ...t, artist: 'Placeholder — assign in Workout Mode' })),
   };
 }

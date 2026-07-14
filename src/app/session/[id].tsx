@@ -120,35 +120,54 @@ export default function SessionDetailScreen() {
           No exercises logged.
         </AppText>
       ) : (
-        session.exercises.map((exercise) => (
-          <Card key={exercise.id} style={styles.exerciseCard}>
-            <AppText variant="bodyBold">{exercise.exercise?.name ?? 'Exercise'}</AppText>
-            {exercise.sets.length === 0 ? (
-              <AppText variant="footnote" color="textTertiary">
-                No sets
-              </AppText>
-            ) : (
-              exercise.sets.map((set) => (
-                <View key={set.id} style={styles.setRow}>
-                  <AppText variant="footnote" color="textSecondary" style={styles.setNum}>
-                    Set {set.setNumber}
-                  </AppText>
-                  <AppText variant="body">
-                    {set.weight != null ? `${units.formatWeight(set.weight)} × ` : ''}
-                    {set.reps ?? '—'} reps
-                  </AppText>
-                  {set.isPr ? (
-                    <View style={styles.prBadge}>
-                      <AppText variant="caption" color="accent">
-                        PR
-                      </AppText>
-                    </View>
-                  ) : null}
-                </View>
-              ))
-            )}
-          </Card>
-        ))
+        session.exercises.map((exercise) => {
+          const exerciseId = exercise.exerciseId ?? exercise.exercise?.id;
+          const exerciseName = exercise.exercise?.name ?? 'Exercise';
+          return (
+            <Card
+              key={exercise.id}
+              style={styles.exerciseCard}
+              onPress={
+                exerciseId
+                  ? () =>
+                      router.push(
+                        `/(features)/exercise-progress?exerciseId=${encodeURIComponent(exerciseId)}&name=${encodeURIComponent(exerciseName)}` as `/(features)/${string}`,
+                      )
+                  : undefined
+              }>
+              <AppText variant="bodyBold">{exerciseName}</AppText>
+              {exerciseId ? (
+                <AppText variant="caption" color="accent" style={styles.chartHint}>
+                  View lift chart
+                </AppText>
+              ) : null}
+              {exercise.sets.length === 0 ? (
+                <AppText variant="footnote" color="textTertiary">
+                  No sets
+                </AppText>
+              ) : (
+                exercise.sets.map((set) => (
+                  <View key={set.id} style={styles.setRow}>
+                    <AppText variant="footnote" color="textSecondary" style={styles.setNum}>
+                      Set {set.setNumber}
+                    </AppText>
+                    <AppText variant="body">
+                      {set.weight != null ? `${units.formatWeight(set.weight)} × ` : ''}
+                      {set.reps ?? '—'} reps
+                    </AppText>
+                    {set.isPr ? (
+                      <View style={styles.prBadge}>
+                        <AppText variant="caption" color="accent">
+                          PR
+                        </AppText>
+                      </View>
+                    ) : null}
+                  </View>
+                ))
+              )}
+            </Card>
+          );
+        })
       )}
 
       <View style={styles.actions}>
@@ -200,6 +219,9 @@ const styles = StyleSheet.create({
   exerciseCard: {
     marginBottom: Spacing.md,
     gap: Spacing.sm,
+  },
+  chartHint: {
+    marginBottom: Spacing.xs,
   },
   setRow: {
     flexDirection: 'row',

@@ -1,7 +1,7 @@
 import { api } from '@/api/client';
 import { mapGroceryList, mapMeal, mapMealPlan, mapNutritionGoals } from '@/lib/db-mappers';
 import { aggregateWeeklyGroceries } from '@/lib/groceryAggregation';
-import { resolveTimeZone } from '@/lib/localDate';
+import { localDateString, resolveTimeZone } from '@/lib/localDate';
 import { aggregateDailyMeals, mealsForCalendarDay } from '@/lib/mealAggregation';
 import { isReplaceablePlannedMeal, pickMealsToKeep, weekEndDate } from '@/lib/mealCleanup';
 import { enrichMealMeta, serializeMealMeta } from '@/lib/mealIngredients';
@@ -229,7 +229,7 @@ export const nutritionService: INutritionService = {
       const [mealsResult, goalsResult, hydrationResult] = await Promise.all([
         supabase
           .from('meals')
-          .select('id, user_id, meal_type, meal_plan_id, name, calories, protein_g, carbs_g, fat_g, instructions, created_at')
+          .select('id, user_id, meal_type, meal_plan_id, name, scheduled_date, calories, protein_g, carbs_g, fat_g, instructions, created_at')
           .eq('user_id', userId)
           .eq('scheduled_date', targetDate),
         supabase.from('nutrition_goals').select('*').eq('user_id', userId).eq('is_active', true).limit(1).maybeSingle(),
@@ -295,7 +295,7 @@ export const nutritionService: INutritionService = {
         (existingMeals ?? [])
           .map(mapMeal)
           .filter((meal) => !isReplaceablePlannedMeal(meal))
-          .map((meal) => mealSlotKey(meal.scheduledDate, meal.mealType)),
+          .map((meal) => mealSlotKey(meal.scheduledDate ?? '', meal.mealType)),
       );
 
       const apiMeals = (plan.meals ?? []) as ApiPlanMeal[];
@@ -475,10 +475,10 @@ export const nutritionService: INutritionService = {
       const goals = await this.getGoals(userId);
       if (goals.success && goals.data) {
         return ok({
-          calories: goals.data.dailyCalories,
-          proteinG: goals.data.proteinG,
-          carbsG: goals.data.carbsG,
-          fatG: goals.data.fatG,
+          calories: goals.data.dailyCalories ?? 0,
+          proteinG: goals.data.proteinG ?? 0,
+          carbsG: goals.data.carbsG ?? 0,
+          fatG: goals.data.fatG ?? 0,
           rationale: 'Using your saved nutrition goals while adaptive targets are temporarily unavailable.',
         });
       }

@@ -182,6 +182,32 @@ const REQUIRED = [
     patterns: ['cardioService.logSession', 'ActivitySessionSaveCard', 'estimateActivityCalories'],
   },
   {
+    file: 'backend/src/lib/movementPatternExclusion.ts',
+    label: 'Pull-up variant pattern exclusion',
+    patterns: ['wide-pull-up', 'archer-pull-up', 'pull-up'],
+  },
+  {
+    file: 'src/lib/heartRateZones.ts',
+    label: 'Activity heart rate zones helper',
+    patterns: ['buildHeartRateZoneBuckets', 'HeartRateZone', 'supportsPowerMetrics'],
+  },
+  {
+    file: 'backend/src/lib/workoutPlanner.ts',
+    label: 'Age-based training adjustments',
+    patterns: ['ageTrainingAdjustments', 'preferLowImpact', 'date_of_birth'],
+  },
+  {
+    file: 'src/lib/pendingMealQueue.ts',
+    label: 'Nutrition meal offline queue',
+    patterns: ['pendingMealQueue', 'enqueue', 'countForUser'],
+  },
+  {
+    file: 'src/hooks/useVoiceRecognition.ts',
+    label: 'Voice STT re-enabled',
+    patterns: ['expo-speech-recognition', 'startListening', 'isAvailable'],
+    forbidden: ['Voice logging is temporarily unavailable'],
+  },
+  {
     file: 'src/constants/activityOptions.ts',
     label: 'Home activity equestrian and walk route',
     patterns: ["id: 'equestrian'", 'cardio-tracking?activity=walk'],

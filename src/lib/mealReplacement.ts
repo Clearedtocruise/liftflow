@@ -1,17 +1,25 @@
-import {
-  enrichMealMeta,
-  serializeMealMeta,
-  type MealIngredient,
-  type MealMacros,
-} from '@/lib/mealIngredients';
 import { estimateFoodMacrosLocal } from '@/lib/foodMacroLookup';
-import type { MealReplacementScope } from '@/types/nutrition';
+import {
+    enrichMealMeta,
+    serializeMealMeta,
+    type MealIngredient,
+    type MealMacros,
+} from '@/lib/mealIngredients';
 import type { Meal } from '@/types';
+import type { MealReplacementScope } from '@/types/nutrition';
+
+export type SmartReplacementItem = {
+  foodName: string;
+  servingSize: string;
+  macros: MealMacros;
+};
 
 export type SmartReplacementInput = {
   foodName: string;
   servingSize: string;
   macros: MealMacros;
+  /** When replacing a whole meal with multiple foods; omitted for single-item / ingredient swap. */
+  items?: SmartReplacementItem[];
 };
 
 function mealKey(name: string): string {
@@ -86,7 +94,10 @@ export function buildSmartMealReplacementUpdate(
 ): Partial<Meal> & { instructions: string } {
   const meta = enrichMealMeta(meal.name, meal.instructions);
   meta.status = 'modified';
-  meta.ingredients = [{ name: replacement.foodName, serving: replacement.servingSize }];
+  const items = replacement.items?.length
+    ? replacement.items
+    : [{ foodName: replacement.foodName, servingSize: replacement.servingSize, macros: replacement.macros }];
+  meta.ingredients = items.map((item) => ({ name: item.foodName, serving: item.servingSize }));
 
   return {
     name: replacement.foodName,

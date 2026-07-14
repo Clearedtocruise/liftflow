@@ -9,16 +9,17 @@ import { AppText } from '@/components/ui/AppText';
 import { ManualSetEntry, type ManualSetLogPayload } from '@/components/workout/ManualSetEntry';
 import { QuickCorrectionButtons } from '@/components/workout/QuickCorrectionButtons';
 import { SetEditModal } from '@/components/workout/SetEditModal';
-import { VoiceComingSoonBanner } from '@/components/workout/VoiceComingSoonBanner';
 import { WorkoutCard } from '@/components/workout/WorkoutCard';
 import { LiftFlowColors, Spacing } from '@/constants/theme';
 import { buildWorkoutSessionName, pickDefaultLocation } from '@/constants/trainingProfile';
 import { useAuth } from '@/hooks/useAuth';
 import { useUnits } from '@/hooks/useUnits';
 import { useWorkoutLocations } from '@/hooks/useWorkoutLocations';
-import { formatWorkoutWeightForInput, adjustWeightKg } from '@/lib/unitConversion';
+import { adjustWeightKg, formatWorkoutWeightForInput } from '@/lib/unitConversion';
 import { useWorkoutSession } from '@/state/workout/WorkoutSessionContext';
 import type { WorkoutSet } from '@/types';
+import { VoiceMicButton } from '@/voice/VoiceMicButton';
+import { useVoiceWorkoutActivation } from '@/voice/useVoiceWorkoutActivation';
 
 export default function ManualLogScreen() {
   const { user } = useAuth();
@@ -38,6 +39,13 @@ export default function ManualLogScreen() {
   const [starting, setStarting] = useState(false);
   const [editSet, setEditSet] = useState<WorkoutSet | null>(null);
   const [editExerciseName, setEditExerciseName] = useState('');
+
+  useVoiceWorkoutActivation({
+    active: Boolean(session && session.status !== 'paused'),
+    userId: user?.id,
+    sessionId: session?.id,
+    handlers: null,
+  });
 
   useEffect(() => {
     if (session || isLoading || !user) return;
@@ -131,7 +139,7 @@ export default function ManualLogScreen() {
       <SectionHeader title="Log Set" subtitle="Fields adapt to the exercise type" />
       <ManualSetEntry exercises={session.exercises} onLogSet={handleManualLog} disabled={isPaused} />
 
-      <VoiceComingSoonBanner />
+      <VoiceMicButton disabled={isPaused} />
 
       <SectionHeader title="Logged Exercises" />
 

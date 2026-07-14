@@ -2,6 +2,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
+import { HeartRateZoneBars } from '@/components/cardio/HeartRateZoneBars';
 import { Card } from '@/components/layout/Card';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
@@ -12,8 +13,25 @@ import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 import { useUnits } from '@/hooks/useUnits';
 import { estimateActivityCalories, formatCalorieEstimate } from '@/lib/activityCalories';
+import { formatCardioDuration } from '@/lib/exerciseModality';
+import {
+    ageFromDateOfBirth,
+    buildHeartRateZoneBuckets,
+    supportsPowerMetrics,
+} from '@/lib/heartRateZones';
 import { cardioService } from '@/services/cardioService';
 import type { CardioType } from '@/types/common';
+
+function SummaryMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.summaryMetric}>
+      <AppText variant="label" color="textTertiary">
+        {label}
+      </AppText>
+      <AppText variant="bodyBold">{value}</AppText>
+    </View>
+  );
+}
 
 export default function LogActivityScreen() {
   const { kind = 'cardio', activity: activityParam } = useLocalSearchParams<{
@@ -26,6 +44,7 @@ export default function LogActivityScreen() {
   const [durationMinutes, setDurationMinutes] = useState('30');
   const [distance, setDistance] = useState('');
   const [heartRate, setHeartRate] = useState('');
+  const [powerWatts, setPowerWatts] = useState('');
   const [notes, setNotes] = useState('');
   const [logging, setLogging] = useState(false);
 
@@ -54,10 +73,15 @@ export default function LogActivityScreen() {
   const preselected = Boolean(activityParam) || kind === 'mobility';
   const selectedOption = options.find((option) => option.id === selectedId);
   const screenTitle = selectedOption ? `Log ${selectedOption.label}` : isSport ? 'Log Sport' : 'Log Activity';
+  const activityLabel = selectedOption?.label ?? selectedId ?? '';
+  const showPowerInput = supportsPowerMetrics(activityLabel || selectedId || '');
 
   const durationSeconds = Math.max(1, Math.round(Number.parseFloat(durationMinutes) * 60));
   const distanceKm = distance.trim() ? units.parseDistance(distance) : undefined;
   const distanceMeters = distanceKm != null ? Math.round(distanceKm * 1000) : undefined;
+  const avgHeartRateBpm = heartRate.trim() ? Number.parseInt(heartRate, 10) : undefined;
+  const parsedPower = powerWatts.trim() ? Number.parseFloat(powerWatts) : undefined;
+  const userAge = ageFromDateOfBirth(user?.dateOfBirth);
 
   const calorieEstimate = useMemo(() => {
     if (!selectedId || !Number.isFinite(durationSeconds)) return null;
@@ -78,6 +102,19 @@ export default function LogActivityScreen() {
       distanceMeters,
     });
   }, [selectedId, durationSeconds, distanceMeters, isSport, user?.weightKg]);
+
+  const heartRateZones = useMemo(() => {
+    if (!avgHeartRateBpm || !Number.isFinite(avgHeartRateBpm) || avgHeartRateBpm <= 0) return null;
+    const startedAt = new Date(Date.now() - durationSeconds * 1000).toISOString();
+    const endedAt = new Date().toISOString();
+    return buildHeartRateZoneBuckets(
+      [
+        { bpm: avgHeartRateBpm, recordedAt: startedAt },
+        { bpm: avgHeartRateBpm, recordedAt: endedAt },
+      ],
+      userAge,
+    );
+  }, [avgHeartRateBpm, durationSeconds, userAge]);
 
   async function handleLog() {
     if (!user || !selectedId) {
@@ -107,6 +144,10 @@ export default function LogActivityScreen() {
     }
 
     const estimate = calorieEstimate ?? estimateActivityCalories({ durationSeconds, weightKg: user.weightKg });
+    const powerValue =
+      showPowerInput && parsedPower != null && Number.isFinite(parsedPower) && parsedPower > 0
+        ? Math.round(parsedPower)
+        : undefined;
 
     const result = await cardioService.logSession({
       userId: user.id,
@@ -114,7 +155,7 @@ export default function LogActivityScreen() {
       durationSeconds,
       distanceMeters,
       caloriesBurned: estimate.calories,
-      avgHeartRate: heartRate.trim() ? Number.parseInt(heartRate, 10) : undefined,
+      avgHeartRate: avgHeartRateBpm,
       notes: notes.trim() || selectedOption?.label,
       activityKind,
       sportId,
@@ -123,6 +164,11 @@ export default function LogActivityScreen() {
         met: estimate.met,
         estimatedCalories: true,
         weightKgUsed: estimate.weightKg,
+        avgHeartRateBpm,
+        avgPowerWatts: powerValue,
+        heartRateZones: heartRateZones
+          ?.filter((zone) => zone.seconds > 0)
+          .map((zone) => ({ zone: zone.zone, seconds: Math.round(zone.seconds) })),
       },
     });
 
@@ -159,97 +205,135 @@ export default function LogActivityScreen() {
         />
       }>
       {!preselected ? (
-          <Card style={styles.section}>
-            <AppText variant="label" color="accent">
-              Activity
-            </AppText>
-            <View style={styles.chips}>
-              {options.map((option) => (
-                <PrimaryButton
-                  key={option.id}
-                  label={option.label}
-                  variant={selectedId === option.id ? 'primary' : 'secondary'}
-                  onPress={() => {
-                    if (option.id === 'walk') {
-                      router.push('/(features)/cardio-tracking?activity=walk');
-                      return;
-                    }
-                    if (option.id === 'run') {
-                      router.push('/(features)/cardio-tracking?activity=steady-run');
-                      return;
-                    }
-                    if (option.id === 'bike') {
-                      router.push('/(features)/cardio-tracking?activity=steady-bike');
-                      return;
-                    }
-                    setSelectedId(option.id);
-                  }}
-                />
-              ))}
-            </View>
-          </Card>
-        ) : selectedOption ? (
-          <Card style={styles.section}>
-            <AppText variant="label" color="accent">
-              Activity
-            </AppText>
-            <AppText variant="bodyBold">{selectedOption.label}</AppText>
-          </Card>
-        ) : null}
-
         <Card style={styles.section}>
-          <AppText variant="label" color="textSecondary">
-            Duration (minutes)
+          <AppText variant="label" color="accent">
+            Activity
           </AppText>
-          <TextInput
-            style={styles.input}
-            value={durationMinutes}
-            onChangeText={setDurationMinutes}
-            keyboardType="decimal-pad"
-            placeholderTextColor={LiftFlowColors.textTertiary}
-          />
-          {!isSport ? (
-            <>
-              <AppText variant="label" color="textSecondary">
-                Distance ({units.preferredDistanceUnit}, optional)
-              </AppText>
-              <TextInput
-                style={styles.input}
-                value={distance}
-                onChangeText={setDistance}
-                keyboardType="decimal-pad"
-                placeholderTextColor={LiftFlowColors.textTertiary}
+          <View style={styles.chips}>
+            {options.map((option) => (
+              <PrimaryButton
+                key={option.id}
+                label={option.label}
+                variant={selectedId === option.id ? 'primary' : 'secondary'}
+                onPress={() => {
+                  if (option.id === 'walk') {
+                    router.push('/(features)/cardio-tracking?activity=walk');
+                    return;
+                  }
+                  if (option.id === 'run') {
+                    router.push('/(features)/cardio-tracking?activity=steady-run');
+                    return;
+                  }
+                  if (option.id === 'bike') {
+                    router.push('/(features)/cardio-tracking?activity=steady-bike');
+                    return;
+                  }
+                  setSelectedId(option.id);
+                }}
               />
-            </>
+            ))}
+          </View>
+        </Card>
+      ) : selectedOption ? (
+        <Card style={styles.section}>
+          <AppText variant="label" color="accent">
+            Activity
+          </AppText>
+          <AppText variant="bodyBold">{selectedOption.label}</AppText>
+        </Card>
+      ) : null}
+
+      <Card style={styles.section}>
+        <AppText variant="label" color="textSecondary">
+          Duration (minutes)
+        </AppText>
+        <TextInput
+          style={styles.input}
+          value={durationMinutes}
+          onChangeText={setDurationMinutes}
+          keyboardType="decimal-pad"
+          placeholderTextColor={LiftFlowColors.textTertiary}
+        />
+        {!isSport ? (
+          <>
+            <AppText variant="label" color="textSecondary">
+              Distance ({units.preferredDistanceUnit}, optional)
+            </AppText>
+            <TextInput
+              style={styles.input}
+              value={distance}
+              onChangeText={setDistance}
+              keyboardType="decimal-pad"
+              placeholderTextColor={LiftFlowColors.textTertiary}
+            />
+          </>
+        ) : null}
+        <AppText variant="label" color="textSecondary">
+          Avg heart rate (optional)
+        </AppText>
+        <TextInput
+          style={styles.input}
+          value={heartRate}
+          onChangeText={setHeartRate}
+          keyboardType="number-pad"
+          placeholderTextColor={LiftFlowColors.textTertiary}
+        />
+        {showPowerInput ? (
+          <>
+            <AppText variant="label" color="textSecondary">
+              Avg power (watts, optional)
+            </AppText>
+            <TextInput
+              style={styles.input}
+              value={powerWatts}
+              onChangeText={setPowerWatts}
+              keyboardType="decimal-pad"
+              placeholderTextColor={LiftFlowColors.textTertiary}
+            />
+          </>
+        ) : null}
+        <AppText variant="label" color="textSecondary">
+          Notes
+        </AppText>
+        <TextInput
+          style={[styles.input, styles.notes]}
+          value={notes}
+          onChangeText={setNotes}
+          multiline
+          placeholderTextColor={LiftFlowColors.textTertiary}
+        />
+      </Card>
+
+      {selectedId && Number.isFinite(durationSeconds) ? (
+        <Card style={styles.section}>
+          <AppText variant="label" color="accent">
+            Session summary
+          </AppText>
+          <View style={styles.summaryRow}>
+            <SummaryMetric label="Time" value={formatCardioDuration(durationSeconds)} />
+            <SummaryMetric
+              label="Active cal"
+              value={calorieEstimate ? `~${calorieEstimate.calories}` : '—'}
+            />
+            {avgHeartRateBpm ? (
+              <SummaryMetric label="Heart rate" value={`${avgHeartRateBpm} bpm`} />
+            ) : null}
+            {showPowerInput && parsedPower != null && parsedPower > 0 ? (
+              <SummaryMetric label="Power" value={`${Math.round(parsedPower)} W`} />
+            ) : null}
+          </View>
+          {heartRateZones?.some((zone) => zone.seconds > 0) ? (
+            <HeartRateZoneBars zones={heartRateZones} />
           ) : null}
           {calorieEstimate ? (
-            <AppText variant="body" color="accent">
+            <AppText variant="caption" color="textTertiary">
               {formatCalorieEstimate(calorieEstimate.calories, !user?.weightKg)}
             </AppText>
           ) : null}
-          <AppText variant="label" color="textSecondary">
-            Avg heart rate (optional)
-          </AppText>
-          <TextInput
-            style={styles.input}
-            value={heartRate}
-            onChangeText={setHeartRate}
-            keyboardType="number-pad"
-            placeholderTextColor={LiftFlowColors.textTertiary}
-          />
-          <AppText variant="label" color="textSecondary">
-            Notes
-          </AppText>
-          <TextInput
-            style={[styles.input, styles.notes]}
-            value={notes}
-            onChangeText={setNotes}
-            multiline
-            placeholderTextColor={LiftFlowColors.textTertiary}
-          />
         </Card>
+      ) : null}
 
-        <PrimaryButton label="Log Activity" onPress={handleLog} loading={logging} size="large" />
+      <PrimaryButton label="Log Activity" onPress={handleLog} loading={logging} size="large" />
     </ScreenContainer>
   );
 }
@@ -268,4 +352,13 @@ const styles = StyleSheet.create({
     fontSize: 17,
   },
   notes: { minHeight: 80, textAlignVertical: 'top' },
+  summaryRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.md,
+  },
+  summaryMetric: {
+    minWidth: '40%',
+    gap: 2,
+  },
 });

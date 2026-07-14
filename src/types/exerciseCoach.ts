@@ -44,7 +44,7 @@ export type ExercisePrescriptionPlanInput = {
   plannedRestSeconds?: number;
   notes?: string;
   sessionId?: string;
-  loggingMode?: 'weighted' | 'bodyweight' | 'timed' | 'cardio';
+  loggingMode?: 'weighted' | 'bodyweight' | 'timed' | 'cardio' | 'any';
   currentSessionSets?: Array<{
     weightKg?: number;
     reps?: number;

@@ -1,0 +1,56 @@
+appId: com.liftflow.app
+---
+# Prerequisites: weekly meal plan exists with today's meals; user signed in.
+# Does not call AI — only opens Smart Replace form.
+# Run: npm run qa:nutrition
+
+- launchApp:
+    clearState: false
+
+- extendedWaitUntil:
+    visible:
+      id: home-screen
+    timeout: 45000
+
+- tapOn:
+    id: nutrition-tab
+
+- extendedWaitUntil:
+    visible:
+      id: nutrition-screen
+    timeout: 30000
+
+- scrollUntilVisible:
+    element:
+      id: meal-list
+    direction: DOWN
+    timeout: 20000
+    optional: true
+
+- scrollUntilVisible:
+    element:
+      id: replace-meal-button
+    direction: DOWN
+    timeout: 30000
+
+- tapOn:
+    id: replace-meal-button
+
+- extendedWaitUntil:
+    visible:
+      id: smart-replace-button
+    timeout: 15000
+
+- tapOn:
+    id: smart-replace-button
+
+- extendedWaitUntil:
+    visible:
+      id: smart-replace-form
+    timeout: 10000
+
+- assertVisible:
+    id: smart-replace-form
+
+- assertVisible:
+    id: confirm-replacement-button

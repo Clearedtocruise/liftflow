@@ -17,7 +17,7 @@ import { subscriptionService } from '@/services/subscriptionService';
 export default function SubscriptionScreen() {
   const { subscription, isPremium, isTrialing, loading, isNativePurchasesAvailable, isRevenueCatConfigured } =
     useSubscription();
-  const [price, setPrice] = useState(SUBSCRIPTION.displayPrice);
+  const [price, setPrice] = useState<string>(SUBSCRIPTION.displayPrice);
 
   useEffect(() => {
     subscriptionService.getOfferings().then((result) => {

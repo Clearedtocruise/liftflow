@@ -1,7 +1,7 @@
 import { ResizeMode, Video } from 'expo-av';
 import { Image } from 'expo-image';
 import { useEffect, useRef, useState } from 'react';
-import { StyleSheet, View, type ViewStyle } from 'react-native';
+import { StyleSheet, View, type ImageStyle } from 'react-native';
 
 import { AppText } from '@/components/ui/AppText';
 import type { AppTheme } from '@/constants/themes';
@@ -51,7 +51,7 @@ function IllustratedMovementCard({
   );
 }
 
-function GifMedia({ url, frameStyle }: { url: string; frameStyle: ViewStyle }) {
+function GifMedia({ url, frameStyle }: { url: string; frameStyle: ImageStyle }) {
   return (
     <Image
       source={{ uri: url }}
@@ -69,7 +69,7 @@ function Mp4Media({
 }: {
   url: string;
   posterUrl?: string;
-  frameStyle: ViewStyle;
+  frameStyle: ImageStyle;
 }) {
   const ref = useRef<Video>(null);
 
@@ -95,7 +95,7 @@ function Mp4Media({
   );
 }
 
-function ImageSequenceMedia({ frames, frameStyle }: { frames: string[]; frameStyle: ViewStyle }) {
+function ImageSequenceMedia({ frames, frameStyle }: { frames: string[]; frameStyle: ImageStyle }) {
   const [frameIndex, setFrameIndex] = useState(0);
 
   useEffect(() => {

@@ -77,6 +77,27 @@ export const planDataCache = {
     await writeJson(cacheKey(userId, weekFrom, weekTo, 'meals'), meals);
   },
 
+  /** Merge updated meals into the cached week plan (used after replace / status changes). */
+  async patchMeals(
+    userId: string,
+    weekFrom: string,
+    weekTo: string,
+    updatedMeals: Meal[],
+  ): Promise<Meal[]> {
+    const current = (await readJson<Meal[]>(cacheKey(userId, weekFrom, weekTo, 'meals'))) ?? [];
+    const byId = new Map(current.map((meal) => [meal.id, meal]));
+    for (const meal of updatedMeals) {
+      byId.set(meal.id, meal);
+    }
+    const merged = Array.from(byId.values()).sort((a, b) => {
+      const dateCmp = (a.scheduledDate ?? '').localeCompare(b.scheduledDate ?? '');
+      if (dateCmp !== 0) return dateCmp;
+      return (a.createdAt ?? '').localeCompare(b.createdAt ?? '');
+    });
+    await this.writeMeals(userId, weekFrom, weekTo, merged);
+    return merged;
+  },
+
   async writeGoals(userId: string, goals: NutritionGoals | null): Promise<void> {
     if (!goals) return;
     await writeJson(goalsKey(userId), goals);

@@ -29,6 +29,7 @@ type HomeNextUpCardProps = {
     trainingLabel: string;
     recoveryScore?: number | null;
     coachMessage?: string;
+    whyToday?: string | null;
   } | null;
   onLogMeal: () => void;
   onGenerateMealPlan?: () => void;
@@ -72,6 +73,7 @@ export function HomeNextUpCard({
         <HomeTodayCard
           workoutTitle={workout.title}
           coachMessage={workout.coachMessage ?? 'Complete today\'s recovery check-in for personalized guidance.'}
+          whyToday={workout.whyToday}
           trainingLabel={workout.trainingLabel}
           startTime={workout.startTime}
           durationMin={workout.durationMin}

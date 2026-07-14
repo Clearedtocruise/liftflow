@@ -10,6 +10,10 @@ export type WatchDisplayContext = {
   statusLine?: string;
   supersetHint?: string;
   draftReps?: number;
+  /** Phone rest overlay labels (keeps Watch/global rest in sync with supersets). */
+  restCurrentLabel?: string;
+  restUpNextLabel?: string;
+  restExerciseName?: string;
 };
 
 const LB_PER_KG = 2.2046226218;

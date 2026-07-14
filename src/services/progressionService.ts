@@ -1,9 +1,9 @@
-import { apiClient } from '@/api/client';
+import { api } from '@/api/client';
+import { fromError, ok } from '@/lib/serviceResult';
 import {
-  computeSmartProgression,
-  mapFitnessGoalsToFocus,
+    computeSmartProgression,
+    mapFitnessGoalsToFocus,
 } from '@/lib/smartProgressionEngine';
-import { fail, fromError, ok } from '@/lib/serviceResult';
 import { getAccessToken } from '@/supabase/client';
 import type { ServiceResult } from '@/types/common';
 import type { ProgressionSetRecord, SmartProgressionRecommendation } from '@/types/progression';
@@ -22,7 +22,7 @@ export const progressionService = {
   ): Promise<ServiceResult<SmartProgressionRecommendation>> {
     try {
       const token = await getAccessToken();
-      const remote = await apiClient.postSmartProgression(
+      const remote = await api.postSmartProgression(
         {
           userId,
           exerciseId,

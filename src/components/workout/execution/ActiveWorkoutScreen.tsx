@@ -15,6 +15,7 @@ import { ExerciseReplaceSheet } from '@/components/workout/execution/ExerciseRep
 import { GuidedWorkoutMetrics, WorkoutProgressBar } from '@/components/workout/execution/GuidedWorkoutMetrics';
 import { SetLoggingControls } from '@/components/workout/execution/SetLoggingControls';
 import { SupersetPrepBanner } from '@/components/workout/execution/SupersetPrepBanner';
+import { UseLastPerformanceChip } from '@/components/workout/execution/UseLastPerformanceChip';
 import { WorkoutChallengeModal } from '@/components/workout/execution/WorkoutChallengeModal';
 import { WorkoutTimerOverlay } from '@/components/workout/execution/WorkoutTimerOverlay';
 import { WorkoutUpNextCard } from '@/components/workout/execution/WorkoutUpNextCard';
@@ -29,9 +30,12 @@ import { useWorkoutTimerEngine } from '@/hooks/useWorkoutTimerEngine';
 import {
     computeWorkoutSetProgress,
     formatCoachTargetLine,
+    formatPreviousPerformanceLine,
     performanceBaselineFromHistorySet,
     performanceBaselineFromSessionSet,
+    performanceBaselineMatchesInputs,
     pickLastPerformanceSet,
+    resolveUseLastPerformance,
     type PerformanceBaseline,
 } from '@/lib/activeWorkoutMetrics';
 import {
@@ -443,6 +447,8 @@ export function ActiveWorkoutScreen({
       const trimmed = newName.trim();
       if (!trimmed) return false;
 
+      setReplaceSheetOpen(false);
+      setShowComplete(false);
       setReplacingExercise(true);
       try {
         const result = await workoutService.replaceSessionExercise(
@@ -456,8 +462,6 @@ export function ActiveWorkoutScreen({
         }
 
         await refreshSession();
-        setShowComplete(false);
-        setReplaceSheetOpen(false);
         void syncPlannedWorkoutAfterSwap(result.data);
         return true;
       } finally {
@@ -703,6 +707,43 @@ export function ActiveWorkoutScreen({
     },
     [],
   );
+
+  const useLastPerformance = useMemo(
+    () => resolveUseLastPerformance(completedSets, historySets, loggingMode, repRange),
+    [completedSets, historySets, loggingMode, repRange],
+  );
+
+  const useLastPerformanceLine = useMemo(() => {
+    if (!useLastPerformance) return null;
+    return formatPreviousPerformanceLine(
+      useLastPerformance.lineSet,
+      loggingMode,
+      (kg) => formatWorkoutWeightForInput(kg, units.preferredWeightUnit),
+      units.weightLabel,
+      units.preferredDistanceUnit,
+    );
+  }, [
+    useLastPerformance,
+    loggingMode,
+    units.preferredWeightUnit,
+    units.weightLabel,
+    units.preferredDistanceUnit,
+  ]);
+
+  const lastPerformanceApplied = useMemo(() => {
+    if (!useLastPerformance) return false;
+    return performanceBaselineMatchesInputs(useLastPerformance.baseline, loggingMode, {
+      weightKg,
+      reps,
+      durationSeconds,
+      distanceKm,
+    });
+  }, [useLastPerformance, loggingMode, weightKg, reps, durationSeconds, distanceKm]);
+
+  const handleUseLastPerformance = useCallback(() => {
+    if (!useLastPerformance) return;
+    applyPerformanceBaseline(useLastPerformance.baseline, loggingMode);
+  }, [useLastPerformance, applyPerformanceBaseline, loggingMode]);
 
   useEffect(() => {
     if (!intervalTimer) setIntervalOverlayOpen(false);
@@ -1347,12 +1388,16 @@ export function ActiveWorkoutScreen({
       statusLine: workoutPosition.currentSetLabel,
       supersetHint: usesSupersetRotation && inSuperset ? workoutPosition.upNextLabel : undefined,
       draftReps: watchDraftReps ?? undefined,
+      restCurrentLabel: workoutPosition.currentSetLabel,
+      restUpNextLabel: workoutPosition.upNextLabel,
+      restExerciseName: workoutPosition.exerciseName,
     });
     return () => watchPhoneBridge.setDisplayContext(null);
   }, [
     stationLabel,
     workoutPosition.currentSetLabel,
     workoutPosition.upNextLabel,
+    workoutPosition.exerciseName,
     usesSupersetRotation,
     inSuperset,
     watchDraftReps,
@@ -1550,6 +1595,74 @@ export function ActiveWorkoutScreen({
                 />
               ) : null}
 
+              {loadingOptions.length > 1 && !showComplete ? (
+                <View style={styles.loadingMethodRow}>
+                  <View style={styles.loadingMethodChoices}>
+                    {loadingOptions.map((option) => (
+                      <Pressable
+                        key={option.method}
+                        onPress={() => setLoadingMethod(option.method)}
+                        style={[
+                          styles.loadingMethodChip,
+                          loadingMethod === option.method && styles.loadingMethodChipActive,
+                        ]}>
+                        <AppText
+                          variant="caption"
+                          color={loadingMethod === option.method ? 'accent' : 'textSecondary'}>
+                          {option.label}
+                        </AppText>
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
+              ) : null}
+
+              {!showComplete ? (
+                <>
+                  {useLastPerformance && useLastPerformanceLine ? (
+                    <UseLastPerformanceChip
+                      performanceLine={useLastPerformanceLine}
+                      origin={useLastPerformance.origin}
+                      alreadyApplied={lastPerformanceApplied}
+                      onPress={handleUseLastPerformance}
+                      disabled={isPaused || logging}
+                    />
+                  ) : null}
+                  <SetLoggingControls
+                    mode={loggingMode}
+                    weightKg={weightKg}
+                    reps={reps}
+                    durationSeconds={durationSeconds}
+                    distanceKm={distanceKm}
+                    onChangeWeight={setWeightKg}
+                    onChangeReps={setReps}
+                    onChangeDuration={setDurationSeconds}
+                    onChangeDistance={setDistanceKm}
+                    disabled={isPaused || logging}
+                  />
+                  <PrimaryButton
+                    label={allSetsDone ? 'All sets logged' : `Log Set ${nextSetNumber}`}
+                    size="large"
+                    loading={logging}
+                    disabled={isPaused}
+                    onPress={handleLogSet}
+                    testID="log-set-button"
+                  />
+                </>
+              ) : null}
+
+              {executionModeUsesTraditionalRest(executionMode) && !showComplete ? (
+                <View style={styles.restPresetRow}>
+                  {[60, 90, 120, 150].map((seconds) => (
+                    <Pressable key={seconds} onPress={() => setRestTargetSeconds(seconds)}>
+                      <AppText variant="caption" color={restTargetSeconds === seconds ? 'accent' : 'textTertiary'}>
+                        {seconds}s
+                      </AppText>
+                    </Pressable>
+                  ))}
+                </View>
+              ) : null}
+
               {showSupersetPrepBanner && supersetPrepGroup ? (
                 <SupersetPrepBanner
                   group={supersetPrepGroup}
@@ -1584,7 +1697,7 @@ export function ActiveWorkoutScreen({
                   remainingSets={remainingSets}
                   loggingMode={loggingMode}
                   repRange={repRange}
-                  historySets={historySets}
+                  historySets={[]}
                   targetPerformanceLine={coachTargetLine}
                   formatWeight={(kg) => formatWorkoutWeightForInput(kg, units.preferredWeightUnit)}
                   weightLabel={units.weightLabel}
@@ -1621,28 +1734,6 @@ export function ActiveWorkoutScreen({
                 />
               ) : null}
 
-              {loadingOptions.length > 1 && !showComplete ? (
-                <View style={styles.loadingMethodRow}>
-                  <View style={styles.loadingMethodChoices}>
-                    {loadingOptions.map((option) => (
-                      <Pressable
-                        key={option.method}
-                        onPress={() => setLoadingMethod(option.method)}
-                        style={[
-                          styles.loadingMethodChip,
-                          loadingMethod === option.method && styles.loadingMethodChipActive,
-                        ]}>
-                        <AppText
-                          variant="caption"
-                          color={loadingMethod === option.method ? 'accent' : 'textSecondary'}>
-                          {option.label}
-                        </AppText>
-                      </Pressable>
-                    ))}
-                  </View>
-                </View>
-              ) : null}
-
               {circuitTimer &&
               circuitTimer.phase !== 'done' &&
               !showComplete ? (
@@ -1676,40 +1767,8 @@ export function ActiveWorkoutScreen({
                 </Pressable>
               ) : null}
 
-              {executionModeUsesTraditionalRest(executionMode) ? (
-              <View style={styles.restPresetRow}>
-                {[60, 90, 120, 150].map((seconds) => (
-                  <Pressable key={seconds} onPress={() => setRestTargetSeconds(seconds)}>
-                    <AppText variant="caption" color={restTargetSeconds === seconds ? 'accent' : 'textTertiary'}>
-                      {seconds}s
-                    </AppText>
-                  </Pressable>
-                ))}
-              </View>
-              ) : null}
-
               {!showComplete ? (
                 <>
-                  <SetLoggingControls
-                    mode={loggingMode}
-                    weightKg={weightKg}
-                    reps={reps}
-                    durationSeconds={durationSeconds}
-                    distanceKm={distanceKm}
-                    onChangeWeight={setWeightKg}
-                    onChangeReps={setReps}
-                    onChangeDuration={setDurationSeconds}
-                    onChangeDistance={setDistanceKm}
-                    disabled={isPaused || logging}
-                  />
-                  <PrimaryButton
-                    label={allSetsDone ? 'All sets logged' : `Log Set ${nextSetNumber}`}
-                    size="large"
-                    loading={logging}
-                    disabled={isPaused}
-                    onPress={handleLogSet}
-                    testID="log-set-button"
-                  />
                   <VoiceMicButton disabled={isPaused || logging} />
                   <VoiceDebugPanel />
                   <View style={styles.extraActions}>
@@ -1877,6 +1936,7 @@ export function ActiveWorkoutScreen({
         goal={user?.fitnessGoals?.[0]}
         programType={user?.metadata?.coachActivation?.programType as string | undefined}
         availableEquipment={user?.availableEquipment}
+        muscleGroups={currentExercise?.exercise?.muscleGroups ?? []}
         onClose={() => setReplaceSheetOpen(false)}
         onReplace={handleReplaceWithAlternative}
         onManualSearch={openManualReplacePicker}

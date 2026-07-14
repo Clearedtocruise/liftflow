@@ -87,6 +87,7 @@ function matches(name: string, keywords: string[]): boolean {
 function isTricepExtension(name: string): boolean {
   if (matches(name, ['back extension', 'hyperextension', 'reverse hyper', 'good morning'])) return false;
   if (matches(name, ['leg extension', 'leg curl', 'hamstring curl'])) return false;
+  if (matches(name, ['glute kickback', 'glute kick-back', 'donkey kick'])) return false;
   return matches(name, [
     'tricep',
     'triceps',
@@ -280,6 +281,32 @@ function buildByPattern(ctx: GuideContext): ExerciseFormGuide {
       movement: 'Step forward, back, or to the side — lower until both knees bend ~90° with front knee over mid-foot.',
       endPosition: 'Drive through the front foot to return to standing; alternate legs as programmed.',
       muscleFocus: `Front leg does the work in ${focus}. Torso upright — no leaning forward.`,
+      coachingCues: ['Front knee tracks toes', 'Torso tall', 'Push through front mid-foot'],
+      commonMistakes: ['Knee collapsing inward', 'Leaning torso forward', 'Shortening the step'],
+    });
+  }
+
+  if (matches(name, ['glute kickback', 'glute kick-back', 'donkey kick'])) {
+    return baseGuide(ctx, {
+      setup: 'Use a cable ankle strap or get on all fours. Keep hips square to the floor or machine.',
+      startPosition: 'Working leg slightly bent, glute engaged before moving.',
+      movement: 'Drive the heel back and up by squeezing the glute — small controlled arc, not a swing.',
+      endPosition: 'Peak squeeze with hip extended; return slowly without letting the weight yank you.',
+      muscleFocus: 'Glute does the work. Lower back stays quiet — do not arch to finish the rep.',
+      coachingCues: ['Heel drives back', 'Hips stay square', 'Squeeze at the top'],
+      commonMistakes: ['Arching the lower back', 'Using momentum', 'Turning into a hamstring curl'],
+    });
+  }
+
+  if (matches(name, ['nordic'])) {
+    return baseGuide(ctx, {
+      setup: 'Kneel with ankles secured under a pad, partner, or Nordic bench. Tall torso, hips extended.',
+      startPosition: 'Knees on pad, body in a straight line from knees to head, arms ready to catch.',
+      movement: 'Slowly lower your torso forward by resisting with hamstrings — hips stay extended.',
+      endPosition: 'Catch yourself with hands near the floor if needed, then pull back up with hamstrings (or assist).',
+      muscleFocus: 'Hamstrings eccentrically control the descent. Do not fold at the hips.',
+      coachingCues: ['Hips locked forward', 'Slow lower', 'Brace abs'],
+      commonMistakes: ['Piking at the hips', 'Dropping too fast', 'Rounding the upper back'],
     });
   }
 

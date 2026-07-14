@@ -497,6 +497,14 @@ def main():
     standard = sum(1 for r in renamed if r[1].startswith("Standard "))
     print("Standard fallback names:", standard)
 
+    import subprocess
+    result = subprocess.run(
+        ["node", "scripts/validate-exercise-education.mjs"],
+        cwd=ROOT,
+    )
+    if result.returncode != 0:
+        raise SystemExit("Exercise education validation failed — fix catalog before committing migration.")
+
 
 if __name__ == "__main__":
     main()

@@ -1,6 +1,6 @@
 # Sprint 8.6 — TestFlight Release Candidate Validation Report
 
-**Date:** 2026-06-13  
+**Date:** 2026-06-30  
 **Result:** PASS  
 **Checks:** 56/56  
 
@@ -79,7 +79,7 @@ Sprint 8.6 validates TestFlight RC readiness: Sprint 8.5 ops complete, productio
 | Trial support | PASS | — |
 | Transformation (8.2) | PASS | 56/56 |
 | Peak Music (8.3) | PASS | 44/44 |
-| Watch Companion (8.4) | PASS | 57/57 |
+| Watch Companion (8.4) | PASS | 63/63 |
 | HealthKit plugin | PASS | — |
 | Mobile Sentry bootstrap | PASS | — |
 | Feedback submission | PASS | — |

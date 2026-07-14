@@ -48,6 +48,8 @@ export type UserTrainingProfile = {
   fitnessGoals: string[];
   trainingExperience?: string | null;
   weightKg?: number | null;
+  /** Whole years from profile date of birth when available. */
+  ageYears?: number | null;
 };
 
 const ALL_EQUIPMENT = [
@@ -397,7 +399,9 @@ export async function loadUserTrainingProfile(userId: string): Promise<UserTrain
   const db = requireAdmin();
   const { data } = await db
     .from('profiles')
-    .select('training_location, available_equipment, primary_training_goal, fitness_goals, training_experience, weight_kg')
+    .select(
+      'training_location, available_equipment, primary_training_goal, fitness_goals, training_experience, weight_kg, date_of_birth',
+    )
     .eq('id', userId)
     .maybeSingle();
 
@@ -410,7 +414,46 @@ export async function loadUserTrainingProfile(userId: string): Promise<UserTrain
     fitnessGoals: ranked,
     trainingExperience: data?.training_experience,
     weightKg: data?.weight_kg,
+    ageYears: ageYearsFromDateOfBirth(data?.date_of_birth),
   };
+}
+
+function ageYearsFromDateOfBirth(dateOfBirth: string | null | undefined): number | null {
+  if (!dateOfBirth) return null;
+  const dob = new Date(dateOfBirth);
+  if (Number.isNaN(dob.getTime())) return null;
+  const now = new Date();
+  let age = now.getFullYear() - dob.getFullYear();
+  const month = now.getMonth() - dob.getMonth();
+  if (month < 0 || (month === 0 && now.getDate() < dob.getDate())) age -= 1;
+  return age > 0 && age < 120 ? age : null;
+}
+
+/** Age-aware volume/intensity and high-impact filtering for joint-friendlier sessions. */
+export function ageTrainingAdjustments(ageYears: number | null | undefined): {
+  volumeMultiplier: number;
+  intensityMultiplier: number;
+  restSecondsBonus: number;
+  preferLowImpact: boolean;
+} {
+  if (ageYears == null) {
+    return { volumeMultiplier: 1, intensityMultiplier: 1, restSecondsBonus: 0, preferLowImpact: false };
+  }
+  if (ageYears >= 65) {
+    return { volumeMultiplier: 0.75, intensityMultiplier: 0.8, restSecondsBonus: 30, preferLowImpact: true };
+  }
+  if (ageYears >= 55) {
+    return { volumeMultiplier: 0.85, intensityMultiplier: 0.9, restSecondsBonus: 15, preferLowImpact: true };
+  }
+  return { volumeMultiplier: 1, intensityMultiplier: 1, restSecondsBonus: 0, preferLowImpact: false };
+}
+
+const HIGH_IMPACT_SLUG_PATTERN =
+  /\b(jump|box-jump|burpee|plyo|kipping|muscle-up|sprint|depth-jump|tuck-jump|broad-jump)\b/i;
+
+export function isHighImpactExercise(exercise: { slug?: string; name?: string }): boolean {
+  const label = `${exercise.slug ?? ''} ${exercise.name ?? ''}`;
+  return HIGH_IMPACT_SLUG_PATTERN.test(label);
 }
 
 export async function loadAvailableExercises(
@@ -950,6 +993,7 @@ export async function buildAdaptiveWorkoutPlan(
   const performance = await getLastPerformanceBySlug(userId);
   const limitations = await loadActiveLimitations(userId);
   const recoveryMods = await loadRecoveryModifiers(userId);
+  const ageMods = ageTrainingAdjustments(profile.ageYears);
 
   const targetCount = Math.max(
     options?.minimumExercises ?? WORKOUT_MIN_EXERCISES,
@@ -957,16 +1001,25 @@ export async function buildAdaptiveWorkoutPlan(
   );
   const minimumSets = Math.max(WORKOUT_MIN_SETS, options?.minimumSets ?? WORKOUT_MIN_SETS);
 
+  const combinedVolume = recoveryMods.volumeMultiplier * ageMods.volumeMultiplier;
+  const combinedIntensity = recoveryMods.intensityMultiplier * ageMods.intensityMultiplier;
+
   const adjustedPreset = {
     ...preset,
-    sets: Math.max(minimumSets, Math.round(preset.sets * recoveryMods.volumeMultiplier)),
+    sets: Math.max(minimumSets, Math.round(preset.sets * combinedVolume)),
     exerciseCount: targetCount,
-    restSeconds: recoveryMods.recoveryModeActive
-      ? Math.round(preset.restSeconds * 1.15)
-      : preset.restSeconds,
+    restSeconds:
+      (recoveryMods.recoveryModeActive
+        ? Math.round(preset.restSeconds * 1.15)
+        : preset.restSeconds) + ageMods.restSecondsBonus,
   };
 
-  if (pool.length === 0) {
+  const exercisePool = ageMods.preferLowImpact
+    ? pool.filter((exercise) => !isHighImpactExercise(exercise))
+    : pool;
+  const activePool = exercisePool.length >= Math.min(8, pool.length) ? exercisePool : pool;
+
+  if (activePool.length === 0) {
     return {
       name: recoveryMods.recoveryModeActive ? 'Recovery Mobility Session' : 'Bodyweight Workout',
       rationale: 'No equipment-matched exercises found — update equipment in onboarding or Settings.',
@@ -984,7 +1037,7 @@ export async function buildAdaptiveWorkoutPlan(
 
   let picked = focusPlan
     ? selectFocusedSplitExercises(
-        pool,
+        activePool,
         focusPlan,
         recentSlugs,
         adjustedPreset.exerciseCount,
@@ -993,7 +1046,7 @@ export async function buildAdaptiveWorkoutPlan(
         available,
       )
     : selectRotatedExercises(
-        pool,
+        activePool,
         normalizedMuscles,
         recentSlugs,
         adjustedPreset.exerciseCount,
@@ -1010,7 +1063,7 @@ export async function buildAdaptiveWorkoutPlan(
   }
 
   if (options?.includeCore && !picked.some((exercise) => isCoreFocusedExercise(exercise))) {
-    const corePick = pool.find(
+    const corePick = activePool.find(
       (exercise) =>
         isCoreFocusedExercise(exercise) &&
         (!focusPlan || isAllowedOnDayFocus(exercise, focusPlan)),
@@ -1024,7 +1077,7 @@ export async function buildAdaptiveWorkoutPlan(
     const allowedMuscles = focusPlan
       ? focusPlan.quotas.flatMap((quota) => quota.muscles)
       : normalizedMuscles;
-    const fillers = pool
+    const fillers = activePool
       .filter((exercise) => {
         if (picked.some((item) => item.slug === exercise.slug)) return false;
         if (focusPlan) return isAllowedOnDayFocus(exercise, focusPlan);
@@ -1037,8 +1090,8 @@ export async function buildAdaptiveWorkoutPlan(
   let exercises: GeneratedWorkoutExercise[] = picked.map((exercise) => {
     const history = performance.get(exercise.slug);
     let weightLbs = suggestWeightLbs(exercise, profile.primaryTrainingGoal, history, profile.weightKg);
-    if (weightLbs && recoveryMods.intensityMultiplier < 1) {
-      weightLbs = Math.round(weightLbs * recoveryMods.intensityMultiplier / 5) * 5;
+    if (weightLbs && combinedIntensity < 1) {
+      weightLbs = Math.round(weightLbs * combinedIntensity / 5) * 5;
     }
 
     const notes = history
@@ -1076,9 +1129,13 @@ export async function buildAdaptiveWorkoutPlan(
 
   const recoveryNote = recoveryMods.recoveryModeActive
     ? ' Recovery Mode — volume and intensity reduced.'
-    : recoveryMods.volumeMultiplier < 1
-      ? ` Volume adjusted to ${Math.round(recoveryMods.volumeMultiplier * 100)}% based on recovery score.`
+    : combinedVolume < 1
+      ? ` Volume adjusted to ${Math.round(combinedVolume * 100)}% based on recovery${ageMods.preferLowImpact ? ' and age-aware intensity' : ''}.`
       : '';
+
+  const ageNote = ageMods.preferLowImpact
+    ? ' Joint-friendly selections prioritized (lower impact).'
+    : '';
 
   const limitationNote =
     limitations.length > 0
@@ -1094,7 +1151,7 @@ export async function buildAdaptiveWorkoutPlan(
     name: recoveryMods.recoveryModeActive
       ? 'Recovery Session'
       : `${normalizedMuscles.slice(0, 3).join(' & ')} — ${goalLabel}`,
-    rationale: `${rationale}${rotationNote}${recoveryNote}${limitationNote}`,
+    rationale: `${rationale}${rotationNote}${recoveryNote}${ageNote}${limitationNote}`,
     muscleGroups: normalizedMuscles,
     exercises,
     estimatedMinutes: Math.max(

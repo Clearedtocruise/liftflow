@@ -3,6 +3,7 @@ import { buildExerciseEducation } from '@/lib/exerciseEducation/buildExerciseEdu
 import { enrichLegacyGuide as enrichStepsToGuide } from '@/lib/exerciseGuideBuilder';
 import type { ExerciseFormGuide } from '@/lib/exerciseGuideTypes';
 import { STRUCTURED_EXERCISE_GUIDES } from '@/lib/exerciseStructuredGuides';
+import { GENERATED_STRUCTURED_FORM_GUIDES } from '@/lib/generatedStructuredFormGuides';
 import { month1GuideFromEncyclopedia } from '@/lib/liftingReference/month1ExerciseEncyclopedia';
 import type { Exercise } from '@/types';
 import type { MovementCategory } from '@/types/common';
@@ -391,6 +392,22 @@ export function resolveExerciseFormGuide(
       feelShouldNot: structured.feelShouldNot ?? enriched.feelShouldNot,
       musclesWorked: structured.musclesWorked ?? enriched.musclesWorked,
       illustratedSteps: structured.illustratedSteps,
+    };
+  }
+
+  const generated = lookupBySlug(GENERATED_STRUCTURED_FORM_GUIDES, slug, name);
+  if (generated) {
+    const enriched = buildExerciseEducation(exercise, name);
+    return {
+      ...enriched,
+      ...generated,
+      feelShould: generated.feelShould ?? enriched.feelShould,
+      feelShouldNot: generated.feelShouldNot ?? enriched.feelShouldNot,
+      musclesWorked: generated.musclesWorked ?? enriched.musclesWorked,
+      coachingCues: generated.coachingCues?.length ? generated.coachingCues : enriched.coachingCues,
+      commonMistakes: generated.commonMistakes?.length
+        ? generated.commonMistakes
+        : enriched.commonMistakes,
     };
   }
 

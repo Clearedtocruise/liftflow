@@ -67,7 +67,10 @@ export const coachActivationService = {
     }
   },
 
-  async getPostWorkoutSummary(userId: string, sessionId: string) {
+  async getPostWorkoutSummary(
+    userId: string,
+    sessionId: string,
+  ): Promise<import('@/types/common').ServiceResult<PostWorkoutCoachSummary>> {
     try {
       const token = await getAccessToken();
       const raw = await withTimeout(

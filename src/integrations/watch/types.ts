@@ -58,6 +58,8 @@ export type WatchActiveSetState = {
 export type WatchWorkoutAssistantState = {
   userId: string;
   activeSet: WatchActiveSetState | null;
+  /** When true, Watch should release the workout latch and return to home. */
+  sessionEnded?: boolean;
   /** Recovery intelligence score 0–100 */
   recoveryScore?: number;
   recoveryLabel?: string;

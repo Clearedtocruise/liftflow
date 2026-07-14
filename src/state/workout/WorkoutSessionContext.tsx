@@ -49,7 +49,7 @@ type WorkoutSessionState = {
 type WorkoutSessionActions = {
   hydrate: () => Promise<void>;
   refreshSession: () => Promise<void>;
-  setActiveExerciseIndex: (index: number) => void;
+  setActiveExerciseIndex: (index: number | ((prev: number) => number)) => void;
   startSession: (payload: StartSessionPayload) => Promise<WorkoutSession | null>;
   startSessionFromPlanned: (plannedWorkoutId: string, payload: StartSessionPayload) => Promise<WorkoutSession | null>;
   endSession: () => Promise<WorkoutSession | null>;
@@ -362,18 +362,25 @@ export function WorkoutSessionProvider({
     if (!activeSession) return null;
     const sessionId = activeSession.id;
     await flushPendingSets();
+    dismissedSessionIdsRef.current.add(sessionId);
     sessionEpochRef.current += 1;
     clearLocalSessionState();
+    if (userId) {
+      void watchCompanionService.notifyWatchSessionEnded(userId, 'Workout complete');
+    }
     setIsLoading(true);
     const result = await workoutService.endSession(sessionId);
     setIsLoading(false);
     if (result.success) {
       await pendingSetQueue.purgeSession(sessionId);
       await syncPendingSetCount(null);
+      if (userId) {
+        void watchCompanionService.notifyWatchSessionEnded(userId, 'Workout complete');
+      }
       return result.data;
     }
     return null;
-  }, [activeSession, clearLocalSessionState, flushPendingSets, syncPendingSetCount]);
+  }, [activeSession, clearLocalSessionState, flushPendingSets, syncPendingSetCount, userId]);
 
   const pauseSession = useCallback(async () => {
     if (!activeSession) return;
@@ -393,6 +400,9 @@ export function WorkoutSessionProvider({
     dismissedSessionIdsRef.current.add(sessionId);
     sessionEpochRef.current += 1;
     clearLocalSessionState();
+    if (userId) {
+      void watchCompanionService.notifyWatchSessionEnded(userId, 'Workout cancelled');
+    }
     await pendingSetQueue.purgeSession(sessionId);
     await syncPendingSetCount(null);
 
@@ -400,7 +410,7 @@ export function WorkoutSessionProvider({
     if (!result.success) {
       console.warn('[workoutSession] cancel failed', result.error);
     }
-  }, [activeSession, clearLocalSessionState, syncPendingSetCount]);
+  }, [activeSession, clearLocalSessionState, syncPendingSetCount, userId]);
 
   const logSet = useCallback(
     async (payload: CreateSetPayload) => {

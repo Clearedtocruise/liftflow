@@ -31,7 +31,7 @@ export type VoiceIntent =
   | 'transformation_progress'
   | 'transformation_target_bf';
 
-export type ParsedVoiceCommandExtended = ParsedVoiceCommand & {
+export type ParsedVoiceCommandExtended = Omit<ParsedVoiceCommand, 'intent'> & {
   intent?: VoiceIntent;
   /** Explicit target weight e.g. "increase to 235" */
   targetWeight?: number;

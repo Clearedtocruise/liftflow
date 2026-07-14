@@ -41,7 +41,7 @@ function formatRest(seconds: number): string {
 function planFallbackLine(
   plan: Omit<ExercisePrescriptionPlanInput, 'exerciseId'> | undefined,
   loggingMode: ExerciseLoggingMode,
-  formatWeight: (kg: number) => number,
+  formatWeight: (kg: number) => string,
   weightLabel: string,
 ): string {
   if (loggingMode === 'timed') {
@@ -145,7 +145,7 @@ export function ExerciseCoachCard({
     const fallbackLine = planFallbackLine(
       plan,
       loggingMode,
-      (kg) => kgToDisplayWeight(kg, units.preferredWeightUnit),
+      (kg) => String(kgToDisplayWeight(kg, units.preferredWeightUnit)),
       units.weightLabel,
     );
 
@@ -198,7 +198,7 @@ export function ExerciseCoachCard({
   const targetLine = formatCoachTargetLine(
     targets,
     loggingMode,
-    (kg) => kgToDisplayWeight(kg, units.preferredWeightUnit),
+    (kg) => String(kgToDisplayWeight(kg, units.preferredWeightUnit)),
     units.weightLabel,
     plan?.plannedReps,
   );

@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Alert, StyleSheet, TextInput, View } from 'react-native';
 
 import { ActivitySessionSaveCard } from '@/components/cardio/ActivitySessionSaveCard';
+import { HeartRateZoneBars } from '@/components/cardio/HeartRateZoneBars';
 import { IntervalTimerPanel } from '@/components/cardio/IntervalTimerPanel';
 import { SteadyCardioMetrics } from '@/components/cardio/SteadyCardioMetrics';
 import { GradientBorderCard } from '@/components/layout/GradientBorderCard';
@@ -23,6 +24,10 @@ import {
     supportsSteadyDistanceMetrics,
 } from '@/lib/cardioMetrics';
 import { formatCardioDuration } from '@/lib/exerciseModality';
+import {
+    ageFromDateOfBirth,
+    buildHeartRateZoneBuckets,
+} from '@/lib/heartRateZones';
 import { parseDistanceToKm } from '@/lib/unitConversion';
 import { cardioService } from '@/services/cardioService';
 import { watchCardioBridge } from '@/state/watchCardioBridge';
@@ -39,7 +44,7 @@ export function CardioSessionPanel({ activity, activityKind }: CardioSessionPane
   const [distanceText, setDistanceText] = useState('');
   const [saving, setSaving] = useState(false);
   const sessionIdRef = useRef(`cardio-${activity.id}`);
-  const heartRateSamplesRef = useRef<number[]>([]);
+  const heartRateSamplesRef = useRef<Array<{ bpm: number; recordedAt: string }>>([]);
 
   const tracksDistance = supportsSteadyDistanceMetrics(activity.type);
   const {
@@ -124,11 +129,15 @@ export function CardioSessionPanel({ activity, activityKind }: CardioSessionPane
 
   useEffect(() => {
     if (heartRateBpm) {
-      heartRateSamplesRef.current.push(heartRateBpm);
+      heartRateSamplesRef.current.push({
+        bpm: heartRateBpm,
+        recordedAt: new Date().toISOString(),
+      });
     }
   }, [heartRateBpm]);
 
   const intervalSavedRef = useRef(false);
+  const userAge = ageFromDateOfBirth(user?.dateOfBirth);
 
   async function saveSession(durationSeconds: number) {
     if (!user) {
@@ -146,7 +155,9 @@ export function CardioSessionPanel({ activity, activityKind }: CardioSessionPane
     const distanceMeters = effectiveDistanceMeters > 0 ? effectiveDistanceMeters : undefined;
     const samples = heartRateSamplesRef.current;
     const avgHeartRate =
-      samples.length > 0 ? Math.round(samples.reduce((sum, bpm) => sum + bpm, 0) / samples.length) : undefined;
+      samples.length > 0
+        ? Math.round(samples.reduce((sum, sample) => sum + sample.bpm, 0) / samples.length)
+        : undefined;
 
     const { calories, met, weightKg } = estimateActivityCalories({
       durationSeconds,
@@ -175,6 +186,10 @@ export function CardioSessionPanel({ activity, activityKind }: CardioSessionPane
         avgSpeed: speedLabel,
         gpsTracked: trackedMeters > 0 && manualDistanceMeters === 0,
         avgHeartRateBpm: avgHeartRate,
+        heartRateZones: buildHeartRateZoneBuckets(samples, userAge).map((zone) => ({
+          zone: zone.zone,
+          seconds: Math.round(zone.seconds),
+        })),
       },
     });
 
@@ -230,6 +245,7 @@ export function CardioSessionPanel({ activity, activityKind }: CardioSessionPane
         }).calories}
         usedDefaultWeight={usedDefaultWeight}
         heartRateBpm={heartRateBpm}
+        heartRateZones={buildHeartRateZoneBuckets(heartRateSamplesRef.current, userAge)}
         saving={saving}
         showDistanceEdit={tracksDistance}
         distanceText={distanceText}
@@ -258,6 +274,8 @@ export function CardioSessionPanel({ activity, activityKind }: CardioSessionPane
 
   const activityTitle = activity.type === 'run' ? 'RUN' : activity.label.toUpperCase();
   const showManualDistance = tracksDistance && !running && elapsed > 0;
+  const liveZones = buildHeartRateZoneBuckets(heartRateSamplesRef.current, userAge);
+  const hasLiveZones = liveZones.some((zone) => zone.seconds > 0);
 
   return (
     <GradientBorderCard intensity="subtle" innerStyle={styles.steadyCard}>
@@ -281,6 +299,8 @@ export function CardioSessionPanel({ activity, activityKind }: CardioSessionPane
           compact
         />
       )}
+
+      {hasLiveZones ? <HeartRateZoneBars zones={liveZones} /> : null}
 
       {showManualDistance ? (
         <View style={styles.distanceBlock}>

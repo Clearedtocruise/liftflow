@@ -41,6 +41,28 @@ export function resolveWorkoutUpNext(input: ResolveWorkoutUpNextInput): WorkoutP
   };
 }
 
+/** Labels while the rest timer is open — “after set N”, not “on set N”. */
+export function resolveRestingUpNext(input: ResolveWorkoutUpNextInput): WorkoutPositionLabels {
+  const finished = Math.max(0, input.completedSetsCount);
+  const currentSetLabel = finished > 0 ? `After Set ${Math.min(finished, input.targetSets)}` : 'Rest';
+
+  let upNextLabel: string;
+  if (finished < input.targetSets) {
+    upNextLabel = `${input.exerciseName} · Set ${finished + 1} of ${input.targetSets}`;
+  } else if (!input.isLastExercise && input.nextExerciseName) {
+    const nextSets = input.nextExerciseTargetSets ?? input.targetSets;
+    upNextLabel = `${input.nextExerciseName} · Set 1 of ${nextSets}`;
+  } else {
+    upNextLabel = 'Finish workout';
+  }
+
+  return {
+    exerciseName: input.exerciseName,
+    currentSetLabel,
+    upNextLabel,
+  };
+}
+
 export function resolveBetweenExerciseUpNext(
   nextExerciseName: string,
   nextTargetSets: number,

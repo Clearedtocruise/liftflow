@@ -41,6 +41,7 @@ import {
     selectMealsForScope,
 } from '@/lib/mealReplacement';
 import { formatScheduleSubtitle, scheduleFromProfile, scheduledTimesForDay } from '@/lib/mealSchedule';
+import { pendingMealQueue } from '@/lib/pendingMealQueue';
 import { planDataCache } from '@/lib/planDataCache';
 import { invalidateWeekPlanPrefetch, warmWeekPlanData } from '@/lib/planDataPrefetch';
 import { logStartup } from '@/lib/startupLogger';
@@ -66,6 +67,7 @@ export default function NutritionScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [pendingMealCount, setPendingMealCount] = useState(0);
   const [replaceMeal, setReplaceMeal] = useState<Meal | null>(null);
   const [replaceMode, setReplaceMode] = useState<'meal' | 'ingredient'>('meal');
   const [replaceIngredientName, setReplaceIngredientName] = useState<string | null>(null);
@@ -97,13 +99,17 @@ export default function NutritionScreen() {
     if (!user || updatedMeals.length === 0) return;
     const { from, to } = getWeekRange(new Date(), user.timezone);
     invalidateWeekPlanPrefetch(user.id, user.timezone);
-    const merged = await planDataCache.patchMeals(user.id, from, to, updatedMeals);
-    setWeekMeals(merged);
-    setDetailMeal((current) => {
-      if (!current) return current;
-      return merged.find((meal) => meal.id === current.id) ?? current;
-    });
-    setSummary((prev) => buildDailySummaryFromMeals(merged, today, goals, prev?.waterMl ?? 0));
+    try {
+      const merged = await planDataCache.patchMeals(user.id, from, to, updatedMeals);
+      setWeekMeals(merged);
+      setDetailMeal((current) => {
+        if (!current) return current;
+        return merged.find((meal) => meal.id === current.id) ?? current;
+      });
+      setSummary((prev) => buildDailySummaryFromMeals(merged, today, goals, prev?.waterMl ?? 0));
+    } catch {
+      await load({ silent: true });
+    }
   }
 
   const load = useCallback(async (options?: { silent?: boolean }) => {
@@ -286,13 +292,24 @@ export default function NutritionScreen() {
         skipFocusLoadRef.current = false;
         return;
       }
-      if (user) void load({ silent: true });
+      if (user) {
+        void flushPendingMeals();
+        void load({ silent: true });
+        void syncPendingMealCount();
+      }
     }, [user, load]),
   );
 
   useAppResume(() => {
-    if (user) void load({ silent: true });
+    if (user) {
+      void flushPendingMeals();
+      void load({ silent: true });
+    }
   });
+
+  useEffect(() => {
+    void syncPendingMealCount();
+  }, [user?.id]);
 
   useLocalWeekRollover(user?.timezone, () => {
     if (!user) return;
@@ -346,6 +363,30 @@ export default function NutritionScreen() {
     setExpandedDay((current) => current ?? today);
   }, [section, today]);
 
+  async function syncPendingMealCount() {
+    if (!user?.id) {
+      setPendingMealCount(0);
+      return;
+    }
+    setPendingMealCount(await pendingMealQueue.countForUser(user.id));
+  }
+
+  async function flushPendingMeals() {
+    if (!user?.id) return;
+    const items = (await pendingMealQueue.list()).filter((item) => item.userId === user.id);
+    for (const item of items) {
+      await pendingMealQueue.markAttempt(item.id);
+      const result = await nutritionService.logFood(user.id, item.payload);
+      if (result.success) {
+        await pendingMealQueue.remove(item.id);
+      }
+    }
+    await syncPendingMealCount();
+    if ((await pendingMealQueue.countForUser(user.id)) === 0) {
+      await load({ silent: true });
+    }
+  }
+
   async function handleQuickLogMeal(payload: {
     name: string;
     mealType: MealType;
@@ -355,16 +396,23 @@ export default function NutritionScreen() {
     if (!user) return;
     const meta = enrichMealMeta(payload.name, undefined);
     meta.status = 'completed';
-    const result = await nutritionService.logFood(user.id, {
+    const foodPayload = {
       ...payload,
       date: today,
       instructions: serializeMealMeta(meta),
-    });
+    };
+    const result = await nutritionService.logFood(user.id, foodPayload);
     if (result.success) {
-      await load();
-    } else {
-      Alert.alert('Could not log meal', result.error);
+      await load({ silent: true });
+      return;
     }
+
+    await pendingMealQueue.enqueue(user.id, foodPayload);
+    await syncPendingMealCount();
+    Alert.alert(
+      'Saved offline',
+      'Meal queued on this device. Tap the sync banner when you’re back online.',
+    );
   }
 
   async function syncGroceriesAfterReplace() {
@@ -482,19 +530,12 @@ export default function NutritionScreen() {
     const savedMeals: Meal[] = [];
 
     for (const target of targets) {
-      const updates = buildSmartReplacementUpdate(
-        target,
-        mode,
-        ingredientName ?? undefined,
-        {
-          items: payload.items.map((item) => ({
-            foodName: item.foodName,
-            servingSize: item.servingSize,
-            macros: item.macros,
-          })),
-          macros: payload.macros,
-        },
-      );
+      const updates = buildSmartReplacementUpdate(target, mode, ingredientName ?? undefined, {
+        foodName: payload.foodName,
+        servingSize: payload.servingSize,
+        macros: payload.macros,
+        items: payload.items,
+      });
       const result = await nutritionService.updateMeal(target.id, updates);
       if (!result.success) {
         Alert.alert('Error', result.error);
@@ -585,10 +626,20 @@ export default function NutritionScreen() {
         </Pressable>
       </FeatureGate>
 
+      {pendingMealCount > 0 ? (
+        <Pressable onPress={() => void flushPendingMeals()}>
+          <Card style={styles.loadWarning}>
+            <AppText variant="footnote" color="warning">
+              {pendingMealCount} meal{pendingMealCount === 1 ? '' : 's'} waiting to sync — tap to retry
+            </AppText>
+          </Card>
+        </Pressable>
+      ) : null}
+
       {loadError ? (
         <Card style={styles.loadWarning}>
           <AppText variant="footnote" color="textSecondary">
-            Some nutrition data could not be refreshed: {loadError}
+            Some nutrition data could not be refreshed. Pull to refresh or tap Retry.
           </AppText>
           <Pressable onPress={() => void load()}>
             <AppText variant="caption" color="accent">
