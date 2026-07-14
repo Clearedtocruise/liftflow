@@ -192,9 +192,14 @@ const REQUIRED = [
     patterns: ['buildHeartRateZoneBuckets', 'HeartRateZone', 'supportsPowerMetrics'],
   },
   {
-    file: 'backend/src/lib/workoutPlanner.ts',
+    file: 'backend/src/lib/ageAdjustments.ts',
     label: 'Age-based training adjustments',
-    patterns: ['ageTrainingAdjustments', 'preferLowImpact', 'date_of_birth'],
+    patterns: ['ageTrainingAdjustments', 'preferLowImpact', 'ageNutritionAdjustments', 'JOINT_FRIENDLY_PREF_KEY'],
+  },
+  {
+    file: 'backend/src/lib/workoutPlanner.ts',
+    label: 'Planner uses age and joint-friendly prefs',
+    patterns: ['resolveTrainingAdjustments', 'jointFriendlyTraining', 'date_of_birth'],
   },
   {
     file: 'src/lib/pendingMealQueue.ts',

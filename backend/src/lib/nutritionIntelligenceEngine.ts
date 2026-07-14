@@ -20,6 +20,7 @@ export type NutritionEngineInput = {
   today: string;
   goal: NutritionGoalFocus;
   bodyWeightKg?: number;
+  ageYears?: number | null;
   recoveryScore: number;
   recoveryStatus: string;
   recoveryModeActive: boolean;
@@ -335,6 +336,7 @@ function buildWeeklyPlan(
     const dayMacros = calculateMacroTargets({
       goal: input.goal,
       bodyWeightKg: input.bodyWeightKg,
+      ageYears: input.ageYears,
       recoveryScore: input.recoveryScore,
       recoveryModeActive: input.recoveryModeActive,
       workoutType,
@@ -390,6 +392,7 @@ export function computeNutritionIntelligence(input: NutritionEngineInput): Nutri
   let baseMacros = calculateMacroTargets({
     goal: input.goal,
     bodyWeightKg: input.bodyWeightKg,
+    ageYears: input.ageYears,
     recoveryScore: input.recoveryScore,
     recoveryModeActive: input.recoveryModeActive,
     trainingVolume: input.trainingVolume7d,

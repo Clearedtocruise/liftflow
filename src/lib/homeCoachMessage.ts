@@ -48,3 +48,20 @@ export function formatWhyTodayRationale(rationale?: string | null, maxLength = 1
   if (cleaned.length <= maxLength) return cleaned;
   return `${cleaned.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
 }
+
+/** Prefer a short joint-friendly / age line when present in planner rationale. */
+export function formatWhyTodayWithAgeEmphasis(rationale?: string | null, maxLength = 160): string | null {
+  if (!rationale) return null;
+  const cleaned = rationale.replace(/\s+/g, ' ').trim();
+  const jointMatch = cleaned.match(/Joint-friendly selections prioritized[^.]*(?:\.|$)/i);
+  const ageMatch = cleaned.match(/age-aware intensity[^.]*(?:\.|$)/i);
+  const highlight = (jointMatch?.[0] ?? ageMatch?.[0] ?? '').trim();
+  if (highlight) {
+    const lead = highlight.endsWith('.') ? highlight : `${highlight}.`;
+    if (lead.length >= maxLength) return formatWhyTodayRationale(lead, maxLength);
+    const rest = cleaned.replace(highlight, '').replace(/\s+/g, ' ').trim();
+    if (!rest) return lead;
+    return formatWhyTodayRationale(`${lead} ${rest}`, maxLength);
+  }
+  return formatWhyTodayRationale(cleaned, maxLength);
+}

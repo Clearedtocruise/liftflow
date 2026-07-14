@@ -1,4 +1,5 @@
 import { generateWeeklyMealPlan } from './aiCoach.js';
+import { ageYearsFromDateOfBirth } from './ageAdjustments.js';
 import { pruneDuplicateMeals, removePlannedMealsForWeek, weekEndDate } from './mealCleanup.js';
 import { captureOutcomeBaseline } from './outcomeEngine.js';
 import { generateTrainingProgram, getProgramDashboard } from './programEngine.js';
@@ -89,6 +90,7 @@ export async function activateCoachSystem(userId: string) {
   const macroTargets = calculateMacroTargets({
     goal: nutritionGoal,
     bodyWeightKg: profile.weight_kg ?? undefined,
+    ageYears: ageYearsFromDateOfBirth(profile.date_of_birth),
     dietaryStyle: coachProfile.dietaryRestrictions?.some((r) => /keto/i.test(r))
       ? 'keto'
       : coachProfile.dietaryRestrictions?.some((r) => /vegetarian/i.test(r))

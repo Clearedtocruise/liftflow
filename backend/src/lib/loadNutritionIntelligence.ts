@@ -1,4 +1,5 @@
 import { addDays } from './programTypes.js';
+import { ageYearsFromDateOfBirth } from './ageAdjustments.js';
 import {
   aggregateDailyMeals,
   countNutritionLogDays,
@@ -29,7 +30,7 @@ export async function loadNutritionIntelligence(userId: string): Promise<Nutriti
       loadRecoveryIntelligence(userId),
       db
         .from('profiles')
-        .select('weight_kg, primary_training_goal, fitness_goals, metadata')
+        .select('weight_kg, primary_training_goal, fitness_goals, metadata, date_of_birth')
         .eq('id', userId)
         .maybeSingle(),
       db
@@ -143,6 +144,7 @@ export async function loadNutritionIntelligence(userId: string): Promise<Nutriti
     today,
     goal,
     bodyWeightKg,
+    ageYears: ageYearsFromDateOfBirth(profileRes.data?.date_of_birth),
     recoveryScore: intelligence.recoveryScore,
     recoveryStatus: intelligence.recoveryStatus,
     recoveryModeActive: intelligence.recoveryScore < 40,

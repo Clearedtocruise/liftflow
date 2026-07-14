@@ -1,3 +1,10 @@
+import {
+  ageYearsFromDateOfBirth,
+  isHighImpactExercise,
+  jointFriendlyTrainingNote,
+  JOINT_FRIENDLY_PREF_KEY,
+  resolveTrainingAdjustments,
+} from './ageAdjustments.js';
 import { expandEquipmentRequirements } from './equipmentCatalog.js';
 import { isCatalogVariantSlug } from './exerciseCatalogDedup.js';
 import {
@@ -7,6 +14,8 @@ import {
 import { maxPatternUsesForDayFocus, patternExclusionGroupId } from './movementPatternExclusion.js';
 import { requireAdmin } from './supabase.js';
 import { blendWorkoutPreset, resolveRankedGoals, toPlannerGoal } from './trainingGoals.js';
+
+export { ageTrainingAdjustments, isHighImpactExercise } from './ageAdjustments.js';
 
 export type GeneratedWorkoutExercise = {
   name: string;
@@ -50,6 +59,8 @@ export type UserTrainingProfile = {
   weightKg?: number | null;
   /** Whole years from profile date of birth when available. */
   ageYears?: number | null;
+  /** Explicit Settings toggle; null means age defaults only. */
+  jointFriendlyTraining?: boolean | null;
 };
 
 const ALL_EQUIPMENT = [
@@ -397,15 +408,20 @@ export async function loadRecoveryModifiers(userId: string): Promise<{ volumeMul
 
 export async function loadUserTrainingProfile(userId: string): Promise<UserTrainingProfile> {
   const db = requireAdmin();
-  const { data } = await db
-    .from('profiles')
-    .select(
-      'training_location, available_equipment, primary_training_goal, fitness_goals, training_experience, weight_kg, date_of_birth',
-    )
-    .eq('id', userId)
-    .maybeSingle();
+  const [{ data }, prefsRes] = await Promise.all([
+    db
+      .from('profiles')
+      .select(
+        'training_location, available_equipment, primary_training_goal, fitness_goals, training_experience, weight_kg, date_of_birth',
+      )
+      .eq('id', userId)
+      .maybeSingle(),
+    db.from('user_preferences').select('coaching_preferences').eq('user_id', userId).maybeSingle(),
+  ]);
 
   const ranked = resolveRankedGoals(data?.fitness_goals, data?.primary_training_goal);
+  const coaching = (prefsRes.data?.coaching_preferences ?? {}) as Record<string, unknown>;
+  const jointPref = coaching[JOINT_FRIENDLY_PREF_KEY];
 
   return {
     trainingLocation: data?.training_location,
@@ -415,45 +431,8 @@ export async function loadUserTrainingProfile(userId: string): Promise<UserTrain
     trainingExperience: data?.training_experience,
     weightKg: data?.weight_kg,
     ageYears: ageYearsFromDateOfBirth(data?.date_of_birth),
+    jointFriendlyTraining: typeof jointPref === 'boolean' ? jointPref : null,
   };
-}
-
-function ageYearsFromDateOfBirth(dateOfBirth: string | null | undefined): number | null {
-  if (!dateOfBirth) return null;
-  const dob = new Date(dateOfBirth);
-  if (Number.isNaN(dob.getTime())) return null;
-  const now = new Date();
-  let age = now.getFullYear() - dob.getFullYear();
-  const month = now.getMonth() - dob.getMonth();
-  if (month < 0 || (month === 0 && now.getDate() < dob.getDate())) age -= 1;
-  return age > 0 && age < 120 ? age : null;
-}
-
-/** Age-aware volume/intensity and high-impact filtering for joint-friendlier sessions. */
-export function ageTrainingAdjustments(ageYears: number | null | undefined): {
-  volumeMultiplier: number;
-  intensityMultiplier: number;
-  restSecondsBonus: number;
-  preferLowImpact: boolean;
-} {
-  if (ageYears == null) {
-    return { volumeMultiplier: 1, intensityMultiplier: 1, restSecondsBonus: 0, preferLowImpact: false };
-  }
-  if (ageYears >= 65) {
-    return { volumeMultiplier: 0.75, intensityMultiplier: 0.8, restSecondsBonus: 30, preferLowImpact: true };
-  }
-  if (ageYears >= 55) {
-    return { volumeMultiplier: 0.85, intensityMultiplier: 0.9, restSecondsBonus: 15, preferLowImpact: true };
-  }
-  return { volumeMultiplier: 1, intensityMultiplier: 1, restSecondsBonus: 0, preferLowImpact: false };
-}
-
-const HIGH_IMPACT_SLUG_PATTERN =
-  /\b(jump|box-jump|burpee|plyo|kipping|muscle-up|sprint|depth-jump|tuck-jump|broad-jump)\b/i;
-
-export function isHighImpactExercise(exercise: { slug?: string; name?: string }): boolean {
-  const label = `${exercise.slug ?? ''} ${exercise.name ?? ''}`;
-  return HIGH_IMPACT_SLUG_PATTERN.test(label);
 }
 
 export async function loadAvailableExercises(
@@ -993,7 +972,7 @@ export async function buildAdaptiveWorkoutPlan(
   const performance = await getLastPerformanceBySlug(userId);
   const limitations = await loadActiveLimitations(userId);
   const recoveryMods = await loadRecoveryModifiers(userId);
-  const ageMods = ageTrainingAdjustments(profile.ageYears);
+  const ageMods = resolveTrainingAdjustments(profile.ageYears, profile.jointFriendlyTraining);
 
   const targetCount = Math.max(
     options?.minimumExercises ?? WORKOUT_MIN_EXERCISES,
@@ -1133,9 +1112,7 @@ export async function buildAdaptiveWorkoutPlan(
       ? ` Volume adjusted to ${Math.round(combinedVolume * 100)}% based on recovery${ageMods.preferLowImpact ? ' and age-aware intensity' : ''}.`
       : '';
 
-  const ageNote = ageMods.preferLowImpact
-    ? ' Joint-friendly selections prioritized (lower impact).'
-    : '';
+  const ageNote = jointFriendlyTrainingNote(ageMods.preferLowImpact);
 
   const limitationNote =
     limitations.length > 0

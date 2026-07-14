@@ -2,6 +2,7 @@ import { INTERVAL_MODE_DEFAULTS } from '@/constants/workoutExecutionModes';
 import type { UserPreferences } from '@/types';
 
 export const TABATA_MODE_PREF_KEY = 'tabataModeEnabled';
+export const JOINT_FRIENDLY_PREF_KEY = 'jointFriendlyTraining';
 
 /** In-workout Tabata timer: work and rest can be adjusted within this range (seconds). */
 export const TABATA_INTERVAL_BOUNDS = {
@@ -36,6 +37,17 @@ export function clampTabataBetweenExerciseRest(seconds: number): number {
 
 export function isTabataModeEnabled(preferences?: UserPreferences | null): boolean {
   return preferences?.coachingPreferences?.[TABATA_MODE_PREF_KEY] === true;
+}
+
+/** Effective joint-friendly mode after combining Settings toggle with age defaults. */
+export function isJointFriendlyTrainingEnabled(
+  preferences?: UserPreferences | null,
+  ageYears?: number | null,
+): boolean {
+  const pref = preferences?.coachingPreferences?.[JOINT_FRIENDLY_PREF_KEY];
+  if (pref === true) return true;
+  if (pref === false) return ageYears != null && ageYears >= 65;
+  return ageYears != null && ageYears >= 55;
 }
 
 export function tabataModeSummary(): string {

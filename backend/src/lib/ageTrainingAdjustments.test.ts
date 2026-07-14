@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { ageTrainingAdjustments, isHighImpactExercise } from './workoutPlanner.js';
+import {
+  ageNutritionAdjustments,
+  ageTrainingAdjustments,
+  isHighImpactExercise,
+  resolveTrainingAdjustments,
+} from './ageAdjustments.js';
 
 test('ageTrainingAdjustments leaves young adults unchanged', () => {
   assert.deepEqual(ageTrainingAdjustments(30), {
@@ -32,6 +37,19 @@ test('ageTrainingAdjustments is strongest at 65+', () => {
   assert.ok(senior.volumeMultiplier < mid.volumeMultiplier);
   assert.ok(senior.restSecondsBonus > mid.restSecondsBonus);
   assert.equal(senior.preferLowImpact, true);
+});
+
+test('resolveTrainingAdjustments honors joint-friendly toggle', () => {
+  assert.equal(resolveTrainingAdjustments(30, true).preferLowImpact, true);
+  assert.equal(resolveTrainingAdjustments(58, false).preferLowImpact, false);
+  assert.equal(resolveTrainingAdjustments(70, false).preferLowImpact, true);
+});
+
+test('ageNutritionAdjustments bumps protein for 55+ and 65+', () => {
+  assert.equal(ageNutritionAdjustments(40).proteinMultiplier, 1);
+  assert.ok(ageNutritionAdjustments(58).proteinMultiplier > 1);
+  assert.ok(ageNutritionAdjustments(70).proteinMultiplier > ageNutritionAdjustments(58).proteinMultiplier);
+  assert.ok((ageNutritionAdjustments(70).note ?? '').length > 0);
 });
 
 test('isHighImpactExercise tags plyometric and jump patterns', () => {

@@ -1,3 +1,4 @@
+import { ageYearsFromDateOfBirth } from './ageAdjustments.js';
 import { prePostWorkoutNamesForDate } from './mealPlanTemplates.js';
 import { parseMealStatus } from './nutritionPreferenceEngine.js';
 import { requireAdmin } from './supabase.js';
@@ -172,7 +173,7 @@ export async function syncNutritionForDate(userId: string, date: string): Promis
   const db = requireAdmin();
 
   const [profileRes, recoveryRes, workoutRes, mealsRes] = await Promise.all([
-    db.from('profiles').select('weight_kg, primary_training_goal, fitness_goals, metadata').eq('id', userId).maybeSingle(),
+    db.from('profiles').select('weight_kg, primary_training_goal, fitness_goals, metadata, date_of_birth').eq('id', userId).maybeSingle(),
     db
       .from('recovery_assessments')
       .select('recovery_score, recovery_mode_active')
@@ -211,6 +212,7 @@ export async function syncNutritionForDate(userId: string, date: string): Promis
     sessionKind: sessionKind === 'rest' ? undefined : sessionKind,
     isTrainingDay,
     dietaryStyle,
+    ageYears: ageYearsFromDateOfBirth(profile?.date_of_birth),
   });
 
   const targetMeals =

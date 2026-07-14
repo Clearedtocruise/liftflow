@@ -40,7 +40,7 @@ import {
     resolveCoachTrainingGuidance,
     validateWorkoutAssignmentConsistency,
 } from '@/lib/activeTrainingDay';
-import { formatHomeCoachMessage, formatWhyTodayRationale } from '@/lib/homeCoachMessage';
+import { formatHomeCoachMessage, formatWhyTodayWithAgeEmphasis } from '@/lib/homeCoachMessage';
 import { deviceTimeZone, formatScheduledDbTime } from '@/lib/localDate';
 import {
     aggregateDailyMeals,
@@ -459,7 +459,7 @@ export default function DashboardScreen() {
     recoveryIntel,
     recoveryScore,
   });
-  const whyToday = formatWhyTodayRationale(todaysWorkout?.aiRationale);
+  const whyToday = formatWhyTodayWithAgeEmphasis(todaysWorkout?.aiRationale);
 
   const workoutDurationMin = todaysWorkout
     ? estimateWorkoutDurationMinutes(exercisesFromPlannedWorkout(todaysWorkout)) ||

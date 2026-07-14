@@ -32,7 +32,9 @@ import { useUnits } from '@/hooks/useUnits';
 import { loadRolloverValidationState, type RolloverValidationState } from '@/lib/rolloverDebug';
 import { openSupportEmail } from '@/lib/supportMail';
 import {
+    isJointFriendlyTrainingEnabled,
     isTabataModeEnabled,
+    JOINT_FRIENDLY_PREF_KEY,
     TABATA_MODE_PREF_KEY,
     tabataModeSummary,
 } from '@/lib/trainingPreferences';
@@ -73,6 +75,7 @@ export default function SettingsScreen() {
   const [locationDetection, setLocationDetection] = useState(true);
   const [locationPermission, setLocationPermission] = useState<string>('—');
   const [tabataMode, setTabataMode] = useState(false);
+  const [jointFriendlyTraining, setJointFriendlyTraining] = useState(false);
   const [restTimerSound, setRestTimerSound] = useState(true);
   const [restTimerHaptics, setRestTimerHaptics] = useState(true);
   const [workoutReminderEnabled, setWorkoutReminderEnabled] = useState(false);
@@ -110,6 +113,7 @@ export default function SettingsScreen() {
         setWakePhraseSettingEnabled(coaching.wakePhraseEnabled === true);
         setGymModeActive(coaching.gymModeEnabled === true);
         setTabataMode(isTabataModeEnabled(result.data));
+        setJointFriendlyTraining(isJointFriendlyTrainingEnabled(result.data));
         setRestTimerSound(result.data.restTimerSound !== false);
         setRestTimerHaptics(result.data.restTimerHaptics !== false);
         setWorkoutReminderEnabled(result.data.notificationPreferences?.workoutReminder === true);
@@ -450,6 +454,24 @@ export default function SettingsScreen() {
             });
           }}
         />
+        <SettingsRow
+          label="Joint-friendly training"
+          value={jointFriendlyTraining ? 'On' : 'Off'}
+          icon={
+            <AppSymbol name="figure.walk" fallback="◎" size={20} tintColor={colors.textSecondary} />
+          }
+          onPress={async () => {
+            if (!user) return;
+            const next = !jointFriendlyTraining;
+            setJointFriendlyTraining(next);
+            const prefs = await userService.getPreferences(user.id);
+            const coaching = prefs.success ? prefs.data.coachingPreferences ?? {} : {};
+            await userService.updatePreferences(user.id, {
+              coachingPreferences: { ...coaching, [JOINT_FRIENDLY_PREF_KEY]: next },
+            });
+            bumpRevision();
+          }}
+        />
       </Card>
 
       <View style={styles.sectionGap}>
@@ -656,6 +678,13 @@ export default function SettingsScreen() {
         <SectionHeader title="Legal & Support" variant="secondary" />
       </View>
       <Card style={styles.group}>
+        <SettingsRow
+          label="Science & sources"
+          icon={
+            <AppSymbol name="book.closed.fill" fallback="📚" size={20} tintColor={colors.textSecondary} />
+          }
+          onPress={() => router.push('/(features)/science-sources')}
+        />
         <SettingsRow
           label="Privacy Policy"
           icon={
