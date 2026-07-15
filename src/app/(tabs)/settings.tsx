@@ -29,9 +29,9 @@ import { useAuth } from '@/hooks/useAuth';
 import { useLiftFlowTheme, useThemedStyles } from '@/hooks/useLiftFlowTheme';
 import { useSubscription } from '@/hooks/useSubscription';
 import { useUnits } from '@/hooks/useUnits';
+import { ageFromDateOfBirth } from '@/lib/heartRateZones';
 import { loadRolloverValidationState, type RolloverValidationState } from '@/lib/rolloverDebug';
 import { openSupportEmail } from '@/lib/supportMail';
-import { ageFromDateOfBirth } from '@/lib/heartRateZones';
 import {
     isJointFriendlyTrainingEnabled,
     isTabataModeEnabled,
@@ -314,6 +314,11 @@ export default function SettingsScreen() {
               coachingPreferences: { ...coaching, voiceAutoLog: next },
             });
           }}
+        />
+        <SettingsRow
+          label="Test voice logging"
+          value="Improve accuracy"
+          onPress={() => router.push('/(features)/voice-test')}
         />
         <SettingsRow
           label="Voice feedback (spoken)"

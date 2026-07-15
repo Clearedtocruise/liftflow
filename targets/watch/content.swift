@@ -32,6 +32,12 @@ struct ContentView: View {
         connectivity.recordHeartRate(newValue)
       }
     }
+    .sheet(isPresented: Binding(
+      get: { connectivity.voiceEntryMode != nil },
+      set: { if !$0 { connectivity.cancelVoiceEntry() } }
+    )) {
+      VoiceEntrySheet(connectivity: connectivity)
+    }
   }
 
   private var activeWorkoutScreen: some View {
@@ -257,6 +263,34 @@ struct ContentView: View {
     let m = seconds / 60
     let s = seconds % 60
     return String(format: "%d:%02d", m, s)
+  }
+}
+
+private struct VoiceEntrySheet: View {
+  @ObservedObject var connectivity: WorkoutConnectivity
+
+  private var title: String {
+    connectivity.voiceEntryMode == "weight" ? "Weight (lb)" : "Reps"
+  }
+
+  var body: some View {
+    VStack(spacing: 10) {
+      Text(title)
+        .font(.headline)
+      TextField(
+        connectivity.voiceEntryMode == "weight" ? "e.g. 45" : "e.g. 10",
+        text: $connectivity.voiceEntryText
+      )
+      .textInputAutocapitalization(.never)
+      HStack(spacing: 8) {
+        Button("Cancel") { connectivity.cancelVoiceEntry() }
+          .buttonStyle(.bordered)
+        Button("Send") { connectivity.submitVoiceEntry() }
+          .buttonStyle(.borderedProminent)
+          .tint(accent)
+      }
+    }
+    .padding()
   }
 }
 

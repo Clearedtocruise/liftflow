@@ -78,7 +78,7 @@ import { applyChallengeDraftBump, pickWorkoutChallenge } from '@/lib/workoutChal
 import { normalizeExecutionMode } from '@/lib/workoutExecutionMode';
 import { buildPlanExercisesFromSession, parseTargetReps } from '@/lib/workoutPlan';
 import { logWorkoutProgressionDecision } from '@/lib/workoutProgressionDebug';
-import { resolveBetweenExerciseUpNext, resolveTabataPrepUpNext, resolveWorkoutUpNext } from '@/lib/workoutUpNext';
+import { resolveBetweenExerciseUpNext, resolveRestingUpNext, resolveTabataPrepUpNext, resolveWorkoutUpNext } from '@/lib/workoutUpNext';
 import type { ExerciseAlternativeOption } from '@/services/exerciseAdvisoryService';
 import { trainingService } from '@/services/trainingService';
 import { workoutService } from '@/services/workoutService';
@@ -750,6 +750,32 @@ export function ActiveWorkoutScreen({
     applyPerformanceBaseline(useLastPerformance.baseline, loggingMode);
   }, [useLastPerformance, applyPerformanceBaseline, loggingMode]);
 
+  const handleChangeWeight = useCallback(
+    (nextWeightKg: number) => {
+      setWeightKg(nextWeightKg);
+      if (currentExercise?.id) {
+        draftByExerciseIdRef.current[currentExercise.id] = {
+          weightKg: nextWeightKg,
+          reps: draftByExerciseIdRef.current[currentExercise.id]?.reps ?? reps,
+        };
+      }
+    },
+    [currentExercise?.id, reps],
+  );
+
+  const handleChangeReps = useCallback(
+    (nextReps: number) => {
+      setReps(nextReps);
+      if (currentExercise?.id) {
+        draftByExerciseIdRef.current[currentExercise.id] = {
+          weightKg: draftByExerciseIdRef.current[currentExercise.id]?.weightKg ?? weightKg,
+          reps: nextReps,
+        };
+      }
+    },
+    [currentExercise?.id, weightKg],
+  );
+
   useEffect(() => {
     if (!intervalTimer) setIntervalOverlayOpen(false);
   }, [intervalTimer]);
@@ -776,9 +802,9 @@ export function ActiveWorkoutScreen({
   }, [executionMode, dismissIntervalTimer, dismissCircuitTimer]);
 
   useEffect(() => {
-    const nextRest = planMeta?.restSeconds ?? resolveTraditionalRestSeconds(executionMode);
+    const nextRest = resolveTraditionalRestSeconds(executionMode);
     setRestTargetSeconds(nextRest);
-  }, [currentExercise?.id, planMeta?.restSeconds, executionMode]);
+  }, [currentExercise?.id, executionMode]);
 
   useEffect(() => {
     if (circuitTimer?.phase !== 'done') return;
@@ -807,27 +833,31 @@ export function ActiveWorkoutScreen({
     }
   }, [watchDraftReps]);
 
-  useEffect(() => {
-    if (watchDraftWeightKg != null) {
-      setWeightKg(watchDraftWeightKg);
-      return;
-    }
-    const pending = watchPhoneBridge.getPendingWatchWeightKg();
-    if (pending != null) {
-      setWeightKg(pending);
-    }
-  }, [watchDraftWeightKg]);
+  // Watch weight drafts intentionally do not overwrite phone steppers.
 
   useEffect(() => {
     if (!user || !currentExercise?.exerciseId) return;
 
     const exerciseKey = currentExercise.id;
-    const cachedDraft = draftByExerciseIdRef.current[exerciseKey];
-    const previousId = previousExerciseIdRef.current;
-    if (previousId && previousId !== exerciseKey) {
-      // previous draft already saved on navigate; keep map warm
-    }
+    const switchedExercise = previousExerciseIdRef.current !== exerciseKey;
     previousExerciseIdRef.current = exerciseKey;
+
+    // Session refresh after logging recreates exercise objects. Only re-seed inputs
+    // when the active exercise actually changes — otherwise "Use last" keeps winning
+    // over manual weight/rep edits on set 2+.
+    if (!switchedExercise) {
+      let cancelled = false;
+      void workoutService
+        .getRecentSetsForExercise(user.id, currentExercise.exerciseId, 5, 'any')
+        .then((result) => {
+          if (!cancelled && result.success) setHistorySets(result.data);
+        });
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const cachedDraft = draftByExerciseIdRef.current[exerciseKey];
 
     lastCoachAppliedRef.current = null;
     completedSetCountRef.current = completedSets.length;
@@ -919,9 +949,7 @@ export function ActiveWorkoutScreen({
       if (watchDraftRepsRef.current != null) {
         setReps(watchDraftRepsRef.current);
       }
-      if (watchDraftWeightKgRef.current != null) {
-        setWeightKg(watchDraftWeightKgRef.current);
-      }
+      // Do not apply watchDraftWeightKg — suggestions stay optional via Use last / coach.
     });
 
     setShowComplete(false);
@@ -956,24 +984,25 @@ export function ActiveWorkoutScreen({
       loggingMode,
     );
     completedSetCountRef.current = count;
+    if (currentExercise.id) {
+      draftByExerciseIdRef.current[currentExercise.id] = {
+        weightKg: lastSet.weight ?? 0,
+        reps: lastSet.reps ?? 0,
+      };
+    }
   }, [applyPerformanceBaseline, completedSets, currentExercise, loggingMode, repRange]);
 
   useEffect(() => {
     if (!coachPrescription || !currentExercise?.id) return;
 
-    const { targets, adjustmentLabel } = coachPrescription;
+    const { adjustmentLabel } = coachPrescription;
     if (adjustmentLabel === 'maintain' || adjustmentLabel === 'increase_sets') return;
 
-    const applyKey = `${currentExercise.id}-${nextSetNumber}-${adjustmentLabel}-${targets.weightKg}-${targets.reps}-${targets.durationSeconds ?? 0}`;
+    // Suggest only — do not auto-overwrite weight/reps; user taps Apply on coach card.
+    const applyKey = `${currentExercise.id}-${nextSetNumber}-${adjustmentLabel}-suggested`;
     if (lastCoachAppliedRef.current === applyKey) return;
-
-    handleApplyCoachTarget({
-      weightKg: targets.weightKg,
-      reps: targets.reps,
-      durationSeconds: targets.durationSeconds,
-    });
     lastCoachAppliedRef.current = applyKey;
-  }, [coachPrescription, currentExercise?.id, handleApplyCoachTarget, nextSetNumber]);
+  }, [coachPrescription, currentExercise?.id, nextSetNumber]);
 
   useEffect(() => {
     if (!executionModeUsesIntervalTimer(executionMode) || showComplete) return;
@@ -1293,14 +1322,22 @@ export function ActiveWorkoutScreen({
   const handleChallengeApply = useCallback(() => {
     if (!activeChallenge) return;
     const bump = applyChallengeDraftBump(activeChallenge, { reps, weightKg });
+    const nextReps = bump.reps ?? reps;
+    const nextWeight = bump.weightKg ?? weightKg;
     if (bump.reps != null) setReps(bump.reps);
     if (bump.weightKg != null) setWeightKg(bump.weightKg);
+    if (currentExercise?.id) {
+      draftByExerciseIdRef.current[currentExercise.id] = {
+        weightKg: nextWeight,
+        reps: nextReps,
+      };
+    }
     setChallengeNotice(bump.notice);
     setAppliedChallenge(activeChallenge);
     setActiveChallenge(null);
     setChallengeFlash(true);
     setTimeout(() => setChallengeFlash(false), 900);
-  }, [activeChallenge, reps, weightKg]);
+  }, [activeChallenge, currentExercise?.id, reps, weightKg]);
 
   useEffect(() => {
     if (restSecondsRemaining !== 0) return;
@@ -1360,7 +1397,7 @@ export function ActiveWorkoutScreen({
         !executionModeUsesTraditionalRest(executionMode) || flowAction.skipRest;
 
       const repsToLog = watchPhoneBridge.getPendingWatchReps() ?? watchDraftReps ?? reps;
-      const weightToLog = watchPhoneBridge.getPendingWatchWeightKg() ?? watchDraftWeightKg ?? weightKg;
+      const weightToLog = weightKg;
 
       if (
         flowAction.afterRestAdvanceIndex != null &&
@@ -1470,23 +1507,39 @@ export function ActiveWorkoutScreen({
   }, [effectiveTargetSets]);
 
   useEffect(() => {
+    const resting =
+      usesSupersetRotation && inSuperset
+        ? workoutPosition
+        : resolveRestingUpNext({
+            exerciseName: currentExercise?.exercise?.name ?? 'Exercise',
+            targetSets: effectiveTargetSets,
+            completedSetsCount: completedSets.length,
+            isLastExercise,
+            nextExerciseName: nextExercise?.exercise?.name,
+            nextExerciseTargetSets: nextPlanMeta?.sets,
+          });
+
     watchPhoneBridge.setDisplayContext({
       stationLabel: stationLabel ?? undefined,
       statusLine: workoutPosition.currentSetLabel,
       supersetHint: usesSupersetRotation && inSuperset ? workoutPosition.upNextLabel : undefined,
       draftReps: watchDraftReps ?? undefined,
-      restCurrentLabel: workoutPosition.currentSetLabel,
-      restUpNextLabel: workoutPosition.upNextLabel,
-      restExerciseName: workoutPosition.exerciseName,
+      restCurrentLabel: resting.currentSetLabel,
+      restUpNextLabel: resting.upNextLabel,
+      restExerciseName: resting.exerciseName,
     });
     return () => watchPhoneBridge.setDisplayContext(null);
   }, [
     stationLabel,
-    workoutPosition.currentSetLabel,
-    workoutPosition.upNextLabel,
-    workoutPosition.exerciseName,
+    workoutPosition,
     usesSupersetRotation,
     inSuperset,
+    currentExercise?.exercise?.name,
+    effectiveTargetSets,
+    completedSets.length,
+    isLastExercise,
+    nextExercise?.exercise?.name,
+    nextPlanMeta?.sets,
     watchDraftReps,
   ]);
 
@@ -1630,15 +1683,30 @@ export function ActiveWorkoutScreen({
         }
         contentContainerStyle={styles.content}>
         <GradientBorderCard innerStyle={styles.heroCard}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`How to do ${currentExercise.exercise?.name ?? 'exercise'}`}
-                onPress={() => setExerciseGuideOpen(true)}
-                style={styles.exerciseNamePressable}>
-                <AppText variant="headline" style={styles.exerciseName}>
-                  {currentExercise.exercise?.name ?? 'Exercise'}
-                </AppText>
-              </Pressable>
+              <View style={styles.exerciseTitleRow}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`How to do ${currentExercise.exercise?.name ?? 'exercise'}`}
+                  onPress={() => setExerciseGuideOpen(true)}
+                  style={styles.exerciseNamePressable}>
+                  <AppText variant="headline" style={styles.exerciseName}>
+                    {currentExercise.exercise?.name ?? 'Exercise'}
+                  </AppText>
+                  <AppText variant="caption" color="textTertiary">
+                    Tap for how-to
+                  </AppText>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="How to"
+                  onPress={() => setExerciseGuideOpen(true)}
+                  style={styles.howToButton}
+                  testID="exercise-how-to-button">
+                  <AppText variant="caption" color="accent">
+                    How to
+                  </AppText>
+                </Pressable>
+              </View>
 
               {!showComplete && sortedExercises.length > 0 ? (
                 <View style={styles.exerciseActionRow}>
@@ -1697,6 +1765,26 @@ export function ActiveWorkoutScreen({
 
               {!showComplete ? (
                 <>
+                  {user && currentExercise.exerciseId && loggingMode !== 'cardio' ? (
+                    <ExerciseCoachCard
+                      variant="compact"
+                      showPerformanceSummary={false}
+                      showReason
+                      loggingMode={loggingMode}
+                      userId={user.id}
+                      exerciseId={currentExercise.exerciseId}
+                      plan={coachPlan}
+                      sessionId={session.id}
+                      currentSessionSets={currentSessionSets}
+                      setNumber={nextSetNumber}
+                      onReplaceRequest={openReplaceSheet}
+                      onPrescription={setCoachPrescription}
+                      onApplyTarget={handleApplyCoachTarget}
+                    />
+                  ) : null}
+
+                  <VoiceMicButton disabled={isPaused || logging} />
+
                   {showSupersetPrepBanner && supersetPrepGroup ? (
                     <SupersetPrepBanner
                       group={supersetPrepGroup}
@@ -1724,8 +1812,8 @@ export function ActiveWorkoutScreen({
                       reps={reps}
                       durationSeconds={durationSeconds}
                       distanceKm={distanceKm}
-                      onChangeWeight={setWeightKg}
-                      onChangeReps={setReps}
+                      onChangeWeight={handleChangeWeight}
+                      onChangeReps={handleChangeReps}
                       onChangeDuration={setDurationSeconds}
                       onChangeDistance={setDistanceKm}
                       disabled={isPaused || logging}
@@ -1781,6 +1869,7 @@ export function ActiveWorkoutScreen({
               {!showComplete ? (
                 <ExerciseMusclePanel
                   exerciseName={currentExercise.exercise?.name ?? 'Exercise'}
+                  muscleGroups={currentExercise.exercise?.muscleGroups ?? []}
                   gender={figureGender}
                   variant="compact"
                 />
@@ -1810,24 +1899,6 @@ export function ActiveWorkoutScreen({
                 <AppText variant="footnote" color="success">
                   {coachSetNotice}
                 </AppText>
-              ) : null}
-
-              {user && currentExercise.exerciseId && loggingMode !== 'cardio' && !showComplete ? (
-                <ExerciseCoachCard
-                  variant="compact"
-                  showPerformanceSummary={false}
-                  showReason
-                  loggingMode={loggingMode}
-                  userId={user.id}
-                  exerciseId={currentExercise.exerciseId}
-                  plan={coachPlan}
-                  sessionId={session.id}
-                  currentSessionSets={currentSessionSets}
-                  setNumber={nextSetNumber}
-                  onReplaceRequest={openReplaceSheet}
-                  onPrescription={setCoachPrescription}
-                  onApplyTarget={handleApplyCoachTarget}
-                />
               ) : null}
 
               {circuitTimer &&
@@ -1865,7 +1936,6 @@ export function ActiveWorkoutScreen({
 
               {!showComplete ? (
                 <>
-                  <VoiceMicButton disabled={isPaused || logging} />
                   <VoiceDebugPanel />
                   <View style={styles.extraActions}>
                     <PrimaryButton
@@ -2060,7 +2130,21 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   exerciseNamePressable: {
+    flex: 1,
     gap: Spacing.xs,
+  },
+  exerciseTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.sm,
+  },
+  howToButton: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: LiftFlowColors.accent,
+    backgroundColor: LiftFlowColors.primaryGlow,
   },
   exerciseActionRow: {
     flexDirection: 'row',

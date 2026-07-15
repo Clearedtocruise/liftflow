@@ -31,7 +31,7 @@ export function SupersetPrepBanner({
       </AppText>
       <AppText variant="bodyBold">{partners}</AppText>
       <AppText variant="footnote" color="textSecondary">
-        Alternate with no rest between partners.
+        Log A, then go straight to B — rest only after the full round.
       </AppText>
       <Pressable onPress={onDismiss} style={styles.button}>
         <AppText variant="caption" color="accent">

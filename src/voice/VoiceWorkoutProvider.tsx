@@ -10,14 +10,14 @@ import {
 } from 'react';
 import { Platform } from 'react-native';
 
-import { enrichParsedCommand, parseVoiceCommandLocal } from '@/lib/voice/parseVoiceCommand';
 import {
-  rememberIosAudioSessionBeforeVoiceCapture,
-  restoreIosAudioSessionAfterVoiceCapture,
-  speakWithMusicDuck,
-  voiceCaptureIosCategory,
+    rememberIosAudioSessionBeforeVoiceCapture,
+    restoreIosAudioSessionAfterVoiceCapture,
+    voiceCaptureIosCategory
 } from '@/lib/iosAudioSession';
+import { enrichParsedCommand, parseVoiceCommandLocal } from '@/lib/voice/parseVoiceCommand';
 import { productAnalyticsService } from '@/services/productAnalyticsService';
+import { voiceCoachingService } from '@/services/voiceCoachingService';
 import { processVoiceTranscript } from '@/services/voiceService';
 
 import { mapExtendedVoiceToWorkoutCommand, parseWorkoutCommand } from './parseWorkoutCommand';
@@ -131,7 +131,7 @@ export function VoiceWorkoutProvider({
   const speak = useCallback(
     (message: string) => {
       if (!voiceFeedbackEnabled || Platform.OS === 'web') return;
-      speakWithMusicDuck(message, { language: 'en-US', rate: 0.95, pitch: 1 });
+      void voiceCoachingService.speakLine(message);
     },
     [voiceFeedbackEnabled],
   );

@@ -25,8 +25,17 @@ export function resolveWorkoutUpNext(input: ResolveWorkoutUpNextInput): WorkoutP
 
   let upNextLabel: string;
   if (input.completedSetsCount < input.targetSets) {
-    const nextSet = input.completedSetsCount + 1;
-    upNextLabel = `Set ${nextSet} of ${input.targetSets}`;
+    // Avoid "Set 1 → Set 1" — point at what comes after this logged set.
+    if (input.completedSetsCount + 1 < input.targetSets) {
+      upNextLabel = `Then Set ${input.completedSetsCount + 2} of ${input.targetSets}`;
+    } else if (!input.isLastExercise && input.nextExerciseName) {
+      const nextSets = input.nextExerciseTargetSets ?? input.targetSets;
+      upNextLabel = `Then ${input.nextExerciseName} · Set 1 of ${nextSets}`;
+    } else if (input.isLastExercise) {
+      upNextLabel = 'Then finish workout';
+    } else {
+      upNextLabel = `Log Set ${activeSet}`;
+    }
   } else if (!input.isLastExercise && input.nextExerciseName) {
     const nextSets = input.nextExerciseTargetSets ?? input.targetSets;
     upNextLabel = `${input.nextExerciseName} · Set 1 of ${nextSets}`;

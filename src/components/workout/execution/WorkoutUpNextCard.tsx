@@ -13,17 +13,26 @@ type WorkoutUpNextCardProps = {
 export function WorkoutUpNextCard({ position, compact = false, supersetActive = false }: WorkoutUpNextCardProps) {
   if (compact) {
     return (
-      <View style={styles.compactRow}>
-        <AppText variant="bodyBold">{position.currentSetLabel}</AppText>
-        <AppText variant="caption" color="textTertiary">
-          →
-        </AppText>
-        <AppText variant="bodyBold" color="accent" style={styles.upNextCompact}>
-          {position.upNextLabel}
-        </AppText>
+      <View style={styles.compactBlock}>
         {supersetActive ? (
           <AppText variant="caption" color="accent">
-            Superset
+            Superset · switch partners with no rest
+          </AppText>
+        ) : null}
+        <View style={styles.compactRow}>
+          <AppText variant="bodyBold" style={styles.compactNow}>
+            {position.currentSetLabel}
+          </AppText>
+          <AppText variant="caption" color="textTertiary">
+            →
+          </AppText>
+          <AppText variant="bodyBold" color="accent" style={styles.upNextCompact}>
+            {position.upNextLabel}
+          </AppText>
+        </View>
+        {!supersetActive && position.exerciseName ? (
+          <AppText variant="footnote" color="textTertiary">
+            {position.exerciseName}
           </AppText>
         ) : null}
       </View>
@@ -34,7 +43,7 @@ export function WorkoutUpNextCard({ position, compact = false, supersetActive = 
     <View style={styles.card}>
       {supersetActive ? (
         <AppText variant="caption" color="accent">
-          Superset — partners back-to-back
+          Superset — finish A, go straight to B
         </AppText>
       ) : null}
       <View style={styles.row}>
@@ -70,18 +79,23 @@ const styles = StyleSheet.create({
     padding: Spacing.md,
     gap: Spacing.sm,
   },
+  compactBlock: {
+    gap: Spacing.xs,
+  },
   compactRow: {
     flexDirection: 'row',
     alignItems: 'center',
     flexWrap: 'wrap',
     gap: Spacing.sm,
   },
+  compactNow: {
+    flexShrink: 1,
+  },
   upNextCompact: {
     flexShrink: 1,
   },
   row: {
     flexDirection: 'row',
-    alignItems: 'stretch',
     gap: Spacing.md,
   },
   cell: {

@@ -233,6 +233,20 @@ const SET_PATTERNS: PatternDef[] = [
     }),
   },
   {
+    // "135 for 8" / "135 x 8" after spoken-number normalize
+    pattern: /^(?<weight>\d+(?:\.\d+)?)\s*(?:for|x|\*|×|at)\s*(?<reps>\d+)(?:\s*reps?)?\.?$/i,
+    build: (m, raw, ctx) => ({
+      intent: 'log_set',
+      exercise: ctx.activeExerciseName,
+      weight: parseFloat(m.groups!.weight!),
+      reps: parseInt(m.groups!.reps!, 10),
+      weightUnit: detectWeightUnit(raw) ?? ctx.preferredWeightUnit,
+      usesContextExercise: !ctx.activeExerciseName,
+      rawText: raw,
+      confidence: ctx.activeExerciseName ? 0.92 : 0.78,
+    }),
+  },
+  {
     pattern: /^(?<reps>\d+)\s*reps?\s*(?:at|@)\s*(?<weight>\d+(?:\.\d+)?)\s*(?<unit>lbs?|pounds?|kg|kilos?)?\.?$/i,
     build: (m, raw, ctx) => ({
       intent: 'log_set',
@@ -243,6 +257,19 @@ const SET_PATTERNS: PatternDef[] = [
       usesContextExercise: !ctx.activeExerciseName,
       rawText: raw,
       confidence: ctx.activeExerciseName ? 0.93 : 0.78,
+    }),
+  },
+  {
+    pattern: /^(?<reps>\d+)\s*reps?\.?$/i,
+    build: (m, raw, ctx) => ({
+      intent: 'log_set',
+      exercise: ctx.activeExerciseName,
+      weight: ctx.lastWeight,
+      reps: parseInt(m.groups!.reps!, 10),
+      usesContextWeight: ctx.lastWeight != null,
+      usesContextExercise: !ctx.activeExerciseName,
+      rawText: raw,
+      confidence: 0.85,
     }),
   },
   {

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 
 import type { WorkoutExercise } from '@/types/workout';
 import type { EditableWorkoutExercise } from '@/types/workoutExecution';
+import { resolveExerciseMuscles } from './exerciseMuscleMap';
 import {
     enrichWithSupersetGroups,
     formatSupersetNavChrome,
@@ -15,6 +16,7 @@ import {
     canOfferMoreChallenges,
     pickWorkoutChallenge,
 } from './workoutChallengeFlow';
+import { resolveRestingUpNext, resolveWorkoutUpNext } from './workoutUpNext';
 
 function planPair(): EditableWorkoutExercise[] {
   return [
@@ -65,7 +67,29 @@ function run() {
   assert.ok(chrome?.includes('A'));
   assert.ok(chrome?.includes('Round'));
 
-  assert.equal(resolveTraditionalRestSeconds('superset'), 90);
+  assert.equal(resolveTraditionalRestSeconds('superset'), 120);
+  assert.equal(resolveTraditionalRestSeconds('traditional'), 120);
+
+  const upNext = resolveWorkoutUpNext({
+    exerciseName: 'Skull Crusher',
+    targetSets: 3,
+    completedSetsCount: 0,
+    isLastExercise: false,
+    nextExerciseName: 'Kickback',
+  });
+  assert.equal(upNext.currentSetLabel, 'Set 1 of 3');
+  assert.ok(upNext.upNextLabel.startsWith('Then'));
+
+  const resting = resolveRestingUpNext({
+    exerciseName: 'Skull Crusher',
+    targetSets: 3,
+    completedSetsCount: 1,
+    isLastExercise: false,
+  });
+  assert.ok(resting.upNextLabel.includes('Skull Crusher'));
+
+  assert.equal(resolveExerciseMuscles('Tricep Dumbbell Kickback').primary[0], 'triceps');
+  assert.equal(resolveExerciseMuscles('DB Kickback', ['triceps']).primary[0], 'triceps');
 
   const noGroups = [
     { id: '1', name: 'Squat', sets: 3, repRange: '5' },

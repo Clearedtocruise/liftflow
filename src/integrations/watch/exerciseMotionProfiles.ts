@@ -1,10 +1,13 @@
 import type { ExerciseMotionProfile } from './types';
 
 /**
- * Movement profiles for automatic rep counting on Apple Watch.
- * Tuned for wrist-mounted accelerometer/gyro during controlled reps.
+ * Motion auto-rep profiles — disabled for now (Watch motion was glitchy).
+ * Keep definitions commented in git history; empty list forces no motion matching.
  */
-export const EXERCISE_MOTION_PROFILES: ExerciseMotionProfile[] = [
+export const EXERCISE_MOTION_PROFILES: ExerciseMotionProfile[] = [];
+
+/** Archived profiles (not used while motion counting is off). */
+export const ARCHIVED_EXERCISE_MOTION_PROFILES: ExerciseMotionProfile[] = [
   profile('bench_press', 'Bench Press', ['bench', 'barbell bench', 'flat bench'], 'push', 'magnitude', 900, 4500, 1.35, 0.82),
   profile('dumbbell_press', 'Dumbbell Press', ['db press', 'dumbbell chest press'], 'push', 'magnitude', 900, 4500, 1.3, 0.78),
   profile('bicep_curl', 'Bicep Curls', ['curl', 'bicep curl', 'dumbbell curl'], 'pull', 'axis_y', 700, 3500, 1.25, 0.8),

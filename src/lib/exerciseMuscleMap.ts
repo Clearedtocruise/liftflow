@@ -77,6 +77,10 @@ export const EXERCISE_MUSCLE_PROFILES: Record<string, ExerciseMuscleProfile> = {
   'overhead-press': { primary: ['front-delts', 'side-delts'], secondary: ['triceps', 'traps', 'core'] },
   'dumbbell-shoulder-press': { primary: ['front-delts', 'side-delts'], secondary: ['triceps'] },
   'tricep-pushdown': { primary: ['triceps'], secondary: ['forearms'] },
+  'db-kickback': { primary: ['triceps'], secondary: ['rear-delts'] },
+  'dumbbell-kickback': { primary: ['triceps'], secondary: ['rear-delts'] },
+  'tricep-kickback': { primary: ['triceps'], secondary: ['rear-delts'] },
+  'skull-crusher': { primary: ['triceps'], secondary: ['forearms'] },
   'pull-up': { primary: ['lats'], secondary: ['biceps', 'mid-back', 'rear-delts'] },
   'lat-pulldown': { primary: ['lats'], secondary: ['biceps', 'mid-back', 'rear-delts'] },
   'barbell-row': { primary: ['mid-back', 'lats'], secondary: ['rear-delts', 'biceps', 'lower-back'] },
@@ -137,6 +141,13 @@ function deriveFromMuscleGroups(groups: string[]): ExerciseMuscleProfile {
 
 function deriveFromNamePattern(name: string): ExerciseMuscleProfile {
   const lower = name.toLowerCase();
+  // Glute kickbacks before general kickback → triceps.
+  if (/\bglute\b.*\bkickback\b|\bkickback\b.*\bglute\b/.test(lower)) {
+    return { primary: ['glutes'], secondary: ['hamstrings'] };
+  }
+  if (/\b(tricep|triceps|kickback|pushdown|skull\s*crusher|overhead extension)\b/.test(lower)) {
+    return { primary: ['triceps'], secondary: ['forearms'] };
+  }
   if (/\b(bench|fly|push-up|pushup|dip)\b/.test(lower)) {
     return { primary: ['chest'], secondary: ['triceps', 'front-delts'] };
   }

@@ -82,10 +82,11 @@ export const voiceCoachingService = {
   async speakLine(text: string): Promise<boolean> {
     const playedOpenAi = await playOpenAiSpeech(text);
     if (!playedOpenAi) {
-      Speech.speak(text, {
+      const { speakWithMusicDuck } = await import('@/lib/iosAudioSession');
+      speakWithMusicDuck(text, {
         language: 'en-US',
-        rate: Platform.OS === 'ios' ? 0.52 : 0.9,
-        pitch: 1.0,
+        rate: Platform.OS === 'ios' ? 0.92 : 0.95,
+        pitch: 1.02,
       });
     }
     return playedOpenAi;

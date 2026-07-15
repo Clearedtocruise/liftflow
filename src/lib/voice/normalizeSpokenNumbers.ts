@@ -39,6 +39,27 @@ const ONES_PATTERN = 'one|two|three|four|five|six|seven|eight|nine';
 export function normalizeSpokenNumbers(text: string): string {
   let normalized = text.toLowerCase();
 
+  // "one hundred thirty five" / "two hundred five"
+  normalized = normalized.replace(
+    new RegExp(
+      `\\b(${ONES_PATTERN})\\s+hundred(?:\\s+and)?(?:\\s+(${TENS_PATTERN}))?(?:\\s+(${ONES_PATTERN}))?\\b`,
+      'g',
+    ),
+    (_m, hundredsWord: string, tensWord?: string, onesWord?: string) => {
+      const hundreds = (ONES[hundredsWord] ?? 0) * 100;
+      const tens = tensWord ? (TENS[tensWord] ?? 0) : 0;
+      const ones = onesWord ? (ONES[onesWord] ?? 0) : 0;
+      return String(hundreds + tens + ones);
+    },
+  );
+
+  // Gym shorthand: "one thirty five" → 135, "two twenty five" → 225
+  normalized = normalized.replace(
+    new RegExp(`\\b(${ONES_PATTERN})\\s+(${TENS_PATTERN})\\s+(${ONES_PATTERN})\\b`, 'g'),
+    (_m, hundredsWord: string, tensWord: string, onesWord: string) =>
+      String((ONES[hundredsWord] ?? 0) * 100 + (TENS[tensWord] ?? 0) + (ONES[onesWord] ?? 0)),
+  );
+
   normalized = normalized.replace(
     new RegExp(`\\b(${TENS_PATTERN})[-\\s]+(${ONES_PATTERN})\\b`, 'g'),
     (_, tensWord: string, onesWord: string) => String(TENS[tensWord]! + ONES[onesWord]!),

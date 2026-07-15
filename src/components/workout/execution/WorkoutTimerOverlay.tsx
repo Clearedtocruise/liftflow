@@ -135,7 +135,11 @@ export function WorkoutTimerOverlay({
                 {formatTimerSeconds(traditional.secondsRemaining ?? traditional.recommendedSeconds)}
               </AppText>
               <AppText variant="footnote" color="textSecondary" align="center">
-                {traditional.isPaused ? 'Paused' : 'Traditional · adjust rest before your next set'}
+                {traditional.isPaused
+                  ? 'Paused'
+                  : position?.upNextLabel
+                    ? `Next: ${position.upNextLabel}`
+                    : 'Traditional · adjust rest before your next set'}
               </AppText>
               <View style={styles.controls}>
                 <Pressable style={styles.controlButton} onPress={() => traditional.onAdjust(-30)}>

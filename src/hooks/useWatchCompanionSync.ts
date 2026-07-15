@@ -65,9 +65,8 @@ export function useWatchCompanionSync(userId: string | undefined) {
     watchPhoneBridge.setRepsHandler((nextReps) => {
       setWatchDraftReps(nextReps);
     });
-    watchPhoneBridge.setWeightKgHandler((weightKg) => {
-      setWatchDraftWeightKg(weightKg);
-    });
+    // Watch weight is suggestion-only — do not force phone steppers.
+    watchPhoneBridge.setWeightKgHandler(null);
     return () => {
       watchPhoneBridge.setSessionHandlers(null);
       watchPhoneBridge.setRepsHandler(null);

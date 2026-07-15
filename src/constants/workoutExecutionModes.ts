@@ -59,7 +59,7 @@ export const SET_REP_MODE_DEFAULTS: Record<
   Extract<WorkoutExecutionMode, 'traditional' | 'hypertrophy' | 'strength'>,
   { sets: number; repRange: string; restSeconds: number }
 > = {
-  traditional: { sets: 3, repRange: '10', restSeconds: 90 },
+  traditional: { sets: 3, repRange: '10', restSeconds: 120 },
   hypertrophy: { sets: 4, repRange: '8-12', restSeconds: 60 },
   strength: { sets: 5, repRange: '3-5', restSeconds: 180 },
 };
@@ -83,7 +83,7 @@ export const SUPERSET_MODE_DEFAULTS = {
   sets: 3,
   repRange: '10-12',
   restBetweenExercisesSeconds: 0,
-  restBetweenRoundSetsSeconds: 90,
+  restBetweenRoundSetsSeconds: 120,
 } as const;
 
 export function workoutExecutionModeDefinition(

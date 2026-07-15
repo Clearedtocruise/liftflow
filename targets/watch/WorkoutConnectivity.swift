@@ -36,6 +36,9 @@ final class WorkoutConnectivity: NSObject, ObservableObject, WCSessionDelegate, 
   @Published var cardioRunning = false
   @Published var cardioPhaseLabel = ""
 
+  @Published var voiceEntryMode: String? // "reps" | "weight"
+  @Published var voiceEntryText = ""
+
   private(set) var workoutSessionId: String?
   private var cardioSessionId: String?
   private var cardioSessionStartedAt: Date?
@@ -699,40 +702,63 @@ final class WorkoutConnectivity: NSObject, ObservableObject, WCSessionDelegate, 
   }
 
   func voiceReps() {
-    guard let controller = WKExtension.shared().visibleInterfaceController else {
-      lastSpokenResponse = "Open ONE MORE on iPhone"
-      return
-    }
-    controller.presentTextInputController(
-      withSuggestions: ["6", "8", "10", "12"],
-      allowedInputMode: .plain
-    ) { [weak self] results in
-      DispatchQueue.main.async {
-        guard let self, let text = results?.first as? String, !text.isEmpty else { return }
-        self.sendVoiceCommand(text)
-      }
-    }
+    presentVoiceEntry(mode: "reps", suggestions: ["6", "8", "10", "12"])
   }
 
   func voiceWeight() {
-    guard let controller = WKExtension.shared().visibleInterfaceController else {
-      lastSpokenResponse = "Open ONE MORE on iPhone"
+    presentVoiceEntry(mode: "weight", suggestions: ["35", "45", "55", "65"])
+  }
+
+  private func presentVoiceEntry(mode: String, suggestions: [String]) {
+    let controller =
+      WKExtension.shared().visibleInterfaceController
+      ?? WKExtension.shared().rootInterfaceController
+
+    if let controller {
+      controller.presentTextInputController(
+        withSuggestions: suggestions,
+        allowedInputMode: .plain
+      ) { [weak self] results in
+        DispatchQueue.main.async {
+          guard let self, let text = results?.first as? String, !text.isEmpty else { return }
+          self.handleVoiceEntry(mode: mode, text: text)
+        }
+      }
       return
     }
-    controller.presentTextInputController(
-      withSuggestions: ["135", "185", "225"],
-      allowedInputMode: .plain
-    ) { [weak self] results in
-      DispatchQueue.main.async {
-        guard let self, let text = results?.first as? String, !text.isEmpty else { return }
-        let digits = text.filter { $0.isNumber }
-        guard let lbs = Int(digits), lbs > 0 else {
-          self.lastSpokenResponse = "Enter weight in pounds"
-          return
-        }
-        self.sendToPhone(type: "set_weight", extra: ["weightLbs": lbs])
+
+    // SwiftUI Watch apps often have no InterfaceController — use in-app sheet instead.
+    voiceEntryText = ""
+    voiceEntryMode = mode
+  }
+
+  func cancelVoiceEntry() {
+    voiceEntryMode = nil
+    voiceEntryText = ""
+  }
+
+  func submitVoiceEntry() {
+    guard let mode = voiceEntryMode else { return }
+    let text = voiceEntryText.trimmingCharacters(in: .whitespacesAndNewlines)
+    voiceEntryMode = nil
+    voiceEntryText = ""
+    guard !text.isEmpty else { return }
+    handleVoiceEntry(mode: mode, text: text)
+  }
+
+  private func handleVoiceEntry(mode: String, text: String) {
+    if mode == "weight" {
+      let digits = text.filter { $0.isNumber }
+      guard let lbs = Int(digits), lbs > 0 else {
+        lastSpokenResponse = "Enter weight in pounds"
+        return
       }
+      // Suggestion only — phone does not auto-force the weight field.
+      sendToPhone(type: "set_weight", extra: ["weightLbs": lbs])
+      lastSpokenResponse = "Suggested \(lbs) lb"
+      return
     }
+    sendVoiceCommand(text)
   }
 
   func requestPhoneSync() {

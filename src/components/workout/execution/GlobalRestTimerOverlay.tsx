@@ -73,6 +73,8 @@ export function GlobalRestTimerOverlay() {
         onSkip: () => void skipRestTimer(),
         onAdjust: adjustRestTimer,
         onSetRest: setRestTimer,
+        nextExerciseName: position?.upNextLabel ?? null,
+        nextExerciseDetail: position?.exerciseName ?? null,
       }}
     />
   );

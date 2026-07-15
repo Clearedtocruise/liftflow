@@ -1,12 +1,12 @@
 import * as Speech from 'expo-speech';
 import { Platform, Vibration } from 'react-native';
 
+import { speakWithMusicDuck } from '@/lib/iosAudioSession';
 import type { ParsedVoiceCommandExtended } from '@/types/voice';
 
 export function speakRecoveryLine(message: string, enabled: boolean): void {
   if (!enabled || Platform.OS === 'web') return;
-  Speech.stop();
-  Speech.speak(message, { rate: 1.0, pitch: 1 });
+  speakWithMusicDuck(message, { rate: 0.95, pitch: 1.02 });
   Vibration.vibrate(20);
 }
 
@@ -41,7 +41,12 @@ export function speakVoiceConfirmation(
     message = command.transformationVoiceLine ?? 'Running transformation projection';
   }
 
-  Speech.stop();
-  Speech.speak(message, { rate: 1.05, pitch: 1 });
+  speakWithMusicDuck(message, { rate: 0.95, pitch: 1.02 });
   Vibration.vibrate(20);
+}
+
+/** @deprecated prefer speakWithMusicDuck — kept for rare direct Speech callers */
+export function speakDeviceFallback(message: string): void {
+  Speech.stop();
+  Speech.speak(message, { language: 'en-US', rate: 0.95, pitch: 1 });
 }

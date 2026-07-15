@@ -3,6 +3,8 @@ import { Platform } from 'react-native';
 
 import type { SpeechOptions } from 'expo-speech';
 
+import { resolvePreferredSpeechVoiceId } from '@/lib/voice/preferredSpeechVoice';
+
 type IosAudioSessionSnapshot = {
   category: string;
   categoryOptions: string[];
@@ -105,18 +107,24 @@ export function speakWithMusicDuck(text: string, options?: SpeechOptions): void 
 
   const { onDone, onError, onStopped, ...rest } = options ?? {};
   Speech.stop();
-  Speech.speak(text, {
-    language: 'en-US',
-    ...rest,
-    ...(Platform.OS === 'ios' ? IOS_DUCKED_SPEECH_OPTIONS : null),
-    onDone: () => {
-      onDone?.();
-    },
-    onError: (error) => {
-      onError?.(error);
-    },
-    onStopped: () => {
-      onStopped?.();
-    },
+
+  void resolvePreferredSpeechVoiceId().then((voice) => {
+    Speech.speak(text, {
+      language: 'en-US',
+      rate: Platform.OS === 'ios' ? 0.92 : 0.95,
+      pitch: 1.02,
+      ...(voice ? { voice } : null),
+      ...rest,
+      ...(Platform.OS === 'ios' ? IOS_DUCKED_SPEECH_OPTIONS : null),
+      onDone: () => {
+        onDone?.();
+      },
+      onError: (error) => {
+        onError?.(error);
+      },
+      onStopped: () => {
+        onStopped?.();
+      },
+    });
   });
 }

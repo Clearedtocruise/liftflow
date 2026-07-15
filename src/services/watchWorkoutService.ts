@@ -426,10 +426,8 @@ export const watchWorkoutService = {
     try {
       switch (message.type) {
         case 'motion_batch': {
-          const r = await this.processMotion(userId, message.samples);
-          if (!r.success) return fail(r.error);
-          if (r.data.spokenPrompt) this.speak(r.data.spokenPrompt);
-          return ok(r.data.state);
+          // Motion auto-rep counting disabled — ignore batches so Watch can't glitch reps/weight.
+          return ok(getAssistant(userId).getState());
         }
         case 'voice_command': {
           const r = await this.handleVoice(userId, message.transcript);
@@ -453,17 +451,19 @@ export const watchWorkoutService = {
           return ok(state);
         }
         case 'set_weight': {
-          watchPhoneBridge.applyWeightLbs(message.weightLbs);
+          // Suggest only — do not force iPhone weight steppers (was glitching mid-set).
           const assistant = getAssistant(userId);
           const set = assistant.getState().activeSet;
           if (set) {
             assistant.loadState({
               ...assistant.getState(),
               activeSet: { ...set, weightLbs: message.weightLbs },
-              lastSpokenResponse: `${message.weightLbs} lb on iPhone.`,
+              progressionLine: `Try ${message.weightLbs} lb`,
+              lastSpokenResponse: `Suggested ${message.weightLbs} lb — confirm on iPhone.`,
               updatedAt: new Date().toISOString(),
             });
           }
+          this.speak(`Suggested ${message.weightLbs} pounds. Confirm on iPhone.`);
           return ok(assistant.getState());
         }
         case 'log_set': {

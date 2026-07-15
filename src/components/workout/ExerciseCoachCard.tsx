@@ -303,42 +303,57 @@ export function ExerciseCoachCard({
 
   if (variant === 'compact') {
     return (
-      <View style={styles.compact}>
-        <View style={styles.compactRow}>
-          <AppText variant="bodyBold" color="accent">
-            {targetLine}
-          </AppText>
-          <AppText variant="caption" color={adjColor}>
-            {coachAdjustmentLabel(displayLabel)}
-          </AppText>
-        </View>
+      <View style={styles.recommendBanner} testID="coach-recommend-banner">
+        <AppText variant="label" color="accent">
+          Coach recommends{setNumber ? ` · Set ${setNumber}` : ''}
+        </AppText>
+        <AppText variant="headline" color="accent" style={styles.recommendTarget}>
+          {targetLine}
+        </AppText>
+        <AppText variant="caption" color={adjColor}>
+          {coachAdjustmentLabel(displayLabel)}
+        </AppText>
         {showReason ? (
-          <AppText variant="footnote" color="textTertiary">
+          <AppText variant="footnote" color="textSecondary">
             {prescription.reason}
+          </AppText>
+        ) : null}
+        <View style={styles.recommendActions}>
+          {onApplyTarget ? (
+            <Pressable
+              style={({ pressed }) => [styles.applyPrimary, pressed && styles.applyButtonPressed]}
+              onPress={() =>
+                onApplyTarget({
+                  weightKg: loggingMode === 'timed' ? 0 : targets.weightKg,
+                  reps: loggingMode === 'timed' ? 1 : targets.reps,
+                  durationSeconds:
+                    loggingMode === 'timed'
+                      ? targets.durationSeconds ??
+                        defaultTimedDurationSeconds(targets.repRange || plan?.plannedReps)
+                      : undefined,
+                })
+              }
+              testID="coach-apply-target">
+              <AppText variant="bodyBold" color="textPrimary">
+                Apply to log
+              </AppText>
+            </Pressable>
+          ) : null}
+          <Pressable onPress={() => setExpanded((open) => !open)} hitSlop={8}>
+            <AppText variant="caption" color="accent">
+              {expanded ? 'Hide why' : 'Why this?'}
+            </AppText>
+          </Pressable>
+        </View>
+        {expanded ? (
+          <AppText variant="footnote" color="textTertiary">
+            {prescription.detailedReason}
           </AppText>
         ) : null}
         {onReplaceRequest ? (
           <Pressable onPress={onReplaceRequest} hitSlop={8}>
             <AppText variant="caption" color="accent">
               Equipment taken? Swap exercise
-            </AppText>
-          </Pressable>
-        ) : null}
-        {onApplyTarget ? (
-          <Pressable
-            style={({ pressed }) => [styles.applyButton, pressed && styles.applyButtonPressed]}
-            onPress={() =>
-              onApplyTarget({
-                weightKg: loggingMode === 'timed' ? 0 : targets.weightKg,
-                reps: loggingMode === 'timed' ? 1 : targets.reps,
-                durationSeconds:
-                  loggingMode === 'timed'
-                    ? targets.durationSeconds ?? defaultTimedDurationSeconds(targets.repRange || plan?.plannedReps)
-                    : undefined,
-              })
-            }>
-            <AppText variant="caption" color="accent">
-              Use
             </AppText>
           </Pressable>
         ) : null}
@@ -366,6 +381,29 @@ const styles = StyleSheet.create({
     backgroundColor: LiftFlowColors.primaryGlow,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: LiftFlowColors.border,
+  },
+  recommendBanner: {
+    gap: Spacing.sm,
+    padding: Spacing.md,
+    borderRadius: Radius.md,
+    backgroundColor: LiftFlowColors.primaryGlow,
+    borderWidth: 1,
+    borderColor: LiftFlowColors.accent,
+  },
+  recommendTarget: {
+    letterSpacing: 0.2,
+  },
+  recommendActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: Spacing.md,
+  },
+  applyPrimary: {
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.lg,
+    borderRadius: Radius.md,
+    backgroundColor: LiftFlowColors.accent,
   },
   compactRow: {
     flexDirection: 'row',
