@@ -1,9 +1,10 @@
-import {
-  CIRCUIT_MODE_DEFAULTS,
-  INTERVAL_MODE_DEFAULTS,
-  SET_REP_MODE_DEFAULTS,
-} from '@/constants/workoutExecutionModes';
 import { DEFAULT_REST_SECONDS } from '@/constants/workout';
+import {
+    CIRCUIT_MODE_DEFAULTS,
+    INTERVAL_MODE_DEFAULTS,
+    SET_REP_MODE_DEFAULTS,
+    SUPERSET_MODE_DEFAULTS,
+} from '@/constants/workoutExecutionModes';
 import type { WorkoutExecutionMode } from '@/types/workoutExecutionMode';
 
 export type TimerKind = 'traditional_rest' | 'interval' | 'circuit_transition';
@@ -62,6 +63,7 @@ export function resolveTraditionalRestSeconds(
   if (override != null && override > 0) return override;
   if (mode === 'hypertrophy') return SET_REP_MODE_DEFAULTS.hypertrophy.restSeconds;
   if (mode === 'strength') return SET_REP_MODE_DEFAULTS.strength.restSeconds;
+  if (mode === 'superset') return SUPERSET_MODE_DEFAULTS.restBetweenRoundSetsSeconds;
   return SET_REP_MODE_DEFAULTS.traditional.restSeconds ?? DEFAULT_REST_SECONDS;
 }
 

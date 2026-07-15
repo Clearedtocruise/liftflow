@@ -1,7 +1,7 @@
 import { enrichWithSupersetGroups } from '@/lib/supersetFlow';
 import { isConditioningWorkout } from '@/lib/weekPlan';
 import { normalizeExecutionMode, prescribeExerciseExecution } from '@/lib/workoutExecutionMode';
-import type { WorkoutSession, WorkoutExercise } from '@/types';
+import type { WorkoutExercise, WorkoutSession } from '@/types';
 import type { PlannedWorkout, TemplateExercise } from '@/types/training';
 import type { EditableWorkoutExercise } from '@/types/workoutExecution';
 import type { WorkoutExecutionMode } from '@/types/workoutExecutionMode';
@@ -102,7 +102,10 @@ export function buildPlanExercisesFromSession(
     return matched ?? fallbackPlanExerciseFromSession(sessionEx, index, tabataMode);
   });
 
-  return enrichWithSupersetGroups(merged);
+  return enrichWithSupersetGroups(
+    merged,
+    normalizeExecutionMode(plannedWorkout?.metadata?.executionMode),
+  );
 }
 
 function setsFromPrescription(
@@ -159,7 +162,10 @@ function templateToEditable(
 export function exercisesFromPlannedWorkout(workout: PlannedWorkout | null): EditableWorkoutExercise[] {
   const raw = workout?.metadata?.exercises ?? [];
   const defaultMode = normalizeExecutionMode(workout?.metadata?.executionMode);
-  return enrichWithSupersetGroups(raw.map((exercise, index) => templateToEditable(exercise, index, defaultMode)));
+  return enrichWithSupersetGroups(
+    raw.map((exercise, index) => templateToEditable(exercise, index, defaultMode)),
+    defaultMode,
+  );
 }
 
 /** Session-only timing remap — preserves exercise identity (name, id, weight). */

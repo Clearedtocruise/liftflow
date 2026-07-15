@@ -23,7 +23,7 @@ export function WorkoutUpNextCard({ position, compact = false, supersetActive = 
         </AppText>
         {supersetActive ? (
           <AppText variant="caption" color="accent">
-            · SS
+            Superset
           </AppText>
         ) : null}
       </View>
@@ -34,7 +34,7 @@ export function WorkoutUpNextCard({ position, compact = false, supersetActive = 
     <View style={styles.card}>
       {supersetActive ? (
         <AppText variant="caption" color="accent">
-          Superset rotation
+          Superset — partners back-to-back
         </AppText>
       ) : null}
       <View style={styles.row}>

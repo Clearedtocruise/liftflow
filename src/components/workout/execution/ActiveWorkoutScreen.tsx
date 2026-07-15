@@ -16,7 +16,7 @@ import { GuidedWorkoutMetrics, WorkoutProgressBar } from '@/components/workout/e
 import { SetLoggingControls } from '@/components/workout/execution/SetLoggingControls';
 import { SupersetPrepBanner } from '@/components/workout/execution/SupersetPrepBanner';
 import { UseLastPerformanceChip } from '@/components/workout/execution/UseLastPerformanceChip';
-import { WorkoutChallengeModal } from '@/components/workout/execution/WorkoutChallengeModal';
+import { WorkoutChallengeChip } from '@/components/workout/execution/WorkoutChallengeChip';
 import { WorkoutTimerOverlay } from '@/components/workout/execution/WorkoutTimerOverlay';
 import { WorkoutUpNextCard } from '@/components/workout/execution/WorkoutUpNextCard';
 import { ExerciseCoachCard } from '@/components/workout/ExerciseCoachCard';
@@ -53,10 +53,13 @@ import { profileFigureGender } from '@/lib/exerciseMuscleMap';
 import {
     executionModeUsesSupersetRotation,
     formatExerciseStationLabel,
+    formatSupersetNavChrome,
     getSupersetGroupForIndex,
     isSupersetGroupComplete,
+    isSupersetMidRound,
     nextExerciseIndexAfterGroup,
     resolvePostSetFlowAction,
+    resolveSupersetGroupNavIndex,
     resolveSupersetWorkoutPosition,
     shouldShowSupersetPrep,
     targetSetsForIndex,
@@ -71,7 +74,7 @@ import {
 import { TABATA_BETWEEN_EXERCISE_REST_BOUNDS, TABATA_BETWEEN_EXERCISE_REST_DEFAULT, TABATA_INTERVAL_BOUNDS, TABATA_PREP_SECONDS_DEFAULT, clampTabataBetweenExerciseRest, clampTabataIntervalSeconds } from '@/lib/trainingPreferences';
 import { formatWorkoutWeightForInput } from '@/lib/unitConversion';
 import { getWeekRange } from '@/lib/weekPlan';
-import { pickWorkoutChallenge } from '@/lib/workoutChallengeFlow';
+import { applyChallengeDraftBump, pickWorkoutChallenge } from '@/lib/workoutChallengeFlow';
 import { normalizeExecutionMode } from '@/lib/workoutExecutionMode';
 import { buildPlanExercisesFromSession, parseTargetReps } from '@/lib/workoutPlan';
 import { logWorkoutProgressionDecision } from '@/lib/workoutProgressionDebug';
@@ -87,7 +90,6 @@ import type { LoadingMethod } from '@/types/exerciseLoading';
 import type {
     WorkoutChallengeRecord,
     WorkoutChallengeTemplate,
-    WorkoutChallengeTrigger,
 } from '@/types/workoutChallenge';
 import type { EditableWorkoutExercise, ExerciseHistorySet } from '@/types/workoutExecution';
 import type { WorkoutExecutionMode } from '@/types/workoutExecutionMode';
@@ -233,12 +235,16 @@ export function ActiveWorkoutScreen({
     resolveTraditionalRestSeconds(executionMode),
   );
   const [activeChallenge, setActiveChallenge] = useState<WorkoutChallengeTemplate | null>(null);
-  const [challengeTrigger, setChallengeTrigger] = useState<WorkoutChallengeTrigger>('between_sets');
-  const [challengeTargetExerciseName, setChallengeTargetExerciseName] = useState<string | null>(null);
+  const [appliedChallenge, setAppliedChallenge] = useState<WorkoutChallengeTemplate | null>(null);
+  const [challengesDisabledForWorkout, setChallengesDisabledForWorkout] = useState(false);
+  const [challengeFlash, setChallengeFlash] = useState(false);
+  const [challengeNotice, setChallengeNotice] = useState<string | null>(null);
   const [loadingMethod, setLoadingMethod] = useState<LoadingMethod>('external_load');
   const pendingAdvanceRef = useRef<number | null>(null);
   const lastCoachAppliedRef = useRef<string | null>(null);
   const completedSetCountRef = useRef(0);
+  const draftByExerciseIdRef = useRef<Record<string, { weightKg: number; reps: number }>>({});
+  const previousExerciseIdRef = useRef<string | null>(null);
   const applyPendingExerciseIndexAdvance = useCallback(() => {
     const nextIndex = pendingAdvanceRef.current;
     if (nextIndex == null) return false;
@@ -247,7 +253,6 @@ export function ActiveWorkoutScreen({
     setShowComplete(false);
     return true;
   }, []);
-  const pendingAdvanceAfterChallengeRef = useRef<(() => void) | null>(null);
   const pendingExerciseAdvanceAfterRestRef = useRef(false);
   const autoAdvanceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const advanceExerciseRef = useRef<() => void>(() => {});
@@ -816,6 +821,14 @@ export function ActiveWorkoutScreen({
   useEffect(() => {
     if (!user || !currentExercise?.exerciseId) return;
 
+    const exerciseKey = currentExercise.id;
+    const cachedDraft = draftByExerciseIdRef.current[exerciseKey];
+    const previousId = previousExerciseIdRef.current;
+    if (previousId && previousId !== exerciseKey) {
+      // previous draft already saved on navigate; keep map warm
+    }
+    previousExerciseIdRef.current = exerciseKey;
+
     lastCoachAppliedRef.current = null;
     completedSetCountRef.current = completedSets.length;
 
@@ -845,6 +858,10 @@ export function ActiveWorkoutScreen({
         performanceBaselineFromSessionSet(sessionLastSet, sessionMode, repRange),
         sessionMode,
       );
+      if (cachedDraft) {
+        setWeightKg(cachedDraft.weightKg);
+        setReps(cachedDraft.reps);
+      }
       void workoutService
         .getRecentSetsForExercise(user.id, currentExercise.exerciseId, 5, 'any')
         .then((result) => {
@@ -855,12 +872,23 @@ export function ActiveWorkoutScreen({
       return;
     }
 
+    if (cachedDraft) {
+      setWeightKg(cachedDraft.weightKg);
+      setReps(cachedDraft.reps);
+    }
+
     let cancelled = false;
     void workoutService
       .getRecentSetsForExercise(user.id, currentExercise.exerciseId, 5, 'any')
       .then((result: Awaited<ReturnType<typeof workoutService.getRecentSetsForExercise>>) => {
       if (cancelled || !result.success) return;
       setHistorySets(result.data);
+
+      if (cachedDraft) {
+        setWeightKg(cachedDraft.weightKg);
+        setReps(cachedDraft.reps);
+        return;
+      }
 
       const last = pickLastPerformanceSet(result.data, mode);
       const inferredMethod = inferLoadingMethodFromHistory(
@@ -992,7 +1020,7 @@ export function ActiveWorkoutScreen({
   }, []);
 
   useEffect(() => {
-    if (!showComplete || restActive || activeChallenge || isPaused) return;
+    if (!showComplete || restActive || isPaused) return;
     scheduleAutoExerciseAdvance();
     return () => {
       if (autoAdvanceTimeoutRef.current) {
@@ -1000,7 +1028,7 @@ export function ActiveWorkoutScreen({
         autoAdvanceTimeoutRef.current = null;
       }
     };
-  }, [showComplete, restActive, activeChallenge, isPaused, currentIndex, scheduleAutoExerciseAdvance]);
+  }, [showComplete, restActive, isPaused, currentIndex, scheduleAutoExerciseAdvance]);
 
   useEffect(() => {
     return () => {
@@ -1040,7 +1068,6 @@ export function ActiveWorkoutScreen({
     pendingExerciseAdvanceAfterRestRef.current = false;
     pendingAdvanceRef.current = null;
     setPendingAdvanceIndex(null);
-    pendingAdvanceAfterChallengeRef.current = null;
     if (autoAdvanceTimeoutRef.current) {
       clearTimeout(autoAdvanceTimeoutRef.current);
       autoAdvanceTimeoutRef.current = null;
@@ -1052,11 +1079,38 @@ export function ActiveWorkoutScreen({
     (index: number) => {
       const clamped = Math.max(0, Math.min(index, sortedExercises.length - 1));
       if (clamped === currentIndex) return;
+      if (currentExercise?.id) {
+        draftByExerciseIdRef.current[currentExercise.id] = { weightKg, reps };
+      }
       clearExerciseAdvanceState();
       setCurrentIndex(clamped);
     },
-    [clearExerciseAdvanceState, currentIndex, sortedExercises.length],
+    [clearExerciseAdvanceState, currentExercise?.id, currentIndex, reps, sortedExercises.length, weightKg],
   );
+
+  const goToPrevExercise = useCallback(() => {
+    if (usesSupersetRotation && inSuperset) {
+      const within = resolveSupersetGroupNavIndex(currentIndex, planExercises, -1);
+      if (within != null) {
+        goToExercise(within);
+        return;
+      }
+      return;
+    }
+    goToExercise(currentIndex - 1);
+  }, [currentIndex, goToExercise, inSuperset, planExercises, usesSupersetRotation]);
+
+  const goToNextExerciseNav = useCallback(() => {
+    if (usesSupersetRotation && inSuperset) {
+      const within = resolveSupersetGroupNavIndex(currentIndex, planExercises, 1);
+      if (within != null) {
+        goToExercise(within);
+        return;
+      }
+      return;
+    }
+    goToExercise(currentIndex + 1);
+  }, [currentIndex, goToExercise, inSuperset, planExercises, usesSupersetRotation]);
 
   useEffect(() => {
     if (!currentExercise?.id) return;
@@ -1191,54 +1245,62 @@ export function ActiveWorkoutScreen({
     }
   }
 
-  const offerBetweenSetsChallenge = useCallback(() => {
-    if (activeChallenge || groupComplete) return;
+  const midSupersetRound =
+    usesSupersetRotation &&
+    inSuperset &&
+    isSupersetMidRound(currentIndex, planExercises, sortedExercises);
+  const showRestPresets =
+    executionModeUsesTraditionalRest(executionMode) && !showComplete && !midSupersetRound;
+  const supersetNavChrome =
+    usesSupersetRotation && inSuperset
+      ? formatSupersetNavChrome(currentIndex, planExercises, sortedExercises)
+      : null;
+  const prevNavDisabled =
+    isPaused ||
+    (usesSupersetRotation && inSuperset
+      ? resolveSupersetGroupNavIndex(currentIndex, planExercises, -1) == null
+      : currentIndex === 0);
+  const nextNavDisabled =
+    isPaused ||
+    (usesSupersetRotation && inSuperset
+      ? resolveSupersetGroupNavIndex(currentIndex, planExercises, 1) == null
+      : isLastExercise);
+
+  const offerSoftChallenge = useCallback(() => {
+    if (challengesDisabledForWorkout || activeChallenge || appliedChallenge || groupComplete) return;
+    if (midSupersetRound) return;
     const template = pickWorkoutChallenge(challengeRecords, 'between_sets');
     if (!template) return;
-    setChallengeTargetExerciseName(currentExercise?.exercise?.name ?? null);
-    setChallengeTrigger('between_sets');
     setActiveChallenge(template);
-  }, [activeChallenge, challengeRecords, groupComplete, currentExercise?.exercise?.name]);
+  }, [
+    activeChallenge,
+    appliedChallenge,
+    challengeRecords,
+    challengesDisabledForWorkout,
+    groupComplete,
+    midSupersetRound,
+  ]);
 
-  const handleChallengeSkip = useCallback(() => {
-    if (!activeChallenge) return;
-    onChallengeRecord({
-      challengeId: activeChallenge.id,
-      kind: activeChallenge.kind,
-      title: activeChallenge.title,
-      prompt: activeChallenge.prompt,
-      status: 'skipped',
-      trigger: challengeTrigger,
-      exerciseName: challengeTargetExerciseName ?? currentExercise?.exercise?.name,
-    });
+  const handleChallengeDismiss = useCallback(() => {
     setActiveChallenge(null);
-    setChallengeTargetExerciseName(null);
-    const advance = pendingAdvanceAfterChallengeRef.current;
-    pendingAdvanceAfterChallengeRef.current = null;
-    advance?.();
-  }, [activeChallenge, challengeTrigger, challengeTargetExerciseName, currentExercise?.exercise?.name, onChallengeRecord]);
+  }, []);
 
-  const handleChallengeComplete = useCallback(
-    (loggedValue?: string) => {
-      if (!activeChallenge) return;
-      onChallengeRecord({
-        challengeId: activeChallenge.id,
-        kind: activeChallenge.kind,
-        title: activeChallenge.title,
-        prompt: activeChallenge.prompt,
-        status: 'completed',
-        trigger: challengeTrigger,
-        exerciseName: challengeTargetExerciseName ?? currentExercise?.exercise?.name,
-        loggedValue,
-      });
-      setActiveChallenge(null);
-      setChallengeTargetExerciseName(null);
-      const advance = pendingAdvanceAfterChallengeRef.current;
-      pendingAdvanceAfterChallengeRef.current = null;
-      advance?.();
-    },
-    [activeChallenge, challengeTrigger, challengeTargetExerciseName, currentExercise?.exercise?.name, onChallengeRecord],
-  );
+  const handleChallengeDontShowAgain = useCallback(() => {
+    setChallengesDisabledForWorkout(true);
+    setActiveChallenge(null);
+  }, []);
+
+  const handleChallengeApply = useCallback(() => {
+    if (!activeChallenge) return;
+    const bump = applyChallengeDraftBump(activeChallenge, { reps, weightKg });
+    if (bump.reps != null) setReps(bump.reps);
+    if (bump.weightKg != null) setWeightKg(bump.weightKg);
+    setChallengeNotice(bump.notice);
+    setAppliedChallenge(activeChallenge);
+    setActiveChallenge(null);
+    setChallengeFlash(true);
+    setTimeout(() => setChallengeFlash(false), 900);
+  }, [activeChallenge, reps, weightKg]);
 
   useEffect(() => {
     if (restSecondsRemaining !== 0) return;
@@ -1326,6 +1388,24 @@ export function ActiveWorkoutScreen({
         setExerciseHadPr(true);
       }
 
+      if (appliedChallenge) {
+        onChallengeRecord({
+          challengeId: appliedChallenge.id,
+          kind: appliedChallenge.kind,
+          title: appliedChallenge.title,
+          prompt: appliedChallenge.prompt,
+          status: 'completed',
+          trigger: 'between_sets',
+          exerciseName: currentExercise.exercise?.name,
+          loggedValue:
+            loggingMode === 'cardio' || loggingMode === 'timed'
+              ? undefined
+              : String(repsToLog),
+        });
+        setAppliedChallenge(null);
+        setChallengeNotice(null);
+      }
+
       if (flowAction.circuitTimer && flowAction.circuitTimer.seconds > 0) {
         pendingAdvanceRef.current = flowAction.circuitTimer.advanceIndex;
         pendingRoundIncrementRef.current = flowAction.circuitTimer.phase === 'round_rest';
@@ -1336,9 +1416,16 @@ export function ActiveWorkoutScreen({
           flowAction.circuitTimer.seconds,
         );
       } else if (flowAction.immediateAdvanceIndex != null) {
+        if (currentExercise.id) {
+          draftByExerciseIdRef.current[currentExercise.id] = {
+            weightKg: weightToLog,
+            reps: repsToLog,
+          };
+        }
         pendingAdvanceRef.current = null;
         setCurrentIndex(flowAction.immediateAdvanceIndex);
         setShowComplete(false);
+        setActiveChallenge(null);
       } else if (flowAction.afterRestAdvanceIndex != null) {
         if (skipRest) {
           applyPendingExerciseIndexAdvance();
@@ -1351,8 +1438,8 @@ export function ActiveWorkoutScreen({
         pendingExerciseAdvanceAfterRestRef.current = true;
       }
 
-      if (completedAfterLog < effectiveTargetSets) {
-        offerBetweenSetsChallenge();
+      if (completedAfterLog < effectiveTargetSets && flowAction.immediateAdvanceIndex == null) {
+        offerSoftChallenge();
       }
 
       setWatchDraftReps(null);
@@ -1470,15 +1557,6 @@ export function ActiveWorkoutScreen({
   }
 
   function handleNextExercise() {
-    const nextName = nextExercise?.exercise?.name;
-    const template = pickWorkoutChallenge(challengeRecords, 'between_exercises');
-    if (template && nextName && !activeChallenge) {
-      pendingAdvanceAfterChallengeRef.current = performExerciseAdvance;
-      setChallengeTargetExerciseName(nextName);
-      setChallengeTrigger('between_exercises');
-      setActiveChallenge(template);
-      return;
-    }
     performExerciseAdvance();
   }
 
@@ -1503,7 +1581,7 @@ export function ActiveWorkoutScreen({
             <TabScreenHeader
               showBrand={false}
               title={session.name}
-              subtitle={`${currentIndex + 1} of ${sortedExercises.length} · ${formatWorkoutClockTime(elapsedSeconds)}${loggedSetCount > 0 ? ' · In progress' : ''}`}
+              subtitle={`${supersetNavChrome ?? `${currentIndex + 1} of ${sortedExercises.length}`} · ${formatWorkoutClockTime(elapsedSeconds)}${loggedSetCount > 0 ? ' · In progress' : ''}`}
               right={
                 isPaused ? (
                   <PrimaryButton label="Resume" onPress={resumeSession} />
@@ -1527,23 +1605,23 @@ export function ActiveWorkoutScreen({
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Previous exercise"
-                onPress={() => goToExercise(currentIndex - 1)}
-                disabled={currentIndex === 0 || isPaused}
+                onPress={goToPrevExercise}
+                disabled={prevNavDisabled}
                 style={styles.exerciseNavButton}>
-                <AppText variant="caption" color={currentIndex === 0 || isPaused ? 'textTertiary' : 'accent'}>
+                <AppText variant="caption" color={prevNavDisabled ? 'textTertiary' : 'accent'}>
                   ← Prev
                 </AppText>
               </Pressable>
               <AppText variant="caption" color="textSecondary" numberOfLines={1} style={styles.exerciseNavTitle}>
-                {currentIndex + 1}/{sortedExercises.length}
+                {supersetNavChrome ?? `${currentIndex + 1}/${sortedExercises.length}`}
               </AppText>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Next exercise"
-                onPress={() => goToExercise(currentIndex + 1)}
-                disabled={isLastExercise || isPaused}
+                onPress={goToNextExerciseNav}
+                disabled={nextNavDisabled}
                 style={styles.exerciseNavButton}>
-                <AppText variant="caption" color={isLastExercise || isPaused ? 'textTertiary' : 'accent'}>
+                <AppText variant="caption" color={nextNavDisabled ? 'textTertiary' : 'accent'}>
                   Next →
                 </AppText>
               </Pressable>
@@ -1619,6 +1697,17 @@ export function ActiveWorkoutScreen({
 
               {!showComplete ? (
                 <>
+                  {showSupersetPrepBanner && supersetPrepGroup ? (
+                    <SupersetPrepBanner
+                      group={supersetPrepGroup}
+                      planExercises={planExercises}
+                      sessionExercises={sortedExercises}
+                      onDismiss={() => {
+                        dismissedSupersetGroupsRef.current.add(supersetPrepGroup.id);
+                        setSupersetBannerTick((tick) => tick + 1);
+                      }}
+                    />
+                  ) : null}
                   {useLastPerformance && useLastPerformanceLine ? (
                     <UseLastPerformanceChip
                       performanceLine={useLastPerformanceLine}
@@ -1628,30 +1717,45 @@ export function ActiveWorkoutScreen({
                       disabled={isPaused || logging}
                     />
                   ) : null}
-                  <SetLoggingControls
-                    mode={loggingMode}
-                    weightKg={weightKg}
-                    reps={reps}
-                    durationSeconds={durationSeconds}
-                    distanceKm={distanceKm}
-                    onChangeWeight={setWeightKg}
-                    onChangeReps={setReps}
-                    onChangeDuration={setDurationSeconds}
-                    onChangeDistance={setDistanceKm}
-                    disabled={isPaused || logging}
-                  />
+                  <View style={challengeFlash ? styles.challengeFlash : undefined}>
+                    <SetLoggingControls
+                      mode={loggingMode}
+                      weightKg={weightKg}
+                      reps={reps}
+                      durationSeconds={durationSeconds}
+                      distanceKm={distanceKm}
+                      onChangeWeight={setWeightKg}
+                      onChangeReps={setReps}
+                      onChangeDuration={setDurationSeconds}
+                      onChangeDistance={setDistanceKm}
+                      disabled={isPaused || logging}
+                    />
+                  </View>
+                  {activeChallenge ? (
+                    <WorkoutChallengeChip
+                      challenge={activeChallenge}
+                      onApply={handleChallengeApply}
+                      onDismiss={handleChallengeDismiss}
+                      onDontShowAgain={handleChallengeDontShowAgain}
+                    />
+                  ) : null}
+                  {challengeNotice ? (
+                    <AppText variant="footnote" color="accent">
+                      {challengeNotice}
+                    </AppText>
+                  ) : null}
                   <PrimaryButton
                     label={allSetsDone ? 'All sets logged' : `Log Set ${nextSetNumber}`}
                     size="large"
                     loading={logging}
-                    disabled={isPaused}
+                    disabled={isPaused || allSetsDone}
                     onPress={handleLogSet}
                     testID="log-set-button"
                   />
                 </>
               ) : null}
 
-              {executionModeUsesTraditionalRest(executionMode) && !showComplete ? (
+              {showRestPresets ? (
                 <View style={styles.restPresetRow}>
                   {[60, 90, 120, 150].map((seconds) => (
                     <Pressable key={seconds} onPress={() => setRestTargetSeconds(seconds)}>
@@ -1661,18 +1765,10 @@ export function ActiveWorkoutScreen({
                     </Pressable>
                   ))}
                 </View>
-              ) : null}
-
-              {showSupersetPrepBanner && supersetPrepGroup ? (
-                <SupersetPrepBanner
-                  group={supersetPrepGroup}
-                  planExercises={planExercises}
-                  sessionExercises={sortedExercises}
-                  onDismiss={() => {
-                    dismissedSupersetGroupsRef.current.add(supersetPrepGroup.id);
-                    setSupersetBannerTick((tick) => tick + 1);
-                  }}
-                />
+              ) : midSupersetRound && !showComplete ? (
+                <AppText variant="caption" color="accent">
+                  Superset — no rest between partners
+                </AppText>
               ) : null}
 
               {executionMode === 'circuit' ? (
@@ -1833,7 +1929,7 @@ export function ActiveWorkoutScreen({
             volumeKg={exerciseVolume}
             hasPr={exerciseHadPr}
             onNext={handleNextExercise}
-            autoAdvancing={!restActive && !activeChallenge}
+            autoAdvancing={!restActive}
             isLastExercise={
               usesSupersetRotation && inSuperset
                 ? nextExerciseIndexAfterGroup(supersetGroup!, sortedExercises.length) === null
@@ -1860,7 +1956,6 @@ export function ActiveWorkoutScreen({
       <WorkoutTimerOverlay
         visible={
           !showComplete &&
-          !activeChallenge &&
           ((intervalTimer != null && intervalOverlayOpen) ||
             (circuitTimer != null && circuitTimer.phase !== 'done' && circuitOverlayOpen))
         }
@@ -1908,15 +2003,6 @@ export function ActiveWorkoutScreen({
         circuit={circuitTimer && circuitTimer.phase !== 'done' ? circuitTimer : null}
         onCircuitSkip={handleFinishCircuitTimer}
         onCircuitDismiss={handleFinishCircuitTimer}
-      />
-
-      <WorkoutChallengeModal
-        visible={activeChallenge != null}
-        challenge={activeChallenge}
-        exerciseName={challengeTargetExerciseName ?? currentExercise?.exercise?.name}
-        trigger={challengeTrigger}
-        onSkip={handleChallengeSkip}
-        onComplete={handleChallengeComplete}
       />
 
       <ExercisePickerModal
@@ -1994,6 +2080,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: Spacing.md,
+  },
+  challengeFlash: {
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: LiftFlowColors.accent,
+    padding: Spacing.xs,
+    backgroundColor: LiftFlowColors.primaryGlow,
   },
   intervalBanner: {
     gap: Spacing.sm,

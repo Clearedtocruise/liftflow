@@ -33,10 +33,23 @@ export type CircuitStation = {
   memberIndices: number[];
 };
 
-/** Pair consecutive exercises (0–1, 2–3, …) when no explicit groups exist. */
-export function enrichWithSupersetGroups(exercises: EditableWorkoutExercise[]): EditableWorkoutExercise[] {
+/**
+ * Pair consecutive exercises (0–1, 2–3, …) when no explicit groups exist.
+ * Only invents pairs for superset/circuit modes — never forces supersets onto traditional plans.
+ */
+export function enrichWithSupersetGroups(
+  exercises: EditableWorkoutExercise[],
+  preferredMode?: WorkoutExecutionMode,
+): EditableWorkoutExercise[] {
   if (exercises.some((e) => e.supersetGroupId)) return exercises;
   if (exercises.length < 2) return exercises;
+  if (
+    preferredMode != null &&
+    preferredMode !== 'superset' &&
+    preferredMode !== 'circuit'
+  ) {
+    return exercises;
+  }
 
   const result = exercises.map((e) => ({ ...e }));
   for (let i = 0; i + 1 < result.length; i += 2) {
@@ -79,6 +92,52 @@ export function getSupersetLabel(group: SupersetGroup | null, index: number): st
   const position = group.memberIndices.indexOf(index);
   if (position < 0) return null;
   return `${String.fromCharCode(65 + position)}`;
+}
+
+/** True while partners have uneven set counts (mid-round A↔B hop). */
+export function isSupersetMidRound(
+  currentIndex: number,
+  planExercises: EditableWorkoutExercise[],
+  sessionExercises: WorkoutExercise[],
+): boolean {
+  const group = getSupersetGroupForIndex(currentIndex, planExercises);
+  if (!group || group.memberIndices.length < 2) return false;
+  const counts = group.memberIndices.map((index) => sessionExercises[index]?.sets?.length ?? 0);
+  return Math.max(...counts) > Math.min(...counts);
+}
+
+/**
+ * Prev/Next within a superset group only. Returns null at group edges or when not in a group
+ * (caller should use linear navigation outside groups).
+ */
+export function resolveSupersetGroupNavIndex(
+  currentIndex: number,
+  planExercises: EditableWorkoutExercise[],
+  direction: -1 | 1,
+): number | null {
+  const group = getSupersetGroupForIndex(currentIndex, planExercises);
+  if (!group || group.memberIndices.length < 2) return null;
+  const ordered = [...group.memberIndices].sort((a, b) => a - b);
+  const position = ordered.indexOf(currentIndex);
+  if (position < 0) return null;
+  const nextPos = position + direction;
+  if (nextPos < 0 || nextPos >= ordered.length) return null;
+  return ordered[nextPos] ?? null;
+}
+
+export function formatSupersetNavChrome(
+  currentIndex: number,
+  planExercises: EditableWorkoutExercise[],
+  sessionExercises: WorkoutExercise[],
+): string | null {
+  const group = getSupersetGroupForIndex(currentIndex, planExercises);
+  if (!group || group.memberIndices.length < 2) return null;
+  const letter = getSupersetLabel(group, currentIndex);
+  const target = targetSetsForIndex(currentIndex, planExercises);
+  const counts = group.memberIndices.map((index) => sessionExercises[index]?.sets?.length ?? 0);
+  const activeRound = Math.min(Math.max(...counts, 0) + (isSupersetMidRound(currentIndex, planExercises, sessionExercises) ? 0 : 1), target);
+  const round = Math.max(1, Math.min(activeRound, target));
+  return letter ? `${letter} · Round ${round}/${target}` : `Round ${round}/${target}`;
 }
 
 /** A1, A2, B1, … based on superset group id and position within group. */
@@ -250,8 +309,11 @@ export function resolvePostSetFlowAction(
       immediateAdvanceIndex: null,
       afterRestAdvanceIndex: supersetAction.afterRestAdvanceIndex,
       circuitTimer: {
-        phase: 'transition',
-        seconds: SUPERSET_MODE_DEFAULTS.restBetweenExercisesSeconds,
+        phase: 'round_rest',
+        seconds: Math.max(
+          SUPERSET_MODE_DEFAULTS.restBetweenRoundSetsSeconds,
+          CIRCUIT_MODE_DEFAULTS.restBetweenRoundsSeconds,
+        ),
         round: circuitRound,
         advanceIndex: supersetAction.afterRestAdvanceIndex,
       },
@@ -393,10 +455,14 @@ export function resolveSupersetWorkoutPosition(
         ? `${partnerName} (${partnerStation}) · Set ${partnerSet}/${partnerTarget}`
         : `${partnerName} · Set ${partnerSet}/${partnerTarget}`;
       const goNow = partnerCompleted < completed;
+      const partnerLetter = getSupersetLabel(group, partnerIndex);
+      const goNowLabel = partnerLetter
+        ? `Next: ${partnerLetter} · ${partnerName} — go now`
+        : `Next: ${partnerName} — go now`;
       return {
         exerciseName,
         currentSetLabel,
-        upNextLabel: goNow ? `${partnerLabel} · go now` : partnerLabel,
+        upNextLabel: goNow ? goNowLabel : partnerLabel,
       };
     }
   }

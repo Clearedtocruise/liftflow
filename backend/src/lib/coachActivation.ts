@@ -1,5 +1,5 @@
-import { generateWeeklyMealPlan } from './aiCoach.js';
 import { ageYearsFromDateOfBirth } from './ageAdjustments.js';
+import { generateWeeklyMealPlan } from './aiCoach.js';
 import { pruneDuplicateMeals, removePlannedMealsForWeek, weekEndDate } from './mealCleanup.js';
 import { captureOutcomeBaseline } from './outcomeEngine.js';
 import { generateTrainingProgram, getProgramDashboard } from './programEngine.js';
