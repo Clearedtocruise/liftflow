@@ -625,11 +625,26 @@ export default function DashboardScreen() {
       {!nextPlanned && !programLoading && user?.onboardingCompleted ? (
         <Animated.View entering={FadeInDown.delay(150).duration(400)}>
           <Card glow style={styles.emptyWorkout}>
-            <AppText variant="bodyBold">Your coach is syncing</AppText>
-            <AppText variant="footnote" color="textSecondary">
-              Pull to refresh — your program should appear momentarily.
+            <AppText variant="bodyBold">
+              {program ? 'No workout scheduled this week' : 'Set up your training program'}
             </AppText>
-            <PrimaryButton label="Refresh Plan" onPress={() => { setRefreshing(true); load(); }} />
+            <AppText variant="footnote" color="textSecondary">
+              {program
+                ? 'Your plan may need a refresh for this week. Tap below to regenerate upcoming workouts.'
+                : 'Create a program so coach can schedule your next session.'}
+            </AppText>
+            <PrimaryButton
+              label={program ? 'Refresh this week’s plan' : 'Refresh Plan'}
+              onPress={async () => {
+                if (!user) return;
+                setRefreshing(true);
+                try {
+                  await trainingService.regenerateProgramIfNeeded(user.id);
+                } finally {
+                  load();
+                }
+              }}
+            />
           </Card>
         </Animated.View>
       ) : null}

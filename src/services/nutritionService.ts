@@ -1,6 +1,5 @@
 import { api } from '@/api/client';
 import { mapGroceryList, mapMeal, mapMealPlan, mapNutritionGoals } from '@/lib/db-mappers';
-import { aggregateWeeklyGroceries } from '@/lib/groceryAggregation';
 import { localDateString, resolveTimeZone } from '@/lib/localDate';
 import { aggregateDailyMeals, mealsForCalendarDay } from '@/lib/mealAggregation';
 import { isReplaceablePlannedMeal, pickMealsToKeep, weekEndDate } from '@/lib/mealCleanup';
@@ -8,6 +7,7 @@ import { enrichMealMeta, serializeMealMeta } from '@/lib/mealIngredients';
 import { mealSlotKey, remapApiMealsToClientWeek, type ApiPlanMeal } from '@/lib/mealPlanWeekAlign';
 import { fail, fromError, ok } from '@/lib/serviceResult';
 import { getWeekRange } from '@/lib/weekPlan';
+import { groceryService } from '@/services/groceryService';
 import type { INutritionService } from '@/services/interfaces';
 import { getAccessToken, supabase } from '@/supabase/client';
 import type { DailyNutritionSummary, Meal, MealType } from '@/types';
@@ -371,57 +371,7 @@ export const nutritionService: INutritionService = {
   async generateGroceryList(userId, mealPlanId?: string) {
     try {
       const { from, to } = getWeekRange(new Date(), undefined);
-      const mealsResult = await this.getMealsForWeek(userId, from, to);
-      if (!mealsResult.success) return fail(mealsResult.error);
-
-      let planId = mealPlanId;
-      if (!planId) {
-        const { data: latest } = await supabase
-          .from('meal_plans')
-          .select('id')
-          .eq('user_id', userId)
-          .order('week_start_date', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        planId = latest?.id;
-      }
-
-      const meals = mealsResult.data;
-      const aggregated = aggregateWeeklyGroceries(meals);
-
-      const { data: list, error } = await supabase
-        .from('grocery_lists')
-        .insert({
-          user_id: userId,
-          meal_plan_id: planId,
-          name: 'Shopping List',
-          week_start_date: weekStartDate(),
-        })
-        .select('*')
-        .single();
-
-      if (error) return fail(error.message);
-
-      const items = aggregated.map((item, index) => ({
-        grocery_list_id: list.id,
-        name: item.name,
-        quantity: parseFloat(item.quantity) || 1,
-        unit: item.quantity.replace(/^[\d.]+\s*/, '') || 'serving',
-        category: item.category,
-        sort_order: index,
-      }));
-
-      if (items.length > 0) {
-        await supabase.from('grocery_list_items').insert(items);
-      }
-
-      const { data: full } = await supabase
-        .from('grocery_lists')
-        .select('*, grocery_list_items(*)')
-        .eq('id', list.id)
-        .single();
-
-      return ok(mapGroceryList(full!));
+      return groceryService.upsertWeekList(userId, from, to, mealPlanId);
     } catch (e) {
       return fromError(e);
     }
@@ -526,37 +476,7 @@ export const nutritionService: INutritionService = {
 
   async syncGroceryListFromMeals(userId: string, from: string, to: string) {
     try {
-      const listsResult = await this.getGroceryLists(userId);
-      if (!listsResult.success || !listsResult.data?.length) return ok(null);
-
-      const list = listsResult.data[0];
-      const mealsResult = await this.getMealsForWeek(userId, from, to);
-      if (!mealsResult.success) return fail(mealsResult.error);
-
-      const aggregated = aggregateWeeklyGroceries(mealsResult.data);
-      await supabase.from('grocery_list_items').delete().eq('grocery_list_id', list.id);
-
-      const items = aggregated.map((item, index) => ({
-        grocery_list_id: list.id,
-        name: item.name,
-        quantity: parseFloat(item.quantity) || 1,
-        unit: item.quantity.replace(/^[\d.]+\s*/, '') || 'serving',
-        category: item.category,
-        sort_order: index,
-      }));
-
-      if (items.length > 0) {
-        await supabase.from('grocery_list_items').insert(items);
-      }
-
-      const { data: full, error } = await supabase
-        .from('grocery_lists')
-        .select('*, grocery_list_items(*)')
-        .eq('id', list.id)
-        .single();
-
-      if (error) return fail(error.message);
-      return ok(mapGroceryList(full!));
+      return groceryService.upsertWeekList(userId, from, to);
     } catch (e) {
       return fromError(e);
     }

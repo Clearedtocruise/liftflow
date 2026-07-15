@@ -29,6 +29,13 @@ import { useAuth } from '@/hooks/useAuth';
 import { useLiftFlowTheme, useThemedStyles } from '@/hooks/useLiftFlowTheme';
 import { useSubscription } from '@/hooks/useSubscription';
 import { useUnits } from '@/hooks/useUnits';
+import {
+    DEFAULT_GROCERY_RETAILER_ID,
+    getGroceryRetailer,
+    GROCERY_RETAILER_PREF_KEY,
+    GROCERY_RETAILERS,
+    type GroceryRetailerId,
+} from '@/lib/grocery/retailers';
 import { ageFromDateOfBirth } from '@/lib/heartRateZones';
 import { loadRolloverValidationState, type RolloverValidationState } from '@/lib/rolloverDebug';
 import { openSupportEmail } from '@/lib/supportMail';
@@ -80,6 +87,8 @@ export default function SettingsScreen() {
   const [restTimerSound, setRestTimerSound] = useState(true);
   const [restTimerHaptics, setRestTimerHaptics] = useState(true);
   const [workoutReminderEnabled, setWorkoutReminderEnabled] = useState(false);
+  const [preferredGroceryRetailer, setPreferredGroceryRetailer] =
+    useState<GroceryRetailerId>(DEFAULT_GROCERY_RETAILER_ID);
   const [validationState, setValidationState] = useState<RolloverValidationState | null>(null);
 
   const refreshValidationState = useCallback(async () => {
@@ -120,6 +129,10 @@ export default function SettingsScreen() {
         setRestTimerSound(result.data.restTimerSound !== false);
         setRestTimerHaptics(result.data.restTimerHaptics !== false);
         setWorkoutReminderEnabled(result.data.notificationPreferences?.workoutReminder === true);
+        const groceryRetailerRaw = coaching[GROCERY_RETAILER_PREF_KEY];
+        setPreferredGroceryRetailer(
+          getGroceryRetailer(typeof groceryRetailerRaw === 'string' ? groceryRetailerRaw : null).id,
+        );
       }
     });
     deviceLocationService.getPermissionStatus().then((status) => {
@@ -566,6 +579,24 @@ export default function SettingsScreen() {
             <AppSymbol name="leaf.fill" fallback="🥗" size={20} tintColor={colors.textSecondary} />
           }
           onPress={() => router.push('/(features)/nutrition-preferences')}
+        />
+        <SettingsRow
+          label="Preferred grocery store"
+          value={getGroceryRetailer(preferredGroceryRetailer).displayName}
+          icon={
+            <AppSymbol name="cart.fill" fallback="🛒" size={20} tintColor={colors.textSecondary} />
+          }
+          onPress={async () => {
+            if (!user) return;
+            const index = GROCERY_RETAILERS.findIndex((r) => r.id === preferredGroceryRetailer);
+            const next = GROCERY_RETAILERS[(index + 1) % GROCERY_RETAILERS.length]!;
+            setPreferredGroceryRetailer(next.id);
+            const prefs = await userService.getPreferences(user.id);
+            const coaching = prefs.success ? prefs.data.coachingPreferences ?? {} : {};
+            await userService.updatePreferences(user.id, {
+              coachingPreferences: { ...coaching, [GROCERY_RETAILER_PREF_KEY]: next.id },
+            });
+          }}
         />
         <SettingsRow
           label="Workout locations"

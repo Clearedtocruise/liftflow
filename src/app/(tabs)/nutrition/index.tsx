@@ -19,6 +19,7 @@ import { NutritionMetricsRow } from '@/components/nutrition/NutritionMetricsRow'
 import { NutritionProgressHeader } from '@/components/nutrition/NutritionProgressHeader';
 import { NutritionSectionTabs, type NutritionSection } from '@/components/nutrition/NutritionSectionTabs';
 import { QuickMealLogSheet } from '@/components/nutrition/QuickMealLogSheet';
+import { ShoppingListSection } from '@/components/nutrition/ShoppingListSection';
 import { FeatureGate } from '@/components/subscription/PremiumGate';
 import { AppText } from '@/components/ui/AppText';
 import { HeroImages } from '@/constants/imagery';
@@ -29,7 +30,12 @@ import { useAuth } from '@/hooks/useAuth';
 import { useLocalCalendarDay } from '@/hooks/useLocalCalendarDay';
 import { useLocalWeekRollover } from '@/hooks/useLocalWeekRollover';
 import { resolveActiveTrainingDay } from '@/lib/activeTrainingDay';
-import { aggregateWeeklyGroceries, groupGroceriesByCategory } from '@/lib/groceryAggregation';
+import {
+    DEFAULT_GROCERY_RETAILER_ID,
+    getGroceryRetailer,
+    GROCERY_RETAILER_PREF_KEY,
+    type GroceryRetailerId,
+} from '@/lib/grocery/retailers';
 import { resolveTimeZone } from '@/lib/localDate';
 import { aggregateDailyMeals, aggregateWeeklyMeals, buildDailySummaryFromMeals, mealsForCalendarDay } from '@/lib/mealAggregation';
 import {
@@ -50,6 +56,7 @@ import { withTimeout } from '@/lib/withTimeout';
 import type { MealAlternativeOption } from '@/services/nutritionAdvisoryService';
 import { nutritionService } from '@/services/nutritionService';
 import { trainingService } from '@/services/trainingService';
+import { userService } from '@/services/userService';
 import { getAccessToken } from '@/supabase/client';
 import type { DailyNutritionSummary, GroceryList, Meal, NutritionGoals } from '@/types';
 import type { MealType } from '@/types/common';
@@ -63,6 +70,8 @@ export default function NutritionScreen() {
   const [summary, setSummary] = useState<DailyNutritionSummary | null>(null);
   const [weekMeals, setWeekMeals] = useState<Meal[]>([]);
   const [groceryList, setGroceryList] = useState<GroceryList | null>(null);
+  const [preferredRetailerId, setPreferredRetailerId] = useState<GroceryRetailerId>(DEFAULT_GROCERY_RETAILER_ID);
+  const [shoppingRefreshing, setShoppingRefreshing] = useState(false);
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -296,6 +305,11 @@ export default function NutritionScreen() {
         void flushPendingMeals();
         void load({ silent: true });
         void syncPendingMealCount();
+        void userService.getPreferences(user.id).then((result) => {
+          if (!result.success) return;
+          const raw = result.data.coachingPreferences?.[GROCERY_RETAILER_PREF_KEY];
+          setPreferredRetailerId(getGroceryRetailer(typeof raw === 'string' ? raw : null).id);
+        });
       }
     }, [user, load]),
   );
@@ -344,9 +358,14 @@ export default function NutritionScreen() {
 
   const weekAggregation = useMemo(() => aggregateWeeklyMeals(weekMeals), [weekMeals]);
 
-  const shoppingItems = useMemo(() => aggregateWeeklyGroceries(weekMeals), [weekMeals]);
-
-  const groupedShopping = useMemo(() => groupGroceriesByCategory(shoppingItems), [shoppingItems]);
+  useEffect(() => {
+    if (!user?.id) return;
+    void userService.getPreferences(user.id).then((result) => {
+      if (!result.success) return;
+      const raw = result.data.coachingPreferences?.[GROCERY_RETAILER_PREF_KEY];
+      setPreferredRetailerId(getGroceryRetailer(typeof raw === 'string' ? raw : null).id);
+    });
+  }, [user?.id]);
 
   useEffect(() => {
     if (log === '1') setQuickLogOpen(true);
@@ -465,10 +484,15 @@ export default function NutritionScreen() {
   }
 
   async function handleGenerateShoppingList() {
-    if (!user) return;
-    const result = await nutritionService.generateGroceryList(user.id);
-    if (result.success) setGroceryList(result.data);
-    else Alert.alert('Error', result.error);
+    if (!user || shoppingRefreshing) return;
+    setShoppingRefreshing(true);
+    try {
+      const result = await nutritionService.generateGroceryList(user.id);
+      if (result.success) setGroceryList(result.data);
+      else Alert.alert('Error', result.error);
+    } finally {
+      setShoppingRefreshing(false);
+    }
   }
 
   async function handleMarkMeal(meal: Meal, status: 'completed' | 'modified' | 'skipped') {
@@ -774,40 +798,15 @@ export default function NutritionScreen() {
       ) : null}
 
       {section === 'shopping' ? (
-        <>
-          <Card style={styles.intelCard}>
-            <AppText variant="label" color="accent">
-              Weekly shopping
-            </AppText>
-            <AppText variant="footnote" color="textSecondary">
-              {weekRange.from} – {weekRange.to} · {weekMeals.length} planned meals · {shoppingItems.length} items
-            </AppText>
-          </Card>
-          <PrimaryButton label="Refresh Shopping List" variant="secondary" onPress={handleGenerateShoppingList} />
-          {shoppingItems.length === 0 ? (
-            <Card style={styles.shoppingCard}>
-              <AppText variant="body" color="textSecondary">
-                Generate a meal plan first.
-              </AppText>
-            </Card>
-          ) : (
-            Object.entries(groupedShopping).map(([category, items]) => (
-              <Card key={category} style={styles.shoppingCard}>
-                <AppText variant="label" color="accent">
-                  {category}
-                </AppText>
-                {items.map((item) => (
-                  <View key={`${category}-${item.name}`} style={styles.shoppingRow}>
-                    <AppText variant="bodyBold">{item.name}</AppText>
-                    <AppText variant="footnote" color="textSecondary">
-                      {item.quantity}
-                    </AppText>
-                  </View>
-                ))}
-              </Card>
-            ))
-          )}
-        </>
+        <ShoppingListSection
+          list={groceryList}
+          weekLabel={`${weekRange.from} – ${weekRange.to}`}
+          mealCount={weekMeals.length}
+          preferredRetailerId={preferredRetailerId}
+          refreshing={shoppingRefreshing}
+          onRefresh={() => void handleGenerateShoppingList()}
+          onListChange={setGroceryList}
+        />
       ) : null}
 
       <MealReplaceSheet
@@ -891,16 +890,5 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-  },
-  shoppingCard: {
-    gap: Spacing.sm,
-  },
-  shoppingRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: Spacing.md,
-    paddingVertical: Spacing.xs,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: LiftFlowColors.border,
   },
 });

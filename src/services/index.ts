@@ -5,6 +5,7 @@ export { bodyService } from './bodyService';
 export { coachCheckInService } from './coachCheckInService';
 export { exportService } from './exportService';
 export { goalService } from './goalService';
+export { groceryService } from './groceryService';
 export { integrationService } from './integrationService';
 export { limitationService } from './limitationService';
 export { notificationService } from './notificationService';
@@ -26,6 +27,7 @@ import { bodyService } from './bodyService';
 import { coachCheckInService } from './coachCheckInService';
 import { exportService } from './exportService';
 import { goalService } from './goalService';
+import { groceryService } from './groceryService';
 import { integrationService } from './integrationService';
 import { limitationService } from './limitationService';
 import { notificationService } from './notificationService';
@@ -45,6 +47,7 @@ export const services = {
   workout: workoutService,
   training: trainingService,
   nutrition: nutritionService,
+  grocery: groceryService,
   body: bodyService,
   goals: goalService,
   analytics: analyticsService,

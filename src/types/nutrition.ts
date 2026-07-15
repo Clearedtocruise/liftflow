@@ -31,6 +31,8 @@ export type Meal = BaseEntity & {
   carbsG?: number;
   fatG?: number;
   instructions?: string;
+  /** Multiplier applied to ingredient quantities when aggregating groceries. Defaults to 1. */
+  servings?: number;
 };
 
 export type GroceryList = BaseEntity & {

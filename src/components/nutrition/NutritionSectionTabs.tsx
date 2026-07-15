@@ -14,7 +14,7 @@ type NutritionSectionTabsProps = {
 const SECTIONS: { id: NutritionSection; label: string }[] = [
   { id: 'today', label: 'Today' },
   { id: 'week', label: 'Week' },
-  { id: 'shopping', label: 'Shopping List' },
+  { id: 'shopping', label: 'Shop' },
 ];
 
 export function NutritionSectionTabs({ active, onChange }: NutritionSectionTabsProps) {

@@ -94,23 +94,28 @@ export function ExerciseCoachCard({
       if (showSpinner) setInitialLoading(true);
       setFetchError(false);
 
-      const result = await exerciseCoachService.getPrescription(userId, exerciseId, {
-        ...planRef.current,
-        sessionId,
-        loggingMode,
-        currentSessionSets: setsRef.current,
-      });
+      try {
+        const result = await exerciseCoachService.getPrescription(userId, exerciseId, {
+          ...planRef.current,
+          sessionId,
+          loggingMode,
+          currentSessionSets: setsRef.current,
+        });
 
-      const next = result.success ? result.data : null;
-      if (!coachPrescriptionsEqual(prescriptionRef.current, next)) {
-        setPrescription(next);
-        onPrescriptionRef.current?.(next);
+        const next = result.success ? result.data : null;
+        if (!coachPrescriptionsEqual(prescriptionRef.current, next)) {
+          setPrescription(next);
+          onPrescriptionRef.current?.(next);
+        }
+        if (!result.success || !next) setFetchError(true);
+        if (result.success && next) {
+          lastFetchedSignatureRef.current = sessionSetsSignature(setsRef.current);
+        }
+      } catch {
+        setFetchError(true);
+      } finally {
+        setInitialLoading(false);
       }
-      if (!result.success) setFetchError(true);
-      if (result.success) {
-        lastFetchedSignatureRef.current = sessionSetsSignature(setsRef.current);
-      }
-      setInitialLoading(false);
     },
     [userId, exerciseId, sessionId, loggingMode],
   );
@@ -157,7 +162,7 @@ export function ExerciseCoachCard({
         <AppText variant="footnote" color="textSecondary">
           {fetchError
             ? 'Coach unavailable — using plan targets.'
-            : 'Using plan targets while coach syncs.'}
+            : 'Using plan targets.'}
         </AppText>
         <AppText variant="bodyBold">{fallbackLine}</AppText>
         {fetchError ? (

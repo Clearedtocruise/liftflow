@@ -7,6 +7,22 @@ export type AggregatedGroceryItem = {
   category: string;
 };
 
+/** Canonical shopping order — matches a typical grocery store walk. */
+export const GROCERY_AISLE_ORDER = [
+  'Produce',
+  'Meat',
+  'Dairy',
+  'Frozen',
+  'Pantry',
+  'Spices',
+  'Beverages',
+  'Miscellaneous',
+] as const;
+
+export type GroceryAisle = (typeof GROCERY_AISLE_ORDER)[number];
+
+const AISLE_RANK = new Map<string, number>(GROCERY_AISLE_ORDER.map((aisle, index) => [aisle, index]));
+
 const UNIT_ALIASES: Record<string, string> = {
   tbsp: 'tbsp',
   tablespoon: 'tbsp',
@@ -63,26 +79,33 @@ function formatQuantity(value: number, unit: string): string {
   return `${rounded} ${unit}`.trim();
 }
 
+function mealServings(meal: Meal): number {
+  const raw = meal.servings;
+  return typeof raw === 'number' && Number.isFinite(raw) && raw > 0 ? raw : 1;
+}
+
 export function aggregateWeeklyGroceries(meals: Meal[]): AggregatedGroceryItem[] {
   const totals = new Map<string, { value: number; unit: string; category: string; displayName: string }>();
 
   for (const meal of meals) {
     const meta = enrichMealMeta(meal.name, meal.instructions);
+    const servings = mealServings(meal);
     for (const ingredient of meta.ingredients ?? []) {
       const parsed = parseServingAmount(ingredient.serving);
       const unit = parsed.unit;
       const key = `${normalizeIngredient(ingredient.name)}|${unit}`;
+      const scaledValue = parsed.value * servings;
       const existing = totals.get(key);
       if (!existing) {
         totals.set(key, {
-          value: parsed.value,
+          value: scaledValue,
           unit,
           category: categorizeIngredient(ingredient.name),
           displayName: ingredient.name.trim(),
         });
         continue;
       }
-      existing.value += parsed.value;
+      existing.value += scaledValue;
     }
   }
 
@@ -92,59 +115,77 @@ export function aggregateWeeklyGroceries(meals: Meal[]): AggregatedGroceryItem[]
       quantity: formatQuantity(data.value, data.unit),
       category: data.category,
     }))
-    .sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
+    .sort((a, b) => {
+      const rankDiff = (AISLE_RANK.get(a.category) ?? GROCERY_AISLE_ORDER.length) -
+        (AISLE_RANK.get(b.category) ?? GROCERY_AISLE_ORDER.length);
+      return rankDiff !== 0 ? rankDiff : a.name.localeCompare(b.name);
+    });
 }
 
-function categorizeIngredient(name: string): string {
+const FROZEN_KEYWORDS = ['frozen', 'ice cream', 'popsicle'];
+const NUT_BUTTER_KEYWORDS = ['almond butter', 'peanut butter', 'cashew butter', 'sunflower butter', 'nut butter'];
+const BEVERAGE_KEYWORDS = [
+  'juice', 'soda', 'coffee', 'tea', 'almond milk', 'soy milk', 'oat milk',
+  'coconut milk', 'protein shake', 'kombucha', 'sports drink', 'lemonade',
+];
+const DAIRY_KEYWORDS = ['yogurt', 'cheese', 'milk', 'egg', 'cream', 'butter'];
+const MEAT_KEYWORDS = [
+  'chicken', 'turkey', 'beef', 'pork', 'steak', 'bacon', 'sausage', 'fish',
+  'salmon', 'cod', 'tilapia', 'shrimp', 'meatball', 'tofu', 'edamame',
+];
+const PRODUCE_KEYWORDS = [
+  'banana', 'berry', 'berries', 'apple', 'spinach', 'broccoli', 'vegetable',
+  'salad', 'pepper', 'asparagus', 'potato', 'lettuce', 'tomato', 'onion',
+  'garlic', 'lemon', 'lime', 'avocado', 'cucumber', 'carrot', 'zucchini',
+  'mushroom', 'greens', 'fruit', 'kale', 'green bean',
+];
+const SPICE_KEYWORDS = [
+  'salt', 'cinnamon', 'cumin', 'paprika', 'oregano', 'basil', 'spice',
+  'seasoning', 'herb', 'chili powder', 'garlic powder', 'onion powder',
+  'black pepper', 'cayenne',
+];
+const MISC_KEYWORDS = ['protein powder', 'whey', 'supplement', 'creatine', 'multivitamin'];
+const PANTRY_KEYWORDS = [
+  'rice', 'oats', 'bread', 'wrap', 'quinoa', 'pasta', 'noodle', 'flour',
+  'sugar', 'honey', 'oil', 'nut', 'granola', 'cereal', 'marinara', 'sauce',
+  'canned', 'bean', 'lentil', 'tortilla', 'mustard', 'balsamic', 'vinegar',
+];
+
+function includesAny(haystack: string, keywords: string[]): boolean {
+  return keywords.some((keyword) => haystack.includes(keyword));
+}
+
+function categorizeIngredient(name: string): GroceryAisle {
   const lower = name.toLowerCase();
-  if (
-    lower.includes('chicken') ||
-    lower.includes('turkey') ||
-    lower.includes('beef') ||
-    lower.includes('fish') ||
-    lower.includes('salmon') ||
-    lower.includes('protein') ||
-    lower.includes('egg') ||
-    lower.includes('yogurt') ||
-    lower.includes('tofu') ||
-    lower.includes('cod')
-  ) {
-    return 'Protein';
-  }
-  if (
-    lower.includes('rice') ||
-    lower.includes('oats') ||
-    lower.includes('bread') ||
-    lower.includes('banana') ||
-    lower.includes('berry') ||
-    lower.includes('fruit') ||
-    lower.includes('potato') ||
-    lower.includes('quinoa') ||
-    lower.includes('wrap')
-  ) {
-    return 'Carbs';
-  }
-  if (lower.includes('oil') || lower.includes('nut') || lower.includes('avocado') || lower.includes('butter')) {
-    return 'Fats';
-  }
-  if (
-    lower.includes('broccoli') ||
-    lower.includes('spinach') ||
-    lower.includes('vegetable') ||
-    lower.includes('salad') ||
-    lower.includes('pepper') ||
-    lower.includes('asparagus')
-  ) {
-    return 'Produce';
-  }
-  return 'Pantry';
+
+  if (includesAny(lower, FROZEN_KEYWORDS)) return 'Frozen';
+  if (includesAny(lower, NUT_BUTTER_KEYWORDS)) return 'Pantry';
+  if (includesAny(lower, BEVERAGE_KEYWORDS)) return 'Beverages';
+  if (includesAny(lower, DAIRY_KEYWORDS)) return 'Dairy';
+  if (includesAny(lower, MEAT_KEYWORDS)) return 'Meat';
+  if (includesAny(lower, PRODUCE_KEYWORDS)) return 'Produce';
+  if (includesAny(lower, SPICE_KEYWORDS)) return 'Spices';
+  if (includesAny(lower, MISC_KEYWORDS)) return 'Miscellaneous';
+  if (includesAny(lower, PANTRY_KEYWORDS)) return 'Pantry';
+  return 'Miscellaneous';
 }
 
 export function groupGroceriesByCategory(items: AggregatedGroceryItem[]): Record<string, AggregatedGroceryItem[]> {
-  return items.reduce<Record<string, AggregatedGroceryItem[]>>((groups, item) => {
+  const groups: Record<string, AggregatedGroceryItem[]> = {};
+
+  for (const item of items) {
     const bucket = groups[item.category] ?? [];
     bucket.push(item);
     groups[item.category] = bucket;
-    return groups;
-  }, {});
+  }
+
+  const ordered: Record<string, AggregatedGroceryItem[]> = {};
+  for (const aisle of GROCERY_AISLE_ORDER) {
+    if (groups[aisle]?.length) ordered[aisle] = groups[aisle];
+  }
+  for (const [category, bucket] of Object.entries(groups)) {
+    if (!(category in ordered)) ordered[category] = bucket;
+  }
+
+  return ordered;
 }
