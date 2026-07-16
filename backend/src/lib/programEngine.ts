@@ -74,6 +74,71 @@ type StoredProgramMetadata = {
   startDate?: string;
 };
 
+function daysBetween(fromDate: string, toDate: string): number {
+  const from = new Date(fromDate + 'T12:00:00').getTime();
+  const to = new Date(toDate + 'T12:00:00').getTime();
+  return Math.floor((to - from) / (1000 * 60 * 60 * 24));
+}
+
+/**
+ * If startDate was recently reset but the user has months of completed history,
+ * restore the program clock from the earliest completed session / planned workout.
+ */
+export async function resolveProgramStartDateFromHistory(
+  userId: string,
+  currentStartDate: string | undefined,
+  options?: { force?: boolean },
+): Promise<{ startDate: string; repaired: boolean }> {
+  const db = requireAdmin();
+  const today = new Date().toISOString().slice(0, 10);
+  const current = weekStartFromDate(currentStartDate ?? today);
+
+  const [{ data: earliestCompleted }, { data: earliestSession }] = await Promise.all([
+    db
+      .from('planned_workouts')
+      .select('scheduled_date')
+      .eq('user_id', userId)
+      .eq('status', 'completed')
+      .order('scheduled_date', { ascending: true })
+      .limit(1)
+      .maybeSingle(),
+    db
+      .from('workout_sessions')
+      .select('started_at')
+      .eq('user_id', userId)
+      .eq('status', 'completed')
+      .order('started_at', { ascending: true })
+      .limit(1)
+      .maybeSingle(),
+  ]);
+
+  const candidates: string[] = [];
+  if (earliestCompleted?.scheduled_date) candidates.push(String(earliestCompleted.scheduled_date));
+  if (earliestSession?.started_at) candidates.push(String(earliestSession.started_at).slice(0, 10));
+
+  if (candidates.length === 0) {
+    return { startDate: current, repaired: false };
+  }
+
+  candidates.sort();
+  const historyStart = weekStartFromDate(candidates[0]!);
+  if (historyStart >= current) {
+    return { startDate: current, repaired: false };
+  }
+
+  const historySpanDays = daysBetween(historyStart, today);
+  const currentAgeDays = daysBetween(current, today);
+  const shouldRepair = options?.force
+    ? true
+    : historySpanDays >= 28 && currentAgeDays <= 21;
+
+  if (!shouldRepair) {
+    return { startDate: current, repaired: false };
+  }
+
+  return { startDate: historyStart, repaired: true };
+}
+
 export type ProgramDashboard = {
   program: Record<string, unknown>;
   phase: Record<string, unknown> | null;
@@ -454,7 +519,10 @@ async function buildProgramInputFromProfile(userId: string): Promise<CreateProgr
   };
 }
 
-export async function regenerateActiveProgram(userId: string, options?: { force?: boolean }) {
+export async function regenerateActiveProgram(
+  userId: string,
+  options?: { force?: boolean; repairFromHistory?: boolean },
+) {
   const db = requireAdmin();
   const { data: program } = await db
     .from('training_programs')
@@ -465,11 +533,14 @@ export async function regenerateActiveProgram(userId: string, options?: { force?
 
   if (program) {
     const meta = (program.metadata ?? {}) as StoredProgramMetadata;
-    if (!options?.force && meta.planRulesVersion === PLAN_RULES_VERSION) {
+    if (!options?.force && !options?.repairFromHistory && meta.planRulesVersion === PLAN_RULES_VERSION) {
       return { regenerated: false as const, reason: 'already_current' as const, program, plannedCount: 0 };
     }
 
     const profileInput = await buildProgramInputFromProfile(userId);
+    const resolvedStart = await resolveProgramStartDateFromHistory(userId, meta.startDate, {
+      force: options?.repairFromHistory === true,
+    });
 
     const input: CreateProgramInput = {
       userId,
@@ -482,17 +553,21 @@ export async function regenerateActiveProgram(userId: string, options?: { force?
       locationId: meta.locationId,
       locationName: meta.locationName,
       customSchedule: meta.customSchedule,
-      startDate: meta.startDate,
+      startDate: resolvedStart.startDate,
       restartProgram: false,
     };
 
     const result = await generateTrainingProgram(input);
-    return { regenerated: true as const, ...result };
+    return {
+      regenerated: true as const,
+      startDateRepaired: resolvedStart.repaired,
+      ...result,
+    };
   }
 
   const input = await buildProgramInputFromProfile(userId);
   const result = await generateTrainingProgram({ ...input, restartProgram: true });
-  return { regenerated: true as const, ...result };
+  return { regenerated: true as const, startDateRepaired: false, ...result };
 }
 
 export async function getProgramDashboard(userId: string): Promise<ProgramDashboard | null> {

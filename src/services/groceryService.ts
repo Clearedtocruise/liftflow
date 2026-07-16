@@ -192,10 +192,17 @@ export const groceryService = {
     }
   },
 
-  async updateItemQuantity(itemId: string, quantity: number, unit?: string): Promise<ServiceResult<GroceryList>> {
+  async updateItemQuantity(
+    itemId: string,
+    quantity: number,
+    unit?: string,
+    extras?: { name?: string; category?: string },
+  ): Promise<ServiceResult<GroceryList>> {
     try {
       const payload: Record<string, unknown> = { quantity };
       if (unit !== undefined) payload.unit = unit;
+      if (extras?.name !== undefined) payload.name = extras.name;
+      if (extras?.category !== undefined) payload.category = extras.category;
 
       const { data, error } = await supabase
         .from('grocery_list_items')

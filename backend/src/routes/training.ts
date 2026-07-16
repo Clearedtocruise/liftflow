@@ -1,12 +1,6 @@
 import { Router } from 'express';
 
 import { adaptActiveProgram } from '../lib/adaptiveProgram.js';
-import { adaptToPreferenceChanges } from '../lib/preferenceAdaptation.js';
-import { applyScheduleChange } from '../lib/planAdaptationEngine.js';
-import {
-  loadExerciseCoachPrescription,
-  loadWorkoutExercisePrescriptions,
-} from '../lib/exerciseCoachPrescription.js';
 import { assessRecovery, suggestMuscleGroups } from '../lib/aiCoach.js';
 import { activateCoachSystem } from '../lib/coachActivation.js';
 import {
@@ -15,21 +9,27 @@ import {
     loadCoachContext,
     mergeTrainingLoadScore,
 } from '../lib/coachContext.js';
+import {
+    loadExerciseCoachPrescription,
+    loadWorkoutExercisePrescriptions,
+} from '../lib/exerciseCoachPrescription.js';
 import { parseLimitationFromVoice } from '../lib/exerciseSubstitution.js';
 import { loadRecoveryIntelligence } from '../lib/loadRecoveryIntelligence.js';
 import { loadSmartProgression } from '../lib/loadSmartProgression.js';
 import { loadWorkoutRecommendations } from '../lib/loadWorkoutRecommendations.js';
+import { applyScheduleChange } from '../lib/planAdaptationEngine.js';
 import { generatePostWorkoutCoachSummary } from '../lib/postWorkoutCoach.js';
+import { adaptToPreferenceChanges } from '../lib/preferenceAdaptation.js';
 import {
     generateTrainingProgram,
-    getPlannedWorkoutsInRange,
     getPlannedWorkoutsInRangeWithRefresh,
     getProgramDashboard,
     regenerateActiveProgram,
     reschedulePlannedWorkout,
-    type CreateProgramInput,
+    type CreateProgramInput
 } from '../lib/programEngine.js';
 import { requireAdmin } from '../lib/supabase.js';
+import { localDateString } from '../lib/localDate.js';
 import { requireProSubscription } from '../middleware/requireProSubscription.js';
 
 export const trainingRouter = Router();
@@ -40,6 +40,12 @@ function weekStartDate(): string {
   const diff = d.getDate() - day + (day === 0 ? -6 : 1);
   d.setDate(diff);
   return d.toISOString().slice(0, 10);
+}
+
+async function userLocalToday(userId: string): Promise<string> {
+  const db = requireAdmin();
+  const { data } = await db.from('profiles').select('timezone').eq('id', userId).maybeSingle();
+  return localDateString(new Date(), data?.timezone as string | null | undefined);
 }
 
 trainingRouter.get('/suggest-muscles', async (req, res) => {
@@ -77,7 +83,7 @@ trainingRouter.get('/recovery/today', async (req, res) => {
     }
 
     const db = requireAdmin();
-    const today = new Date().toISOString().slice(0, 10);
+    const today = await userLocalToday(userId);
     const { data } = await db
       .from('recovery_assessments')
       .select('*')
@@ -206,7 +212,7 @@ trainingRouter.post('/recovery/check-in', async (req, res) => {
     }
 
     const db = requireAdmin();
-    const today = new Date().toISOString().slice(0, 10);
+    const today = await userLocalToday(userId);
     const threeDaysAgo = new Date();
     threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
 
@@ -583,12 +589,19 @@ trainingRouter.post('/coach/post-workout', async (req, res) => {
 
 trainingRouter.post('/programs/regenerate', async (req, res) => {
   try {
-    const { userId } = req.body as { userId?: string };
+    const { userId, force, repairFromHistory } = req.body as {
+      userId?: string;
+      force?: boolean;
+      repairFromHistory?: boolean;
+    };
     if (!userId) {
       res.status(400).json({ message: 'userId is required' });
       return;
     }
-    const result = await regenerateActiveProgram(userId, { force: Boolean((req.body as { force?: boolean }).force) });
+    const result = await regenerateActiveProgram(userId, {
+      force: Boolean(force) || Boolean(repairFromHistory),
+      repairFromHistory: Boolean(repairFromHistory),
+    });
     res.json(result);
   } catch (error) {
     res.status(500).json({ message: error instanceof Error ? error.message : 'Program regeneration failed' });

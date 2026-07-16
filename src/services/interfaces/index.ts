@@ -173,6 +173,9 @@ export interface ITrainingService {
   generateProgram(userId: string, payload: import('@/types').CreateProgramPayload): Promise<ServiceResult<import('@/types').ProgramDashboard | null>>;
   regenerateProgramIfNeeded(userId: string): Promise<ServiceResult<{ regenerated: boolean }>>;
   forceRegenerateProgram(userId: string): Promise<ServiceResult<{ regenerated: boolean }>>;
+  repairProgramFromHistory(
+    userId: string,
+  ): Promise<ServiceResult<{ regenerated: boolean; startDateRepaired: boolean }>>;
   getDashboard(userId: string): Promise<ServiceResult<import('@/types').ProgramDashboard | null>>;
   adaptProgram(userId: string): Promise<ServiceResult<import('@/types').ProgramDashboard | null>>;
   rescheduleWorkout(plannedWorkoutId: string, scheduledDate: string): Promise<ServiceResult<PlannedWorkout>>;

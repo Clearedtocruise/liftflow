@@ -59,7 +59,7 @@ export const FEATURES: FeatureDefinition[] = [
   // Phase 3
   { id: 'nutrition', title: 'Nutrition Recommendations', description: 'Evidence-based nutrition guidance', phase: 'phase3', category: 'nutrition', route: '/(features)/nutrition', icon: 'leaf.fill' },
   { id: 'meal-plans', title: 'Weekly Meal Plans', description: 'AI-generated meal planning', phase: 'phase3', category: 'nutrition', route: '/(features)/meal-plans', icon: 'fork.knife' },
-  { id: 'grocery-lists', title: 'Grocery Lists', description: 'Shopping lists from meal plans', phase: 'phase3', category: 'nutrition', route: '/(features)/grocery-lists', icon: 'cart.fill' },
+  { id: 'grocery-lists', title: 'Grocery Lists', description: 'Shopping lists from meal plans', phase: 'phase3', category: 'nutrition', route: '/(tabs)/nutrition?section=shopping', icon: 'cart.fill' },
   { id: 'hydration', title: 'Hydration Tracking', description: 'Daily water intake logging', phase: 'phase3', category: 'nutrition', route: '/(features)/hydration', icon: 'drop.fill' },
   { id: 'body-composition', title: 'Body Composition', description: 'Weight, body fat, measurements', phase: 'phase3', category: 'body', route: '/(features)/body-composition', icon: 'figure.stand' },
   { id: 'progress-photos', title: 'Progress Photos', description: 'Track visual progress over time', phase: 'phase3', category: 'body', route: '/(features)/progress-photos', icon: 'camera.fill' },

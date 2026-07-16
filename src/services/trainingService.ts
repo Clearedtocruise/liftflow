@@ -306,6 +306,19 @@ export const trainingService: ITrainingService = {
     }
   },
 
+  async repairProgramFromHistory(userId: string) {
+    try {
+      const token = await getAccessToken();
+      const result = await api.repairProgramFromHistory(userId, token);
+      return ok({
+        regenerated: result.regenerated,
+        startDateRepaired: result.startDateRepaired === true,
+      });
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
   async regenerateProgramIfNeeded(userId: string) {
     try {
       const { from, to } = await import('@/lib/weekPlan').then((m) => m.getWeekRange());

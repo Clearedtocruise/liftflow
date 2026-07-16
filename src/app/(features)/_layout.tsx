@@ -27,6 +27,7 @@ export default function FeaturesLayout() {
       {/* Cardio — full-screen flows use TabScreenHeader internally */}
       <ThemedStack.Screen name="cardio-tracking" options={{ headerShown: false }} />
       <ThemedStack.Screen name="log-activity" options={{ headerShown: false }} />
+      <ThemedStack.Screen name="grocery-lists" options={{ headerShown: false }} />
       <ThemedStack.Screen name="[feature]" options={{ title: 'ONE MORE' }} />
     </ThemedStack>
   );

@@ -180,8 +180,15 @@ export function ExerciseCoachCard({
       return (
         <View style={styles.compact}>
           <AppText variant="footnote" color="textSecondary">
-            Plan target · {fallbackLine}
+            {fetchError ? 'Coach unavailable — ' : ''}Plan target · {fallbackLine}
           </AppText>
+          {fetchError ? (
+            <Pressable onPress={() => void fetchPrescription({ showSpinner: true })} hitSlop={8}>
+              <AppText variant="caption" color="accent">
+                Retry coach
+              </AppText>
+            </Pressable>
+          ) : null}
           {onReplaceRequest ? (
             <Pressable onPress={onReplaceRequest} hitSlop={8}>
               <AppText variant="caption" color="accent">

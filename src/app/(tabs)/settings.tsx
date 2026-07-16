@@ -54,6 +54,7 @@ import { deviceLocationService } from '@/services/deviceLocationService';
 import { exportService } from '@/services/exportService';
 import { feedbackService } from '@/services/feedbackService';
 import { notificationService } from '@/services/notificationService';
+import { trainingService } from '@/services/trainingService';
 import { userService } from '@/services/userService';
 import { useWorkoutSession } from '@/state/workout/WorkoutSessionContext';
 import type { ConfirmationMode } from '@/types/common';
@@ -586,16 +587,67 @@ export default function SettingsScreen() {
           icon={
             <AppSymbol name="cart.fill" fallback="🛒" size={20} tintColor={colors.textSecondary} />
           }
-          onPress={async () => {
+          onPress={() => {
             if (!user) return;
-            const index = GROCERY_RETAILERS.findIndex((r) => r.id === preferredGroceryRetailer);
-            const next = GROCERY_RETAILERS[(index + 1) % GROCERY_RETAILERS.length]!;
-            setPreferredGroceryRetailer(next.id);
-            const prefs = await userService.getPreferences(user.id);
-            const coaching = prefs.success ? prefs.data.coachingPreferences ?? {} : {};
-            await userService.updatePreferences(user.id, {
-              coachingPreferences: { ...coaching, [GROCERY_RETAILER_PREF_KEY]: next.id },
-            });
+            Alert.alert(
+              'Preferred grocery store',
+              'Used for Open in Store on your Shop list.',
+              [
+                ...GROCERY_RETAILERS.map((retailer) => ({
+                  text: retailer.displayName,
+                  onPress: () => {
+                    void (async () => {
+                      setPreferredGroceryRetailer(retailer.id);
+                      const prefs = await userService.getPreferences(user.id);
+                      const coaching = prefs.success ? prefs.data.coachingPreferences ?? {} : {};
+                      await userService.updatePreferences(user.id, {
+                        coachingPreferences: {
+                          ...coaching,
+                          [GROCERY_RETAILER_PREF_KEY]: retailer.id,
+                        },
+                      });
+                    })();
+                  },
+                })),
+                { text: 'Cancel', style: 'cancel' as const },
+              ],
+            );
+          }}
+        />
+        <SettingsRow
+          label="Continue program from history"
+          value="Fix week clock"
+          icon={
+            <AppSymbol name="calendar.badge.clock" fallback="📅" size={20} tintColor={colors.textSecondary} />
+          }
+          onPress={() => {
+            if (!user) return;
+            Alert.alert(
+              'Continue from history',
+              'Restores your program week from your earliest completed workouts if the clock was reset to Week 1.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Continue',
+                  onPress: () => {
+                    void (async () => {
+                      const result = await trainingService.repairProgramFromHistory(user.id);
+                      if (!result.success) {
+                        Alert.alert('Could not repair', result.error);
+                        return;
+                      }
+                      bumpRevision();
+                      Alert.alert(
+                        result.data.startDateRepaired ? 'Week clock restored' : 'Program refreshed',
+                        result.data.startDateRepaired
+                          ? 'Your program week now continues from training history.'
+                          : 'No older history found to restore — plan was refreshed with the current start date.',
+                      );
+                    })();
+                  },
+                },
+              ],
+            );
           }}
         />
         <SettingsRow

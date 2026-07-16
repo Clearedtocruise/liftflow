@@ -1,4 +1,5 @@
 import { loadHealthContext } from './loadHealthContext.js';
+import { localDateString } from './localDate.js';
 import {
     computeRecoveryIntelligence,
     countConsecutiveTrainingDays,
@@ -60,7 +61,9 @@ export async function loadRecoveryIntelligence(userId: string): Promise<Recovery
   threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
   const fourteenDaysAgo = new Date(now);
   fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
-  const today = now.toISOString().slice(0, 10);
+
+  const { data: profile } = await db.from('profiles').select('timezone').eq('id', userId).maybeSingle();
+  const today = localDateString(now, profile?.timezone as string | null | undefined);
 
   const [checkInRes, trendRes, sessionsRes, cardioRes, healthContext] = await Promise.all([
     db

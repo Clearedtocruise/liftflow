@@ -65,7 +65,7 @@ import { userService } from '@/services/userService';
 import { weeklyCloseoutService } from '@/services/weeklyCloseoutService';
 import { useWorkoutPlanDraft } from '@/state/workout/WorkoutPlanDraftContext';
 import { useWorkoutSession } from '@/state/workout/WorkoutSessionContext';
-import type { DashboardSummary, Meal, NutritionGoals, PlannedWorkout, ProgramDashboard } from '@/types';
+import type { DashboardSummary, DailyRecoveryCheckIn, Meal, NutritionGoals, PlannedWorkout, ProgramDashboard } from '@/types';
 import type { RecoveryIntelligenceReport } from '@/types/recoveryIntelligence';
 
 export default function DashboardScreen() {
@@ -83,6 +83,7 @@ export default function DashboardScreen() {
   const [recoveryScore, setRecoveryScore] = useState<number | null>(null);
   const [recoveryModeActive, setRecoveryModeActive] = useState(false);
   const [recoveryIntel, setRecoveryIntel] = useState<RecoveryIntelligenceReport | null>(null);
+  const [todayCheckIn, setTodayCheckIn] = useState<DailyRecoveryCheckIn | null>(null);
   const [program, setProgram] = useState<ProgramDashboard | null>(null);
   const [weekWorkouts, setWeekWorkouts] = useState<PlannedWorkout[]>([]);
   const [nutritionGoals, setNutritionGoals] = useState<NutritionGoals | null>(null);
@@ -216,33 +217,41 @@ export default function DashboardScreen() {
 
       void (async () => {
         try {
-          const recoveryResult = isPremiumRef.current
-            ? await recoveryService.getIntelligence(user.id)
-            : await recoveryService.getToday(user.id);
-
+          const todayResult = await recoveryService.getToday(user.id);
           if (generation !== loadGenerationRef.current) return;
 
+          if (todayResult.success && todayResult.data) {
+            setTodayCheckIn(todayResult.data);
+            if (!isPremiumRef.current) {
+              setRecoveryScore(todayResult.data.recoveryScore);
+              setRecoveryModeActive(todayResult.data.recoveryModeActive);
+            }
+          } else {
+            setTodayCheckIn(null);
+            if (!isPremiumRef.current) {
+              setRecoveryScore(null);
+              setRecoveryModeActive(false);
+            }
+          }
+
           if (isPremiumRef.current) {
-            const intelResult = recoveryResult as Awaited<ReturnType<typeof recoveryService.getIntelligence>>;
+            const intelResult = await recoveryService.getIntelligence(user.id);
+            if (generation !== loadGenerationRef.current) return;
             if (intelResult.success) {
               setRecoveryIntel(intelResult.data);
               setRecoveryScore(intelResult.data.recoveryScore);
               setRecoveryModeActive(intelResult.data.recoveryScore < 40);
+            } else if (todayResult.success && todayResult.data) {
+              setRecoveryIntel(null);
+              setRecoveryScore(todayResult.data.recoveryScore);
+              setRecoveryModeActive(todayResult.data.recoveryModeActive);
             } else {
               setRecoveryIntel(null);
               setRecoveryScore(null);
               setRecoveryModeActive(false);
             }
           } else {
-            const todayResult = recoveryResult as Awaited<ReturnType<typeof recoveryService.getToday>>;
             setRecoveryIntel(null);
-            if (todayResult.success && todayResult.data) {
-              setRecoveryScore(todayResult.data.recoveryScore);
-              setRecoveryModeActive(todayResult.data.recoveryModeActive);
-            } else {
-              setRecoveryScore(null);
-              setRecoveryModeActive(false);
-            }
           }
           logStartup('RECOVERY_LOADED');
         } catch (error) {
@@ -401,10 +410,11 @@ export default function DashboardScreen() {
   const showWorkoutSection = !programLoading;
   const scheduleWithWorkout = scheduleFromProfile(user, hasWorkoutToday);
   const hasRecoveryScore = recoveryScore != null;
+  const checkInCompletedToday = todayCheckIn != null;
   const readinessScore = recoveryIntel?.factors?.muscleReadinessScore ?? null;
 
   const handleRecoveryPress = useCallback(() => {
-    if (!hasRecoveryScore) {
+    if (!checkInCompletedToday) {
       router.push('/(features)/recovery-check-in');
       return;
     }
@@ -413,7 +423,7 @@ export default function DashboardScreen() {
       return;
     }
     router.push('/(features)/recovery-check-in');
-  }, [hasRecoveryScore, isPremium]);
+  }, [checkInCompletedToday, isPremium]);
 
   const trainingLabel = coachGuidance.trainingLabel;
 
@@ -458,6 +468,7 @@ export default function DashboardScreen() {
     scheduledWorkout: todaysWorkout,
     recoveryIntel,
     recoveryScore,
+    checkInCompletedToday,
   });
   const whyToday = formatWhyTodayWithAgeEmphasis(todaysWorkout?.aiRationale);
 
@@ -551,7 +562,7 @@ export default function DashboardScreen() {
 
       <RecoveryModeNotice recoveryScore={recoveryScore} recoveryModeActive={recoveryModeActive} />
 
-      {!hasRecoveryScore && !summaryLoading ? (
+      {!checkInCompletedToday && !summaryLoading ? (
         <RecoveryCheckInCue onPress={handleRecoveryPress} />
       ) : null}
 

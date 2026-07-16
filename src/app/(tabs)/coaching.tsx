@@ -18,6 +18,7 @@ import { UpgradePrompt } from '@/components/subscription/UpgradePrompt';
 import { AppText } from '@/components/ui/AppText';
 import { WorkoutRecommendationPanel } from '@/components/workout/WorkoutRecommendationPanel';
 import { Brand, LiftFlowColors, Spacing } from '@/constants/theme';
+import { usePlanAdjustment } from '@/contexts/PlanAdjustmentContext';
 import { useAuth } from '@/hooks/useAuth';
 import { useSubscription } from '@/hooks/useSubscription';
 import { logStartup } from '@/lib/startupLogger';
@@ -37,6 +38,7 @@ import type { WorkoutRecommendationReport } from '@/types/workoutRecommendation'
 export default function CoachingScreen() {
   const { user } = useAuth();
   const { isPremium } = useSubscription();
+  const { bumpRevision } = usePlanAdjustment();
   const [recommendations, setRecommendations] = useState<AIRecommendation[]>([]);
   const [checkIn, setCheckIn] = useState<DailyRecoveryCheckIn | null>(null);
   const [intelligence, setIntelligence] = useState<RecoveryIntelligenceReport | null>(null);
@@ -292,7 +294,16 @@ export default function CoachingScreen() {
         </Card>
       </View>
 
-      {!checkIn ? <RecoveryCheckInForm userId={user!.id} onComplete={(r) => { setCheckIn(r); load(); }} /> : null}
+      {!checkIn ? (
+        <RecoveryCheckInForm
+          userId={user!.id}
+          onComplete={(r) => {
+            setCheckIn(r);
+            bumpRevision();
+            load();
+          }}
+        />
+      ) : null}
 
       {macroRationale ? (
         <Card style={styles.macroCard}>

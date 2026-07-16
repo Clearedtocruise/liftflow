@@ -18,9 +18,10 @@ export function formatHomeCoachMessage(
     scheduledWorkout: PlannedWorkout | null;
     recoveryIntel: RecoveryIntelligenceReport | null;
     recoveryScore: number | null;
+    checkInCompletedToday?: boolean;
   },
 ): string {
-  const { scheduledWorkout, recoveryIntel, recoveryScore } = options;
+  const { scheduledWorkout, recoveryIntel, recoveryScore, checkInCompletedToday } = options;
   const status = recoveryStatusLine(recoveryIntel, recoveryScore);
 
   if (scheduledWorkout) {
@@ -35,6 +36,10 @@ export function formatHomeCoachMessage(
 
   if (guidance.trainingRecommendation === 'rest_day') {
     return guidance.coachMessage || `Rest day recommended. Status: ${status}.`;
+  }
+
+  if (checkInCompletedToday || recoveryScore != null) {
+    return guidance.coachMessage || `Status: ${status}. Match nutrition to your remaining macros.`;
   }
 
   return guidance.coachMessage || `Complete today's recovery check-in for personalized guidance.`;

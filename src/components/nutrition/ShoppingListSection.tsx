@@ -1,24 +1,24 @@
 import { useCallback, useMemo, useState } from 'react';
 import {
-  Alert,
-  Modal,
-  Pressable,
-  Share,
-  StyleSheet,
-  TextInput,
-  View,
+    Alert,
+    Modal,
+    Pressable,
+    Share,
+    StyleSheet,
+    TextInput,
+    View,
 } from 'react-native';
 
-import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { Card } from '@/components/layout/Card';
+import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
-import { GROCERY_AISLE_ORDER } from '@/lib/groceryAggregation';
 import {
-  getGroceryRetailer,
-  GROCERY_RETAILERS,
-  type GroceryRetailerId,
+    getGroceryRetailer,
+    GROCERY_RETAILERS,
+    type GroceryRetailerId,
 } from '@/lib/grocery/retailers';
+import { GROCERY_AISLE_ORDER } from '@/lib/groceryAggregation';
 import { groceryService } from '@/services/groceryService';
 import type { GroceryList, GroceryListItem } from '@/types';
 
@@ -136,6 +136,7 @@ export function ShoppingListSection({
           editItem.id,
           Number.isFinite(quantity) ? quantity : 1,
           unitDraft.trim() || 'serving',
+          { name, category: categoryDraft },
         );
         if (!result.success) {
           Alert.alert('Error', result.error);
@@ -220,7 +221,9 @@ export function ShoppingListSection({
       {!list || itemCount === 0 ? (
         <Card style={styles.shoppingCard}>
           <AppText variant="body" color="textSecondary">
-            Generate a meal plan first, then refresh your shopping list.
+            {mealCount > 0
+              ? 'Tap Refresh Shopping List to build this week’s aisle list from your meal plan.'
+              : 'Generate a meal plan first, then refresh your shopping list.'}
           </AppText>
         </Card>
       ) : (
@@ -252,7 +255,7 @@ export function ShoppingListSection({
                     {item.name}
                   </AppText>
                   <AppText variant="caption" color="textTertiary">
-                    Tap to edit qty
+                    Tap to edit
                   </AppText>
                 </Pressable>
                 <AppText variant="footnote" color="textSecondary" style={styles.qty}>
@@ -272,32 +275,26 @@ export function ShoppingListSection({
       <Modal visible={addOpen} transparent animationType="fade" onRequestClose={() => setAddOpen(false)}>
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
-            <AppText variant="headline">{editItem ? 'Edit quantity' : 'Add item'}</AppText>
-            {!editItem ? (
-              <>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Item name"
-                  placeholderTextColor={LiftFlowColors.textTertiary}
-                  value={nameDraft}
-                  onChangeText={setNameDraft}
-                />
-                <View style={styles.categoryRow}>
-                  {GROCERY_AISLE_ORDER.map((aisle) => (
-                    <Pressable
-                      key={aisle}
-                      onPress={() => setCategoryDraft(aisle)}
-                      style={[styles.categoryChip, categoryDraft === aisle && styles.categoryChipOn]}>
-                      <AppText variant="caption" color={categoryDraft === aisle ? 'accent' : 'textSecondary'}>
-                        {aisle}
-                      </AppText>
-                    </Pressable>
-                  ))}
-                </View>
-              </>
-            ) : (
-              <AppText variant="bodyBold">{nameDraft}</AppText>
-            )}
+            <AppText variant="headline">{editItem ? 'Edit item' : 'Add item'}</AppText>
+            <TextInput
+              style={styles.input}
+              placeholder="Item name"
+              placeholderTextColor={LiftFlowColors.textTertiary}
+              value={nameDraft}
+              onChangeText={setNameDraft}
+            />
+            <View style={styles.categoryRow}>
+              {GROCERY_AISLE_ORDER.map((aisle) => (
+                <Pressable
+                  key={aisle}
+                  onPress={() => setCategoryDraft(aisle)}
+                  style={[styles.categoryChip, categoryDraft === aisle && styles.categoryChipOn]}>
+                  <AppText variant="caption" color={categoryDraft === aisle ? 'accent' : 'textSecondary'}>
+                    {aisle}
+                  </AppText>
+                </Pressable>
+              ))}
+            </View>
             <View style={styles.qtyRow}>
               <TextInput
                 style={[styles.input, styles.qtyInput]}

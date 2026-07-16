@@ -35,6 +35,16 @@ export type Meal = BaseEntity & {
   servings?: number;
 };
 
+export type GroceryAisle =
+  | 'Produce'
+  | 'Meat'
+  | 'Dairy'
+  | 'Frozen'
+  | 'Pantry'
+  | 'Spices'
+  | 'Beverages'
+  | 'Miscellaneous';
+
 export type GroceryList = BaseEntity & {
   userId: string;
   mealPlanId?: string;

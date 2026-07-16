@@ -32,8 +32,8 @@ import { useLocalWeekRollover } from '@/hooks/useLocalWeekRollover';
 import { resolveActiveTrainingDay } from '@/lib/activeTrainingDay';
 import {
     DEFAULT_GROCERY_RETAILER_ID,
-    getGroceryRetailer,
     GROCERY_RETAILER_PREF_KEY,
+    getGroceryRetailer,
     type GroceryRetailerId,
 } from '@/lib/grocery/retailers';
 import { resolveTimeZone } from '@/lib/localDate';
@@ -63,7 +63,11 @@ import type { MealType } from '@/types/common';
 
 export default function NutritionScreen() {
   const { user } = useAuth();
-  const { log, generate } = useLocalSearchParams<{ log?: string; generate?: string }>();
+  const { log, generate, section: sectionParam } = useLocalSearchParams<{
+    log?: string;
+    generate?: string;
+    section?: string;
+  }>();
   const { revision } = usePlanAdjustment();
   const [section, setSection] = useState<NutritionSection>('today');
   const [goals, setGoals] = useState<NutritionGoals | null>(null);
@@ -370,6 +374,12 @@ export default function NutritionScreen() {
   useEffect(() => {
     if (log === '1') setQuickLogOpen(true);
   }, [log]);
+
+  useEffect(() => {
+    if (sectionParam === 'shopping' || sectionParam === 'week' || sectionParam === 'today') {
+      setSection(sectionParam);
+    }
+  }, [sectionParam]);
 
   useEffect(() => {
     if (generate !== '1' || !user?.id || generateHandledRef.current || generatingRef.current) return;

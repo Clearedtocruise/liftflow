@@ -178,9 +178,6 @@ export function HomeNextUpCard({
         {mealsTotal === 0 && onGenerateMealPlan ? (
           <PrimaryButton label="Generate Plan" variant="ghost" onPress={onGenerateMealPlan} />
         ) : null}
-        {onLogActivity ? (
-          <PrimaryButton label="+ Activity" variant="ghost" onPress={onLogActivity} testID="log-activity-nutrition-button" />
-        ) : null}
         </View>
       </Card>
     </View>

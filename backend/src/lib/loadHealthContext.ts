@@ -1,9 +1,11 @@
+import { localDateString } from './localDate.js';
 import { requireAdmin } from './supabase.js';
 import { buildHealthContextFromRows, type HealthContextSnapshot } from './healthSyncEngine.js';
 
 export async function loadHealthContext(userId: string): Promise<HealthContextSnapshot> {
   const db = requireAdmin();
-  const today = new Date().toISOString().slice(0, 10);
+  const { data: profile } = await db.from('profiles').select('timezone').eq('id', userId).maybeSingle();
+  const today = localDateString(new Date(), profile?.timezone as string | null | undefined);
   const since = new Date();
   since.setDate(since.getDate() - 30);
 
