@@ -10,6 +10,7 @@ import { inferProgramFrequency, inferProgramType, resolveDaysPerWeekFromProfile 
 import {
     addDays,
     buildWeeklySchedule,
+    countLiftSlotsInSchedule,
     currentProgramWeek,
     dayLabel,
     phaseForWeek,
@@ -57,7 +58,7 @@ export type CreateProgramInput = {
 };
 
 /** Bump when workout planning rules change so existing programs can be regenerated. */
-export const PLAN_RULES_VERSION = 17;
+export const PLAN_RULES_VERSION = 18;
 
 const MIN_ACCEPTABLE_EXERCISES_PER_SESSION = 8;
 
@@ -72,6 +73,7 @@ type StoredProgramMetadata = {
   customSchedule?: string[];
   planRulesVersion?: number;
   startDate?: string;
+  schedule?: Array<{ label?: string; isRest?: boolean }>;
 };
 
 function daysBetween(fromDate: string, toDate: string): number {
@@ -256,18 +258,9 @@ export async function generateTrainingProgram(input: CreateProgramInput) {
   const recoveryMods = await loadRecoveryModifiers(input.userId);
   const equipment = await resolveProgramEquipment(input.userId, input);
 
-  await db.from('training_programs').update({ is_active: false }).eq('user_id', input.userId);
-
-  const endDate = addDays(startDate, durationWeeks * 7 - 1);
+  // Never cancel existing planned workouts until the new week is inserted.
+  // Cancel-first left athletes with empty weeks when generation timed out.
   const cancelFrom = weekStartFromDate(new Date().toISOString().slice(0, 10));
-  await db
-    .from('planned_workouts')
-    .update({ status: 'cancelled' })
-    .eq('user_id', input.userId)
-    .eq('status', 'planned')
-    .gte('scheduled_date', cancelFrom)
-    .lte('scheduled_date', endDate);
-
   const programName = `${programTypeLabel(input.programType)} — ${input.frequency === 'custom' ? 'Custom' : `${input.frequency}x/week`}`;
 
   const { data: program, error: programError } = await db
@@ -297,12 +290,24 @@ export async function generateTrainingProgram(input: CreateProgramInput) {
 
   if (programError) throw programError;
 
+  await db
+    .from('training_programs')
+    .update({ is_active: false })
+    .eq('user_id', input.userId)
+    .neq('id', program.id);
+
   const templateCache = new Map<string, string>();
   const programRecentSlugs = new Map<string, Date>();
+  const insertedPlannedIds: string[] = [];
   let plannedCount = 0;
+  // Only materialize the current week + a short horizon. Generating the full remaining
+  // block (10–40+ weeks × lift days) freezes the API and the app UI on swap/regen.
+  const WEEKS_AHEAD = 2;
   const firstWeekToGenerate = Math.max(1, Math.min(elapsedWeek, durationWeeks));
+  const lastWeekToGenerate = Math.min(durationWeeks, firstWeekToGenerate + WEEKS_AHEAD);
+  const cancelTo = addDays(startDate, lastWeekToGenerate * 7 - 1);
 
-  for (let week = firstWeekToGenerate; week <= durationWeeks; week++) {
+  for (let week = firstWeekToGenerate; week <= lastWeekToGenerate; week++) {
     const phaseSpec = phaseForWeek(week, durationWeeks);
     const phaseId = await ensurePhaseForWeek(input.userId, program.id, week, durationWeeks, startDate);
 
@@ -312,28 +317,33 @@ export async function generateTrainingProgram(input: CreateProgramInput) {
       const date = addDays(startDate, (week - 1) * 7 + slot.dayIndex);
 
       if (slot.sessionKind === 'cardio') {
-        await db.from('planned_workouts').insert({
-          user_id: input.userId,
-          training_phase_id: phaseId,
-          name: `${slot.label} — Week ${week}`,
-          scheduled_date: date,
-          status: 'planned',
-          suggested_muscle_groups: slot.muscleGroups,
-          ai_rationale: `${dayLabel(slot.dayIndex)} · Cardio / HIIT · ${programTypeLabel(input.programType)}`,
-          metadata: {
-            programId: program.id,
-            weekNumber: week,
-            dayIndex: slot.dayIndex,
-            dayLabel: dayLabel(slot.dayIndex),
-            slotLabel: slot.label,
-            sprintPhase: phaseSpec.sprintPhase,
-            sessionKind: 'cardio',
-            cardioType: 'hiit',
-            exercises: [],
-            locationId: input.locationId,
-            locationName: input.locationName,
-          },
-        });
+        const { data: cardioRow } = await db
+          .from('planned_workouts')
+          .insert({
+            user_id: input.userId,
+            training_phase_id: phaseId,
+            name: `${slot.label} — Week ${week}`,
+            scheduled_date: date,
+            status: 'planned',
+            suggested_muscle_groups: slot.muscleGroups,
+            ai_rationale: `${dayLabel(slot.dayIndex)} · Cardio / HIIT · ${programTypeLabel(input.programType)}`,
+            metadata: {
+              programId: program.id,
+              weekNumber: week,
+              dayIndex: slot.dayIndex,
+              dayLabel: dayLabel(slot.dayIndex),
+              slotLabel: slot.label,
+              sprintPhase: phaseSpec.sprintPhase,
+              sessionKind: 'cardio',
+              cardioType: 'hiit',
+              exercises: [],
+              locationId: input.locationId,
+              locationName: input.locationName,
+            },
+          })
+          .select('id')
+          .single();
+        if (cardioRow?.id) insertedPlannedIds.push(cardioRow.id);
         plannedCount += 1;
         continue;
       }
@@ -442,30 +452,52 @@ export async function generateTrainingProgram(input: CreateProgramInput) {
             ),
           );
 
-      await db.from('planned_workouts').insert({
-        user_id: input.userId,
-        template_id: templateId,
-        training_phase_id: phaseId,
-        name: `${slot.label} — Week ${week}`,
-        scheduled_date: date,
-        status: 'planned',
-        suggested_muscle_groups: slot.muscleGroups,
-        ai_rationale: `${dayLabel(slot.dayIndex)} · ${phaseSpec.sprintPhase} phase · ${programTypeLabel(input.programType)}`,
-        metadata: {
-          programId: program.id,
-          weekNumber: week,
-          dayIndex: slot.dayIndex,
-          dayLabel: dayLabel(slot.dayIndex),
-          slotLabel: slot.label,
-          sprintPhase: phaseSpec.sprintPhase,
-          exercises: progressed,
-          plannedVolume: totalPlannedVolume(progressed),
-          locationId: input.locationId,
-          locationName: input.locationName,
-        },
-      });
+      const { data: plannedRow } = await db
+        .from('planned_workouts')
+        .insert({
+          user_id: input.userId,
+          template_id: templateId,
+          training_phase_id: phaseId,
+          name: `${slot.label} — Week ${week}`,
+          scheduled_date: date,
+          status: 'planned',
+          suggested_muscle_groups: slot.muscleGroups,
+          ai_rationale: `${dayLabel(slot.dayIndex)} · ${phaseSpec.sprintPhase} phase · ${programTypeLabel(input.programType)}`,
+          metadata: {
+            programId: program.id,
+            weekNumber: week,
+            dayIndex: slot.dayIndex,
+            dayLabel: dayLabel(slot.dayIndex),
+            slotLabel: slot.label,
+            sprintPhase: phaseSpec.sprintPhase,
+            exercises: progressed,
+            plannedVolume: totalPlannedVolume(progressed),
+            locationId: input.locationId,
+            locationName: input.locationName,
+          },
+        })
+        .select('id')
+        .single();
+      if (plannedRow?.id) insertedPlannedIds.push(plannedRow.id);
 
       plannedCount += 1;
+    }
+  }
+
+  // Supersede old planned rows only after the new week exists.
+  if (insertedPlannedIds.length > 0) {
+    const { data: stale } = await db
+      .from('planned_workouts')
+      .select('id')
+      .eq('user_id', input.userId)
+      .eq('status', 'planned')
+      .gte('scheduled_date', cancelFrom)
+      .lte('scheduled_date', cancelTo);
+    const staleIds = (stale ?? [])
+      .map((row) => row.id as string)
+      .filter((id) => !insertedPlannedIds.includes(id));
+    if (staleIds.length > 0) {
+      await db.from('planned_workouts').update({ status: 'cancelled' }).in('id', staleIds);
     }
   }
 
@@ -533,14 +565,40 @@ export async function regenerateActiveProgram(
 
   if (program) {
     const meta = (program.metadata ?? {}) as StoredProgramMetadata;
-    if (!options?.force && !options?.repairFromHistory && meta.planRulesVersion === PLAN_RULES_VERSION) {
+    const profileInput = await buildProgramInputFromProfile(userId);
+    const expectedFrequency = profileInput.frequency;
+    const storedFrequency =
+      typeof meta.frequency === 'number' && meta.frequency >= 3 && meta.frequency <= 7
+        ? meta.frequency
+        : null;
+    const scheduleLiftDays = Array.isArray(meta.schedule)
+      ? countLiftSlotsInSchedule(meta.schedule)
+      : null;
+    // Prefer stored frequency mismatch; schedule count is a backup when frequency is missing/wrong.
+    const frequencyMismatch =
+      expectedFrequency !== 'custom' &&
+      ((storedFrequency != null && storedFrequency !== expectedFrequency) ||
+        (storedFrequency == null &&
+          scheduleLiftDays != null &&
+          scheduleLiftDays !== expectedFrequency));
+
+    if (
+      !options?.force &&
+      !options?.repairFromHistory &&
+      !frequencyMismatch &&
+      meta.planRulesVersion === PLAN_RULES_VERSION
+    ) {
       return { regenerated: false as const, reason: 'already_current' as const, program, plannedCount: 0 };
     }
 
-    const profileInput = await buildProgramInputFromProfile(userId);
-    const resolvedStart = await resolveProgramStartDateFromHistory(userId, meta.startDate, {
-      force: options?.repairFromHistory === true,
-    });
+    // Preserve the program clock unless explicitly repairing from history.
+    // Routine regenerations must NOT reset athletes back to Week 1.
+    const resolvedStart = options?.repairFromHistory
+      ? await resolveProgramStartDateFromHistory(userId, meta.startDate, { force: true })
+      : {
+          startDate: weekStartFromDate(meta.startDate ?? program.created_at.slice(0, 10)),
+          repaired: false,
+        };
 
     const input: CreateProgramInput = {
       userId,
@@ -552,7 +610,8 @@ export async function regenerateActiveProgram(
       equipment: profileInput.equipment ?? meta.equipment,
       locationId: meta.locationId,
       locationName: meta.locationName,
-      customSchedule: meta.customSchedule,
+      // Drop a stale custom week when frequency no longer matches — rebuild from pattern.
+      customSchedule: frequencyMismatch ? undefined : meta.customSchedule,
       startDate: resolvedStart.startDate,
       restartProgram: false,
     };

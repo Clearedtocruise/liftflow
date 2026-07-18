@@ -16,6 +16,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { screenDataCache } from '@/lib/screenDataCache';
 import { getCombinedActivityHistory } from '@/services/activityHistoryService';
 import { analyticsService } from '@/services/analyticsService';
+import { healthService } from '@/services/healthService';
 import { workoutService } from '@/services/workoutService';
 import type { WorkoutHistoryItem } from '@/types';
 
@@ -36,6 +37,7 @@ export default function HistoryScreen() {
 
     if (!silent) setLoading(true);
 
+    // Load history immediately; pull Apple Fitness in the background so History never freezes.
     const historyResult = await getCombinedActivityHistory(user.id);
     if (generation !== loadGenerationRef.current) return;
 
@@ -45,13 +47,24 @@ export default function HistoryScreen() {
     setRefreshing(false);
 
     void (async () => {
-      const streakResult = await analyticsService.getWorkoutStreak(user.id);
+      try {
+        await healthService.sync(user.id, 14);
+      } catch {
+        // Non-blocking
+      }
       if (generation !== loadGenerationRef.current) return;
 
-      const streakValue = streakResult.success ? streakResult.data : 0;
-      if (streakResult.success) setStreak(streakValue);
+      const [refreshed, streakResult] = await Promise.all([
+        getCombinedActivityHistory(user.id),
+        analyticsService.getWorkoutStreak(user.id),
+      ]);
+      if (generation !== loadGenerationRef.current) return;
 
-      screenDataCache.writeHistory(user.id, { items, streak: streakValue });
+      const nextItems = refreshed.success ? refreshed.data.data : items;
+      const streakValue = streakResult.success ? streakResult.data : 0;
+      if (refreshed.success) setHistory(nextItems);
+      if (streakResult.success) setStreak(streakValue);
+      screenDataCache.writeHistory(user.id, { items: nextItems, streak: streakValue });
     })();
   }, [user]);
 
@@ -147,14 +160,14 @@ export default function HistoryScreen() {
 
       <SectionHeader
         title="Recent Sessions"
-        subtitle="Tap strength sessions to view · Long press to delete"
+        subtitle="Includes Apple Fitness workouts · Pull to refresh · Long press to delete"
         variant="secondary"
       />
 
       {history.length === 0 ? (
         <EmptyStateCard
           title="No sessions yet"
-          message="Complete a workout or log cardio to build your history."
+          message="Complete a lift in ONE MORE, or pull to refresh to import runs and cardio from Apple Fitness."
           actionLabel="Start a workout"
           onAction={() => router.push('/(tabs)/workout')}
         />

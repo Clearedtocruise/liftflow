@@ -112,7 +112,13 @@ export async function loadCoachContext(userId: string): Promise<CoachContext> {
     ageYears: ageYearsFromDateOfBirth(profile.data?.date_of_birth),
   });
 
-  const programDashboard = await getProgramDashboard(userId);
+  // Never let dashboard/regen load block meal-plan or coach replies.
+  let programDashboard: Awaited<ReturnType<typeof getProgramDashboard>> = null;
+  try {
+    programDashboard = await getProgramDashboard(userId);
+  } catch {
+    programDashboard = null;
+  }
 
   return {
     recovery: {

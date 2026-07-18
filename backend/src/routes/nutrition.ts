@@ -37,23 +37,26 @@ nutritionRouter.post('/meal-plan/generate', async (req, res) => {
     let calories = 2400;
 
     if (userId) {
-      const ctx = await loadCoachContext(userId);
-      if (ctx.macroTargets) {
-        proteinG = ctx.macroTargets.proteinG;
-        calories = ctx.macroTargets.calories;
-      } else {
-        const db = requireAdmin();
-        const { data: goals } = await db
-          .from('nutrition_goals')
-          .select('*')
-          .eq('user_id', userId)
-          .eq('is_active', true)
-          .limit(1)
-          .maybeSingle();
-        if (goals) {
-          proteinG = goals.protein_g ?? proteinG;
-          calories = goals.daily_calories ?? calories;
+      const db = requireAdmin();
+      const { data: goals } = await db
+        .from('nutrition_goals')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('is_active', true)
+        .limit(1)
+        .maybeSingle();
+      if (goals) {
+        proteinG = goals.protein_g ?? proteinG;
+        calories = goals.daily_calories ?? calories;
+      }
+      try {
+        const ctx = await loadCoachContext(userId);
+        if (ctx.macroTargets) {
+          proteinG = ctx.macroTargets.proteinG;
+          calories = ctx.macroTargets.calories;
         }
+      } catch {
+        // Keep goals/defaults — never fail meal generation on coach context.
       }
     }
 

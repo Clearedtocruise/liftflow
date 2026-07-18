@@ -409,10 +409,11 @@ async function applyMove(userId: string, change: ScheduleChangeMove): Promise<Pl
   await reschedulePlannedWorkout(workout.id, toDate);
 
   const affectedDates = [...new Set([fromDate, toDate])];
-  const nutritionResults = await syncNutritionForDates(userId, affectedDates);
-  const nutritionByDate = Object.fromEntries(nutritionResults.map((n) => [n.date, n]));
+  // Nutrition/macros sync in background — awaiting it froze day swaps for many seconds.
+  const nutritionByDate: Record<string, DayNutritionSync> = {};
   const coach = buildMoveCoachMessages(workout.name, fromDate, toDate, nutritionByDate, swappedWith);
   await persistPlanAdjustment(userId, coach, affectedDates);
+  void syncNutritionForDates(userId, affectedDates);
   void getProgramDashboard(userId);
 
   return {
@@ -449,8 +450,7 @@ async function applySwap(userId: string, change: ScheduleChangeSwap): Promise<Pl
   await reschedulePlannedWorkout(workoutB.id, dateA);
 
   const affectedDates = [...new Set([dateA, dateB])];
-  const nutritionResults = await syncNutritionForDates(userId, affectedDates);
-  const nutritionByDate = Object.fromEntries(nutritionResults.map((n) => [n.date, n]));
+  const nutritionByDate: Record<string, DayNutritionSync> = {};
 
   const coach = buildSwapCoachMessages(
     { ...workoutA, scheduled_date: dateB },
@@ -459,6 +459,7 @@ async function applySwap(userId: string, change: ScheduleChangeSwap): Promise<Pl
   );
 
   await persistPlanAdjustment(userId, coach, affectedDates);
+  void syncNutritionForDates(userId, affectedDates);
   void getProgramDashboard(userId);
 
   return {

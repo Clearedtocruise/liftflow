@@ -120,33 +120,11 @@ export function WorkoutCalendar({ userId, workouts, view = 'week', onReschedule 
     ]);
   }
 
-  function promptCardio(workout: PlannedWorkout) {
-    Alert.alert('Convert to cardio', 'Choose activity — nutrition adjusts for endurance.', [
-      { text: 'Running', onPress: () => adaptChange({ type: 'to_cardio', workoutId: workout.id, activity: 'running' }) },
-      { text: 'Swimming', onPress: () => adaptChange({ type: 'to_cardio', workoutId: workout.id, activity: 'swimming' }) },
-      { text: 'Cycling', onPress: () => adaptChange({ type: 'to_cardio', workoutId: workout.id, activity: 'cycling' }) },
-      { text: 'Sport', onPress: () => adaptChange({ type: 'to_cardio', workoutId: workout.id, activity: 'sport' }) },
-      { text: 'Conditioning', onPress: () => adaptChange({ type: 'to_cardio', workoutId: workout.id, activity: 'conditioning' }) },
-      { text: 'Cancel', style: 'cancel' },
-    ]);
-  }
-
-  function isStrengthWorkout(workout: PlannedWorkout): boolean {
-    const kind = workout.metadata?.sessionKind;
-    return !kind || kind === 'strength';
-  }
-
   function handleWorkoutPress(workout: PlannedWorkout) {
     if (busy || workout.status !== 'planned') return;
-    const convertOptions = isStrengthWorkout(workout)
-      ? [
-          { text: 'Cardio / sport…', onPress: () => promptCardio(workout) },
-          { text: 'Recovery session', onPress: () => confirmRecovery(workout) },
-        ]
-      : [];
     Alert.alert(workout.name, 'Adjust this workout? Training and nutrition update automatically.', [
       { text: 'Cancel', style: 'cancel' },
-      ...convertOptions,
+      { text: 'Recovery session', onPress: () => confirmRecovery(workout) },
       { text: 'Swap days', onPress: () => promptSwap(workout) },
       { text: 'Skip', style: 'destructive', onPress: () => confirmSkip(workout) },
       { text: '+1 day', onPress: () => moveWorkout(workout, 1) },

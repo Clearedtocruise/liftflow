@@ -91,45 +91,56 @@ function logBeforeModal(
 }
 
 async function executeAdapt(deps: PlanDayActionDeps, change: ScheduleChange) {
+  // Optimistic UI first so swap/move never feels frozen while the API runs.
+  const patched = dedupePlannedWorkoutsByDate(
+    patchPlannedWorkoutsForChange(deps.workouts, change),
+    new Date(),
+    deps.timeZone,
+  );
+  const { from, to } = getWeekRange(new Date(), deps.timeZone ?? undefined);
+  deps.onWorkoutsUpdated?.(patched);
+  invalidateWeekPlanPrefetch(deps.userId, deps.timeZone ?? undefined);
+  void planDataCache.writeWorkouts(deps.userId, from, to, patched);
+
   deps.onBusyChange?.(true);
-  const result = await trainingService.adaptScheduleChange(deps.userId, change);
-  deps.onBusyChange?.(false);
-  if (result.success) {
-    deps.setFromAdaptation(result.data);
+  try {
+    const result = await trainingService.adaptScheduleChange(deps.userId, change);
+    if (result.success) {
+      deps.setFromAdaptation(result.data);
 
-    const patched = dedupePlannedWorkoutsByDate(
-      patchPlannedWorkoutsForChange(deps.workouts, change),
-      new Date(),
-      deps.timeZone,
-    );
-    const { from, to } = getWeekRange(new Date(), deps.timeZone ?? undefined);
-    deps.onWorkoutsUpdated?.(patched);
-    invalidateWeekPlanPrefetch(deps.userId, deps.timeZone ?? undefined);
-    await planDataCache.writeWorkouts(deps.userId, from, to, patched);
-
-    void (async () => {
-      const workoutsResult = await trainingService.getPlannedWorkouts(
-        deps.userId,
-        from,
-        to,
-        deps.timeZone,
-      );
-      if (workoutsResult.success) {
-        const merged = mergePlannedWorkoutsPreferringReschedule(
-          patched,
-          workoutsResult.data,
-          new Date(),
+      void (async () => {
+        const workoutsResult = await trainingService.getPlannedWorkouts(
+          deps.userId,
+          from,
+          to,
           deps.timeZone,
         );
-        await planDataCache.writeWorkouts(deps.userId, from, to, merged);
-        deps.onWorkoutsUpdated?.(merged);
-      }
-    })();
+        if (workoutsResult.success) {
+          const merged = mergePlannedWorkoutsPreferringReschedule(
+            patched,
+            workoutsResult.data,
+            new Date(),
+            deps.timeZone,
+          );
+          await planDataCache.writeWorkouts(deps.userId, from, to, merged);
+          deps.onWorkoutsUpdated?.(merged);
+        }
+      })();
 
-    void syncGroceriesAfterPlanAdaptation(deps.userId, result.data);
+      void syncGroceriesAfterPlanAdaptation(deps.userId, result.data);
+      deps.onComplete?.();
+    } else {
+      presentAlert('Could not adjust plan', result.error);
+      deps.onComplete?.();
+    }
+  } catch (error) {
+    presentAlert(
+      'Could not adjust plan',
+      error instanceof Error ? error.message : 'Something went wrong. Try again.',
+    );
     deps.onComplete?.();
-  } else {
-    presentAlert('Could not adjust plan', result.error);
+  } finally {
+    deps.onBusyChange?.(false);
   }
 }
 
