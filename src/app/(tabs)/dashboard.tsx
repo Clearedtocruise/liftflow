@@ -51,6 +51,7 @@ import { formatWorkoutTime, scheduleFromProfile, scheduledTimesForDay } from '@/
 import { planDataCache } from '@/lib/planDataCache';
 import { warmWeekPlanData } from '@/lib/planDataPrefetch';
 import { buildHomeManageDayMenu } from '@/lib/planDayActions';
+import { setPlannedWorkoutHandoff } from '@/lib/plannedWorkoutHandoff';
 import { recoveryScoreColor } from '@/lib/recoveryScoreColor';
 import { startPlannedWorkout } from '@/lib/startPlannedWorkout';
 import { logStartup, printStartupReport } from '@/lib/startupLogger';
@@ -670,7 +671,16 @@ export default function DashboardScreen() {
                 return;
               }
               if (!todaysWorkout) return;
-              router.push({ pathname: '/(tabs)/workout/day', params: { id: todaysWorkout.id } });
+              setPlannedWorkoutHandoff(todaysWorkout);
+              setPlannedWorkout(todaysWorkout);
+              router.push({
+                pathname: '/(tabs)/workout/day',
+                params: {
+                  id: todaysWorkout.id,
+                  plannedWorkoutId: todaysWorkout.id,
+                  date: todaysWorkout.scheduledDate,
+                },
+              });
             }}
             onStartWorkout={() => todaysWorkout && handleStartNextWorkout(todaysWorkout)}
             onManageDay={handleManageDay}

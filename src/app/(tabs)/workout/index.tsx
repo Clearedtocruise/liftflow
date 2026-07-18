@@ -27,6 +27,7 @@ import { warmWeekPlanData } from '@/lib/planDataPrefetch';
 import { buildEditDayMenu, type ManageDayMenuContent } from '@/lib/planDayActions';
 import { logStartup } from '@/lib/startupLogger';
 import { inferExecutionModeFromPlan } from '@/lib/supersetFlow';
+import { setPlannedWorkoutHandoff } from '@/lib/plannedWorkoutHandoff';
 import { buildWeekPlan, getWeekRange, isConditioningWorkout, type WeekDayPlan } from '@/lib/weekPlan';
 import { serializeChallengeNotes } from '@/lib/workoutChallengeFlow';
 import { normalizeExecutionMode } from '@/lib/workoutExecutionMode';
@@ -203,6 +204,7 @@ export default function WorkoutScreen() {
         return;
       }
       if (day.workout) {
+        setPlannedWorkoutHandoff(day.workout);
         setPlannedWorkout(day.workout);
         router.push({
           pathname: '/(tabs)/workout/day',
@@ -243,6 +245,7 @@ export default function WorkoutScreen() {
           ? () => {
               setEditDayOpen(false);
               setEditDayMenu(null);
+              setPlannedWorkoutHandoff(day.workout!);
               setPlannedWorkout(day.workout!);
               router.push({
                 pathname: '/(tabs)/workout/day',
