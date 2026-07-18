@@ -4,10 +4,6 @@ import { dedupePlannedWorkoutsByDate } from '@/lib/weekPlan';
 import { withTimeout } from '@/lib/withTimeout';
 import type { ITrainingService } from '@/services/interfaces';
 import { getAccessToken, supabase } from '@/supabase/client';
-
-/** Avoid hammering full program rebuilds when Home/Workout remount. */
-let lastRegenCheckAt = 0;
-const REGEN_CHECK_COOLDOWN_MS = 60_000;
 import type {
     CreateProgramPayload,
     PlannedWorkout,
@@ -18,6 +14,10 @@ import type {
     TrainingProgram,
     WorkoutTemplate,
 } from '@/types';
+
+/** Avoid hammering full program rebuilds when Home/Workout remount. */
+let lastRegenCheckAt = 0;
+const REGEN_CHECK_COOLDOWN_MS = 60_000;
 
 type PlannedRow = {
   id: string;
@@ -233,7 +233,11 @@ export const trainingService: ITrainingService = {
     const sbData =
       sbResult.status === 'fulfilled' && sbResult.value.success ? sbResult.value.data : null;
 
-    // Prefer Supabase on device — reads land immediately after plan adaptations.
+    // Prefer non-empty Supabase (fast after local adaptations). Never treat an empty
+    // Supabase week as authoritative when the API still has planned rows — that made
+    // day screens show "Workout not found" right after a rebuild.
+    if (sbData && sbData.length > 0) return ok(sbData);
+    if (apiData && apiData.length > 0) return ok(apiData);
     if (sbData) return ok(sbData);
     if (apiData) return ok(apiData);
 
@@ -241,6 +245,35 @@ export const trainingService: ITrainingService = {
     if (sbResult.status === 'fulfilled' && !sbResult.value.success) return sbResult.value;
 
     return fail('Could not load planned workouts');
+  },
+
+  async getPlannedWorkoutById(
+    plannedWorkoutId: string,
+    userId?: string,
+    timeZone?: string | null,
+  ) {
+    try {
+      const { data, error } = await supabase
+        .from('planned_workouts')
+        .select('*')
+        .eq('id', plannedWorkoutId)
+        .maybeSingle();
+      if (!error && data) return ok(mapPlanned(data as PlannedRow));
+
+      if (userId) {
+        const { getWeekRange } = await import('@/lib/weekPlan');
+        const { from, to } = getWeekRange(new Date(), timeZone);
+        const week = await this.getPlannedWorkouts(userId, from, to, timeZone);
+        if (week.success) {
+          const found = week.data.find((workout) => workout.id === plannedWorkoutId);
+          if (found) return ok(found);
+        }
+      }
+
+      return fail(error?.message ?? 'Workout not found');
+    } catch (e) {
+      return fromError(e);
+    }
   },
 
   async suggestMuscleGroups(userId) {

@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
@@ -11,7 +11,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useTabataModePreference } from '@/hooks/useTabataModePreference';
 import { useWorkoutLocations } from '@/hooks/useWorkoutLocations';
 import { profileFigureGender } from '@/lib/exerciseMuscleMap';
-import { getWeekRange, isConditioningWorkout } from '@/lib/weekPlan';
+import { isConditioningWorkout } from '@/lib/weekPlan';
 import { exercisesForSessionStart, exercisesFromPlannedWorkout } from '@/lib/workoutPlan';
 import type { ExerciseAlternativeOption } from '@/services/exerciseAdvisoryService';
 import { trainingService } from '@/services/trainingService';
@@ -19,16 +19,27 @@ import { useWorkoutPlanDraft } from '@/state/workout/WorkoutPlanDraftContext';
 import { useWorkoutSession } from '@/state/workout/WorkoutSessionContext';
 import type { PlannedWorkout } from '@/types/training';
 
+function paramId(value: string | string[] | undefined): string | undefined {
+  if (Array.isArray(value)) return value[0];
+  return value;
+}
+
 export default function WorkoutDayScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const params = useLocalSearchParams<{ id?: string | string[] }>();
+  const id = paramId(params.id);
   const { user } = useAuth();
   const { tabataModeEnabled } = useTabataModePreference();
-  const { exercises, setPlannedWorkout, setExercises } = useWorkoutPlanDraft();
+  const { exercises, plannedWorkout: draftWorkout, setPlannedWorkout, setExercises } = useWorkoutPlanDraft();
   const { startSessionFromPlanned, refreshSession } = useWorkoutSession();
   const { locations, selectedId } = useWorkoutLocations(user?.id);
 
-  const [workout, setWorkout] = useState<PlannedWorkout | null>(null);
-  const [loading, setLoading] = useState(true);
+  const draftMatch = useMemo(
+    () => (draftWorkout && id && draftWorkout.id === id ? draftWorkout : null),
+    [draftWorkout, id],
+  );
+
+  const [workout, setWorkout] = useState<PlannedWorkout | null>(draftMatch);
+  const [loading, setLoading] = useState(!draftMatch);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
 
@@ -38,29 +49,34 @@ export default function WorkoutDayScreen() {
       return;
     }
 
-    setLoading(true);
-    setLoadError(null);
+    // Weekly plan already stamped this workout into draft before navigate — use it immediately.
+    if (draftMatch) {
+      setWorkout(draftMatch);
+      setPlannedWorkout(draftMatch);
+      setExercises(exercisesFromPlannedWorkout(draftMatch));
+      setLoading(false);
+      setLoadError(null);
+    } else {
+      setLoading(true);
+      setLoadError(null);
+    }
 
-    const { from, to } = getWeekRange();
-    const result = await trainingService.getPlannedWorkouts(user.id, from, to);
-
+    const result = await trainingService.getPlannedWorkoutById(id, user.id, user.timezone);
     if (!result.success) {
-      setLoadError(result.error);
-      setWorkout(null);
+      if (!draftMatch) {
+        setLoadError(result.error);
+        setWorkout(null);
+      }
       setLoading(false);
       return;
     }
 
-    const found = result.data.find((item) => item.id === id) ?? null;
-    if (found) {
-      setWorkout(found);
-      setPlannedWorkout(found);
-      setExercises(exercisesFromPlannedWorkout(found));
-    } else {
-      setWorkout(null);
-    }
+    setWorkout(result.data);
+    setPlannedWorkout(result.data);
+    setExercises(exercisesFromPlannedWorkout(result.data));
+    setLoadError(null);
     setLoading(false);
-  }, [user?.id, id, setPlannedWorkout, setExercises]);
+  }, [user?.id, user?.timezone, id, draftMatch, setPlannedWorkout, setExercises]);
 
   useEffect(() => {
     void loadWorkout();
@@ -131,7 +147,7 @@ export default function WorkoutDayScreen() {
     );
   }
 
-  if (loadError) {
+  if (loadError && !workout) {
     return (
       <ScreenContainer contentContainerStyle={styles.centeredContent}>
         <ErrorStateCard
