@@ -258,14 +258,32 @@ export const trainingService: ITrainingService = {
         .select('*')
         .eq('id', plannedWorkoutId)
         .maybeSingle();
-      if (!error && data) return ok(mapPlanned(data as PlannedRow));
+      if (!error && data && data.status !== 'cancelled') {
+        return ok(mapPlanned(data as PlannedRow));
+      }
+
+      // If this id was cancelled by a racey regen, recover the replacement on the same date.
+      if (!error && data?.scheduled_date && userId) {
+        const { data: replacement } = await supabase
+          .from('planned_workouts')
+          .select('*')
+          .eq('user_id', userId)
+          .eq('scheduled_date', data.scheduled_date as string)
+          .eq('status', 'planned')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (replacement) return ok(mapPlanned(replacement as PlannedRow));
+      }
 
       if (userId) {
         const { getWeekRange } = await import('@/lib/weekPlan');
         const { from, to } = getWeekRange(new Date(), timeZone);
         const week = await this.getPlannedWorkouts(userId, from, to, timeZone);
         if (week.success) {
-          const found = week.data.find((workout) => workout.id === plannedWorkoutId);
+          const found = week.data.find(
+            (workout) => workout.id === plannedWorkoutId && workout.status !== 'cancelled',
+          );
           if (found) return ok(found);
         }
       }

@@ -204,7 +204,14 @@ export default function WorkoutScreen() {
       }
       if (day.workout) {
         setPlannedWorkout(day.workout);
-        router.push({ pathname: '/(tabs)/workout/day', params: { id: day.workout.id } });
+        router.push({
+          pathname: '/(tabs)/workout/day',
+          params: {
+            id: day.workout.id,
+            plannedWorkoutId: day.workout.id,
+            date: day.date,
+          },
+        });
         return;
       }
       router.push({
@@ -237,7 +244,14 @@ export default function WorkoutScreen() {
               setEditDayOpen(false);
               setEditDayMenu(null);
               setPlannedWorkout(day.workout!);
-              router.push({ pathname: '/(tabs)/workout/day', params: { id: day.workout!.id } });
+              router.push({
+                pathname: '/(tabs)/workout/day',
+                params: {
+                  id: day.workout!.id,
+                  plannedWorkoutId: day.workout!.id,
+                  date: day.date,
+                },
+              });
             }
           : undefined,
         onStartWorkout: day.workout
