@@ -484,7 +484,20 @@ export async function generateTrainingProgram(input: CreateProgramInput) {
     }
   }
 
+  const expectedLiftSlots = schedule.filter((slot) => !slot.isRest).length;
+  if (expectedLiftSlots > 0 && insertedPlannedIds.length === 0) {
+    // Roll back the empty program shell so the prior active week stays usable.
+    await db.from('training_programs').update({ is_active: false }).eq('id', program.id);
+    if (existingActive?.id) {
+      await db.from('training_programs').update({ is_active: true }).eq('id', existingActive.id);
+    }
+    throw new Error('Program rebuild created no workouts — kept your existing week. Retry in a moment.');
+  }
+
   // Supersede old planned rows only after the new week exists.
+  // Always cover the visible calendar week so a timezone/startDate skew can't leave a stale 3-day week.
+  const calendarWeekEnd = addDays(cancelFrom, 6);
+  const effectiveCancelTo = cancelTo > calendarWeekEnd ? cancelTo : calendarWeekEnd;
   if (insertedPlannedIds.length > 0) {
     const { data: stale } = await db
       .from('planned_workouts')
@@ -492,7 +505,7 @@ export async function generateTrainingProgram(input: CreateProgramInput) {
       .eq('user_id', input.userId)
       .eq('status', 'planned')
       .gte('scheduled_date', cancelFrom)
-      .lte('scheduled_date', cancelTo);
+      .lte('scheduled_date', effectiveCancelTo);
     const staleIds = (stale ?? [])
       .map((row) => row.id as string)
       .filter((id) => !insertedPlannedIds.includes(id));
@@ -575,17 +588,34 @@ export async function regenerateActiveProgram(
       ? countLiftSlotsInSchedule(meta.schedule)
       : null;
     // Prefer stored frequency mismatch; schedule count is a backup when frequency is missing/wrong.
+    // Also treat a stale template schedule (e.g. still 3 lift slots after user set 6 days) as mismatch.
     const frequencyMismatch =
       expectedFrequency !== 'custom' &&
       ((storedFrequency != null && storedFrequency !== expectedFrequency) ||
-        (storedFrequency == null &&
-          scheduleLiftDays != null &&
-          scheduleLiftDays !== expectedFrequency));
+        (scheduleLiftDays != null && scheduleLiftDays !== expectedFrequency));
+
+    // Visible calendar week can lag metadata after a failed rebuild (preference 6, still 3 lift days).
+    // Count planned + completed so mid-week progress does not look like an under-built week.
+    const calendarWeekStart = weekStartFromDate(new Date().toISOString().slice(0, 10));
+    const calendarWeekEnd = addDays(calendarWeekStart, 6);
+    const { data: calendarWeekRows } = await db
+      .from('planned_workouts')
+      .select('id')
+      .eq('user_id', userId)
+      .in('status', ['planned', 'completed', 'skipped'])
+      .gte('scheduled_date', calendarWeekStart)
+      .lte('scheduled_date', calendarWeekEnd);
+    const calendarLiftDays = calendarWeekRows?.length ?? 0;
+    const calendarFrequencyMismatch =
+      expectedFrequency !== 'custom' &&
+      typeof expectedFrequency === 'number' &&
+      calendarLiftDays < expectedFrequency;
 
     if (
       !options?.force &&
       !options?.repairFromHistory &&
       !frequencyMismatch &&
+      !calendarFrequencyMismatch &&
       meta.planRulesVersion === PLAN_RULES_VERSION
     ) {
       return { regenerated: false as const, reason: 'already_current' as const, program, plannedCount: 0 };
