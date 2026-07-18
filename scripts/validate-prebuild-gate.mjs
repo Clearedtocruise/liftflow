@@ -56,7 +56,10 @@ mustInclude('src/lib/voice/voiceLoggingTest.ts', 'Voice test skip persistence', 
 mustInclude('backend/src/lib/programEngine.ts', 'Regen builds before cancel', [
   'Never cancel existing planned workouts until the new week is inserted',
   'insertedPlannedIds',
-  'WEEKS_AHEAD = 2',
+  'WEEKS_AHEAD = 0',
+]);
+mustInclude('backend/src/lib/programEngine.ts', 'Week fetch never force-regens', [
+  'Never force-regenerate on a read path',
 ]);
 mustInclude('src/services/trainingService.ts', 'Client force-rebuilds under-built weeks', [
   'calendarLiftDays < preferredDays',
