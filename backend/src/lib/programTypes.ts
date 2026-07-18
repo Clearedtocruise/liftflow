@@ -102,20 +102,55 @@ function isUpperFocusLabel(label: string): boolean {
   return UPPER_FOCUS_PATTERN.test(label);
 }
 
-/** Prevent back-to-back chest/upper-focused sessions in auto-generated schedules. */
+/**
+ * Prefer spacing consecutive upper-focused sessions by swapping with an existing Rest day.
+ * Never converts a lift day into Rest — that would silently drop below the user's frequency
+ * (e.g. 6-day full body collapsing to 3 lift days).
+ */
 export function enforceUpperFocusSpacing(labels: readonly string[]): string[] {
   const result = [...labels];
   for (let i = 0; i < result.length - 1; i += 1) {
     if (
-      result[i] !== 'Rest' &&
-      result[i + 1] !== 'Rest' &&
-      isUpperFocusLabel(result[i]) &&
-      isUpperFocusLabel(result[i + 1])
+      result[i] === 'Rest' ||
+      result[i + 1] === 'Rest' ||
+      !isUpperFocusLabel(result[i]!) ||
+      !isUpperFocusLabel(result[i + 1]!)
     ) {
+      continue;
+    }
+
+    let swapIdx = -1;
+    for (let j = i + 2; j < result.length; j += 1) {
+      if (result[j] !== 'Rest') continue;
+      const prev = result[j - 1];
+      const next = result[j + 1];
+      const createsNewPair =
+        (prev != null && prev !== 'Rest' && isUpperFocusLabel(prev) && isUpperFocusLabel(result[i + 1]!)) ||
+        (next != null && next !== 'Rest' && isUpperFocusLabel(result[i + 1]!) && isUpperFocusLabel(next));
+      if (!createsNewPair) {
+        swapIdx = j;
+        break;
+      }
+      if (swapIdx < 0) swapIdx = j;
+    }
+
+    if (swapIdx >= 0) {
+      const moving = result[i + 1]!;
       result[i + 1] = 'Rest';
+      result[swapIdx] = moving;
     }
   }
   return result;
+}
+
+export function countLiftSlotsInSchedule(
+  schedule: ReadonlyArray<{ isRest?: boolean; label?: string }>,
+): number {
+  return schedule.filter((day) => {
+    if (day.isRest) return false;
+    const label = (day.label ?? '').toLowerCase();
+    return label !== 'rest' && !label.includes('condition');
+  }).length;
 }
 
 export function buildWeeklySchedule(

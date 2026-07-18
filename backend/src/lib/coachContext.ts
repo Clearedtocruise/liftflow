@@ -1,3 +1,4 @@
+import { ageYearsFromDateOfBirth } from './ageAdjustments.js';
 import type { LimitationContext } from './exerciseSubstitution.js';
 import { parseLimitationFromVoice } from './exerciseSubstitution.js';
 import { getProgramDashboard } from './programEngine.js';
@@ -83,7 +84,7 @@ export async function loadCoachContext(userId: string): Promise<CoachContext> {
       .order('week_start_date', { ascending: false })
       .limit(1)
       .maybeSingle(),
-    db.from('profiles').select('weight_kg, primary_training_goal, fitness_goals').eq('id', userId).maybeSingle(),
+    db.from('profiles').select('weight_kg, primary_training_goal, fitness_goals, date_of_birth').eq('id', userId).maybeSingle(),
   ]);
 
   const limitationContexts: LimitationContext[] = (limitations.data ?? []).map((row) => ({
@@ -108,9 +109,16 @@ export async function loadCoachContext(userId: string): Promise<CoachContext> {
     workoutType,
     isTrainingDay: !!plannedToday.data,
     dietaryStyle: 'balanced',
+    ageYears: ageYearsFromDateOfBirth(profile.data?.date_of_birth),
   });
 
-  const programDashboard = await getProgramDashboard(userId);
+  // Never let dashboard/regen load block meal-plan or coach replies.
+  let programDashboard: Awaited<ReturnType<typeof getProgramDashboard>> = null;
+  try {
+    programDashboard = await getProgramDashboard(userId);
+  } catch {
+    programDashboard = null;
+  }
 
   return {
     recovery: {

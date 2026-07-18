@@ -10,6 +10,7 @@ import { inferProgramFrequency, inferProgramType, resolveDaysPerWeekFromProfile 
 import {
     addDays,
     buildWeeklySchedule,
+    countLiftSlotsInSchedule,
     currentProgramWeek,
     dayLabel,
     phaseForWeek,
@@ -51,10 +52,13 @@ export type CreateProgramInput = {
   locationId?: string;
   locationName?: string;
   customSchedule?: string[];
+  /** Preserve timeline across regenerations. Only omit / restart for true first create or explicit restart. */
+  startDate?: string;
+  restartProgram?: boolean;
 };
 
 /** Bump when workout planning rules change so existing programs can be regenerated. */
-export const PLAN_RULES_VERSION = 17;
+export const PLAN_RULES_VERSION = 18;
 
 const MIN_ACCEPTABLE_EXERCISES_PER_SESSION = 8;
 
@@ -69,7 +73,73 @@ type StoredProgramMetadata = {
   customSchedule?: string[];
   planRulesVersion?: number;
   startDate?: string;
+  schedule?: Array<{ label?: string; isRest?: boolean }>;
 };
+
+function daysBetween(fromDate: string, toDate: string): number {
+  const from = new Date(fromDate + 'T12:00:00').getTime();
+  const to = new Date(toDate + 'T12:00:00').getTime();
+  return Math.floor((to - from) / (1000 * 60 * 60 * 24));
+}
+
+/**
+ * If startDate was recently reset but the user has months of completed history,
+ * restore the program clock from the earliest completed session / planned workout.
+ */
+export async function resolveProgramStartDateFromHistory(
+  userId: string,
+  currentStartDate: string | undefined,
+  options?: { force?: boolean },
+): Promise<{ startDate: string; repaired: boolean }> {
+  const db = requireAdmin();
+  const today = new Date().toISOString().slice(0, 10);
+  const current = weekStartFromDate(currentStartDate ?? today);
+
+  const [{ data: earliestCompleted }, { data: earliestSession }] = await Promise.all([
+    db
+      .from('planned_workouts')
+      .select('scheduled_date')
+      .eq('user_id', userId)
+      .eq('status', 'completed')
+      .order('scheduled_date', { ascending: true })
+      .limit(1)
+      .maybeSingle(),
+    db
+      .from('workout_sessions')
+      .select('started_at')
+      .eq('user_id', userId)
+      .eq('status', 'completed')
+      .order('started_at', { ascending: true })
+      .limit(1)
+      .maybeSingle(),
+  ]);
+
+  const candidates: string[] = [];
+  if (earliestCompleted?.scheduled_date) candidates.push(String(earliestCompleted.scheduled_date));
+  if (earliestSession?.started_at) candidates.push(String(earliestSession.started_at).slice(0, 10));
+
+  if (candidates.length === 0) {
+    return { startDate: current, repaired: false };
+  }
+
+  candidates.sort();
+  const historyStart = weekStartFromDate(candidates[0]!);
+  if (historyStart >= current) {
+    return { startDate: current, repaired: false };
+  }
+
+  const historySpanDays = daysBetween(historyStart, today);
+  const currentAgeDays = daysBetween(current, today);
+  const shouldRepair = options?.force
+    ? true
+    : historySpanDays >= 28 && currentAgeDays <= 21;
+
+  if (!shouldRepair) {
+    return { startDate: current, repaired: false };
+  }
+
+  return { startDate: historyStart, repaired: true };
+}
 
 export type ProgramDashboard = {
   program: Record<string, unknown>;
@@ -161,25 +231,36 @@ async function resolveProgramEquipment(
 
 export async function generateTrainingProgram(input: CreateProgramInput) {
   const db = requireAdmin();
-  const durationWeeks = input.durationWeeks ?? 12;
-  const startDate = weekStartFromDate(new Date().toISOString().slice(0, 10));
+
+  const { data: existingActive } = await db
+    .from('training_programs')
+    .select('id, created_at, metadata, duration_weeks')
+    .eq('user_id', input.userId)
+    .eq('is_active', true)
+    .maybeSingle();
+
+  const existingMeta = (existingActive?.metadata ?? {}) as StoredProgramMetadata;
+  const rawStart = input.restartProgram
+    ? undefined
+    : (input.startDate ?? existingMeta.startDate ?? existingActive?.created_at?.slice(0, 10));
+  const startDate = weekStartFromDate(rawStart ?? new Date().toISOString().slice(0, 10));
+
+  // Keep timeline continuous: if the user is past the original block, extend weeks so
+  // the current calendar week still gets planned workouts (avoids empty-week → Week 1 loop).
+  let durationWeeks = input.durationWeeks ?? existingActive?.duration_weeks ?? 12;
+  const elapsedWeek = currentProgramWeek(startDate);
+  if (elapsedWeek > durationWeeks) {
+    durationWeeks = elapsedWeek + 4;
+  }
   const schedule = buildWeeklySchedule(input.programType, input.frequency, input.customSchedule);
   const limitations = await loadActiveLimitations(input.userId);
   const performance = await getLastPerformanceBySlug(input.userId);
   const recoveryMods = await loadRecoveryModifiers(input.userId);
   const equipment = await resolveProgramEquipment(input.userId, input);
 
-  await db.from('training_programs').update({ is_active: false }).eq('user_id', input.userId);
-
-  const endDate = addDays(startDate, durationWeeks * 7 - 1);
-  await db
-    .from('planned_workouts')
-    .update({ status: 'cancelled' })
-    .eq('user_id', input.userId)
-    .eq('status', 'planned')
-    .gte('scheduled_date', startDate)
-    .lte('scheduled_date', endDate);
-
+  // Never cancel existing planned workouts until the new week is inserted.
+  // Cancel-first left athletes with empty weeks when generation timed out.
+  const cancelFrom = weekStartFromDate(new Date().toISOString().slice(0, 10));
   const programName = `${programTypeLabel(input.programType)} — ${input.frequency === 'custom' ? 'Custom' : `${input.frequency}x/week`}`;
 
   const { data: program, error: programError } = await db
@@ -209,11 +290,24 @@ export async function generateTrainingProgram(input: CreateProgramInput) {
 
   if (programError) throw programError;
 
+  await db
+    .from('training_programs')
+    .update({ is_active: false })
+    .eq('user_id', input.userId)
+    .neq('id', program.id);
+
   const templateCache = new Map<string, string>();
   const programRecentSlugs = new Map<string, Date>();
+  const insertedPlannedIds: string[] = [];
   let plannedCount = 0;
+  // Only materialize the current week + a short horizon. Generating the full remaining
+  // block (10–40+ weeks × lift days) freezes the API and the app UI on swap/regen.
+  const WEEKS_AHEAD = 2;
+  const firstWeekToGenerate = Math.max(1, Math.min(elapsedWeek, durationWeeks));
+  const lastWeekToGenerate = Math.min(durationWeeks, firstWeekToGenerate + WEEKS_AHEAD);
+  const cancelTo = addDays(startDate, lastWeekToGenerate * 7 - 1);
 
-  for (let week = 1; week <= durationWeeks; week++) {
+  for (let week = firstWeekToGenerate; week <= lastWeekToGenerate; week++) {
     const phaseSpec = phaseForWeek(week, durationWeeks);
     const phaseId = await ensurePhaseForWeek(input.userId, program.id, week, durationWeeks, startDate);
 
@@ -223,28 +317,33 @@ export async function generateTrainingProgram(input: CreateProgramInput) {
       const date = addDays(startDate, (week - 1) * 7 + slot.dayIndex);
 
       if (slot.sessionKind === 'cardio') {
-        await db.from('planned_workouts').insert({
-          user_id: input.userId,
-          training_phase_id: phaseId,
-          name: `${slot.label} — Week ${week}`,
-          scheduled_date: date,
-          status: 'planned',
-          suggested_muscle_groups: slot.muscleGroups,
-          ai_rationale: `${dayLabel(slot.dayIndex)} · Cardio / HIIT · ${programTypeLabel(input.programType)}`,
-          metadata: {
-            programId: program.id,
-            weekNumber: week,
-            dayIndex: slot.dayIndex,
-            dayLabel: dayLabel(slot.dayIndex),
-            slotLabel: slot.label,
-            sprintPhase: phaseSpec.sprintPhase,
-            sessionKind: 'cardio',
-            cardioType: 'hiit',
-            exercises: [],
-            locationId: input.locationId,
-            locationName: input.locationName,
-          },
-        });
+        const { data: cardioRow } = await db
+          .from('planned_workouts')
+          .insert({
+            user_id: input.userId,
+            training_phase_id: phaseId,
+            name: `${slot.label} — Week ${week}`,
+            scheduled_date: date,
+            status: 'planned',
+            suggested_muscle_groups: slot.muscleGroups,
+            ai_rationale: `${dayLabel(slot.dayIndex)} · Cardio / HIIT · ${programTypeLabel(input.programType)}`,
+            metadata: {
+              programId: program.id,
+              weekNumber: week,
+              dayIndex: slot.dayIndex,
+              dayLabel: dayLabel(slot.dayIndex),
+              slotLabel: slot.label,
+              sprintPhase: phaseSpec.sprintPhase,
+              sessionKind: 'cardio',
+              cardioType: 'hiit',
+              exercises: [],
+              locationId: input.locationId,
+              locationName: input.locationName,
+            },
+          })
+          .select('id')
+          .single();
+        if (cardioRow?.id) insertedPlannedIds.push(cardioRow.id);
         plannedCount += 1;
         continue;
       }
@@ -353,30 +452,52 @@ export async function generateTrainingProgram(input: CreateProgramInput) {
             ),
           );
 
-      await db.from('planned_workouts').insert({
-        user_id: input.userId,
-        template_id: templateId,
-        training_phase_id: phaseId,
-        name: `${slot.label} — Week ${week}`,
-        scheduled_date: date,
-        status: 'planned',
-        suggested_muscle_groups: slot.muscleGroups,
-        ai_rationale: `${dayLabel(slot.dayIndex)} · ${phaseSpec.sprintPhase} phase · ${programTypeLabel(input.programType)}`,
-        metadata: {
-          programId: program.id,
-          weekNumber: week,
-          dayIndex: slot.dayIndex,
-          dayLabel: dayLabel(slot.dayIndex),
-          slotLabel: slot.label,
-          sprintPhase: phaseSpec.sprintPhase,
-          exercises: progressed,
-          plannedVolume: totalPlannedVolume(progressed),
-          locationId: input.locationId,
-          locationName: input.locationName,
-        },
-      });
+      const { data: plannedRow } = await db
+        .from('planned_workouts')
+        .insert({
+          user_id: input.userId,
+          template_id: templateId,
+          training_phase_id: phaseId,
+          name: `${slot.label} — Week ${week}`,
+          scheduled_date: date,
+          status: 'planned',
+          suggested_muscle_groups: slot.muscleGroups,
+          ai_rationale: `${dayLabel(slot.dayIndex)} · ${phaseSpec.sprintPhase} phase · ${programTypeLabel(input.programType)}`,
+          metadata: {
+            programId: program.id,
+            weekNumber: week,
+            dayIndex: slot.dayIndex,
+            dayLabel: dayLabel(slot.dayIndex),
+            slotLabel: slot.label,
+            sprintPhase: phaseSpec.sprintPhase,
+            exercises: progressed,
+            plannedVolume: totalPlannedVolume(progressed),
+            locationId: input.locationId,
+            locationName: input.locationName,
+          },
+        })
+        .select('id')
+        .single();
+      if (plannedRow?.id) insertedPlannedIds.push(plannedRow.id);
 
       plannedCount += 1;
+    }
+  }
+
+  // Supersede old planned rows only after the new week exists.
+  if (insertedPlannedIds.length > 0) {
+    const { data: stale } = await db
+      .from('planned_workouts')
+      .select('id')
+      .eq('user_id', input.userId)
+      .eq('status', 'planned')
+      .gte('scheduled_date', cancelFrom)
+      .lte('scheduled_date', cancelTo);
+    const staleIds = (stale ?? [])
+      .map((row) => row.id as string)
+      .filter((id) => !insertedPlannedIds.includes(id));
+    if (staleIds.length > 0) {
+      await db.from('planned_workouts').update({ status: 'cancelled' }).in('id', staleIds);
     }
   }
 
@@ -430,7 +551,10 @@ async function buildProgramInputFromProfile(userId: string): Promise<CreateProgr
   };
 }
 
-export async function regenerateActiveProgram(userId: string, options?: { force?: boolean }) {
+export async function regenerateActiveProgram(
+  userId: string,
+  options?: { force?: boolean; repairFromHistory?: boolean },
+) {
   const db = requireAdmin();
   const { data: program } = await db
     .from('training_programs')
@@ -441,11 +565,40 @@ export async function regenerateActiveProgram(userId: string, options?: { force?
 
   if (program) {
     const meta = (program.metadata ?? {}) as StoredProgramMetadata;
-    if (!options?.force && meta.planRulesVersion === PLAN_RULES_VERSION) {
+    const profileInput = await buildProgramInputFromProfile(userId);
+    const expectedFrequency = profileInput.frequency;
+    const storedFrequency =
+      typeof meta.frequency === 'number' && meta.frequency >= 3 && meta.frequency <= 7
+        ? meta.frequency
+        : null;
+    const scheduleLiftDays = Array.isArray(meta.schedule)
+      ? countLiftSlotsInSchedule(meta.schedule)
+      : null;
+    // Prefer stored frequency mismatch; schedule count is a backup when frequency is missing/wrong.
+    const frequencyMismatch =
+      expectedFrequency !== 'custom' &&
+      ((storedFrequency != null && storedFrequency !== expectedFrequency) ||
+        (storedFrequency == null &&
+          scheduleLiftDays != null &&
+          scheduleLiftDays !== expectedFrequency));
+
+    if (
+      !options?.force &&
+      !options?.repairFromHistory &&
+      !frequencyMismatch &&
+      meta.planRulesVersion === PLAN_RULES_VERSION
+    ) {
       return { regenerated: false as const, reason: 'already_current' as const, program, plannedCount: 0 };
     }
 
-    const profileInput = await buildProgramInputFromProfile(userId);
+    // Preserve the program clock unless explicitly repairing from history.
+    // Routine regenerations must NOT reset athletes back to Week 1.
+    const resolvedStart = options?.repairFromHistory
+      ? await resolveProgramStartDateFromHistory(userId, meta.startDate, { force: true })
+      : {
+          startDate: weekStartFromDate(meta.startDate ?? program.created_at.slice(0, 10)),
+          repaired: false,
+        };
 
     const input: CreateProgramInput = {
       userId,
@@ -457,16 +610,23 @@ export async function regenerateActiveProgram(userId: string, options?: { force?
       equipment: profileInput.equipment ?? meta.equipment,
       locationId: meta.locationId,
       locationName: meta.locationName,
-      customSchedule: meta.customSchedule,
+      // Drop a stale custom week when frequency no longer matches — rebuild from pattern.
+      customSchedule: frequencyMismatch ? undefined : meta.customSchedule,
+      startDate: resolvedStart.startDate,
+      restartProgram: false,
     };
 
     const result = await generateTrainingProgram(input);
-    return { regenerated: true as const, ...result };
+    return {
+      regenerated: true as const,
+      startDateRepaired: resolvedStart.repaired,
+      ...result,
+    };
   }
 
   const input = await buildProgramInputFromProfile(userId);
-  const result = await generateTrainingProgram(input);
-  return { regenerated: true as const, ...result };
+  const result = await generateTrainingProgram({ ...input, restartProgram: true });
+  return { regenerated: true as const, startDateRepaired: false, ...result };
 }
 
 export async function getProgramDashboard(userId: string): Promise<ProgramDashboard | null> {
@@ -531,18 +691,46 @@ export async function getProgramDashboard(userId: string): Promise<ProgramDashbo
 
 export async function reschedulePlannedWorkout(plannedWorkoutId: string, newDate: string) {
   const db = requireAdmin();
-  const { data: existing } = await db.from('planned_workouts').select('scheduled_date, metadata').eq('id', plannedWorkoutId).single();
+  const { data: existing } = await db
+    .from('planned_workouts')
+    .select('scheduled_date, name, metadata, user_id')
+    .eq('id', plannedWorkoutId)
+    .single();
   if (!existing) throw new Error('Planned workout not found');
 
+  const prevMeta = (existing.metadata ?? {}) as Record<string, unknown>;
+  let weekNumber =
+    typeof prevMeta.weekNumber === 'number' ? (prevMeta.weekNumber as number) : undefined;
+
+  const { data: program } = await db
+    .from('training_programs')
+    .select('metadata, created_at')
+    .eq('user_id', existing.user_id)
+    .eq('is_active', true)
+    .maybeSingle();
+  const startDate =
+    (program?.metadata as { startDate?: string } | null)?.startDate ??
+    program?.created_at?.slice(0, 10);
+  if (startDate) {
+    weekNumber = currentProgramWeek(startDate, newDate);
+  }
+
+  const slotLabel =
+    (typeof prevMeta.slotLabel === 'string' && prevMeta.slotLabel) ||
+    String(existing.name ?? 'Workout').replace(/\s*—\s*Week\s*\d+\s*$/i, '').trim();
+  const nextName = weekNumber != null ? `${slotLabel} — Week ${weekNumber}` : existing.name;
+
   const metadata = {
-    ...(existing.metadata as Record<string, unknown>),
+    ...prevMeta,
     rescheduledFrom: existing.scheduled_date,
     rescheduledAt: new Date().toISOString(),
+    ...(weekNumber != null ? { weekNumber } : null),
+    ...(slotLabel ? { slotLabel } : null),
   };
 
   const { data, error } = await db
     .from('planned_workouts')
-    .update({ scheduled_date: newDate, metadata })
+    .update({ scheduled_date: newDate, name: nextName, metadata })
     .eq('id', plannedWorkoutId)
     .select('*')
     .single();

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 
 import { generateWeeklyMealPlan } from '../lib/aiCoach.js';
+import { ageYearsFromDateOfBirth } from '../lib/ageAdjustments.js';
 import { loadCoachContext } from '../lib/coachContext.js';
 import { loadNutritionIntelligence } from '../lib/loadNutritionIntelligence.js';
 import { syncNutritionForDates } from '../lib/nutritionDaySync.js';
@@ -36,23 +37,26 @@ nutritionRouter.post('/meal-plan/generate', async (req, res) => {
     let calories = 2400;
 
     if (userId) {
-      const ctx = await loadCoachContext(userId);
-      if (ctx.macroTargets) {
-        proteinG = ctx.macroTargets.proteinG;
-        calories = ctx.macroTargets.calories;
-      } else {
-        const db = requireAdmin();
-        const { data: goals } = await db
-          .from('nutrition_goals')
-          .select('*')
-          .eq('user_id', userId)
-          .eq('is_active', true)
-          .limit(1)
-          .maybeSingle();
-        if (goals) {
-          proteinG = goals.protein_g ?? proteinG;
-          calories = goals.daily_calories ?? calories;
+      const db = requireAdmin();
+      const { data: goals } = await db
+        .from('nutrition_goals')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('is_active', true)
+        .limit(1)
+        .maybeSingle();
+      if (goals) {
+        proteinG = goals.protein_g ?? proteinG;
+        calories = goals.daily_calories ?? calories;
+      }
+      try {
+        const ctx = await loadCoachContext(userId);
+        if (ctx.macroTargets) {
+          proteinG = ctx.macroTargets.proteinG;
+          calories = ctx.macroTargets.calories;
         }
+      } catch {
+        // Keep goals/defaults — never fail meal generation on coach context.
       }
     }
 
@@ -86,7 +90,7 @@ nutritionRouter.post('/adaptive-targets', async (req, res) => {
     const db = requireAdmin();
     const { data: profile } = await db
       .from('profiles')
-      .select('weight_kg, primary_training_goal, fitness_goals')
+      .select('weight_kg, primary_training_goal, fitness_goals, date_of_birth')
       .eq('id', userId)
       .maybeSingle();
 
@@ -95,6 +99,7 @@ nutritionRouter.post('/adaptive-targets', async (req, res) => {
     const targets = calculateMacroTargets({
       goal: toNutritionGoal(ranked[0]),
       bodyWeightKg: profile?.weight_kg ?? undefined,
+      ageYears: ageYearsFromDateOfBirth(profile?.date_of_birth),
       recoveryScore: ctx.recovery.score,
       recoveryModeActive: ctx.recovery.recoveryModeActive,
       workoutType,

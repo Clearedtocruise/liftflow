@@ -1,16 +1,22 @@
 import { router } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, RefreshControl, StyleSheet, View } from 'react-native';
+import { Alert, RefreshControl, StyleSheet, View } from 'react-native';
 
 import { HistoryCard } from '@/components/history/HistoryCard';
-import { Card } from '@/components/layout/Card';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { SectionHeader } from '@/components/layout/SectionHeader';
+import { SkeletonBlock } from '@/components/layout/SkeletonBlock';
+import { StatCard } from '@/components/layout/StatCard';
+import { EmptyStateCard } from '@/components/layout/StateCard';
+import { TabScreenHeader } from '@/components/layout/TabScreenHeader';
 import { AppText } from '@/components/ui/AppText';
+import { HeroImages } from '@/constants/imagery';
 import { LiftFlowColors, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 import { screenDataCache } from '@/lib/screenDataCache';
+import { getCombinedActivityHistory } from '@/services/activityHistoryService';
 import { analyticsService } from '@/services/analyticsService';
+import { healthService } from '@/services/healthService';
 import { workoutService } from '@/services/workoutService';
 import type { WorkoutHistoryItem } from '@/types';
 
@@ -31,7 +37,8 @@ export default function HistoryScreen() {
 
     if (!silent) setLoading(true);
 
-    const historyResult = await workoutService.getHistory(user.id);
+    // Load history immediately; pull Apple Fitness in the background so History never freezes.
+    const historyResult = await getCombinedActivityHistory(user.id);
     if (generation !== loadGenerationRef.current) return;
 
     const items = historyResult.success ? historyResult.data.data : [];
@@ -40,13 +47,24 @@ export default function HistoryScreen() {
     setRefreshing(false);
 
     void (async () => {
-      const streakResult = await analyticsService.getWorkoutStreak(user.id);
+      try {
+        await healthService.sync(user.id, 14);
+      } catch {
+        // Non-blocking
+      }
       if (generation !== loadGenerationRef.current) return;
 
-      const streakValue = streakResult.success ? streakResult.data : 0;
-      if (streakResult.success) setStreak(streakValue);
+      const [refreshed, streakResult] = await Promise.all([
+        getCombinedActivityHistory(user.id),
+        analyticsService.getWorkoutStreak(user.id),
+      ]);
+      if (generation !== loadGenerationRef.current) return;
 
-      screenDataCache.writeHistory(user.id, { items, streak: streakValue });
+      const nextItems = refreshed.success ? refreshed.data.data : items;
+      const streakValue = streakResult.success ? streakResult.data : 0;
+      if (refreshed.success) setHistory(nextItems);
+      if (streakResult.success) setStreak(streakValue);
+      screenDataCache.writeHistory(user.id, { items: nextItems, streak: streakValue });
     })();
   }, [user]);
 
@@ -77,7 +95,11 @@ export default function HistoryScreen() {
     };
   }, [user?.id, load]);
 
-  async function handleDelete(id: string) {
+  async function handleDelete(id: string, sessionKind?: WorkoutHistoryItem['sessionKind']) {
+    if (sessionKind === 'cardio') {
+      Alert.alert('Cardio session', 'Cardio entries are kept for recovery tracking.');
+      return;
+    }
     Alert.alert('Delete workout', 'Remove this session from history?', [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -94,52 +116,72 @@ export default function HistoryScreen() {
 
   if (loading && history.length === 0) {
     return (
-      <View style={styles.loading}>
-        <ActivityIndicator size="large" color={LiftFlowColors.accent} />
-      </View>
+      <ScreenContainer
+        header={<TabScreenHeader title="History" subtitle="Track progression over time" bannerUri={HeroImages.tabs.history} />}
+        scroll={false}>
+        <View style={styles.statsRow}>
+          <StatCard label="Day Streak">
+            <SkeletonBlock height={40} width="50%" />
+          </StatCard>
+          <StatCard label="Sessions">
+            <SkeletonBlock height={40} width="50%" />
+          </StatCard>
+        </View>
+        <SkeletonBlock height={20} width="40%" />
+        <SkeletonBlock height={88} />
+        <SkeletonBlock height={88} />
+      </ScreenContainer>
     );
   }
 
   return (
     <ScreenContainer
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load({ silent: true }); }} tintColor={LiftFlowColors.accent} />}>
-      <View style={styles.header}>
-        <AppText variant="headline">History</AppText>
-        <AppText variant="body" color="textSecondary">
-          Track progression over time
-        </AppText>
-      </View>
-
+      header={<TabScreenHeader title="History" subtitle="Track progression over time" bannerUri={HeroImages.tabs.history} />}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={() => {
+            setRefreshing(true);
+            load({ silent: true });
+          }}
+          tintColor={LiftFlowColors.primary}
+        />
+      }>
       <View style={styles.statsRow}>
-        <Card style={styles.statCard}>
+        <StatCard label="Day Streak">
           <AppText variant="metric" color="accent">
             {streak}
           </AppText>
-          <AppText variant="caption" color="textSecondary">
-            Day Streak
-          </AppText>
-        </Card>
-        <Card style={styles.statCard}>
+        </StatCard>
+        <StatCard label="Sessions">
           <AppText variant="metric">{history.length}</AppText>
-          <AppText variant="caption" color="textSecondary">
-            Workouts
-          </AppText>
-        </Card>
+        </StatCard>
       </View>
 
-      <SectionHeader title="Recent Workouts" subtitle="Tap to view · Long press to delete" />
+      <SectionHeader
+        title="Recent Sessions"
+        subtitle="Includes Apple Fitness workouts · Pull to refresh · Long press to delete"
+        variant="secondary"
+      />
 
       {history.length === 0 ? (
-        <AppText variant="body" color="textSecondary">
-          No completed workouts yet.
-        </AppText>
+        <EmptyStateCard
+          title="No sessions yet"
+          message="Complete a lift in ONE MORE, or pull to refresh to import runs and cardio from Apple Fitness."
+          actionLabel="Start a workout"
+          onAction={() => router.push('/(tabs)/workout')}
+        />
       ) : (
         history.map((item) => (
           <HistoryCard
             key={item.id}
             item={item}
-            onPress={() => router.push(`/session/${item.id}`)}
-            onLongPress={() => handleDelete(item.id)}
+            onPress={
+              item.sessionKind === 'cardio'
+                ? undefined
+                : () => router.push(`/session/${item.id}`)
+            }
+            onLongPress={() => handleDelete(item.id, item.sessionKind)}
           />
         ))
       )}
@@ -148,25 +190,8 @@ export default function HistoryScreen() {
 }
 
 const styles = StyleSheet.create({
-  loading: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: LiftFlowColors.background,
-  },
-  header: {
-    gap: Spacing.xs,
-    marginBottom: Spacing.xxl,
-  },
   statsRow: {
     flexDirection: 'row',
     gap: Spacing.md,
-    marginBottom: Spacing.xxl,
-  },
-  statCard: {
-    flex: 1,
-    alignItems: 'center',
-    gap: Spacing.xs,
-    paddingVertical: Spacing.lg,
   },
 });

@@ -1,10 +1,13 @@
 import { api, apiClient } from '@/api/client';
-import { WORKOUT_PLAN_RULES_VERSION } from '@/constants/workout';
 import { fail, fromError, ok } from '@/lib/serviceResult';
 import { dedupePlannedWorkoutsByDate } from '@/lib/weekPlan';
 import { withTimeout } from '@/lib/withTimeout';
 import type { ITrainingService } from '@/services/interfaces';
 import { getAccessToken, supabase } from '@/supabase/client';
+
+/** Avoid hammering full program rebuilds when Home/Workout remount. */
+let lastRegenCheckAt = 0;
+const REGEN_CHECK_COOLDOWN_MS = 60_000;
 import type {
     CreateProgramPayload,
     PlannedWorkout,
@@ -192,8 +195,10 @@ export const trainingService: ITrainingService = {
     }
   },
 
-  async getPlannedWorkouts(userId, from, to, timeZone?: string | null) {
-    const fromSupabase = async () => {
+  async getPlannedWorkouts(userId, from, to, timeZone?: string | null): Promise<
+    import('@/types/common').ServiceResult<PlannedWorkout[]>
+  > {
+    const fromSupabase = async (): Promise<import('@/types/common').ServiceResult<PlannedWorkout[]>> => {
       const { data, error } = await supabase
         .from('planned_workouts')
         .select('*')
@@ -208,7 +213,7 @@ export const trainingService: ITrainingService = {
       );
     };
 
-    const fromApi = async () => {
+    const fromApi = async (): Promise<import('@/types/common').ServiceResult<PlannedWorkout[]>> => {
       const token = await getAccessToken();
       const remote = await withTimeout(
         apiClient.get<PlannedRow[]>(
@@ -223,12 +228,14 @@ export const trainingService: ITrainingService = {
 
     const [apiResult, sbResult] = await Promise.allSettled([fromApi(), fromSupabase()]);
 
-    if (apiResult.status === 'fulfilled' && apiResult.value.success) {
-      return apiResult.value;
-    }
-    if (sbResult.status === 'fulfilled' && sbResult.value.success) {
-      return sbResult.value;
-    }
+    const apiData =
+      apiResult.status === 'fulfilled' && apiResult.value.success ? apiResult.value.data : null;
+    const sbData =
+      sbResult.status === 'fulfilled' && sbResult.value.success ? sbResult.value.data : null;
+
+    // Prefer Supabase on device — reads land immediately after plan adaptations.
+    if (sbData) return ok(sbData);
+    if (apiData) return ok(apiData);
 
     if (apiResult.status === 'fulfilled' && !apiResult.value.success) return apiResult.value;
     if (sbResult.status === 'fulfilled' && !sbResult.value.success) return sbResult.value;
@@ -302,34 +309,45 @@ export const trainingService: ITrainingService = {
     }
   },
 
+  async repairProgramFromHistory(userId: string) {
+    try {
+      const token = await getAccessToken();
+      const result = await api.repairProgramFromHistory(userId, token);
+      return ok({
+        regenerated: result.regenerated,
+        startDateRepaired: result.startDateRepaired === true,
+      });
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
   async regenerateProgramIfNeeded(userId: string) {
     try {
+      const now = Date.now();
+      if (now - lastRegenCheckAt < REGEN_CHECK_COOLDOWN_MS) {
+        return ok({ regenerated: false });
+      }
+
       const { from, to } = await import('@/lib/weekPlan').then((m) => m.getWeekRange());
       const weekRes = await this.getPlannedWorkouts(userId, from, to);
       const weekPlans = weekRes.success ? weekRes.data : [];
 
-      if (weekPlans.length === 0) {
-        const token = await getAccessToken();
-        const result = await api.regenerateProgram(userId, token, true);
-        return ok({ regenerated: result.regenerated });
+      // Only rebuild when the week is empty. Background version/frequency regen was
+      // hanging the API and leaving cancelled workouts — which broke Start Workout
+      // and anything that waits on training/nutrition.
+      if (weekPlans.length > 0) {
+        lastRegenCheckAt = now;
+        return ok({ regenerated: false });
       }
 
-      const lowExerciseCount = weekPlans.some((workout) => {
-        if (workout.metadata?.sessionKind === 'cardio') return false;
-        const count = workout.metadata?.exercises?.length ?? 0;
-        return count > 0 && count < 8;
-      });
-
-      const dashboard = await this.getDashboard(userId);
-      if (dashboard.success && dashboard.data && !lowExerciseCount) {
-        const version = dashboard.data.program.metadata?.planRulesVersion;
-        if (version === WORKOUT_PLAN_RULES_VERSION) {
-          return ok({ regenerated: false });
-        }
-      }
-
+      lastRegenCheckAt = now;
       const token = await getAccessToken();
-      const result = await api.regenerateProgram(userId, token, lowExerciseCount || undefined);
+      const result = await withTimeout(
+        api.regenerateProgram(userId, token, true),
+        45_000,
+        'rebuild workout week',
+      );
       return ok({ regenerated: result.regenerated });
     } catch (e) {
       return fromError(e);
