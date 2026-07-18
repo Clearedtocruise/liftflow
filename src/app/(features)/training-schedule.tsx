@@ -9,6 +9,7 @@ import { ChipGrid, SelectableChip } from '@/components/onboarding/SelectableChip
 import { AppText } from '@/components/ui/AppText';
 import { DAYS_PER_WEEK_OPTIONS, WEEKDAY_OPTIONS } from '@/constants/onboardingCoach';
 import { Spacing } from '@/constants/theme';
+import { usePlanAdjustment } from '@/contexts/PlanAdjustmentContext';
 import { useAuth } from '@/hooks/useAuth';
 import { resolveDaysPerWeek, summarizeTrainingSchedule, trainingScheduleLabel } from '@/lib/trainingSchedule';
 import { trainingService } from '@/services/trainingService';
@@ -24,6 +25,7 @@ function toggleDay(dayId: string, selected: string[], setSelected: (days: string
 
 export default function TrainingScheduleScreen() {
   const { user, refreshProfile } = useAuth();
+  const { bumpRevision } = usePlanAdjustment();
   const [daysPerWeek, setDaysPerWeek] = useState<number>(6);
   const [preferredDays, setPreferredDays] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -82,14 +84,15 @@ export default function TrainingScheduleScreen() {
       return;
     }
 
+    bumpRevision();
     Alert.alert(
       'Plan updated',
       regenResult.data.regenerated
-        ? `Your week is now built for ${summarizeTrainingSchedule(daysPerWeek)}.`
+        ? `Your week is now built for ${summarizeTrainingSchedule(daysPerWeek)}. Open the Workout tab to confirm.`
         : 'Your lifting frequency is saved. Open Workout if the week still looks wrong.',
     );
     router.back();
-  }, [user, daysPerWeek, preferredDays, refreshProfile]);
+  }, [user, daysPerWeek, preferredDays, refreshProfile, bumpRevision]);
 
   return (
     <ScreenContainer>

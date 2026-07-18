@@ -58,9 +58,13 @@ mustInclude('backend/src/lib/programEngine.ts', 'Regen builds before cancel', [
   'insertedPlannedIds',
   'WEEKS_AHEAD = 2',
 ]);
-mustInclude('src/services/trainingService.ts', 'Client regen asks backend (no empty-week skip)', [
-  'Always ask the backend',
-  'api.regenerateProgram(userId, token, false)',
+mustInclude('src/services/trainingService.ts', 'Client force-rebuilds under-built weeks', [
+  'calendarLiftDays < preferredDays',
+  'forceRegenerateProgram(userId)',
+]);
+mustInclude('src/app/(tabs)/settings.tsx', 'Settings rebuild week action', [
+  "label=\"Rebuild this week's plan\"",
+  'forceRegenerateProgram(user.id)',
 ]);
 mustInclude('backend/src/lib/programTypes.ts', 'Spacing preserves lift days', [
   'Never converts a lift day into Rest',

@@ -540,6 +540,42 @@ export default function SettingsScreen() {
           onPress={() => router.push('/(features)/training-schedule')}
         />
         <SettingsRow
+          label="Rebuild this week's plan"
+          value="Force refresh"
+          icon={
+            <AppSymbol name="arrow.triangle.2.circlepath" fallback="↻" size={20} tintColor={colors.textSecondary} />
+          }
+          onPress={() => {
+            if (!user) return;
+            Alert.alert(
+              'Rebuild this week?',
+              `This rebuilds your calendar for ${summarizeTrainingSchedule(resolveDaysPerWeek(user))}. Use this if Settings shows more lift days than Workout.`,
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Rebuild',
+                  onPress: () => {
+                    void (async () => {
+                      const result = await trainingService.forceRegenerateProgram(user.id);
+                      if (!result.success) {
+                        Alert.alert('Rebuild failed', result.error);
+                        return;
+                      }
+                      bumpRevision();
+                      Alert.alert(
+                        'Plan rebuilt',
+                        result.data.regenerated
+                          ? 'Open the Workout tab — your lift days should match your schedule.'
+                          : 'Server reported no changes. Open Workout and pull to refresh.',
+                      );
+                    })();
+                  },
+                },
+              ],
+            );
+          }}
+        />
+        <SettingsRow
           label="Training goals"
           value={
             user?.fitnessGoals?.length

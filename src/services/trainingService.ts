@@ -311,12 +311,32 @@ export const trainingService: ITrainingService = {
     try {
       const result = await run();
       lastRegenCheckAt = Date.now();
+      try {
+        const { getWeekRange } = await import('@/lib/weekPlan');
+        const { from, to } = getWeekRange();
+        const { planDataCache } = await import('@/lib/planDataCache');
+        const { invalidateWeekPlanPrefetch } = await import('@/lib/planDataPrefetch');
+        await planDataCache.clearWeekPlan(userId, from, to);
+        invalidateWeekPlanPrefetch(userId);
+      } catch {
+        // Cache clear is best-effort — rebuild already succeeded server-side.
+      }
       return ok({ regenerated: result.regenerated });
     } catch (e) {
       // One retry — Render cold starts often fail the first forced rebuild.
       try {
         const result = await run();
         lastRegenCheckAt = Date.now();
+        try {
+          const { getWeekRange } = await import('@/lib/weekPlan');
+          const { from, to } = getWeekRange();
+          const { planDataCache } = await import('@/lib/planDataCache');
+          const { invalidateWeekPlanPrefetch } = await import('@/lib/planDataPrefetch');
+          await planDataCache.clearWeekPlan(userId, from, to);
+          invalidateWeekPlanPrefetch(userId);
+        } catch {
+          // ignore
+        }
         return ok({ regenerated: result.regenerated });
       } catch (e2) {
         return fromError(e2);
@@ -339,21 +359,52 @@ export const trainingService: ITrainingService = {
 
   async regenerateProgramIfNeeded(userId: string) {
     try {
+      const { getWeekRange } = await import('@/lib/weekPlan');
+      const { from, to } = getWeekRange();
+      const weekRes = await this.getPlannedWorkouts(userId, from, to);
+      const weekPlans = weekRes.success ? weekRes.data : [];
+      const calendarLiftDays = weekPlans.filter(
+        (workout) =>
+          workout.status === 'planned' ||
+          workout.status === 'active' ||
+          workout.status === 'paused' ||
+          workout.status === 'completed',
+      ).length;
+
+      // Client-side under-build check — do not trust cooldown / soft regen when the
+      // athlete saved 6–7 days but the calendar still only has 3 lift days.
+      const { data: profileRow } = await supabase
+        .from('profiles')
+        .select('metadata')
+        .eq('id', userId)
+        .maybeSingle();
+      const profileMeta = (profileRow?.metadata ?? {}) as {
+        coachProfile?: { daysPerWeek?: number };
+        coachActivation?: { frequency?: number };
+      };
+      const preferredDays =
+        profileMeta.coachProfile?.daysPerWeek ?? profileMeta.coachActivation?.frequency ?? null;
+      if (
+        typeof preferredDays === 'number' &&
+        preferredDays >= 3 &&
+        preferredDays <= 7 &&
+        calendarLiftDays < preferredDays
+      ) {
+        return this.forceRegenerateProgram(userId);
+      }
+
       const now = Date.now();
       if (now - lastRegenCheckAt < REGEN_CHECK_COOLDOWN_MS) {
         return ok({ regenerated: false });
       }
 
-      lastRegenCheckAt = now;
       const token = await getAccessToken();
-      // Always ask the backend. Skipping when the week already had days stranded
-      // athletes on a 3-day week after a failed 5/6/7-day schedule save.
-      // Backend only rebuilds on frequency / plan-rules mismatch (or force).
       const result = await withTimeout(
         api.regenerateProgram(userId, token, false),
         45_000,
         'rebuild workout week',
       );
+      lastRegenCheckAt = Date.now();
       return ok({ regenerated: result.regenerated });
     } catch (e) {
       return fromError(e);

@@ -1,7 +1,7 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, StyleSheet } from 'react-native';
+import { Alert, RefreshControl, StyleSheet } from 'react-native';
 
 import { ManageDayModal } from '@/components/dashboard/ManageDayModal';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
@@ -41,7 +41,7 @@ import type { WorkoutChallengeRecord } from '@/types/workoutChallenge';
 
 export default function WorkoutScreen() {
   const { user } = useAuth();
-  const { revision, setFromAdaptation } = usePlanAdjustment();
+  const { revision, setFromAdaptation, bumpRevision } = usePlanAdjustment();
   const { exercises, setPlannedWorkout, plannedWorkout } = useWorkoutPlanDraft();
   const { tabataModeEnabled } = useTabataModePreference();
   const { activeSession: session, isLoading: loading, endSession, cancelSession, refreshSession } = useWorkoutSession();
@@ -341,7 +341,26 @@ export default function WorkoutScreen() {
   return (
     <ScreenContainer
       header={<TabScreenHeader title="Workout" subtitle="This week's plan" showBrand={false} bannerUri={HeroImages.tabs.workout} />}
-      contentContainerStyle={styles.content}>
+      contentContainerStyle={styles.content}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshingPlan}
+          tintColor="#2DD4BF"
+          onRefresh={() => {
+            if (!user?.id) return;
+            setRefreshingPlan(true);
+            void (async () => {
+              const regen = await trainingService.regenerateProgramIfNeeded(user.id);
+              if (!regen.success) {
+                Alert.alert('Could not refresh plan', regen.error);
+              } else if (regen.data.regenerated) {
+                bumpRevision();
+              }
+              await loadWeekPlan({ silent: true });
+            })();
+          }}
+        />
+      }>
       <WorkoutWeeklyPlanScreen
         days={weekDays}
         loading={loadingPlan}

@@ -73,7 +73,7 @@ import type { RecoveryIntelligenceReport } from '@/types/recoveryIntelligence';
 
 export default function DashboardScreen() {
   const { user, isProfileReady } = useAuth();
-  const { adjustment, revision, setFromAdaptation } = usePlanAdjustment();
+  const { adjustment, revision, setFromAdaptation, bumpRevision } = usePlanAdjustment();
   const { isPremium } = useSubscription();
   const units = useUnits();
   const { insight } = useInsightRotator();
@@ -586,8 +586,21 @@ export default function DashboardScreen() {
         <RefreshControl
           refreshing={refreshing}
           onRefresh={() => {
+            if (!user) {
+              setRefreshing(true);
+              load();
+              return;
+            }
             setRefreshing(true);
-            load();
+            void (async () => {
+              const regen = await trainingService.regenerateProgramIfNeeded(user.id);
+              if (!regen.success) {
+                Alert.alert('Could not refresh plan', regen.error);
+              } else if (regen.data.regenerated) {
+                bumpRevision();
+              }
+              load();
+            })();
           }}
           tintColor={colors.primary}
         />
@@ -702,7 +715,16 @@ export default function DashboardScreen() {
                 if (!user) return;
                 setRefreshing(true);
                 try {
-                  await trainingService.regenerateProgramIfNeeded(user.id);
+                  const result = await trainingService.forceRegenerateProgram(user.id);
+                  if (!result.success) {
+                    Alert.alert('Could not refresh plan', result.error);
+                    return;
+                  }
+                  bumpRevision();
+                  Alert.alert(
+                    'Plan rebuilt',
+                    'Open Workout — your week should now match your lift-day schedule.',
+                  );
                 } finally {
                   load();
                 }
