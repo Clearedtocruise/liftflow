@@ -8,6 +8,8 @@ export type NutritionContext = {
   sessionKind?: 'strength' | 'cardio' | 'mobility';
   isTrainingDay?: boolean;
   dietaryStyle?: 'high_protein' | 'low_carb' | 'keto' | 'mediterranean' | 'vegetarian' | 'balanced';
+  /** Whole years from profile date of birth when available. */
+  ageYears?: number | null;
 };
 
 export type MacroTargets = {
@@ -18,17 +20,20 @@ export type MacroTargets = {
   rationale: string;
 };
 
+import { ageNutritionAdjustments } from './ageAdjustments.js';
 import { selectDailyCoreMeals } from './mealPlanTemplates.js';
 
 export function calculateMacroTargets(ctx: NutritionContext): MacroTargets {
   const bw = ctx.bodyWeightKg ?? 75;
   const bwLbs = bw * 2.20462;
+  const ageMods = ageNutritionAdjustments(ctx.ageYears);
 
   let calories = Math.round(bwLbs * 15);
   let proteinG = Math.round(bw * 2);
   let carbsG = Math.round((calories * 0.4) / 4);
   let fatG = Math.round((calories * 0.25) / 9);
   const notes: string[] = [];
+  const maintenanceCalories = calories;
 
   switch (ctx.goal) {
     case 'fat_loss':
@@ -72,6 +77,17 @@ export function calculateMacroTargets(ctx: NutritionContext): MacroTargets {
     carbsG = Math.round(carbsG * 0.75);
     fatG = Math.round(fatG * 1.05);
     notes.push('Rest day — lower carbs');
+  }
+
+  if (ageMods.proteinMultiplier > 1) {
+    proteinG = Math.round(proteinG * ageMods.proteinMultiplier);
+  }
+  if (ageMods.deficitSoftening > 0 && calories < maintenanceCalories) {
+    const gap = maintenanceCalories - calories;
+    calories = Math.round(calories + gap * ageMods.deficitSoftening);
+  }
+  if (ageMods.note) {
+    notes.push(ageMods.note);
   }
 
   if (ctx.dietaryStyle === 'keto') {

@@ -1,3 +1,4 @@
+import { ageYearsFromDateOfBirth } from './ageAdjustments.js';
 import type { LimitationContext } from './exerciseSubstitution.js';
 import { parseLimitationFromVoice } from './exerciseSubstitution.js';
 import { getProgramDashboard } from './programEngine.js';
@@ -108,6 +109,7 @@ export async function loadCoachContext(userId: string): Promise<CoachContext> {
     workoutType,
     isTrainingDay: !!plannedToday.data,
     dietaryStyle: 'balanced',
+    ageYears: ageYearsFromDateOfBirth(profile.data?.date_of_birth),
   });
 
   // Never let dashboard/regen load block meal-plan or coach replies.
