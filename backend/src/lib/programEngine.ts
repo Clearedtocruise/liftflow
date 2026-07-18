@@ -300,9 +300,9 @@ export async function generateTrainingProgram(input: CreateProgramInput) {
   const programRecentSlugs = new Map<string, Date>();
   const insertedPlannedIds: string[] = [];
   let plannedCount = 0;
-  // Only materialize the current week + a short horizon. Generating the full remaining
-  // block (10–40+ weeks × lift days) freezes the API and the app UI on swap/regen.
-  const WEEKS_AHEAD = 2;
+  // Current calendar week only. Building 3 weeks × 7 lift days was timing out the
+  // app's 60s rebuild (Render free tier). Next weeks fill in on later opens/regen.
+  const WEEKS_AHEAD = 0;
   const firstWeekToGenerate = Math.max(1, Math.min(elapsedWeek, durationWeeks));
   const lastWeekToGenerate = Math.min(durationWeeks, firstWeekToGenerate + WEEKS_AHEAD);
   const cancelTo = addDays(startDate, lastWeekToGenerate * 7 - 1);
