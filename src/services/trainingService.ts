@@ -304,7 +304,7 @@ export const trainingService: ITrainingService = {
       const token = await getAccessToken();
       return withTimeout(
         api.regenerateProgram(userId, token, true),
-        60_000,
+        120_000,
         'rebuild workout plan',
       );
     };
@@ -401,7 +401,7 @@ export const trainingService: ITrainingService = {
       const token = await getAccessToken();
       const result = await withTimeout(
         api.regenerateProgram(userId, token, false),
-        45_000,
+        90_000,
         'rebuild workout week',
       );
       lastRegenCheckAt = Date.now();
