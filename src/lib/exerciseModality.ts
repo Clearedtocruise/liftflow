@@ -67,9 +67,13 @@ export function getExerciseLoggingMode(
     return 'timed';
   }
 
-  if (exercise?.exerciseType) {
-    const fromType = exerciseTypeToLoggingMode(exercise.exerciseType);
-    if (fromType !== 'weighted') return fromType;
+  // Pull-ups / dips etc. are bodyweight even when DB stores exercise_type=strength.
+  if (isBodyweightExercise(exercise, label)) {
+    return 'bodyweight';
+  }
+
+  if (exercise?.exerciseType && exercise.exerciseType !== 'strength') {
+    return exerciseTypeToLoggingMode(exercise.exerciseType);
   }
 
   const classified = classifyExercise({
@@ -77,7 +81,8 @@ export function getExerciseLoggingMode(
     name: label ?? 'Exercise',
     equipment: exercise?.equipment,
     movementCategory: exercise?.category,
-    exerciseType: exercise?.exerciseType,
+    // Omit misleading strength tags so name/equipment heuristics can win.
+    exerciseType: exercise?.exerciseType === 'strength' ? null : exercise?.exerciseType,
   });
   return exerciseTypeToLoggingMode(classified);
 }

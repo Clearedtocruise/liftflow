@@ -25,6 +25,7 @@ import { peakMusicService } from '@/services/peakMusicService';
 import { userService } from '@/services/userService';
 import { watchCompanionService } from '@/services/watchCompanionService';
 import { workoutService } from '@/services/workoutService';
+import { watchPhoneBridge } from '@/state/WatchPhoneBridge';
 import type { CreateSetPayload, RestPeriod, StartSessionPayload, UpdateSetPayload, WorkoutSession, WorkoutSet } from '@/types';
 
 type WorkoutSessionState = {
@@ -59,7 +60,10 @@ type WorkoutSessionActions = {
   logSet: (payload: CreateSetPayload) => Promise<WorkoutSet | null>;
   updateSet: (setId: string, payload: UpdateSetPayload) => Promise<WorkoutSet | null>;
   deleteSet: (setId: string) => Promise<boolean>;
-  addExerciseByName: (name: string) => Promise<string | null>;
+  addExerciseByName: (
+    name: string,
+    options?: { afterSortOrder?: number },
+  ) => Promise<string | null>;
   setListening: (listening: boolean) => void;
   startRestTimer: (setId: string, seconds?: number) => Promise<void>;
   adjustRestTimer: (deltaSeconds: number) => void;
@@ -369,7 +373,9 @@ export function WorkoutSessionProvider({
       void watchCompanionService.notifyWatchSessionEnded(userId, 'Workout complete');
     }
     setIsLoading(true);
-    const result = await workoutService.endSession(sessionId);
+    const caloriesBurned = watchPhoneBridge.getLastWatchActiveCalories() ?? undefined;
+    const result = await workoutService.endSession(sessionId, { caloriesBurned });
+    watchPhoneBridge.setLastWatchActiveCalories(null);
     setIsLoading(false);
     if (result.success) {
       await pendingSetQueue.purgeSession(sessionId);
@@ -515,7 +521,7 @@ export function WorkoutSessionProvider({
   );
 
   const addExerciseByName = useCallback(
-    async (name: string) => {
+    async (name: string, options?: { afterSortOrder?: number }) => {
       if (!userId || !activeSession) return null;
 
       const exerciseIdResult = await workoutService.findOrCreateExerciseByName(name, userId);
@@ -524,7 +530,13 @@ export function WorkoutSessionProvider({
       const existing = activeSession.exercises.find((e) => e.exerciseId === exerciseIdResult.data);
       if (existing) return existing.id;
 
-      const addResult = await workoutService.addExercise(activeSession.id, exerciseIdResult.data);
+      const insertAt =
+        options?.afterSortOrder != null ? options.afterSortOrder + 1 : undefined;
+      const addResult = await workoutService.addExercise(
+        activeSession.id,
+        exerciseIdResult.data,
+        insertAt,
+      );
       if (!addResult.success) return null;
 
       await refreshSession();

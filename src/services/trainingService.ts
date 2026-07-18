@@ -300,12 +300,27 @@ export const trainingService: ITrainingService = {
   },
 
   async forceRegenerateProgram(userId: string) {
-    try {
+    const run = async () => {
       const token = await getAccessToken();
-      const result = await api.regenerateProgram(userId, token, true);
+      return withTimeout(
+        api.regenerateProgram(userId, token, true),
+        60_000,
+        'rebuild workout plan',
+      );
+    };
+    try {
+      const result = await run();
+      lastRegenCheckAt = Date.now();
       return ok({ regenerated: result.regenerated });
     } catch (e) {
-      return fromError(e);
+      // One retry — Render cold starts often fail the first forced rebuild.
+      try {
+        const result = await run();
+        lastRegenCheckAt = Date.now();
+        return ok({ regenerated: result.regenerated });
+      } catch (e2) {
+        return fromError(e2);
+      }
     }
   },
 
@@ -329,22 +344,13 @@ export const trainingService: ITrainingService = {
         return ok({ regenerated: false });
       }
 
-      const { from, to } = await import('@/lib/weekPlan').then((m) => m.getWeekRange());
-      const weekRes = await this.getPlannedWorkouts(userId, from, to);
-      const weekPlans = weekRes.success ? weekRes.data : [];
-
-      // Only rebuild when the week is empty. Background version/frequency regen was
-      // hanging the API and leaving cancelled workouts — which broke Start Workout
-      // and anything that waits on training/nutrition.
-      if (weekPlans.length > 0) {
-        lastRegenCheckAt = now;
-        return ok({ regenerated: false });
-      }
-
       lastRegenCheckAt = now;
       const token = await getAccessToken();
+      // Always ask the backend. Skipping when the week already had days stranded
+      // athletes on a 3-day week after a failed 5/6/7-day schedule save.
+      // Backend only rebuilds on frequency / plan-rules mismatch (or force).
       const result = await withTimeout(
-        api.regenerateProgram(userId, token, true),
+        api.regenerateProgram(userId, token, false),
         45_000,
         'rebuild workout week',
       );

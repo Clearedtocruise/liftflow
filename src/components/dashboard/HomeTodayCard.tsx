@@ -18,6 +18,10 @@ type HomeTodayCardProps = {
   startTime?: string;
   durationMin?: number;
   recoveryScore?: number | null;
+  /** True when today's planned workout is already completed. */
+  completed?: boolean;
+  /** e.g. "9.7k lb" — shown after completion. */
+  volumeLabel?: string | null;
   onStartWorkout: () => void;
   onViewWorkout?: () => void;
   onManageDay?: () => void;
@@ -39,6 +43,8 @@ export function HomeTodayCard({
   startTime,
   durationMin,
   recoveryScore,
+  completed = false,
+  volumeLabel,
   onStartWorkout,
   onViewWorkout,
   onManageDay,
@@ -50,9 +56,20 @@ export function HomeTodayCard({
   showBanner = true,
 }: HomeTodayCardProps) {
   const theme = useAppTheme();
-  const meta = [trainingLabel, startTime, durationMin ? `${durationMin} min` : null].filter(Boolean).join(' · ');
-  const coachBody = whyToday?.trim() || coachMessage;
-  const coachLabel = whyToday?.trim() ? 'Why today' : 'Coach';
+  const meta = [
+    trainingLabel,
+    startTime,
+    durationMin ? `${durationMin} min` : null,
+    completed && volumeLabel ? `Lifted ${volumeLabel}` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  const coachBody = completed
+    ? volumeLabel
+      ? `Nice work — you lifted ${volumeLabel} today.`
+      : 'Workout complete. Recovery starts with food and rest.'
+    : whyToday?.trim() || coachMessage;
+  const coachLabel = completed ? 'Done' : whyToday?.trim() ? 'Why today' : 'Coach';
 
   return (
     <View testID="today-workout-card">
@@ -104,13 +121,23 @@ export function HomeTodayCard({
             </AppText>
           </View>
 
-          <PrimaryButton
-            label={tabataModeEnabled ? 'Start Tabata' : 'Start Workout'}
-            onPress={onStartWorkout}
-            loading={startingWorkout}
-            size="large"
-            testID="start-workout-button"
-          />
+          {completed ? (
+            <PrimaryButton
+              label="View History"
+              onPress={onViewWorkout ?? onStartWorkout}
+              size="large"
+              variant="secondary"
+              testID="view-completed-workout-button"
+            />
+          ) : (
+            <PrimaryButton
+              label={tabataModeEnabled ? 'Start Tabata' : 'Start Workout'}
+              onPress={onStartWorkout}
+              loading={startingWorkout}
+              size="large"
+              testID="start-workout-button"
+            />
+          )}
           {onManageDay ? (
             <PrimaryButton
               label="Manage Day"
@@ -121,7 +148,7 @@ export function HomeTodayCard({
               testID="manage-day-button"
             />
           ) : null}
-          {onLogActivity ? (
+          {!completed && onLogActivity ? (
             <PrimaryButton label="+ Activity" variant="secondary" onPress={onLogActivity} testID="log-activity-button" />
           ) : null}
         </View>

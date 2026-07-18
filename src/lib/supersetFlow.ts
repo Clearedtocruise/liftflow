@@ -33,6 +33,14 @@ export type CircuitStation = {
   memberIndices: number[];
 };
 
+function stripSupersetGroupIds(exercises: EditableWorkoutExercise[]): EditableWorkoutExercise[] {
+  return exercises.map((exercise) => {
+    if (exercise.supersetGroupId == null) return exercise;
+    const { supersetGroupId: _supersetGroupId, ...rest } = exercise;
+    return rest;
+  });
+}
+
 /**
  * Pair consecutive exercises (0–1, 2–3, …) when no explicit groups exist.
  * Only invents pairs for superset/circuit modes — never forces supersets onto traditional plans.
@@ -41,15 +49,12 @@ export function enrichWithSupersetGroups(
   exercises: EditableWorkoutExercise[],
   preferredMode?: WorkoutExecutionMode,
 ): EditableWorkoutExercise[] {
+  const isRotationMode = preferredMode === 'superset' || preferredMode === 'circuit';
+  if (!isRotationMode) {
+    return stripSupersetGroupIds(exercises);
+  }
   if (exercises.some((e) => e.supersetGroupId)) return exercises;
   if (exercises.length < 2) return exercises;
-  if (
-    preferredMode != null &&
-    preferredMode !== 'superset' &&
-    preferredMode !== 'circuit'
-  ) {
-    return exercises;
-  }
 
   const result = exercises.map((e) => ({ ...e }));
   for (let i = 0; i + 1 < result.length; i += 2) {
@@ -383,15 +388,25 @@ export function nextExerciseIndexAfterGroup(
   return next < totalExercises ? next : null;
 }
 
-/** Use superset rotation when the plan pairs exercises, unless user chose tabata/circuit/hiit. */
+/**
+ * Resolve execution mode for a session.
+ * Never upgrade traditional/hypertrophy/strength to superset just because stale group IDs exist.
+ */
 export function inferExecutionModeFromPlan(
   planExercises: EditableWorkoutExercise[],
   preferred: WorkoutExecutionMode,
 ): WorkoutExecutionMode {
-  if (preferred === 'tabata' || preferred === 'circuit' || preferred === 'hiit') {
+  if (
+    preferred === 'traditional' ||
+    preferred === 'hypertrophy' ||
+    preferred === 'strength' ||
+    preferred === 'tabata' ||
+    preferred === 'circuit' ||
+    preferred === 'hiit'
+  ) {
     return preferred;
   }
-  if (buildSupersetGroups(planExercises).length > 0) {
+  if (preferred === 'superset' || buildSupersetGroups(planExercises).length > 0) {
     return 'superset';
   }
   return preferred;

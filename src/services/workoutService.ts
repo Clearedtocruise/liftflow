@@ -1,4 +1,4 @@
-import { mapHistoryItem, mapSession, mapSet } from '@/lib/db-mappers';
+import { mapExercise, mapHistoryItem, mapSession, mapSet } from '@/lib/db-mappers';
 import { fail, fromError, ok } from '@/lib/serviceResult';
 import type { IWorkoutService } from '@/services/interfaces';
 import { supabase } from '@/supabase/client';
@@ -390,7 +390,7 @@ export const workoutService: IWorkoutService = {
     }
   },
 
-  async endSession(sessionId) {
+  async endSession(sessionId, options?: { caloriesBurned?: number }) {
     try {
       const session = await loadSession(sessionId);
       if (!session) return fail('Session not found');
@@ -400,13 +400,18 @@ export const workoutService: IWorkoutService = {
         (endedAt.getTime() - new Date(session.startedAt).getTime()) / 1000,
       );
 
+      const update: Record<string, unknown> = {
+        status: 'completed',
+        ended_at: endedAt.toISOString(),
+        duration_seconds: durationSeconds,
+      };
+      if (options?.caloriesBurned != null && options.caloriesBurned > 0) {
+        update.calories_burned = Math.round(options.caloriesBurned);
+      }
+
       const { error } = await supabase
         .from('workout_sessions')
-        .update({
-          status: 'completed',
-          ended_at: endedAt.toISOString(),
-          duration_seconds: durationSeconds,
-        })
+        .update(update)
         .eq('id', sessionId);
 
       if (error) return fail(error.message);
@@ -686,6 +691,25 @@ export const workoutService: IWorkoutService = {
 
   async addExercise(sessionId, exerciseId, sortOrder?: number) {
     try {
+      if (sortOrder != null) {
+        const { data: toShift, error: shiftError } = await supabase
+          .from('workout_exercises')
+          .select('id, sort_order')
+          .eq('session_id', sessionId)
+          .gte('sort_order', sortOrder)
+          .order('sort_order', { ascending: false });
+
+        if (shiftError) return fail(shiftError.message);
+
+        for (const row of toShift ?? []) {
+          const { error: updateError } = await supabase
+            .from('workout_exercises')
+            .update({ sort_order: row.sort_order + 1 })
+            .eq('id', row.id);
+          if (updateError) return fail(updateError.message);
+        }
+      }
+
       const { data: existing } = await supabase
         .from('workout_exercises')
         .select('sort_order')
@@ -722,6 +746,63 @@ export const workoutService: IWorkoutService = {
       const exerciseId = await findOrCreateExerciseByNameInternal(name, userId);
       if (!exerciseId) return fail('Could not create exercise');
       return ok(exerciseId);
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
+  async createCustomExercise(
+    userId: string,
+    input: {
+      name: string;
+      equipment?: string;
+      muscleGroup?: string;
+      exerciseType?: Exercise['exerciseType'];
+      notes?: string;
+    },
+  ) {
+    try {
+      const normalized = input.name.trim();
+      if (!normalized) return fail('Name is required');
+      const slug = `custom-${normalized.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${Date.now().toString(36)}`;
+      const { data, error } = await supabase
+        .from('exercises')
+        .insert({
+          name: normalized,
+          slug,
+          category: 'other',
+          equipment: input.equipment?.trim() || 'other',
+          muscle_groups: [input.muscleGroup?.trim() || 'general'],
+          exercise_type: input.exerciseType ?? 'strength',
+          instructions: input.notes?.trim() || null,
+          is_system: false,
+          created_by: userId,
+        })
+        .select('id, name, slug, category, equipment, muscle_groups, exercise_type, is_system, created_by, created_at')
+        .single();
+
+      if (error || !data) return fail(error?.message ?? 'Could not create exercise');
+
+      if (input.notes?.trim()) {
+        await supabase.from('user_custom_exercises').upsert(
+          {
+            user_id: userId,
+            exercise_id: data.id,
+            notes: input.notes.trim(),
+          },
+          { onConflict: 'user_id,exercise_id' },
+        );
+      }
+
+      return ok(
+        mapExercise({
+          ...data,
+          secondary_muscles: null,
+          tutorial_url: null,
+          instructions: input.notes?.trim() ?? null,
+          updated_at: data.created_at,
+        }),
+      );
     } catch (e) {
       return fromError(e);
     }
@@ -927,7 +1008,9 @@ export const workoutService: IWorkoutService = {
     try {
       let request = supabase
         .from('exercises')
-        .select('id, name, slug, category, equipment, muscle_groups, is_system, created_by, created_at')
+        .select(
+          'id, name, slug, category, equipment, muscle_groups, exercise_type, is_system, created_by, created_at',
+        )
         .or(`is_system.eq.true,created_by.eq.${userId}`)
         .order('name')
         .limit(limit);
@@ -939,18 +1022,29 @@ export const workoutService: IWorkoutService = {
       const { data, error } = await request;
       if (error) return fail(error.message);
 
-      const exercises: Exercise[] = (data ?? []).map((row) => ({
-        id: row.id,
-        name: row.name,
-        slug: row.slug ?? undefined,
-        category: row.category as Exercise['category'],
-        exerciseType: 'strength',
-        equipment: row.equipment,
-        muscleGroups: row.muscle_groups ?? [],
-        isSystem: row.is_system ?? false,
-        createdBy: row.created_by ?? undefined,
-        createdAt: row.created_at,
-      }));
+      const { classifyExercise } = await import('@/lib/exerciseClassification');
+      const exercises: Exercise[] = (data ?? []).map((row) => {
+        const storedType = (row.exercise_type as Exercise['exerciseType'] | null) ?? null;
+        const exerciseType = classifyExercise({
+          slug: row.slug,
+          name: row.name,
+          equipment: row.equipment,
+          movementCategory: row.category,
+          exerciseType: storedType,
+        });
+        return {
+          id: row.id,
+          name: row.name,
+          slug: row.slug ?? undefined,
+          category: row.category as Exercise['category'],
+          exerciseType,
+          equipment: row.equipment,
+          muscleGroups: row.muscle_groups ?? [],
+          isSystem: row.is_system ?? false,
+          createdBy: row.created_by ?? undefined,
+          createdAt: row.created_at,
+        };
+      });
 
       return ok(exercises);
     } catch (e) {

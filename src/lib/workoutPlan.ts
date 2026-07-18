@@ -47,7 +47,8 @@ function matchTemplateForSessionExercise(
   const byName = templateExercises.find((item) => normalizeExerciseName(item.name) === sessionName);
   if (byName) return byName;
 
-  return byIndex ?? null;
+  // Do not fall back to by-index — that can copy another exercise's supersetGroupId.
+  return null;
 }
 
 /** Resolve planned workout metadata for an in-progress session. */
@@ -93,8 +94,10 @@ export function buildPlanExercisesFromSession(
         normalizeExerciseName(sessionSorted[index]?.exercise?.name ?? ''),
     );
 
+  const mode = normalizeExecutionMode(plannedWorkout?.metadata?.executionMode);
+
   if (orderAligned) {
-    return templatePlan;
+    return enrichWithSupersetGroups(templatePlan, mode);
   }
 
   const merged = sessionSorted.map((sessionEx, index) => {
@@ -102,10 +105,7 @@ export function buildPlanExercisesFromSession(
     return matched ?? fallbackPlanExerciseFromSession(sessionEx, index, tabataMode);
   });
 
-  return enrichWithSupersetGroups(
-    merged,
-    normalizeExecutionMode(plannedWorkout?.metadata?.executionMode),
-  );
+  return enrichWithSupersetGroups(merged, mode);
 }
 
 function setsFromPrescription(

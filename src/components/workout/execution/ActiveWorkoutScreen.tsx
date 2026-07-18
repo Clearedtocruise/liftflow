@@ -1050,6 +1050,7 @@ export function ActiveWorkoutScreen({
 
   useEffect(() => {
     if (!showComplete || restActive || isPaused) return;
+    if (!usesSupersetRotation && !allSetsDone) return;
     scheduleAutoExerciseAdvance();
     return () => {
       if (autoAdvanceTimeoutRef.current) {
@@ -1057,7 +1058,15 @@ export function ActiveWorkoutScreen({
         autoAdvanceTimeoutRef.current = null;
       }
     };
-  }, [showComplete, restActive, isPaused, currentIndex, scheduleAutoExerciseAdvance]);
+  }, [
+    showComplete,
+    restActive,
+    isPaused,
+    currentIndex,
+    scheduleAutoExerciseAdvance,
+    usesSupersetRotation,
+    allSetsDone,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -1261,17 +1270,13 @@ export function ActiveWorkoutScreen({
       return;
     }
 
-    const workoutExerciseId = await addExerciseByName(exercise.name);
+    const currentSortOrder = currentExercise?.sortOrder;
+    const workoutExerciseId = await addExerciseByName(exercise.name, {
+      afterSortOrder: currentSortOrder,
+    });
     if (!workoutExerciseId) return;
+    // Stay on the current exercise — newly inserted item sits after it.
     await refreshSession();
-    const refreshed = await workoutService.getSession(session.id);
-    if (refreshed.success) {
-      const nextIndex = refreshed.data.exercises.findIndex((item) => item.id === workoutExerciseId);
-      if (nextIndex >= 0) {
-        setCurrentIndex(nextIndex);
-        setShowComplete(false);
-      }
-    }
   }
 
   const midSupersetRound =
@@ -1452,7 +1457,10 @@ export function ActiveWorkoutScreen({
           undefined,
           flowAction.circuitTimer.seconds,
         );
-      } else if (flowAction.immediateAdvanceIndex != null) {
+      } else if (
+        usesSupersetRotation &&
+        flowAction.immediateAdvanceIndex != null
+      ) {
         if (currentExercise.id) {
           draftByExerciseIdRef.current[currentExercise.id] = {
             weightKg: weightToLog,
@@ -1463,7 +1471,7 @@ export function ActiveWorkoutScreen({
         setCurrentIndex(flowAction.immediateAdvanceIndex);
         setShowComplete(false);
         setActiveChallenge(null);
-      } else if (flowAction.afterRestAdvanceIndex != null) {
+      } else if (usesSupersetRotation && flowAction.afterRestAdvanceIndex != null) {
         if (skipRest) {
           applyPendingExerciseIndexAdvance();
         }
@@ -1548,7 +1556,12 @@ export function ActiveWorkoutScreen({
       clearTimeout(autoAdvanceTimeoutRef.current);
       autoAdvanceTimeoutRef.current = null;
     }
-    if (usesSupersetRotation && supersetGroup && supersetGroup.memberIndices.length >= 2) {
+    if (
+      usesSupersetRotation &&
+      supersetGroup &&
+      supersetGroup.memberIndices.length >= 2 &&
+      isSupersetGroupComplete(supersetGroup, sortedExercises, planExercises)
+    ) {
       const next = nextExerciseIndexAfterGroup(supersetGroup, sortedExercises.length);
       if (next != null) {
         if (executionMode === 'tabata') {
@@ -1566,8 +1579,17 @@ export function ActiveWorkoutScreen({
         return;
       }
     }
-    if (isLastExercise) {
+    if (!usesSupersetRotation && !allSetsDone) {
+      return;
+    }
+    const sessionComplete = workoutProgress.completedSets >= workoutProgress.totalSets;
+    if (isLastExercise && sessionComplete) {
       onFinish();
+      return;
+    }
+    if (isLastExercise && !sessionComplete) {
+      // Stay in session — user can navigate to unfinished exercises; do not end workout.
+      setShowComplete(false);
       return;
     }
     if (executionMode === 'tabata') {

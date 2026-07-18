@@ -41,7 +41,7 @@ import {
     validateWorkoutAssignmentConsistency,
 } from '@/lib/activeTrainingDay';
 import { formatHomeCoachMessage, formatWhyTodayWithAgeEmphasis } from '@/lib/homeCoachMessage';
-import { deviceTimeZone, formatScheduledDbTime } from '@/lib/localDate';
+import { deviceTimeZone, formatScheduledDbTime, isSameCalendarDate } from '@/lib/localDate';
 import {
     aggregateDailyMeals,
     findNextMeal,
@@ -58,14 +58,17 @@ import { buildWeekPlan, dedupePlannedWorkoutsByDate, getWeekRange } from '@/lib/
 import { withTimeout } from '@/lib/withTimeout';
 import { estimateWorkoutDurationMinutes, exercisesFromPlannedWorkout } from '@/lib/workoutPlan';
 import { analyticsService } from '@/services/analyticsService';
+import { cardioService } from '@/services/cardioService';
+import { healthService } from '@/services/healthService';
 import { nutritionService } from '@/services/nutritionService';
 import { recoveryService } from '@/services/recoveryService';
 import { trainingService } from '@/services/trainingService';
 import { userService } from '@/services/userService';
 import { weeklyCloseoutService } from '@/services/weeklyCloseoutService';
+import { workoutService } from '@/services/workoutService';
 import { useWorkoutPlanDraft } from '@/state/workout/WorkoutPlanDraftContext';
 import { useWorkoutSession } from '@/state/workout/WorkoutSessionContext';
-import type { DashboardSummary, DailyRecoveryCheckIn, Meal, NutritionGoals, PlannedWorkout, ProgramDashboard } from '@/types';
+import type { DailyRecoveryCheckIn, DashboardSummary, Meal, NutritionGoals, PlannedWorkout, ProgramDashboard } from '@/types';
 import type { RecoveryIntelligenceReport } from '@/types/recoveryIntelligence';
 
 export default function DashboardScreen() {
@@ -96,6 +99,8 @@ export default function DashboardScreen() {
   const [acceptingWeeklyPlan, setAcceptingWeeklyPlan] = useState(false);
   const [weeklyCloseoutId, setWeeklyCloseoutId] = useState<string | null>(null);
   const [manageDayOpen, setManageDayOpen] = useState(false);
+  const [caloriesBurnedToday, setCaloriesBurnedToday] = useState(0);
+  const [todayLiftedVolumeKg, setTodayLiftedVolumeKg] = useState<number | null>(null);
   const homeRenderedRef = useRef(false);
   const appReadyLoggedRef = useRef(false);
   const loadGenerationRef = useRef(0);
@@ -260,6 +265,44 @@ export default function DashboardScreen() {
       })();
 
       void nutritionService.pruneDuplicateMeals(user.id).catch(() => undefined);
+
+      void (async () => {
+        try {
+          // Import Apple Fitness runs into ONE MORE before summing today's burned calories.
+          await healthService.sync(user.id, 7).catch(() => undefined);
+          if (generation !== loadGenerationRef.current) return;
+
+          const [historyResult, cardioResult] = await Promise.all([
+            workoutService.getHistory(user.id, 1),
+            cardioService.getRecent(user.id, 20),
+          ]);
+          if (generation !== loadGenerationRef.current) return;
+
+          let burned = 0;
+          let volumeKg: number | null = null;
+
+          if (historyResult.success) {
+            for (const item of historyResult.data.data) {
+              if (!isSameCalendarDate(item.date, today)) continue;
+              if (item.caloriesBurned) burned += item.caloriesBurned;
+              if (item.totalVolume != null && item.totalVolume > 0) {
+                volumeKg = (volumeKg ?? 0) + item.totalVolume;
+              }
+            }
+          }
+          if (cardioResult.success) {
+            for (const session of cardioResult.data) {
+              if (!isSameCalendarDate(session.startedAt, today)) continue;
+              if (session.caloriesBurned) burned += session.caloriesBurned;
+            }
+          }
+
+          setCaloriesBurnedToday(burned);
+          setTodayLiftedVolumeKg(volumeKg);
+        } catch (error) {
+          console.warn('[dashboard] activity metrics load failed', error);
+        }
+      })();
     });
 
     if (!appReadyLoggedRef.current && generation === loadGenerationRef.current) {
@@ -558,8 +601,6 @@ export default function DashboardScreen() {
         subtitle={coachHeadline}
       />
 
-      <HomePlanAdjustedBanner />
-
       <RecoveryModeNotice recoveryScore={recoveryScore} recoveryModeActive={recoveryModeActive} />
 
       {!checkInCompletedToday && !summaryLoading ? (
@@ -584,9 +625,11 @@ export default function DashboardScreen() {
                 : null
             }
             caloriesRemaining={caloriesRemaining}
+            calorieTarget={calorieTarget}
             proteinRemainingG={proteinRemaining}
             mealsCompleted={mealAggregation.mealsCompleted}
             mealsTotal={mealAggregation.mealsTotal}
+            caloriesBurnedToday={caloriesBurnedToday}
             workout={
               todaysWorkout
                 ? {
@@ -597,6 +640,11 @@ export default function DashboardScreen() {
                     recoveryScore: hasRecoveryScore ? recoveryScore : null,
                     coachMessage,
                     whyToday,
+                    status: todaysWorkout.status,
+                    volumeLabel:
+                      todaysWorkout.status === 'completed' && todayLiftedVolumeKg != null
+                        ? units.formatVolume(todayLiftedVolumeKg)
+                        : null,
                   }
                 : null
             }
@@ -604,6 +652,10 @@ export default function DashboardScreen() {
             onQuickLogMeal={() => router.push('/(tabs)/nutrition?log=1')}
             onGenerateMealPlan={() => router.push('/(tabs)/nutrition?generate=1')}
             onViewWorkout={() => {
+              if (todaysWorkout?.status === 'completed') {
+                router.push('/(tabs)/history');
+                return;
+              }
               if (!todaysWorkout) return;
               router.push({ pathname: '/(tabs)/workout/day', params: { id: todaysWorkout.id } });
             }}
@@ -705,6 +757,8 @@ export default function DashboardScreen() {
           <InsightCard insight={insight} />
         </Animated.View>
       ) : null}
+
+      <HomePlanAdjustedBanner />
 
       {manageDayMenu ? (
         <ManageDayModal

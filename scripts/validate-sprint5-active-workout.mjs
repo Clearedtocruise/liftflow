@@ -37,17 +37,22 @@ const elapsed = read('src/hooks/useWorkoutElapsedSeconds.ts');
 const coach = read('src/components/workout/ExerciseCoachCard.tsx');
 const workoutService = read('src/services/workoutService.ts');
 
-record('Exercise number shown', active.includes('Exercise {currentIndex + 1} of'));
-record('Workout Time label', active.includes('Workout Time') && active.includes('formatWorkoutClockTime'));
+record(
+  'Exercise number shown',
+  active.includes('currentIndex + 1') && (active.includes(' of ') || active.includes('of ${sortedExercises.length}')),
+);
+record('Workout elapsed clock', active.includes('formatWorkoutClockTime'));
 record('Workout progress bar', active.includes('WorkoutProgressBar'));
-record('Current Set metric', metrics.includes('Current Set'));
-record('Remaining Sets metric', metrics.includes('Remaining Sets'));
-record('Previous Performance block', metrics.includes('Previous Performance'));
-record('Target Performance block', metrics.includes('Target Performance'));
+record(
+  'Set progress fields',
+  metrics.includes('currentSet') && metrics.includes('remainingSets') && metrics.includes('targetSets'),
+);
+record('Previous Performance block', metrics.includes('Previous Performance') || metrics.includes('Last ·'));
+record('Target Performance block', metrics.includes('Target Performance') || metrics.includes('targetLine'));
 record('One exercise focus (currentIndex)', active.includes('currentIndex'));
 record(
-  'No exercise search in main active flow',
-  !active.includes('ExercisePickerModal') || active.includes('title="Add Exercise"'),
+  'Add Exercise uses picker modal (not free typing)',
+  active.includes('ExercisePickerModal') && active.includes('Add Exercise'),
 );
 record('Timed history support', workoutService.includes('duration_seconds') && workoutService.includes("mode === 'timed'"));
 record('Coach enabled for timed exercises', !active.includes("loggingMode !== 'timed'"));

@@ -1,13 +1,32 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
-/** Wall-clock elapsed seconds since workout started (pauses when session status is paused). */
+import { computeWorkoutElapsedSeconds } from '@/lib/workoutElapsed';
+
+export { computeWorkoutElapsedSeconds } from '@/lib/workoutElapsed';
+
+/**
+ * Wall-clock elapsed seconds since workout started.
+ * Paused time is excluded so resume does not jump by the pause duration.
+ */
 export function useWorkoutElapsedSeconds(startedAt: string | undefined, status: string | undefined): number {
   const [elapsed, setElapsed] = useState(0);
+  const pausedAccumulatedMsRef = useRef(0);
+  const pausedAtMsRef = useRef<number | null>(null);
+  const lastStartedAtRef = useRef<string | undefined>(undefined);
 
   useEffect(() => {
     if (!startedAt) {
       setElapsed(0);
+      pausedAccumulatedMsRef.current = 0;
+      pausedAtMsRef.current = null;
+      lastStartedAtRef.current = undefined;
       return;
+    }
+
+    if (lastStartedAtRef.current !== startedAt) {
+      lastStartedAtRef.current = startedAt;
+      pausedAccumulatedMsRef.current = 0;
+      pausedAtMsRef.current = null;
     }
 
     const startMs = new Date(startedAt).getTime();
@@ -17,11 +36,35 @@ export function useWorkoutElapsedSeconds(startedAt: string | undefined, status: 
     }
 
     if (status === 'paused') {
+      if (pausedAtMsRef.current == null) {
+        pausedAtMsRef.current = Date.now();
+      }
+      setElapsed(
+        computeWorkoutElapsedSeconds({
+          startedAtMs: startMs,
+          nowMs: Date.now(),
+          status,
+          pausedAtMs: pausedAtMsRef.current,
+          pausedAccumulatedMs: pausedAccumulatedMsRef.current,
+        }),
+      );
       return;
     }
 
+    if (pausedAtMsRef.current != null) {
+      pausedAccumulatedMsRef.current += Date.now() - pausedAtMsRef.current;
+      pausedAtMsRef.current = null;
+    }
+
     const tick = () => {
-      setElapsed(Math.max(0, Math.floor((Date.now() - startMs) / 1000)));
+      setElapsed(
+        computeWorkoutElapsedSeconds({
+          startedAtMs: startMs,
+          nowMs: Date.now(),
+          status,
+          pausedAccumulatedMs: pausedAccumulatedMsRef.current,
+        }),
+      );
     };
 
     tick();

@@ -74,7 +74,10 @@ export default function TrainingScheduleScreen() {
     setSaving(false);
 
     if (!regenResult.success) {
-      Alert.alert('Saved schedule', 'Your preference was saved, but the plan could not rebuild right now. Open the Workout tab to retry.');
+      Alert.alert(
+        'Saved schedule',
+        `Your preference was saved (${summarizeTrainingSchedule(daysPerWeek)}), but rebuild failed: ${regenResult.error}. Open the Workout tab — it will retry automatically.`,
+      );
       router.back();
       return;
     }
@@ -83,7 +86,7 @@ export default function TrainingScheduleScreen() {
       'Plan updated',
       regenResult.data.regenerated
         ? `Your week is now built for ${summarizeTrainingSchedule(daysPerWeek)}.`
-        : 'Your lifting frequency is saved.',
+        : 'Your lifting frequency is saved. Open Workout if the week still looks wrong.',
     );
     router.back();
   }, [user, daysPerWeek, preferredDays, refreshProfile]);

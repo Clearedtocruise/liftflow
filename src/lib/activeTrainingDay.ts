@@ -53,7 +53,8 @@ export function resolveActiveTrainingDay(
   const reference = options?.reference ?? new Date();
   const date = options?.date ?? localDateString(reference, options?.timeZone);
   const deduped = dedupePlannedWorkoutsByDate(workouts, reference, options?.timeZone);
-  const workout = deduped.find((w) => w.scheduledDate === date && w.status === 'planned') ?? null;
+  const workout =
+    deduped.find((w) => w.scheduledDate === date && w.status !== 'cancelled') ?? null;
 
   return {
     date,

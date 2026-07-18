@@ -31,10 +31,17 @@ export type WeeklyPlanEntry = {
 
 const PLANNED_STATUS_PRIORITY: Record<string, number> = {
   planned: 3,
+  active: 2,
+  paused: 2,
   in_progress: 2,
   completed: 1,
   cancelled: 0,
 };
+
+/** Workouts that can still be moved / swapped on the calendar. */
+export function isMovablePlannedWorkout(workout: Pick<PlannedWorkout, 'status'>): boolean {
+  return workout.status === 'planned' || workout.status === 'active' || workout.status === 'paused';
+}
 
 /** When two planned rows share a date, pick the more authoritative one. */
 function isPreferredPlannedWorkout(candidate: PlannedWorkout, incumbent: PlannedWorkout): boolean {
@@ -194,7 +201,7 @@ export function buildWeeklyPlanEntries(
 
   return dates.map((date, index) => {
     const workout = byDate.get(date);
-    const isRestDay = !workout || workout.status !== 'planned';
+    const isRestDay = !workout || workout.status === 'cancelled';
     return {
       day: WEEKDAY_LABELS[index],
       date,
@@ -216,12 +223,12 @@ export function buildWeekPlan(
 
   return dates.map((date, index) => {
     const workout = byDate.get(date) ?? null;
-    const isPlanned = workout?.status === 'planned';
+    const isRestDay = !workout || workout.status === 'cancelled';
     return {
       date,
       dayLabel: WEEKDAY_LABELS[index],
-      workout: isPlanned ? workout : null,
-      isRestDay: !isPlanned,
+      workout: isRestDay ? null : workout,
+      isRestDay,
     };
   });
 }

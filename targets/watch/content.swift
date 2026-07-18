@@ -8,7 +8,7 @@ struct ContentView: View {
   @StateObject private var heartRate = HeartRateReader()
 
   private var isHomeScreen: Bool {
-    !connectivity.isCardioMode && connectivity.workoutSessionId == nil && !connectivity.isRestPhase
+    !connectivity.isCardioMode && !connectivity.isSessionActive
   }
 
   var body: some View {
@@ -69,9 +69,9 @@ struct ContentView: View {
   private var statusRow: some View {
     HStack {
       Circle()
-        .fill(connectivity.isReachable ? Color.green : Color.orange)
+        .fill(connectivity.isReachable ? Color.green : Color.secondary.opacity(0.5))
         .frame(width: 8, height: 8)
-      Text(connectivity.isReachable ? "Connected" : "Waiting for iPhone")
+      Text(connectivity.isReachable ? "Connected" : "iPhone nearby")
         .font(.caption2)
         .foregroundStyle(.secondary)
       Spacer()
@@ -127,25 +127,10 @@ struct ContentView: View {
           .font(.caption)
           .foregroundStyle(.pink)
       }
-      if connectivity.sessionCalories > 0 {
-        VStack(alignment: .leading, spacing: 0) {
-          Text("\(connectivity.sessionCalories) cal")
-            .font(.caption)
-            .foregroundStyle(.orange)
-          Text("session")
-            .font(.caption2)
-            .foregroundStyle(.secondary)
-        }
-      }
-      if connectivity.activeCalories > 0 {
-        VStack(alignment: .leading, spacing: 0) {
-          Text("\(connectivity.activeCalories) cal")
-            .font(.caption)
-            .foregroundStyle(accent)
-          Text("active")
-            .font(.caption2)
-            .foregroundStyle(.secondary)
-        }
+      if max(connectivity.sessionCalories, connectivity.activeCalories) > 0 {
+        Text("\(max(connectivity.sessionCalories, connectivity.activeCalories)) Active cal")
+          .font(.caption)
+          .foregroundStyle(.orange)
       }
       if let weight = connectivity.weightLbs, weight > 0 {
         Text("\(weight) lb")
@@ -177,8 +162,8 @@ struct ContentView: View {
           .font(.caption2)
           .foregroundStyle(.secondary)
       }
-      if connectivity.sessionCalories > 0 {
-        Text("\(connectivity.sessionCalories) cal")
+      if max(connectivity.sessionCalories, connectivity.activeCalories) > 0 {
+        Text("\(max(connectivity.sessionCalories, connectivity.activeCalories)) Active cal")
           .font(.caption)
           .foregroundStyle(.orange)
       }
@@ -305,19 +290,20 @@ private struct WatchHomeScreen: View {
           Text("ONE MORE")
             .font(.system(size: 22, weight: .bold, design: .rounded))
             .foregroundStyle(accent)
-          Text("Workout companion")
-            .font(.caption2)
+          Text(connectivity.isReachable ? "Ready to train" : "Companion ready")
+            .font(.caption)
             .foregroundStyle(.secondary)
         }
         .padding(.top, 4)
 
         HStack(spacing: 6) {
           Circle()
-            .fill(connectivity.isReachable ? Color.green : Color.orange)
+            .fill(connectivity.isReachable ? Color.green : accentMuted)
             .frame(width: 8, height: 8)
-          Text(connectivity.isReachable ? "iPhone connected" : "Open ONE MORE on iPhone")
+          Text(connectivity.isReachable ? "iPhone connected" : "Works offline — sync when iPhone is open")
             .font(.caption2)
-            .foregroundStyle(connectivity.isReachable ? Color.green : .orange)
+            .foregroundStyle(connectivity.isReachable ? Color.green : .secondary)
+            .multilineTextAlignment(.center)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
@@ -330,6 +316,12 @@ private struct WatchHomeScreen: View {
             .foregroundStyle(.pink)
         }
 
+        if let score = connectivity.recoveryScore {
+          Text("Recovery \(score)")
+            .font(.caption)
+            .foregroundStyle(accent)
+        }
+
         if !connectivity.workoutRecommendation.isEmpty {
           Text(connectivity.workoutRecommendation)
             .font(.caption)
@@ -338,7 +330,7 @@ private struct WatchHomeScreen: View {
             .lineLimit(4)
             .padding(.horizontal, 4)
         } else {
-          Text("Start a lift, run, or cardio session on your phone. Your sets, rest timer, and heart rate show up here.")
+          Text("Start a lift or cardio on iPhone — sets, rest, and heart rate appear here automatically.")
             .font(.caption2)
             .foregroundStyle(.secondary)
             .multilineTextAlignment(.center)
@@ -349,7 +341,7 @@ private struct WatchHomeScreen: View {
         VStack(spacing: 8) {
           featureRow(icon: "figure.strengthtraining.traditional", label: "Log sets & rest")
           featureRow(icon: "figure.run", label: "Cardio & HIIT")
-          featureRow(icon: "heart.fill", label: "Heart rate")
+          featureRow(icon: "heart.fill", label: "Live heart rate")
         }
         .padding(.vertical, 4)
 

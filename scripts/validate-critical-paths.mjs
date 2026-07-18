@@ -224,8 +224,8 @@ const REQUIRED = [
   },
   {
     file: 'src/components/dashboard/HomeNextUpCard.tsx',
-    label: 'Home + Activity entry point',
-    patterns: ['+ Activity', 'onLogActivity'],
+    label: 'Home activity / calories entry',
+    patterns: ['Calories left', 'onLogActivity', 'Log Activity'],
   },
   {
     file: 'src/components/workout/execution/WorkoutWeeklyPlanScreen.tsx',
@@ -241,7 +241,7 @@ const REQUIRED = [
   {
     file: 'targets/watch/content.swift',
     label: 'Watch home screen when idle',
-    patterns: ['WatchHomeScreen', 'Workout companion', 'Sync with iPhone'],
+    patterns: ['WatchHomeScreen', 'Sync with iPhone', 'Start a lift or cardio on iPhone'],
   },
   {
     file: 'src/app/(tabs)/settings.tsx',

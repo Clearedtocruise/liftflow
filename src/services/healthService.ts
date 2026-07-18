@@ -2,18 +2,17 @@ import { Platform } from 'react-native';
 
 import { HEALTH_DATA_LABELS, HEALTH_DATA_TYPES, type HealthPermissionStatus } from '@/integrations/healthConstants';
 import {
-  fetchHealthKitSamples,
-  getHealthKitAvailability,
-  requestHealthKitAuthorization,
-  syncHealthKitFromDevice,
+    fetchHealthKitSamples,
+    getHealthKitAvailability,
+    requestHealthKitAuthorization,
+    syncHealthKitFromDevice,
 } from '@/integrations/healthkitProvider';
-import type { HealthMetricSample } from '@/integrations/types';
+import type { HealthMetricSample, HealthSyncResult } from '@/integrations/types';
 import { mergeHealthSamples, summarizeHealthByDay, type HealthDailySummary, type StoredHealthSample } from '@/lib/healthSyncEngine';
+import { mapHealthKitWorkoutToCardio } from '@/lib/mapHealthKitWorkoutToCardio';
 import { fail, fromError, ok } from '@/lib/serviceResult';
-import { getAccessToken } from '@/supabase/client';
-import { supabase } from '@/supabase/client';
+import { getAccessToken, supabase } from '@/supabase/client';
 import type { ServiceResult } from '@/types/common';
-import type { HealthSyncResult } from '@/integrations/types';
 
 export type HealthServiceStatus = {
   permission: HealthPermissionStatus;
@@ -28,7 +27,58 @@ export type HealthSyncReport = HealthSyncResult & {
   updated: number;
   skipped: number;
   conflicts: number;
+  importedCardio: number;
 };
+
+async function importHealthKitWorkoutsAsCardio(
+  userId: string,
+  samples: HealthMetricSample[],
+): Promise<number> {
+  const mapped = samples
+    .map((sample) => mapHealthKitWorkoutToCardio(sample))
+    .filter((row): row is NonNullable<typeof row> => row != null);
+
+  if (mapped.length === 0) return 0;
+
+  const { data: existing } = await supabase
+    .from('cardio_sessions')
+    .select('id, metadata')
+    .eq('user_id', userId)
+    .order('started_at', { ascending: false })
+    .limit(200);
+
+  const knownIds = new Set<string>();
+  for (const row of existing ?? []) {
+    const meta = (row.metadata ?? {}) as { source?: string; external_id?: string };
+    if (meta.source === 'apple_healthkit' && meta.external_id) {
+      knownIds.add(meta.external_id);
+    }
+  }
+
+  let imported = 0;
+  for (const workout of mapped) {
+    if (knownIds.has(workout.metadata.external_id)) continue;
+
+    const { error } = await supabase.from('cardio_sessions').insert({
+      user_id: userId,
+      cardio_type: workout.cardioType,
+      started_at: workout.startedAt,
+      ended_at: workout.endedAt,
+      duration_seconds: workout.durationSeconds,
+      distance_meters: workout.distanceMeters ?? null,
+      calories_burned: workout.caloriesBurned ?? null,
+      notes: workout.notes,
+      metadata: workout.metadata,
+    });
+
+    if (!error) {
+      knownIds.add(workout.metadata.external_id);
+      imported += 1;
+    }
+  }
+
+  return imported;
+}
 
 async function fetchExistingSamples(userId: string, since: Date): Promise<StoredHealthSample[]> {
   const { data } = await supabase
@@ -152,6 +202,7 @@ export const healthService = {
       );
 
       const persisted = await persistMerged(userId, toInsert, toUpdate);
+      const importedCardio = await importHealthKitWorkoutsAsCardio(userId, deviceResult.samples);
 
       const latestWeight = deviceResult.samples
         .filter((s) => s.dataType === 'weight')
@@ -192,6 +243,7 @@ export const healthService = {
         updated: result.updated,
         skipped: result.skipped,
         conflicts: result.conflicts,
+        importedCardio,
       });
     } catch (e) {
       return fromError(e);

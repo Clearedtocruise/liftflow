@@ -21,6 +21,7 @@ const LB_PER_KG = 2.2046226218;
 let logSetHandler: (() => Promise<void>) | null = null;
 let skipRestHandler: (() => Promise<void>) | null = null;
 let cancelWorkoutHandler: (() => Promise<void>) | null = null;
+let endWorkoutHandler: (() => Promise<void>) | null = null;
 let setRepsHandler: ((reps: number) => void) | null = null;
 let setWeightKgHandler: ((weightKg: number) => void) | null = null;
 let pendingWatchReps: number | null = null;
@@ -30,8 +31,18 @@ let readRestSeconds: (() => number | null) | null = null;
 let readTargetSets: (() => number) | null = null;
 let displayContext: WatchDisplayContext | null = null;
 let executionRestOverride: number | null = null;
+let lastWatchActiveCalories: number | null = null;
 
 export const watchPhoneBridge = {
+  setLastWatchActiveCalories(calories: number | null) {
+    lastWatchActiveCalories =
+      calories != null && Number.isFinite(calories) && calories > 0 ? Math.round(calories) : null;
+  },
+
+  getLastWatchActiveCalories(): number | null {
+    return lastWatchActiveCalories;
+  },
+
   setLogSetHandler(handler: (() => Promise<void>) | null) {
     logSetHandler = handler;
   },
@@ -69,12 +80,14 @@ export const watchPhoneBridge = {
   setSessionHandlers(handlers: {
     skipRest: () => Promise<void>;
     cancelWorkout?: () => Promise<void>;
+    endWorkout?: () => Promise<void>;
     getExerciseIndex: () => number;
     getRestSecondsRemaining: () => number | null;
   } | null) {
     if (!handlers) {
       skipRestHandler = null;
       cancelWorkoutHandler = null;
+      endWorkoutHandler = null;
       readExerciseIndex = null;
       readRestSeconds = null;
       executionRestOverride = null;
@@ -82,6 +95,7 @@ export const watchPhoneBridge = {
     }
     skipRestHandler = handlers.skipRest;
     cancelWorkoutHandler = handlers.cancelWorkout ?? null;
+    endWorkoutHandler = handlers.endWorkout ?? null;
     readExerciseIndex = handlers.getExerciseIndex;
     readRestSeconds = handlers.getRestSecondsRemaining;
   },
@@ -169,6 +183,23 @@ export const watchPhoneBridge = {
       return {
         ok: false,
         error: error instanceof Error ? error.message : 'Could not cancel workout.',
+      };
+    }
+  },
+
+  async endWorkout(): Promise<LogSetResult> {
+    if (!endWorkoutHandler) {
+      return cancelWorkoutHandler
+        ? this.cancelWorkout()
+        : { ok: false, error: 'Open ONE MORE on iPhone to end the workout.' };
+    }
+    try {
+      await endWorkoutHandler();
+      return { ok: true };
+    } catch (error) {
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : 'Could not end workout.',
       };
     }
   },

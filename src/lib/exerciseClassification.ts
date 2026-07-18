@@ -35,7 +35,24 @@ function isBodyweightEquipment(equipment: string): boolean {
  * Priority: stored type → catalog slug → cardio → timed → bodyweight → strength.
  */
 export function classifyExercise(input: ExerciseClassificationInput): ExerciseType {
-  if (input.exerciseType) return input.exerciseType;
+  const name = normalize(input.name);
+  const equipment = normalize(input.equipment);
+  const movementCategory = normalize(input.movementCategory);
+
+  // Name/equipment heuristics beat a generic stored "strength" tag (e.g. Commando Pull-Up).
+  if (movementCategory === 'cardio' || CARDIO_NAME_PATTERN.test(name)) {
+    return 'cardio';
+  }
+  if (TIMED_NAME_PATTERN.test(name)) {
+    return 'timed';
+  }
+  if (BODYWEIGHT_NAME_PATTERN.test(name) || (isBodyweightEquipment(equipment) && !LOADED_EQUIPMENT.has(equipment))) {
+    return 'bodyweight';
+  }
+
+  if (input.exerciseType && input.exerciseType !== 'strength') {
+    return input.exerciseType;
+  }
 
   const slug = normalize(input.slug);
   if (slug) {
@@ -43,25 +60,7 @@ export function classifyExercise(input: ExerciseClassificationInput): ExerciseTy
     if (catalogMatch) return catalogMatch.exerciseType;
   }
 
-  const name = normalize(input.name);
-  const equipment = normalize(input.equipment);
-  const movementCategory = normalize(input.movementCategory);
-
-  if (movementCategory === 'cardio' || CARDIO_NAME_PATTERN.test(name)) {
-    return 'cardio';
-  }
-
-  if (TIMED_NAME_PATTERN.test(name)) {
-    return 'timed';
-  }
-
-  if (BODYWEIGHT_NAME_PATTERN.test(name)) {
-    return 'bodyweight';
-  }
-
-  if (isBodyweightEquipment(equipment) && !LOADED_EQUIPMENT.has(equipment)) {
-    return 'bodyweight';
-  }
+  if (input.exerciseType) return input.exerciseType;
 
   return 'strength';
 }

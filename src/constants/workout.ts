@@ -1,7 +1,7 @@
 export const DEFAULT_REST_SECONDS = 120;
 
 /** Must match backend PLAN_RULES_VERSION — triggers one-time program regeneration. */
-export const WORKOUT_PLAN_RULES_VERSION = 17;
+export const WORKOUT_PLAN_RULES_VERSION = 18;
 
 export const QUICK_CORRECTIONS = [
   { id: 'weight-up', label: 'Weight +5' },

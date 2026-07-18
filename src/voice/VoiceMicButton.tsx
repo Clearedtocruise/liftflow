@@ -1,10 +1,14 @@
 import { router } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
-import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
-import { hasPassedVoiceLoggingTest } from '@/lib/voice/voiceLoggingTest';
+import {
+    hasPassedVoiceLoggingTest,
+    hasSkippedVoiceLoggingTest,
+    markVoiceLoggingTestSkipped,
+} from '@/lib/voice/voiceLoggingTest';
 
 import { useVoiceWorkout } from './useVoiceWorkout';
 
@@ -22,33 +26,17 @@ export function VoiceMicButton({ disabled }: VoiceMicButtonProps) {
     startCommandListening,
     error,
   } = useVoiceWorkout();
-  const [testPassed, setTestPassed] = useState(true);
+  const [showTestHint, setShowTestHint] = useState(false);
 
   useEffect(() => {
-    void hasPassedVoiceLoggingTest().then(setTestPassed);
+    void (async () => {
+      const [passed, skipped] = await Promise.all([
+        hasPassedVoiceLoggingTest(),
+        hasSkippedVoiceLoggingTest(),
+      ]);
+      setShowTestHint(!passed && !skipped);
+    })();
   }, []);
-
-  const handlePress = useCallback(() => {
-    if (!testPassed) {
-      Alert.alert(
-        'Quick voice test',
-        'A 30-second check makes voice logging more accurate. Take it now?',
-        [
-          {
-            text: 'Later',
-            style: 'cancel',
-            onPress: () => void startCommandListening(),
-          },
-          {
-            text: 'Take test',
-            onPress: () => router.push('/(features)/voice-test'),
-          },
-        ],
-      );
-      return;
-    }
-    void startCommandListening();
-  }, [startCommandListening, testPassed]);
 
   const showWakeHint =
     wakePhraseSettingEnabled && (listeningForWakeWord || listeningForCommand || wakeWordEnabled);
@@ -56,7 +44,7 @@ export function VoiceMicButton({ disabled }: VoiceMicButtonProps) {
   return (
     <View style={styles.wrapper}>
       <Pressable
-        onPress={handlePress}
+        onPress={() => void startCommandListening()}
         disabled={disabled}
         style={({ pressed }) => [
           styles.primaryButton,
@@ -72,12 +60,24 @@ export function VoiceMicButton({ disabled }: VoiceMicButtonProps) {
         </AppText>
       </Pressable>
 
-      {!testPassed ? (
-        <Pressable onPress={() => router.push('/(features)/voice-test')}>
-          <AppText variant="caption" color="accent" align="center">
-            Take voice test for better accuracy
-          </AppText>
-        </Pressable>
+      {showTestHint ? (
+        <View style={styles.hintRow}>
+          <Pressable onPress={() => router.push('/(features)/voice-test')} hitSlop={8}>
+            <AppText variant="caption" color="accent" align="center">
+              Optional: improve accuracy
+            </AppText>
+          </Pressable>
+          <Pressable
+            onPress={() => {
+              setShowTestHint(false);
+              void markVoiceLoggingTestSkipped();
+            }}
+            hitSlop={8}>
+            <AppText variant="caption" color="textTertiary" align="center">
+              Dismiss
+            </AppText>
+          </Pressable>
+        </View>
       ) : null}
 
       {listeningForCommand && transcript ? (
@@ -125,6 +125,12 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.9,
+  },
+  hintRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: Spacing.md,
   },
   wakeRow: {
     flexDirection: 'row',

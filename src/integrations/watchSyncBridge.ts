@@ -85,6 +85,22 @@ export function parseWatchWorkoutMessage(raw: Record<string, unknown>): WatchWor
         type: 'start_workout',
         workoutSessionId: raw.workoutSessionId as string | undefined,
       };
+    case 'end_workout':
+      return {
+        type: 'end_workout',
+        workoutSessionId: raw.workoutSessionId as string | undefined,
+        activeCalories:
+          typeof raw.activeCalories === 'number'
+            ? raw.activeCalories
+            : Number.isFinite(Number(raw.activeCalories))
+              ? Number(raw.activeCalories)
+              : undefined,
+      };
+    case 'cancel_workout':
+      return {
+        type: 'cancel_workout',
+        workoutSessionId: raw.workoutSessionId as string | undefined,
+      };
     case 'rep_correction':
       return {
         type: 'rep_correction',
@@ -118,6 +134,12 @@ export function parseWatchWorkoutMessage(raw: Record<string, unknown>): WatchWor
         type: 'heart_rate_sample',
         bpm: Number(raw.bpm ?? 0),
         recordedAt: String(raw.recordedAt ?? new Date().toISOString()),
+      };
+    case 'active_calories':
+      return {
+        type: 'active_calories',
+        activeCalories: Number(raw.activeCalories ?? 0),
+        workoutSessionId: raw.workoutSessionId as string | undefined,
       };
     default:
       return null;
@@ -266,6 +288,14 @@ export async function pushCardioStateToWatch(
   return sendToWatch(payload);
 }
 
+let watchSyncGeneration = 0;
+
+/** Bump and attach a monotonic sync generation so the Watch can drop stale packets. */
+export function nextWatchSyncGeneration(): number {
+  watchSyncGeneration += 1;
+  return watchSyncGeneration;
+}
+
 export async function pushWorkoutStateToWatch(
   state: WatchWorkoutAssistantState,
   options?: { presentWorkout?: boolean; force?: boolean },
@@ -274,14 +304,33 @@ export async function pushWorkoutStateToWatch(
     return { sent: false, error: 'Watch is showing cardio' };
   }
 
+  const generation = state.syncGeneration ?? nextWatchSyncGeneration();
+  const stateWithGeneration: WatchWorkoutAssistantState = {
+    ...state,
+    syncGeneration: generation,
+  };
+
   const payload: Record<string, unknown> = {
     type: 'workout_state',
-    state: serializeWatchStateForNative(state),
+    state: serializeWatchStateForNative(stateWithGeneration),
   };
   if (options?.presentWorkout) {
     payload.presentWorkout = true;
   }
-  return sendToWatch(payload);
+  const result = await sendToWatch(payload);
+
+  if (state.sessionEnded) {
+    await sendToWatch({
+      type: 'workout_ended',
+      message: state.lastSpokenResponse ?? 'Workout ended',
+    });
+  }
+
+  return result;
+}
+
+export async function pushWorkoutEndedToWatch(message = 'Workout ended'): Promise<{ sent: boolean; error?: string }> {
+  return sendToWatch({ type: 'workout_ended', message });
 }
 
 export async function requestWatchSync(): Promise<{ queued: boolean; error?: string }> {
@@ -317,6 +366,7 @@ export function isWorkoutAssistantMessage(message: Record<string, unknown>): boo
     t === 'next_set' ||
     t === 'start_workout' ||
     t === 'cancel_workout' ||
+    t === 'end_workout' ||
     t === 'workout_state'
   );
 }

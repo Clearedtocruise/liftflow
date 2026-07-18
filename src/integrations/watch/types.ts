@@ -60,6 +60,8 @@ export type WatchWorkoutAssistantState = {
   activeSet: WatchActiveSetState | null;
   /** When true, Watch should release the workout latch and return to home. */
   sessionEnded?: boolean;
+  /** Monotonic phone→Watch sequence; Watch ignores older packets. */
+  syncGeneration?: number;
   /** Recovery intelligence score 0–100 */
   recoveryScore?: number;
   recoveryLabel?: string;
@@ -120,6 +122,8 @@ export type WatchWorkoutMessage =
   | { type: 'log_set'; workoutSessionId?: string }
   | { type: 'start_workout'; workoutSessionId?: string }
   | { type: 'cancel_workout'; workoutSessionId?: string }
+  | { type: 'end_workout'; workoutSessionId?: string; activeCalories?: number }
+  | { type: 'active_calories'; activeCalories: number; workoutSessionId?: string }
   | { type: 'set_weight'; weightLbs: number; workoutSessionId?: string }
   | { type: 'workout_sync'; [key: string]: unknown }
   | { type: 'cardio_state'; state: WatchCardioState; presentWorkout?: boolean }

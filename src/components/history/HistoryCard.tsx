@@ -43,7 +43,7 @@ export function HistoryCard({ item, onPress, onLongPress }: HistoryCardProps) {
 
       {isCardio ? (
         <View style={styles.statsRow}>
-          <Stat label="Calories" value={item.caloriesBurned ? `~${item.caloriesBurned}` : '—'} />
+          <Stat label="Active cal" value={item.caloriesBurned ? `~${item.caloriesBurned}` : '—'} />
           <Stat
             label="Distance"
             value={
@@ -57,8 +57,11 @@ export function HistoryCard({ item, onPress, onLongPress }: HistoryCardProps) {
       ) : (
         <View style={styles.statsRow}>
           <Stat label="Exercises" value={String(item.exerciseCount)} />
-          <Stat label="Sets" value={String(item.totalSets)} />
           <Stat label="Volume" value={units.formatVolume(item.totalVolume)} />
+          <Stat
+            label="Active cal"
+            value={item.caloriesBurned ? `~${item.caloriesBurned}` : '—'}
+          />
         </View>
       )}
     </Card>

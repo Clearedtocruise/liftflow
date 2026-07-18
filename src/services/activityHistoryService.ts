@@ -1,3 +1,4 @@
+import { dedupeOverlappingCardio } from '@/lib/cardioHistoryDedupe';
 import { cardioService } from '@/services/cardioService';
 import { workoutService } from '@/services/workoutService';
 import type { ServiceResult } from '@/types/common';
@@ -32,26 +33,28 @@ export async function getCombinedActivityHistory(
     : [];
 
   const cardioItems: WorkoutHistoryItem[] = cardioResult.success
-    ? cardioResult.data.map((session) => {
-        const durationMinutes = Math.max(1, Math.round((session.durationSeconds ?? 0) / 60));
-        const label = session.notes?.trim() || cardioTypeLabel(session.cardioType);
-        return {
-          id: session.id,
-          name: label,
-          date: session.startedAt,
-          durationMinutes,
-          exerciseCount: 0,
-          totalSets: 0,
-          totalVolume: 0,
-          status: 'completed',
-          sessionKind: 'cardio' as const,
-          cardioType: session.cardioType,
-          distanceMeters: session.distanceMeters,
-          caloriesBurned: session.caloriesBurned,
-          avgHeartRate: session.avgHeartRate,
-          notes: session.notes,
-        };
-      })
+    ? dedupeOverlappingCardio(
+        cardioResult.data.map((session) => {
+          const durationMinutes = Math.max(1, Math.round((session.durationSeconds ?? 0) / 60));
+          const label = session.notes?.trim() || cardioTypeLabel(session.cardioType);
+          return {
+            id: session.id,
+            name: label,
+            date: session.startedAt,
+            durationMinutes,
+            exerciseCount: 0,
+            totalSets: 0,
+            totalVolume: 0,
+            status: 'completed' as const,
+            sessionKind: 'cardio' as const,
+            cardioType: session.cardioType,
+            distanceMeters: session.distanceMeters,
+            caloriesBurned: session.caloriesBurned,
+            avgHeartRate: session.avgHeartRate,
+            notes: session.notes,
+          };
+        }),
+      )
     : [];
 
   const merged = [...strengthItems, ...cardioItems].sort(

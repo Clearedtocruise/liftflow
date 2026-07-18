@@ -1,5 +1,5 @@
-import { getProgramDashboard, reschedulePlannedWorkout } from './programEngine.js';
 import { syncNutritionForDates, type DayNutritionSync } from './nutritionDaySync.js';
+import { getProgramDashboard, reschedulePlannedWorkout } from './programEngine.js';
 import { requireAdmin } from './supabase.js';
 
 export type ScheduleChangeMove = {
@@ -325,7 +325,7 @@ async function loadWorkoutOnDate(userId: string, date: string, excludeId?: strin
     .select('id, name, scheduled_date, status, ai_rationale, metadata')
     .eq('user_id', userId)
     .eq('scheduled_date', date)
-    .eq('status', 'planned');
+    .in('status', ['planned', 'active', 'paused']);
   if (excludeId) query = query.neq('id', excludeId);
   const { data } = await query.limit(1).maybeSingle();
   return (data as PlannedRow | null) ?? null;
@@ -387,6 +387,20 @@ async function persistPlanAdjustment(userId: string, coach: PlanCoachMessage, af
     .eq('id', userId);
 }
 
+function assertMovableWorkout(status: string, action: 'moved' | 'swapped' | 'skipped'): void {
+  if (status === 'planned' || status === 'active' || status === 'paused') return;
+  if (status === 'completed') {
+    throw new Error(`Completed workouts can't be ${action}. Pick an upcoming day, or rebuild your week in Settings.`);
+  }
+  throw new Error(`Only upcoming workouts can be ${action}`);
+}
+
+async function clearActiveWorkoutState(workoutId: string, status: string): Promise<void> {
+  if (status !== 'active' && status !== 'paused') return;
+  const db = requireAdmin();
+  await db.from('planned_workouts').update({ status: 'planned' }).eq('id', workoutId);
+}
+
 async function applyMove(userId: string, change: ScheduleChangeMove): Promise<PlanAdaptationResult> {
   const workout = await loadWorkout(change.workoutId);
   const fromDate = workout.scheduled_date;
@@ -395,18 +409,19 @@ async function applyMove(userId: string, change: ScheduleChangeMove): Promise<Pl
   if (fromDate === toDate) {
     throw new Error('Workout is already scheduled on that date');
   }
-  if (workout.status !== 'planned') {
-    throw new Error('Only planned workouts can be moved');
-  }
+  assertMovableWorkout(workout.status, 'moved');
 
   let swappedWith: string | undefined;
   const destWorkout = await loadWorkoutOnDate(userId, toDate, workout.id);
   if (destWorkout) {
+    assertMovableWorkout(destWorkout.status, 'moved');
     swappedWith = destWorkout.name;
     await reschedulePlannedWorkout(destWorkout.id, fromDate);
+    await clearActiveWorkoutState(destWorkout.id, destWorkout.status);
   }
 
   await reschedulePlannedWorkout(workout.id, toDate);
+  await clearActiveWorkoutState(workout.id, workout.status);
 
   const affectedDates = [...new Set([fromDate, toDate])];
   // Nutrition/macros sync in background — awaiting it froze day swaps for many seconds.
@@ -439,15 +454,16 @@ async function applySwap(userId: string, change: ScheduleChangeSwap): Promise<Pl
   if (workoutA.id === workoutB.id) {
     throw new Error('Choose two different workouts to swap');
   }
-  if (workoutA.status !== 'planned' || workoutB.status !== 'planned') {
-    throw new Error('Only planned workouts can be swapped');
-  }
+  assertMovableWorkout(workoutA.status, 'swapped');
+  assertMovableWorkout(workoutB.status, 'swapped');
 
   const dateA = workoutA.scheduled_date;
   const dateB = workoutB.scheduled_date;
 
   await reschedulePlannedWorkout(workoutA.id, dateB);
   await reschedulePlannedWorkout(workoutB.id, dateA);
+  await clearActiveWorkoutState(workoutA.id, workoutA.status);
+  await clearActiveWorkoutState(workoutB.id, workoutB.status);
 
   const affectedDates = [...new Set([dateA, dateB])];
   const nutritionByDate: Record<string, DayNutritionSync> = {};
@@ -529,9 +545,7 @@ async function applySkip(userId: string, change: ScheduleChangeSkip): Promise<Pl
   const workout = await loadWorkout(change.workoutId);
   const skippedDate = workout.scheduled_date;
 
-  if (workout.status !== 'planned') {
-    throw new Error('Only planned workouts can be skipped');
-  }
+  assertMovableWorkout(workout.status, 'skipped');
 
   const db = requireAdmin();
   await db

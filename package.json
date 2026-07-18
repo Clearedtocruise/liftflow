@@ -93,6 +93,7 @@
     "validate:sprint85": "node scripts/validate-sprint85-beta-readiness.mjs",
     "validate:sprint86": "node scripts/validate-sprint86-testflight-rc.mjs",
     "validate:critical-paths": "node scripts/validate-critical-paths.mjs",
+    "validate:prebuild": "node scripts/validate-prebuild-gate.mjs",
     "qa:env": "node scripts/qa/check-environment.mjs",
     "qa:smoke": "node scripts/qa/run-maestro.mjs smoke.yaml",
     "qa:workout": "node scripts/qa/run-maestro.mjs workout-basic.yaml",

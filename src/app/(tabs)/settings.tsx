@@ -331,7 +331,7 @@ export default function SettingsScreen() {
         />
         <SettingsRow
           label="Test voice logging"
-          value="Improve accuracy"
+          value="Meter · practice · diagnostics"
           onPress={() => router.push('/(features)/voice-test')}
         />
         <SettingsRow

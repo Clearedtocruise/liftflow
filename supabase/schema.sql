@@ -207,6 +207,7 @@ create table public.workout_sessions (
   duration_seconds integer,
   total_volume numeric(12,2),
   total_sets integer default 0,
+  calories_burned integer,
   notes text,
   metadata jsonb not null default '{}',
   created_at timestamptz not null default now(),

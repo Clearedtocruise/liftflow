@@ -89,7 +89,10 @@ export interface IWorkoutService {
     payload: StartSessionPayload,
   ): Promise<ServiceResult<WorkoutSession>>;
   getActiveSession(userId: string): Promise<ServiceResult<WorkoutSession | null>>;
-  endSession(sessionId: string): Promise<ServiceResult<WorkoutSession>>;
+  endSession(
+    sessionId: string,
+    options?: { caloriesBurned?: number },
+  ): Promise<ServiceResult<WorkoutSession>>;
   /** MVP: Log a set */
   logSet(payload: CreateSetPayload): Promise<ServiceResult<import('@/types').WorkoutSet>>;
   updateSet(setId: string, payload: import('@/types').UpdateSetPayload): Promise<ServiceResult<import('@/types').WorkoutSet>>;
@@ -104,6 +107,16 @@ export interface IWorkoutService {
   updateSession(sessionId: string, updates: { name?: string; notes?: string }): Promise<ServiceResult<WorkoutSession>>;
   addExercise(sessionId: string, exerciseId: string, sortOrder?: number): Promise<ServiceResult<import('@/types').WorkoutExercise>>;
   findOrCreateExerciseByName(name: string, userId: string): Promise<ServiceResult<string>>;
+  createCustomExercise(
+    userId: string,
+    input: {
+      name: string;
+      equipment?: string;
+      muscleGroup?: string;
+      exerciseType?: import('@/types').Exercise['exerciseType'];
+      notes?: string;
+    },
+  ): Promise<ServiceResult<import('@/types').Exercise>>;
   /** Rest timers */
   startRestTimer(sessionId: string, setId: string, recommendedSeconds: number): Promise<ServiceResult<RestPeriod>>;
   endRestTimer(restPeriodId: string, actualSeconds: number, wasSkipped?: boolean): Promise<ServiceResult<RestPeriod>>;

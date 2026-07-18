@@ -164,7 +164,7 @@ export function SmartMealReplaceForm({
         <View key={row.id} style={styles.itemCard}>
           <View style={styles.itemHeader}>
             <AppText variant="label" color="textSecondary">
-              {allowMultiple ? `Item ${index + 1}` : 'Food'}
+              {allowMultiple ? (index === 0 ? 'Entrée' : `Side ${index}`) : 'Food'}
             </AppText>
             {allowMultiple && rows.length > 1 ? (
               <Pressable onPress={() => removeRow(row.id)} hitSlop={8}>
@@ -198,7 +198,7 @@ export function SmartMealReplaceForm({
       {allowMultiple ? (
         <Pressable style={styles.addItem} onPress={addRow} testID="add-replace-item-button">
           <AppText variant="caption" color="accent">
-            + Add item
+            + Add side
           </AppText>
         </Pressable>
       ) : null}

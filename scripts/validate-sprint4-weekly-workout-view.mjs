@@ -37,14 +37,25 @@ const workoutIndex = read('src/app/(tabs)/workout/index.tsx');
 const layout = read('src/app/(tabs)/workout/_layout.tsx');
 
 record('Week has 7 weekday labels', weekPlan.includes("'Sunday'") && (weekPlan.match(/WEEKDAY_LABELS/g) ?? []).length >= 1);
-record('buildWeekPlan returns 7 days', weekPlan.includes('for (let i = 0; i < 7'));
+record(
+  'buildWeekPlan returns 7 days',
+  weekPlan.includes('export function buildWeekPlan') &&
+    weekPlan.includes('getWeekRange') &&
+    weekPlan.includes('dates.map') &&
+    weekPlan.includes('WEEKDAY_LABELS[index]'),
+);
 record('workoutTotalSets helper exists', weekPlan.includes('export function workoutTotalSets'));
 record('Weekly card shows total sets', weeklyScreen.includes('workoutTotalSets'));
 record('Weekly card shows exercise count', weeklyScreen.includes('workoutExerciseCount'));
 record('Weekly card shows muscle groups', weeklyScreen.includes('workoutMuscleGroups'));
 record('Weekly card shows duration', weeklyScreen.includes('workoutDurationMinutes'));
 record('No Saturday conditioning hardcode', !weeklyScreen.includes("day.dayLabel === 'Saturday'"));
-record('All day cards tappable (no disabled)', !weeklyScreen.includes('disabled='));
+record(
+  'Day cards tappable (select not disabled)',
+  weeklyScreen.includes('onSelectDay(day)') &&
+    weeklyScreen.includes('onPress={() => onSelectDay(day)}') &&
+    !/onSelectDay[\s\S]{0,120}disabled=/.test(weeklyScreen),
+);
 record('Rest day route wired', workoutIndex.includes('/(tabs)/workout/rest-day'));
 record('Rest day stack screen registered', layout.includes('rest-day'));
 

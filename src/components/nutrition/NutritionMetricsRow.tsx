@@ -29,11 +29,13 @@ type MetricSpec = {
 function MetricTile({
   label,
   value,
+  detail,
   accent,
   styles,
 }: {
   label: string;
   value: string;
+  detail?: string;
   accent?: boolean;
   styles: ReturnType<typeof createStyles>;
 }) {
@@ -48,6 +50,11 @@ function MetricTile({
         minimumFontScale={0.7}>
         {value}
       </AppText>
+      {detail ? (
+        <AppText variant="caption" color="textTertiary" numberOfLines={1}>
+          {detail}
+        </AppText>
+      ) : null}
       <AppText variant="caption" color="textTertiary" style={styles.tileLabel} numberOfLines={1}>
         {label}
       </AppText>
@@ -155,6 +162,7 @@ export function NutritionMetricsRow({
           <MetricTile
             label={metric.label}
             value={metric.value}
+            detail={metric.detail}
             accent={metric.accent}
             styles={styles}
           />

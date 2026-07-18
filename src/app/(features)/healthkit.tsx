@@ -124,7 +124,11 @@ export default function HealthKitScreen() {
         <PrimaryButton label={syncing ? 'Syncing…' : 'Sync Health Data'} onPress={handleHealthSync} disabled={syncing} />
         {lastReport ? (
           <AppText variant="footnote" color="textSecondary">
-            Last sync: {lastReport.synced} saved · {lastReport.skipped} skipped · {lastReport.conflicts} conflicts
+            Last sync: {lastReport.synced} saved · {lastReport.skipped} skipped · {lastReport.conflicts}{' '}
+            conflicts
+            {'importedCardio' in lastReport && typeof lastReport.importedCardio === 'number'
+              ? ` · ${lastReport.importedCardio} workouts imported to History`
+              : ''}
           </AppText>
         ) : null}
       </Card>

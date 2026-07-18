@@ -165,6 +165,7 @@ export const watchCompanionService = {
     };
     watchWorkoutService.loadState(userId, ended);
     // Skip enrich (network) so teardown is immediate; idle preview can arrive on next sync.
+    // pushWorkoutStateToWatch also emits workout_ended for a hard Watch UI reset.
     await pushWorkoutStateToWatch(ended, { force: true });
   },
 
@@ -312,6 +313,14 @@ export const watchCompanionService = {
       return { reply: { received: true } };
     }
 
+    if (message.type === 'active_calories') {
+      const calories = Number(message.activeCalories);
+      if (Number.isFinite(calories) && calories > 0) {
+        watchPhoneBridge.setLastWatchActiveCalories(Math.round(calories));
+      }
+      return { reply: { received: true } };
+    }
+
     if (message.type === 'cardio_pause') {
       watchCardioBridge.emitCommand('pause');
       return { reply: { received: true } };
@@ -349,20 +358,42 @@ export const watchCompanionService = {
       return this.replyWithCurrentState(userId);
     }
 
-    if (message.type === 'cancel_workout') {
-      const bridgeResult = await watchPhoneBridge.cancelWorkout();
+    if (message.type === 'cancel_workout' || message.type === 'end_workout') {
+      const shouldComplete = message.type === 'end_workout';
+      const endCalories = Number(message.activeCalories);
+      if (shouldComplete && Number.isFinite(endCalories) && endCalories > 0) {
+        watchPhoneBridge.setLastWatchActiveCalories(Math.round(endCalories));
+      }
+      const bridgeResult = shouldComplete
+        ? await watchPhoneBridge.endWorkout()
+        : await watchPhoneBridge.cancelWorkout();
       if (!bridgeResult.ok) {
         const active = await workoutService.getActiveSession(userId);
         if (active.success && active.data) {
-          await workoutService.cancelSession(active.data.id);
+          if (shouldComplete) {
+            await workoutService.endSession(active.data.id, {
+              caloriesBurned: watchPhoneBridge.getLastWatchActiveCalories() ?? undefined,
+            });
+            watchPhoneBridge.setLastWatchActiveCalories(null);
+          } else {
+            await workoutService.cancelSession(active.data.id);
+          }
         }
       }
-      await this.notifyWatchSessionEnded(userId, 'Workout cancelled.');
+      await this.notifyWatchSessionEnded(
+        userId,
+        shouldComplete ? 'Workout complete.' : 'Workout cancelled.',
+      );
       const ended = watchWorkoutService.getState(userId);
       return {
         reply: {
           type: 'workout_state',
-          state: { ...ended, sessionEnded: true, activeSet: null, lastSpokenResponse: 'Workout cancelled.' },
+          state: {
+            ...ended,
+            sessionEnded: true,
+            activeSet: null,
+            lastSpokenResponse: shouldComplete ? 'Workout complete.' : 'Workout cancelled.',
+          },
         },
       };
     }

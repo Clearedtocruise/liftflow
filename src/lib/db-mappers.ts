@@ -171,14 +171,13 @@ export function mapExercise(row: ExerciseRow): Exercise {
     name: row.name,
     slug: row.slug ?? undefined,
     category: row.category as Exercise['category'],
-    exerciseType:
-      (row.exercise_type as Exercise['exerciseType'] | undefined) ??
-      classifyExercise({
-        slug: row.slug,
-        name: row.name,
-        equipment: row.equipment,
-        movementCategory: row.category,
-      }),
+    exerciseType: classifyExercise({
+      slug: row.slug,
+      name: row.name,
+      equipment: row.equipment,
+      movementCategory: row.category,
+      exerciseType: (row.exercise_type as Exercise['exerciseType'] | undefined) ?? null,
+    }),
     equipment: row.equipment,
     muscleGroups: row.muscle_groups ?? [],
     secondaryMuscles: row.secondary_muscles ?? undefined,
@@ -275,7 +274,9 @@ type SessionRow = {
   duration_seconds: number | null;
   total_volume: number | null;
   total_sets: number | null;
+  calories_burned?: number | null;
   notes: string | null;
+  metadata?: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
   workout_exercises?: WorkoutExerciseRow[] | null;
@@ -319,6 +320,9 @@ export function mapHistoryItem(row: SessionRow & { workout_exercises?: HistoryEx
     return count + (exercise.workout_sets ?? []).filter((set) => set.is_pr).length;
   }, 0);
 
+  const metaCalories =
+    typeof row.metadata?.caloriesBurned === 'number' ? row.metadata.caloriesBurned : undefined;
+
   return {
     id: row.id,
     name: row.name,
@@ -327,6 +331,7 @@ export function mapHistoryItem(row: SessionRow & { workout_exercises?: HistoryEx
     exerciseCount: row.workout_exercises?.length ?? 0,
     totalSets: row.total_sets ?? 0,
     totalVolume: row.total_volume ?? 0,
+    caloriesBurned: row.calories_burned ?? metaCalories ?? undefined,
     prCount: prCount > 0 ? prCount : undefined,
     status: row.status as WorkoutHistoryItem['status'],
   };

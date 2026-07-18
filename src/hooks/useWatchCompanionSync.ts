@@ -24,6 +24,7 @@ export function useWatchCompanionSync(userId: string | undefined) {
     skipRestTimer,
     refreshSession,
     cancelSession,
+    endSession,
     setWatchDraftReps,
     setWatchDraftWeightKg,
   } = useWorkoutSession();
@@ -59,6 +60,9 @@ export function useWatchCompanionSync(userId: string | undefined) {
     watchPhoneBridge.setSessionHandlers({
       skipRest: skipRestTimer,
       cancelWorkout: cancelSession,
+      endWorkout: async () => {
+        await endSession();
+      },
       getExerciseIndex: () => exerciseIndexRef.current,
       getRestSecondsRemaining: () => restSecondsRef.current,
     });
@@ -72,7 +76,7 @@ export function useWatchCompanionSync(userId: string | undefined) {
       watchPhoneBridge.setRepsHandler(null);
       watchPhoneBridge.setWeightKgHandler(null);
     };
-  }, [userId, skipRestTimer, cancelSession, setWatchDraftReps, setWatchDraftWeightKg]);
+  }, [userId, skipRestTimer, cancelSession, endSession, setWatchDraftReps, setWatchDraftWeightKg]);
 
   const pushFullState = () => {
     if (!userId || watchCardioBridge.isWatchOwnedByCardio()) return;

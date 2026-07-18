@@ -61,6 +61,14 @@ Phone-side handlers were already in `watchWorkoutService` / `watchCompanionServi
 
 Watch face complications for rest timer / active workout are not yet implemented.
 
+## Auto-present workout UI (OS limits)
+
+When a strength session starts on iPhone, the phone sends `presentWorkout: true` with the WatchConnectivity `workout_state` payload. The Watch target starts an `HKWorkoutSession` / live builder and presents the companion workout UI when it can receive the message.
+
+**watchOS cannot force-launch a cold companion from the phone.** WatchConnectivity delivery only helps if the Watch app is installed and the session can wake or reach it. If the Watch is locked, unreachable, or the app was never opened after install, the user may need to open ONE MORE on the Watch (or wait for a later `request_sync`) before live sets/HR/Active cal appear. This is an Apple platform limit — not a LiftFlow bug.
+
+Closest supported path: start HealthKit workout session + `presentWorkout` so system workout UI / extended runtime engages as soon as the Watch app can receive the message.
+
 ## Dev without Watch hardware
 
 - Open `/(features)/apple-watch`

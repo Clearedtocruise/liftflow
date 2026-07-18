@@ -38,11 +38,12 @@ const hypertrophySplit = inferWeeklyLiftingSplit({
 });
 assert.equal(hypertrophySplit, 'push_pull_legs');
 
+// Current selector routes most ≥4-day goals (including fat loss) through body_part / PPL.
 const fatLossSplit = inferWeeklyLiftingSplit({
   primaryGoal: 'fat_loss',
   daysPerWeek: 4,
 });
-assert.equal(fatLossSplit, 'upper_lower');
+assert.equal(fatLossSplit, 'push_pull_legs');
 
 const plan = buildWeeklyLiftingPlan({
   programType: 'push_pull_legs',

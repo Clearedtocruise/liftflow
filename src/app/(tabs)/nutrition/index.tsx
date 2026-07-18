@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, InteractionManager, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 
 import { api } from '@/api/client';
-import { HomePlanAdjustedBanner } from '@/components/dashboard/HomePlanAdjustedBanner';
 import { Card } from '@/components/layout/Card';
 import { HeroPhotoBanner } from '@/components/layout/HeroPhotoBanner';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
@@ -623,8 +622,6 @@ export default function NutritionScreen() {
         subtitle={formatScheduleSubtitle(schedule)}
       />
 
-      <HomePlanAdjustedBanner />
-
       <Pressable onPress={() => router.push('/(features)/nutrition-preferences')} style={styles.prefsRow}>
         <AppText variant="caption" color="accent">
           Preferences →
@@ -753,11 +750,13 @@ export default function NutritionScreen() {
         <>
           <NutritionMetricsRow
             layout="rows"
-            caloriesLabel="Calories"
-            caloriesValue={String(weekAggregation.caloriesConsumed)}
-            caloriesFooter={`of ${weekAggregation.plannedCalories} planned`}
-            proteinLabel="Protein"
-            proteinValue={`${Math.round(weekAggregation.proteinG)}g`}
+            caloriesLabel="Calories left"
+            caloriesValue={String(
+              Math.max(0, Math.round(weekAggregation.plannedCalories - weekAggregation.caloriesConsumed)),
+            )}
+            caloriesFooter={`of ${Math.round(weekAggregation.plannedCalories)} planned`}
+            proteinLabel="Protein left"
+            proteinValue={`${Math.max(0, Math.round(weekAggregation.plannedProteinG - weekAggregation.proteinG))}g`}
             proteinFooter={`of ${Math.round(weekAggregation.plannedProteinG)}g planned`}
             mealsLabel="Meals"
             mealsValue={`${weekAggregation.mealsCompleted}/${weekAggregation.mealsTotal}`}
