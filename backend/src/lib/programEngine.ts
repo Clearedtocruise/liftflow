@@ -860,12 +860,10 @@ export function weekPlansNeedExerciseRefresh(
 }
 
 export async function getPlannedWorkoutsInRangeWithRefresh(userId: string, from: string, to: string) {
-  let workouts = await getPlannedWorkoutsInRange(userId, from, to);
-  if (weekPlansNeedExerciseRefresh(workouts)) {
-    await regenerateActiveProgram(userId, { force: true });
-    workouts = await getPlannedWorkoutsInRange(userId, from, to);
-  }
-  return workouts;
+  // Never force-regenerate on a read path. Thin exercise counts used to trigger
+  // regenerateActiveProgram here, which cancelled the IDs the Workout tab was
+  // displaying — every day tap then showed "Workout not found".
+  return getPlannedWorkoutsInRange(userId, from, to);
 }
 
 export type { DaySlot, ProgramFrequency, ProgramType };
