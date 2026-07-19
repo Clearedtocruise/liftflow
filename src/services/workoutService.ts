@@ -339,6 +339,24 @@ export const workoutService: IWorkoutService = {
       if (plannedError) return fail(plannedError.message);
       if (!planned) return fail('Planned workout not found');
 
+      // Resume path: never re-apply the plan onto an existing session — that deletes
+      // swapped exercises / logged sets and can hang past the client start timeout.
+      const existing = await this.getActiveSession(userId);
+      if (existing.success && existing.data) {
+        if (
+          !existing.data.plannedWorkoutId ||
+          existing.data.plannedWorkoutId === plannedWorkoutId
+        ) {
+          if (existing.data.status === 'paused') {
+            const resumed = await this.resumeSession(existing.data.id);
+            if (resumed.success) return resumed;
+          }
+          await syncPlannedWorkoutStatus(plannedWorkoutId, 'active');
+          return ok(existing.data);
+        }
+        return fail('Another workout is already in progress. Finish or cancel it first.');
+      }
+
       const startResult = await createWorkoutSession(userId, {
         ...payload,
         plannedWorkoutId,
@@ -347,17 +365,22 @@ export const workoutService: IWorkoutService = {
 
       if (!startResult.success) return startResult;
 
-      if (payload.exercisePlan && payload.exercisePlan.length > 0) {
-        const applyResult = await applySessionExercisePlanInternal(
-          startResult.data.id,
-          userId,
-          payload.exercisePlan,
-        );
-        if (!applyResult.success) return applyResult;
-      } else {
-        const exercises = await loadPlannedExercises(plannedWorkoutId);
-        if (exercises.length > 0) {
-          await preloadSessionExercises(startResult.data.id, userId, exercises);
+      // createWorkoutSession may still return a race-created existing session.
+      const isFreshSession = (startResult.data.exercises?.length ?? 0) === 0;
+
+      if (isFreshSession) {
+        if (payload.exercisePlan && payload.exercisePlan.length > 0) {
+          const applyResult = await applySessionExercisePlanInternal(
+            startResult.data.id,
+            userId,
+            payload.exercisePlan,
+          );
+          if (!applyResult.success) return applyResult;
+        } else {
+          const exercises = await loadPlannedExercises(plannedWorkoutId);
+          if (exercises.length > 0) {
+            await preloadSessionExercises(startResult.data.id, userId, exercises);
+          }
         }
       }
 
@@ -956,7 +979,7 @@ export const workoutService: IWorkoutService = {
     }
   },
 
-  /** Swap the movement on an in-progress exercise row — logged sets stay attached. */
+  /** Swap the movement on an in-progress exercise row and rebuild that node (clears its sets). */
   async replaceSessionExercise(workoutExerciseId: string, newExerciseName: string, userId: string) {
     try {
       const normalized = newExerciseName.trim();
@@ -967,12 +990,22 @@ export const workoutService: IWorkoutService = {
 
       const { data: row, error: loadError } = await supabase
         .from('workout_exercises')
-        .select('session_id')
+        .select('session_id, exercise_id')
         .eq('id', workoutExerciseId)
         .maybeSingle();
 
       if (loadError) return fail(loadError.message);
       if (!row?.session_id) return fail('Exercise not found');
+
+      // Rebuild this workout node: drop sets logged against the previous exercise so
+      // loading schema / set progression cannot leak across the swap.
+      if (row.exercise_id !== exerciseId) {
+        const { error: clearSetsError } = await supabase
+          .from('workout_sets')
+          .delete()
+          .eq('workout_exercise_id', workoutExerciseId);
+        if (clearSetsError) return fail(clearSetsError.message);
+      }
 
       const { error } = await supabase
         .from('workout_exercises')

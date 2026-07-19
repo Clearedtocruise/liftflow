@@ -602,18 +602,18 @@ export function WorkoutSessionProvider({
 
   const skipRestTimer = useCallback(async () => {
     suppressWatchRestCompleteRef.current = true;
-    if (activeRestPeriod) {
-      const elapsed = Math.floor((Date.now() - new Date(activeRestPeriod.startedAt).getTime()) / 1000);
-      await workoutService.endRestTimer(activeRestPeriod.id, elapsed, true);
+    const period = activeRestPeriod;
+    // Hit 0 so ActiveWorkoutScreen advance effects run (null alone dismisses UI but
+    // never advances). The shared === 0 effect clears local rest state afterward.
+    restEndAtRef.current = null;
+    pausedRemainingRef.current = null;
+    setRestTimerPaused(false);
+    setRestSecondsRemaining(0);
+    if (period) {
+      const elapsed = Math.floor((Date.now() - new Date(period.startedAt).getTime()) / 1000);
+      void workoutService.endRestTimer(period.id, elapsed, true);
     }
     if (userId) void peakMusicService.onSetCompleted(userId);
-    clearLocalRestTimerState({
-      setActiveRestPeriod,
-      setRestSecondsRemaining,
-      setRestTimerPaused,
-      restEndAtRef,
-      pausedRemainingRef,
-    });
   }, [activeRestPeriod, userId]);
 
   const setExerciseEffectiveTargetSets = useCallback((workoutExerciseId: string, targetSets: number) => {

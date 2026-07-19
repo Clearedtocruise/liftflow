@@ -3,14 +3,30 @@ import { describe, it } from 'node:test';
 
 import { dedupeOverlappingCardio } from '@/lib/cardioHistoryDedupe';
 import { classifyExercise } from '@/lib/exerciseClassification';
+import { defaultLoadingMethodForExercise, loadingMethodToLoggingMode } from '@/lib/exerciseLoadingMethod';
 import { getExerciseLoggingMode } from '@/lib/exerciseModality';
 import { resolveMealMacros } from '@/lib/mealIngredients';
 import { buildSmartMealReplacementUpdate } from '@/lib/mealReplacement';
 import { enrichWithSupersetGroups, inferExecutionModeFromPlan } from '@/lib/supersetFlow';
 import { computeWorkoutElapsedSeconds } from '@/lib/workoutElapsed';
-import type { Meal } from '@/types';
+import type { Exercise, Meal } from '@/types';
 import type { WorkoutHistoryItem } from '@/types/workout';
 import type { EditableWorkoutExercise } from '@/types/workoutExecution';
+
+function strengthExercise(name: string, overrides: Partial<Exercise> = {}): Exercise {
+  return {
+    id: 'ex-1',
+    name,
+    slug: name.toLowerCase().replace(/\s+/g, '-'),
+    category: 'pull',
+    exerciseType: 'strength',
+    equipment: 'cable',
+    muscleGroups: ['lats'],
+    isSystem: true,
+    createdAt: '2026-01-01',
+    ...overrides,
+  };
+}
 
 function planEx(name: string, groupId?: string): EditableWorkoutExercise {
   return {
@@ -52,18 +68,47 @@ describe('stability sprint regressions', () => {
       exerciseType: 'strength',
     });
     assert.equal(type, 'bodyweight');
+    const commando = strengthExercise('Commando Pull-Up', {
+      slug: 'commando-pull-up',
+      equipment: 'bodyweight',
+    });
+    assert.equal(getExerciseLoggingMode(commando), 'bodyweight');
     assert.equal(
-      getExerciseLoggingMode({
-        id: '1',
-        name: 'Commando Pull-Up',
-        slug: 'commando-pull-up',
-        category: 'pull',
-        exerciseType: 'strength',
-        equipment: 'bodyweight',
-        muscleGroups: ['lats'],
-        isSystem: true,
-        createdAt: '2026-01-01',
-      }),
+      loadingMethodToLoggingMode(defaultLoadingMethodForExercise(commando, commando.slug)),
+      'bodyweight',
+    );
+  });
+
+  it('does not treat strength row variations as cardio logging', () => {
+    for (const name of ['Hammer Low Row', 'Seated Cable Row', 'Bent Over Row', 'Inverted Row']) {
+      assert.notEqual(
+        classifyExercise({ name, equipment: 'cable', movementCategory: 'pull', exerciseType: 'strength' }),
+        'cardio',
+        name,
+      );
+      assert.notEqual(getExerciseLoggingMode(strengthExercise(name)), 'cardio', name);
+    }
+  });
+
+  it('still classifies true rowing/cardio machines as cardio', () => {
+    assert.equal(classifyExercise({ name: 'Rowing', movementCategory: 'cardio' }), 'cardio');
+    assert.equal(classifyExercise({ name: 'Concept 2 Rower', equipment: 'machine' }), 'cardio');
+    assert.equal(getExerciseLoggingMode(strengthExercise('Row Erg', { exerciseType: 'cardio', category: 'cardio' })), 'cardio');
+  });
+
+  it('rebuilds logging schema when catalog exerciseId changes on same row', () => {
+    // Mirrors ActiveWorkoutScreen switch key: workout_exercise id stays stable on replace.
+    const rowId = 'we-1';
+    const before = `${rowId}:hammer-curl-id`;
+    const after = `${rowId}:commando-pull-up-id`;
+    assert.notEqual(before, after);
+    const next = strengthExercise('Commando Pull-Up', {
+      id: 'commando-pull-up-id',
+      slug: 'commando-pull-up',
+      equipment: 'bodyweight',
+    });
+    assert.equal(
+      loadingMethodToLoggingMode(defaultLoadingMethodForExercise(next, next.slug)),
       'bodyweight',
     );
   });

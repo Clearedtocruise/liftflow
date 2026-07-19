@@ -466,6 +466,21 @@ export function ActiveWorkoutScreen({
           return false;
         }
 
+        // Force the logging-schema effect to treat this as a new exercise node.
+        // replace keeps the same workout_exercises row id, so id-only keys miss swaps.
+        delete draftByExerciseIdRef.current[currentExercise.id];
+        previousExerciseIdRef.current = null;
+        setHistorySets([]);
+        setCoachPrescription(null);
+        setActiveChallenge(null);
+        setAppliedChallenge(null);
+        setBonusSetsByExerciseId((current) => {
+          if (!(currentExercise.id in current)) return current;
+          const next = { ...current };
+          delete next[currentExercise.id];
+          return next;
+        });
+
         await refreshSession();
         void syncPlannedWorkoutAfterSwap(result.data);
         return true;
@@ -838,7 +853,9 @@ export function ActiveWorkoutScreen({
   useEffect(() => {
     if (!user || !currentExercise?.exerciseId) return;
 
-    const exerciseKey = currentExercise.id;
+    // Include catalog exerciseId so Replace Exercise (same workout_exercises row)
+    // still rebuilds loading method / drafts / history for the new movement.
+    const exerciseKey = `${currentExercise.id}:${currentExercise.exerciseId}`;
     const switchedExercise = previousExerciseIdRef.current !== exerciseKey;
     previousExerciseIdRef.current = exerciseKey;
 
@@ -857,7 +874,7 @@ export function ActiveWorkoutScreen({
       };
     }
 
-    const cachedDraft = draftByExerciseIdRef.current[exerciseKey];
+    const cachedDraft = draftByExerciseIdRef.current[currentExercise.id];
 
     lastCoachAppliedRef.current = null;
     completedSetCountRef.current = completedSets.length;

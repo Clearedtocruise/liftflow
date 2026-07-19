@@ -7,8 +7,8 @@ import { exercisesForSessionStart } from '@/lib/workoutPlan';
 import type { StartSessionPayload, WorkoutSession } from '@/types';
 import type { PlannedWorkout } from '@/types/training';
 import type { UserProfile } from '@/types/user';
-import type { WorkoutLocation } from '@/types/workoutLocation';
 import type { EditableWorkoutExercise } from '@/types/workoutExecution';
+import type { WorkoutLocation } from '@/types/workoutLocation';
 
 type StartPlannedWorkoutParams = {
   user: UserProfile;
@@ -57,7 +57,7 @@ export async function startPlannedWorkout({
         workoutLocationId: location?.id,
         exercisePlan: sessionExercises,
       }),
-      20_000,
+      45_000,
       'start workout',
     );
 
@@ -69,9 +69,13 @@ export async function startPlannedWorkout({
     await withTimeout(refreshSession(), 8_000, 'refresh workout session').catch(() => undefined);
     return { session: started, sessionExercises };
   } catch (error) {
+    // Hydrate may still recover an in-progress session after a slow start/resume.
+    await withTimeout(refreshSession(), 8_000, 'refresh workout session').catch(() => undefined);
     Alert.alert(
-      'Could not start workout',
-      error instanceof Error ? error.message : 'Something went wrong. Please try again.',
+      'Restoring workout',
+      error instanceof Error
+        ? `${error.message}. If a workout is already in progress, open the Workout tab to continue.`
+        : 'If a workout is already in progress, open the Workout tab to continue.',
     );
     return null;
   }
