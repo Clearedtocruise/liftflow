@@ -24,6 +24,7 @@ import {
     loadConversationalCoachHistory,
 } from '../lib/conversationalCoachEngine.js';
 import { generateExerciseAlternatives } from '../lib/exerciseReplacementEngine.js';
+import { searchExercisesOnline } from '../lib/exerciseOnlineSearch.js';
 import { estimateFoodMacros } from '../lib/foodMacroEstimator.js';
 import { requireAdmin } from '../lib/supabase.js';
 import { requireProSubscription } from '../middleware/requireProSubscription.js';
@@ -286,6 +287,31 @@ aiRouter.post('/advisory/workout/exercise-alternatives', async (req, res) => {
   } catch (error) {
     captureAiError(error, '/api/ai/advisory/workout/exercise-alternatives');
     res.status(500).json({ message: error instanceof Error ? error.message : 'Exercise alternatives failed' });
+  }
+});
+
+aiRouter.post('/exercises/search', async (req, res) => {
+  try {
+    const { query, limit, availableEquipment } = req.body as {
+      query?: string;
+      limit?: number;
+      availableEquipment?: string[];
+    };
+
+    if (!query || !query.trim()) {
+      res.status(400).json({ message: 'query is required' });
+      return;
+    }
+
+    const suggestions = await searchExercisesOnline({
+      query: query.trim(),
+      limit,
+      availableEquipment,
+    });
+    res.json({ data: { suggestions } });
+  } catch (error) {
+    captureAiError(error, '/api/ai/exercises/search');
+    res.status(500).json({ message: error instanceof Error ? error.message : 'Exercise search failed' });
   }
 });
 

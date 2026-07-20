@@ -59,8 +59,9 @@ const TIMED_NAME_PATTERN =
 const BODYWEIGHT_NAME_PATTERN =
   /\b(pull[\s-]?up|chin[\s-]?up|push[\s-]?up|dip|burpee|air\s*squat|bodyweight|inverted\s*row|muscle[\s-]?up|pistol\s*squat|walking\s*lunge)\b/i;
 
+// Prefer rowing/erg terms — bare "row" matches strength moves (Hammer Low Row, Cable Row).
 const CARDIO_NAME_PATTERN =
-  /\b(run|running|jog|sprint|swim|swimming|cycle|cycling|bike|biking|row(?:ing)?|walk(?:ing)?|treadmill|elliptical|hiit|cardio|jump\s*rope)\b/i;
+  /\b(run|running|jog|sprint|swim|swimming|cycle|cycling|bike|biking|rowing|rower|row\s*erg|erg\s*row|concept\s*2|walk(?:ing)?|treadmill|elliptical|hiit|cardio|jump\s*rope)\b/i;
 
 function normalize(value: string | undefined | null): string {
   return (value ?? '').trim().toLowerCase();
