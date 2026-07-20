@@ -488,12 +488,8 @@ export async function loadWorkoutExercisePrescriptions(
   userId: string,
   exercises: ExercisePrescriptionPlanInput[],
 ): Promise<ExerciseCoachPrescription[]> {
-  const results: ExerciseCoachPrescription[] = [];
-  for (const exercise of exercises) {
-    if (!exercise.exerciseId) continue;
-    results.push(
-      await loadExerciseCoachPrescription(userId, exercise.exerciseId, exercise),
-    );
-  }
-  return results;
+  const jobs = exercises
+    .filter((exercise) => Boolean(exercise.exerciseId))
+    .map((exercise) => loadExerciseCoachPrescription(userId, exercise.exerciseId, exercise));
+  return Promise.all(jobs);
 }

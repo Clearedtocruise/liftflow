@@ -78,7 +78,7 @@ export default function DashboardScreen() {
   const { isPremium } = useSubscription();
   const units = useUnits();
   const { insight } = useInsightRotator();
-  const { startSessionFromPlanned, refreshSession } = useWorkoutSession();
+  const { startSessionFromPlanned, refreshSession, activeSession } = useWorkoutSession();
   const { setPlannedWorkout, setExercises } = useWorkoutPlanDraft();
   const { tabataModeEnabled } = useTabataModePreference();
   const colors = useLiftFlowTheme();
@@ -569,6 +569,12 @@ export default function DashboardScreen() {
         selectedLocationId: selectedId,
         startSessionFromPlanned,
         refreshSession,
+        getActiveSession: async () => {
+          if (activeSession) return activeSession;
+          if (!user?.id) return null;
+          const result = await workoutService.getActiveSession(user.id);
+          return result.success ? result.data : null;
+        },
       });
       if (!result) return;
 

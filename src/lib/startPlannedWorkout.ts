@@ -21,6 +21,8 @@ type StartPlannedWorkoutParams = {
     payload: StartSessionPayload,
   ) => Promise<WorkoutSession | null>;
   refreshSession: () => Promise<void>;
+  /** Optional fast path — restore in-memory/hydrated session without another start. */
+  getActiveSession?: () => Promise<WorkoutSession | null>;
 };
 
 export type StartPlannedWorkoutResult = {
@@ -36,6 +38,7 @@ export async function startPlannedWorkout({
   selectedLocationId,
   startSessionFromPlanned,
   refreshSession,
+  getActiveSession,
 }: StartPlannedWorkoutParams): Promise<StartPlannedWorkoutResult | null> {
   if (isConditioningWorkout(planned)) {
     Alert.alert('Cardio workout', 'Open the workout tab to log this cardio session.');
@@ -47,6 +50,29 @@ export async function startPlannedWorkout({
     planned,
     tabataModeEnabled && !isConditioningWorkout(planned),
   );
+
+  // Prefer restoring an in-progress session over starting a duplicate.
+  if (getActiveSession) {
+    try {
+      const existing = await withTimeout(getActiveSession(), 6_000, 'check active workout');
+      if (
+        existing &&
+        (!existing.plannedWorkoutId || existing.plannedWorkoutId === planned.id)
+      ) {
+        await withTimeout(refreshSession(), 8_000, 'refresh workout session').catch(() => undefined);
+        return { session: existing, sessionExercises };
+      }
+      if (existing) {
+        Alert.alert(
+          'Workout already in progress',
+          'Finish or cancel the current workout on the Workout tab before starting another.',
+        );
+        return null;
+      }
+    } catch {
+      // Fall through to start/resume via API.
+    }
+  }
 
   try {
     const started = await withTimeout(
@@ -62,7 +88,11 @@ export async function startPlannedWorkout({
     );
 
     if (!started) {
-      Alert.alert('Could not start workout', 'Please check your connection and try again.');
+      await withTimeout(refreshSession(), 8_000, 'refresh workout session').catch(() => undefined);
+      Alert.alert(
+        'Could not start workout',
+        'The server may be waking up. Open the Workout tab if a session already started, or try again in a moment.',
+      );
       return null;
     }
 

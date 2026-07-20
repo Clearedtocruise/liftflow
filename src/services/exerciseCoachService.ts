@@ -5,7 +5,7 @@ import { getAccessToken } from '@/supabase/client';
 import type { ServiceResult } from '@/types/common';
 import type { ExerciseCoachPrescription, ExercisePrescriptionPlanInput } from '@/types/exerciseCoach';
 
-const COACH_PRESCRIPTION_TIMEOUT_MS = 8_000;
+const COACH_PRESCRIPTION_TIMEOUT_MS = 15_000;
 
 export const exerciseCoachService = {
   async getPrescription(

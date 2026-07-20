@@ -103,15 +103,23 @@ export function ExerciseCoachCard({
         });
 
         const next = result.success ? result.data : null;
-        if (!coachPrescriptionsEqual(prescriptionRef.current, next)) {
-          setPrescription(next);
-          onPrescriptionRef.current?.(next);
-        }
-        if (!result.success || !next) setFetchError(true);
-        if (result.success && next) {
+        if (next) {
+          if (!coachPrescriptionsEqual(prescriptionRef.current, next)) {
+            setPrescription(next);
+            onPrescriptionRef.current?.(next);
+          }
+          setFetchError(false);
           lastFetchedSignatureRef.current = sessionSetsSignature(setsRef.current);
+        } else {
+          // Keep last good prescription mid-workout; only show unavailable when empty.
+          setFetchError(true);
+          if (!prescriptionRef.current) {
+            setPrescription(null);
+            onPrescriptionRef.current?.(null);
+          }
         }
       } catch {
+        // Keep last good prescription; only surface unavailable when empty.
         setFetchError(true);
       } finally {
         setInitialLoading(false);

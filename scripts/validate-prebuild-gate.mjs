@@ -83,6 +83,7 @@ const unit = spawnSync(
     'tsx',
     '--test',
     'src/lib/stabilitySprint.regression.test.ts',
+    'src/lib/optimisticSetLogging.regression.test.ts',
     'src/lib/mapHealthKitWorkoutToCardio.test.ts',
     'src/lib/mealReplacement.test.ts',
     'src/lib/voice/voiceLoggingAccuracy.test.ts',

@@ -420,35 +420,11 @@ export function WorkoutSessionProvider({
 
   const logSet = useCallback(
     async (payload: CreateSetPayload) => {
-      const result = await workoutService.logSet(payload);
+      if (!activeSession) return null;
 
-      const beginRest = async (loggedSet: WorkoutSet, useServerRest: boolean) => {
-        if (activeSession?.status !== 'active' || payload.skipRest) return;
-
+      const beginLocalRest = (loggedSet: WorkoutSet) => {
+        if (activeSession.status !== 'active' || payload.skipRest) return;
         const restSeconds = payload.restSeconds ?? DEFAULT_REST_SECONDS;
-        if (useServerRest) {
-          const restResult = await workoutService.startRestTimer(
-            activeSession.id,
-            loggedSet.id,
-            restSeconds,
-          );
-          if (restResult.success) {
-            hapticFiredRef.current = false;
-            setRestTimerPaused(false);
-            setActiveRestPeriod(restResult.data);
-            const seconds = restResult.data.recommendedSeconds ?? DEFAULT_REST_SECONDS;
-            restEndAtRef.current = Date.now() + seconds * 1000;
-            setRestSecondsRemaining(seconds);
-            if (userId) {
-              void peakMusicService.triggerRestPeakSync(userId, seconds * 1000, {
-                isHeavySet: loggedSet.weight != null && loggedSet.weight >= 100,
-                isPrAttempt: loggedSet.isPr === true || loggedSet.type === 'failure',
-              });
-            }
-          }
-          return;
-        }
-
         hapticFiredRef.current = false;
         setRestTimerPaused(false);
         setActiveRestPeriod(null);
@@ -462,24 +438,72 @@ export function WorkoutSessionProvider({
         }
       };
 
-      if (result.success) {
-        setLastLoggedSet(result.data);
-        await refreshSession();
-        await beginRest(result.data, true);
-        return result.data;
-      }
-
-      if (!activeSession) return null;
-
-      const pendingId = await pendingSetQueue.enqueue(activeSession.id, payload);
-      await syncPendingSetCount(activeSession.id);
-      const optimistic = applyOptimisticSetToSession(activeSession, payload, pendingId);
+      // Optimistic-first: unlock UI immediately, sync in the background.
+      // Ephemeral id until durable queue is needed on network failure.
+      const localPendingId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const optimistic = applyOptimisticSetToSession(activeSession, payload, localPendingId);
       setActiveSession(optimistic.session);
       setLastLoggedSet(optimistic.set);
-      await beginRest(optimistic.set, false);
+      beginLocalRest(optimistic.set);
+
+      void (async () => {
+        const result = await workoutService.logSet(payload);
+        if (result.success) {
+          setLastLoggedSet(result.data);
+          setActiveSession((current) => {
+            if (!current || current.id !== activeSession.id) return current;
+            return {
+              ...current,
+              exercises: current.exercises.map((exercise) => {
+                if (exercise.id !== payload.workoutExerciseId) return exercise;
+                return {
+                  ...exercise,
+                  sets: exercise.sets.map((set) =>
+                    set.id === optimistic.set.id ? { ...result.data, pendingSync: false } : set,
+                  ),
+                };
+              }),
+            };
+          });
+          if (activeSession.status === 'active' && !payload.skipRest) {
+            void workoutService
+              .startRestTimer(
+                activeSession.id,
+                result.data.id,
+                payload.restSeconds ?? DEFAULT_REST_SECONDS,
+              )
+              .then((restResult) => {
+                if (!restResult.success) return;
+                setActiveRestPeriod(restResult.data);
+              });
+          }
+          return;
+        }
+
+        const pendingId = await pendingSetQueue.enqueue(activeSession.id, payload);
+        await syncPendingSetCount(activeSession.id);
+        setActiveSession((current) => {
+          if (!current || current.id !== activeSession.id) return current;
+          return {
+            ...current,
+            exercises: current.exercises.map((exercise) => {
+              if (exercise.id !== payload.workoutExerciseId) return exercise;
+              return {
+                ...exercise,
+                sets: exercise.sets.map((set) =>
+                  set.id === optimistic.set.id
+                    ? { ...set, id: `pending-${pendingId}`, pendingSync: true }
+                    : set,
+                ),
+              };
+            }),
+          };
+        });
+      })();
+
       return optimistic.set;
     },
-    [activeSession, refreshSession, syncPendingSetCount, userId],
+    [activeSession, syncPendingSetCount, userId],
   );
 
   const updateSet = useCallback(
