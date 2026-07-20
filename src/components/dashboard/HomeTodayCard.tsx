@@ -1,12 +1,24 @@
 import type { ImageSource } from 'expo-image';
+import { useEffect } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
+import Animated, {
+  Easing,
+  FadeIn,
+  FadeInDown,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
 
 import { Card } from '@/components/layout/Card';
 import { CardLifestyleBanner } from '@/components/layout/CardLifestyleBanner';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { AppText } from '@/components/ui/AppText';
 import { LifestyleBannerSets } from '@/constants/imagery';
-import { Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
 import { useAppTheme } from '@/contexts/ThemeContext';
 
 type HomeTodayCardProps = {
@@ -25,7 +37,6 @@ type HomeTodayCardProps = {
   onStartWorkout: () => void;
   onViewWorkout?: () => void;
   onManageDay?: () => void;
-  onLogActivity?: () => void;
   tabataModeEnabled?: boolean;
   startingWorkout?: boolean;
   adaptingPlan?: boolean;
@@ -48,7 +59,6 @@ export function HomeTodayCard({
   onStartWorkout,
   onViewWorkout,
   onManageDay,
-  onLogActivity,
   tabataModeEnabled = false,
   startingWorkout,
   adaptingPlan,
@@ -56,6 +66,41 @@ export function HomeTodayCard({
   showBanner = true,
 }: HomeTodayCardProps) {
   const theme = useAppTheme();
+  const checkScale = useSharedValue(completed ? 1 : 0);
+  const glow = useSharedValue(0);
+
+  useEffect(() => {
+    if (!completed) {
+      checkScale.value = 0;
+      glow.value = 0;
+      return;
+    }
+    checkScale.value = withSequence(
+      withTiming(0, { duration: 0 }),
+      withTiming(1.18, { duration: 420, easing: Easing.out(Easing.back(1.6)) }),
+      withTiming(1, { duration: 180 }),
+    );
+    glow.value = withDelay(
+      200,
+      withRepeat(
+        withSequence(
+          withTiming(1, { duration: 900, easing: Easing.inOut(Easing.quad) }),
+          withTiming(0.35, { duration: 900, easing: Easing.inOut(Easing.quad) }),
+        ),
+        -1,
+        false,
+      ),
+    );
+  }, [checkScale, completed, glow]);
+
+  const checkStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: checkScale.value }],
+  }));
+
+  const glowStyle = useAnimatedStyle(() => ({
+    opacity: 0.25 + glow.value * 0.45,
+  }));
+
   const meta = [
     trainingLabel,
     startTime,
@@ -66,14 +111,14 @@ export function HomeTodayCard({
     .join(' · ');
   const coachBody = completed
     ? volumeLabel
-      ? `Nice work — you lifted ${volumeLabel} today.`
-      : 'Workout complete. Recovery starts with food and rest.'
+      ? `You crushed it — ${volumeLabel} in the books.`
+      : 'Workout locked in. Eat, recover, come back stronger.'
     : whyToday?.trim() || coachMessage;
-  const coachLabel = completed ? 'Done' : whyToday?.trim() ? 'Why today' : 'Coach';
+  const coachLabel = completed ? 'Victory' : whyToday?.trim() ? 'Why today' : 'Coach';
 
   return (
     <View testID="today-workout-card">
-      <Card style={styles.card} glow>
+      <Card style={[styles.card, completed && styles.cardComplete]} glow>
         {showBanner ? (
           <CardLifestyleBanner
             sources={bannerSources}
@@ -84,10 +129,40 @@ export function HomeTodayCard({
           />
         ) : null}
         <View style={styles.body}>
+          {completed ? (
+            <Animated.View entering={FadeIn.duration(400)} style={styles.completeHero}>
+              <Animated.View
+                style={[
+                  styles.glowRing,
+                  { borderColor: theme.colors.primary, backgroundColor: theme.colors.primaryGlow },
+                  glowStyle,
+                ]}
+              />
+              <Animated.View
+                style={[
+                  styles.checkBadge,
+                  { backgroundColor: theme.colors.primary, shadowColor: theme.colors.primary },
+                  checkStyle,
+                ]}>
+                <AppText variant="headline" style={styles.checkMark}>
+                  ✓
+                </AppText>
+              </Animated.View>
+              <Animated.View entering={FadeInDown.delay(120).duration(420)}>
+                <AppText variant="label" color="accent" style={styles.completeEyebrow}>
+                  Workout complete
+                </AppText>
+                <AppText variant="headline" style={styles.completeTitle}>
+                  One more in the bank
+                </AppText>
+              </Animated.View>
+            </Animated.View>
+          ) : null}
+
           <View style={styles.titleRow}>
             <View style={styles.titleBlock}>
               <AppText variant="label" color="accent">
-                Today&apos;s workout
+                {completed ? 'Today' : "Today's workout"}
               </AppText>
               <Pressable onPress={onViewWorkout} disabled={!onViewWorkout}>
                 <AppText variant="headline" style={styles.workoutTitle}>
@@ -100,8 +175,12 @@ export function HomeTodayCard({
                 </AppText>
               ) : null}
             </View>
-            {recoveryScore != null ? (
-              <View style={[styles.scorePill, { borderColor: theme.colors.primarySoft, backgroundColor: theme.colors.primaryGlow }]}>
+            {recoveryScore != null && !completed ? (
+              <View
+                style={[
+                  styles.scorePill,
+                  { borderColor: theme.colors.primarySoft, backgroundColor: theme.colors.primaryGlow },
+                ]}>
                 <AppText variant="caption" color="accent">
                   {Math.round(recoveryScore)}
                 </AppText>
@@ -123,10 +202,9 @@ export function HomeTodayCard({
 
           {completed ? (
             <PrimaryButton
-              label="View History"
+              label="Relive it in History"
               onPress={onViewWorkout ?? onStartWorkout}
               size="large"
-              variant="secondary"
               testID="view-completed-workout-button"
             />
           ) : (
@@ -148,9 +226,6 @@ export function HomeTodayCard({
               testID="manage-day-button"
             />
           ) : null}
-          {!completed && onLogActivity ? (
-            <PrimaryButton label="+ Activity" variant="secondary" onPress={onLogActivity} testID="log-activity-button" />
-          ) : null}
         </View>
       </Card>
     </View>
@@ -163,9 +238,52 @@ const styles = StyleSheet.create({
     padding: 0,
     gap: 0,
   },
+  cardComplete: {
+    borderWidth: 1,
+    borderColor: 'rgba(45, 212, 191, 0.35)',
+  },
   body: {
     padding: Spacing.lg,
     gap: Spacing.md,
+  },
+  completeHero: {
+    alignItems: 'center',
+    gap: Spacing.sm,
+    paddingTop: Spacing.sm,
+    paddingBottom: Spacing.xs,
+  },
+  glowRing: {
+    position: 'absolute',
+    top: 4,
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    borderWidth: 2,
+  },
+  checkBadge: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowOpacity: 0.45,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 6,
+  },
+  checkMark: {
+    color: '#041016',
+    fontSize: 28,
+    lineHeight: 32,
+  },
+  completeEyebrow: {
+    textAlign: 'center',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+  },
+  completeTitle: {
+    textAlign: 'center',
+    marginTop: 2,
   },
   titleRow: {
     flexDirection: 'row',
@@ -180,26 +298,23 @@ const styles = StyleSheet.create({
     lineHeight: 28,
   },
   scorePill: {
-    minWidth: 52,
+    borderWidth: 1,
+    borderRadius: Radius.md,
     paddingHorizontal: Spacing.sm,
     paddingVertical: Spacing.xs,
-    borderRadius: 12,
-    borderWidth: 1,
     alignItems: 'center',
-    gap: 2,
+    minWidth: 64,
   },
   scoreLabel: {
-    fontSize: 9,
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
+    textTransform: 'lowercase',
   },
   coachRow: {
-    gap: 4,
-    paddingTop: Spacing.sm,
     borderTopWidth: StyleSheet.hairlineWidth,
+    paddingTop: Spacing.md,
+    gap: Spacing.xs,
   },
   coachLabel: {
-    letterSpacing: 0.6,
     textTransform: 'uppercase',
+    letterSpacing: 0.8,
   },
 });

@@ -13,7 +13,7 @@ export default function WorkoutRestDayRoute() {
     <WorkoutRestDayScreen
       day={{ date: date ?? new Date().toISOString().slice(0, 10), dayLabel }}
       onBack={() => router.back()}
-      onLogCardio={() => router.push('/(features)/cardio-tracking')}
+      onOpenAppleFitness={() => router.push('/(features)/healthkit')}
     />
   );
 }

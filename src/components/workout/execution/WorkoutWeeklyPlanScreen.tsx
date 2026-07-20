@@ -78,7 +78,7 @@ function DayCard({
           </>
         ) : hasWorkout && isConditioning ? (
           <AppText variant="footnote" color="textSecondary">
-            Cardio session · tap to log
+            Track in Apple Fitness · ONE MORE syncs calories
           </AppText>
         ) : (
           <AppText variant="footnote" color="textSecondary">
@@ -155,7 +155,12 @@ export function WorkoutWeeklyPlanScreen({
 
       <View style={styles.quickActions}>
         {onCardio ? (
-          <PrimaryButton label="Cardio & HIIT" variant="secondary" onPress={onCardio} testID="workout-cardio-button" />
+          <PrimaryButton
+            label="Apple Fitness sync"
+            variant="secondary"
+            onPress={onCardio}
+            testID="workout-cardio-button"
+          />
         ) : null}
         <PrimaryButton label="Quick log" variant="ghost" onPress={onManualLog} />
       </View>

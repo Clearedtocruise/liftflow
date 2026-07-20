@@ -8,6 +8,7 @@ import { NutritionMetricsRow } from '@/components/nutrition/NutritionMetricsRow'
 import { AppText } from '@/components/ui/AppText';
 import { HeroImages } from '@/constants/imagery';
 import { Spacing } from '@/constants/theme';
+import { computeDailyDeficit } from '@/lib/dailyEnergyBalance';
 import { mealTypeLabel } from '@/lib/mealSchedule';
 import type { MealType } from '@/types/common';
 
@@ -42,7 +43,9 @@ type HomeNextUpCardProps = {
   onStartWorkout: () => void;
   onViewWorkout?: () => void;
   onManageDay?: () => void;
-  onLogActivity?: () => void;
+  /** Fat-loss goals: show burned / consumed / deficit. */
+  caloriesConsumedToday?: number;
+  showDeficit?: boolean;
   tabataModeEnabled?: boolean;
   showWorkoutSection?: boolean;
   isRestDay?: boolean;
@@ -66,7 +69,8 @@ export function HomeNextUpCard({
   onStartWorkout,
   onViewWorkout,
   onManageDay,
-  onLogActivity,
+  caloriesConsumedToday = 0,
+  showDeficit = false,
   tabataModeEnabled = false,
   showWorkoutSection = false,
   isRestDay = false,
@@ -107,10 +111,21 @@ export function HomeNextUpCard({
           />
         ) : null}
 
-        {caloriesBurnedToday > 0 ? (
-          <AppText variant="footnote" color="textSecondary">
-            Active burned today · {Math.round(caloriesBurnedToday)} cal
-          </AppText>
+        {caloriesBurnedToday > 0 || showDeficit ? (
+          <View style={styles.energyBlock}>
+            {caloriesBurnedToday > 0 ? (
+              <AppText variant="footnote" color="textSecondary">
+                Apple Fitness burned · {Math.round(caloriesBurnedToday)} cal
+              </AppText>
+            ) : null}
+            {showDeficit ? (
+              <AppText variant="footnote" color="accent">
+                {caloriesBurnedToday > 0
+                  ? `Deficit today · ${computeDailyDeficit(caloriesBurnedToday, caloriesConsumedToday)} cal`
+                  : `Consumed · ${Math.round(caloriesConsumedToday)} cal · connect Apple Health for deficit`}
+              </AppText>
+            ) : null}
+          </View>
         ) : null}
 
         {nextMeal ? (
@@ -170,7 +185,6 @@ export function HomeNextUpCard({
           onStartWorkout={onStartWorkout}
           onViewWorkout={onViewWorkout}
           onManageDay={onManageDay}
-          onLogActivity={onLogActivity}
           tabataModeEnabled={tabataModeEnabled}
           startingWorkout={startingWorkout}
           adaptingPlan={adaptingPlan}
@@ -204,9 +218,6 @@ export function HomeNextUpCard({
                 testID="manage-day-button"
               />
             ) : null}
-            {onLogActivity ? (
-              <PrimaryButton label="Log Activity" variant="secondary" onPress={onLogActivity} />
-            ) : null}
           </View>
         </Card>
       ) : null}
@@ -231,6 +242,9 @@ const styles = StyleSheet.create({
     gap: Spacing.md,
   },
   section: {
+    gap: Spacing.xs,
+  },
+  energyBlock: {
     gap: Spacing.xs,
   },
 });

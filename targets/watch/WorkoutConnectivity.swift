@@ -128,84 +128,8 @@ final class WorkoutConnectivity: NSObject, ObservableObject, WCSessionDelegate, 
   }
 
   private func applyCardioState(_ state: [String: Any], shouldPresent: Bool = false) {
-    let previousSession = cardioSessionId
-    isCardioMode = true
-    workoutSessionId = nil
-    phase = "cardio"
-    cardioSessionId = state["sessionId"] as? String
-    cardioActivityLabel = state["activityLabel"] as? String ?? "Cardio"
-    cardioRunning = state["running"] as? Bool ?? false
-    cardioPhaseLabel = state["phaseLabel"] as? String ?? ""
-
-    if let startedAt = state["sessionStartedAt"] as? String {
-      cardioSessionStartedAt = ISO8601DateFormatter().date(from: startedAt)
-    } else if cardioSessionStartedAt == nil, cardioRunning {
-      cardioSessionStartedAt = Date().addingTimeInterval(-Double(state["elapsedSeconds"] as? Int ?? 0))
-    }
-
-    if cardioRunning {
-      startCardioElapsedTimer()
-      cardioElapsedSeconds = computeCardioElapsed()
-    } else {
-      cardioElapsedSeconds = state["elapsedSeconds"] as? Int ?? computeCardioElapsed()
-      stopCardioElapsedTimer()
-    }
-
-    exerciseName = cardioActivityLabel
-    setLabel = formatCardioElapsed(cardioElapsedSeconds)
-    statusLine = cardioPhaseLabel.isEmpty ? (cardioRunning ? "In progress" : "Paused") : cardioPhaseLabel
-
-    if let pace = state["paceLabel"] as? String, !pace.isEmpty {
-      cardioPaceLabel = pace
-    } else {
-      cardioPaceLabel = ""
-    }
-
-    if let distanceMeters = state["distanceMeters"] as? Double, distanceMeters > 0 {
-      let km = distanceMeters / 1000.0
-      cardioDistanceLabel = String(format: "%.2f km", km)
-    } else if let distanceMeters = state["distanceMeters"] as? Int, distanceMeters > 0 {
-      let km = Double(distanceMeters) / 1000.0
-      cardioDistanceLabel = String(format: "%.2f km", km)
-    } else {
-      cardioDistanceLabel = ""
-    }
-
-    if let calories = state["calories"] as? Int {
-      sessionCalories = calories
-      activeCalories = calories
-    }
-
-    if let hr = state["heartRateBpm"] as? Int {
-      heartRateBpm = hr
-    }
-
-    if previousSession == nil, cardioSessionId != nil {
-      let activity: HKWorkoutActivityType = {
-        let label = cardioActivityLabel.lowercased()
-        if label.contains("run") { return .running }
-        if label.contains("bike") || label.contains("cycle") { return .cycling }
-        if label.contains("walk") { return .walking }
-        if label.contains("row") { return .rowing }
-        return .mixedCardio
-      }()
-      beginWorkoutRuntime(activityType: activity)
-      if shouldPresent {
-        WKInterfaceDevice.current().play(.start)
-        lastSpokenResponse = "Cardio started on iPhone"
-      }
-    } else if cardioSessionId != nil {
-      sessionLatchActive = true
-      isSessionActive = true
-    }
-
-    if cardioRunning {
-      if calorieTimer == nil {
-        startCalorieTimer()
-      }
-    } else if !cardioRunning, cardioElapsedSeconds == 0, previousSession != nil, cardioSessionId == nil {
-      clearCardioState()
-    }
+    // Extra/cardio companion removed — ignore phone cardio pushes; keep strength UI.
+    clearCardioState()
   }
 
   private func clearCardioState() {

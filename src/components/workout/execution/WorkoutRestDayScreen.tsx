@@ -10,10 +10,10 @@ import { isToday, type WeekDayPlan } from '@/lib/weekPlan';
 type WorkoutRestDayScreenProps = {
   day: Pick<WeekDayPlan, 'date' | 'dayLabel'>;
   onBack: () => void;
-  onLogCardio: () => void;
+  onOpenAppleFitness?: () => void;
 };
 
-export function WorkoutRestDayScreen({ day, onBack, onLogCardio }: WorkoutRestDayScreenProps) {
+export function WorkoutRestDayScreen({ day, onBack, onOpenAppleFitness }: WorkoutRestDayScreenProps) {
   const today = isToday(day.date);
 
   return (
@@ -31,13 +31,19 @@ export function WorkoutRestDayScreen({ day, onBack, onLogCardio }: WorkoutRestDa
         </AppText>
         <AppText variant="title">Rest Day</AppText>
         <AppText variant="footnote" color="textSecondary">
-          Recovery, mobility, or optional light activity
+          Recovery starts here. Track walks and cardio in Apple Fitness — ONE MORE pulls them in for daily totals.
         </AppText>
       </Card>
 
-      <View style={styles.actions}>
-        <PrimaryButton label="Log Cardio" variant="secondary" onPress={onLogCardio} />
-      </View>
+      {onOpenAppleFitness ? (
+        <View style={styles.actions}>
+          <PrimaryButton
+            label="Connect Apple Health"
+            variant="secondary"
+            onPress={onOpenAppleFitness}
+          />
+        </View>
+      ) : null}
     </ScreenContainer>
   );
 }

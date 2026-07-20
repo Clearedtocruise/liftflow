@@ -1,7 +1,7 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, InteractionManager, RefreshControl, StyleSheet, type AlertButton } from 'react-native';
+import { Alert, InteractionManager, RefreshControl, StyleSheet } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { HomeNextUpCard } from '@/components/dashboard/HomeNextUpCard';
@@ -20,7 +20,6 @@ import { SectionHeader } from '@/components/layout/SectionHeader';
 import { SkeletonBlock } from '@/components/layout/SkeletonBlock';
 import { StatCard } from '@/components/layout/StatCard';
 import { AppText } from '@/components/ui/AppText';
-import { HOME_ACTIVITY_OPTIONS } from '@/constants/activityOptions';
 import { HeroImages } from '@/constants/imagery';
 import { Spacing } from '@/constants/theme';
 import { usePlanAdjustment } from '@/contexts/PlanAdjustmentContext';
@@ -59,7 +58,6 @@ import { buildWeekPlan, dedupePlannedWorkoutsByDate, getWeekRange } from '@/lib/
 import { withTimeout } from '@/lib/withTimeout';
 import { estimateWorkoutDurationMinutes, exercisesFromPlannedWorkout } from '@/lib/workoutPlan';
 import { analyticsService } from '@/services/analyticsService';
-import { cardioService } from '@/services/cardioService';
 import { healthService } from '@/services/healthService';
 import { nutritionService } from '@/services/nutritionService';
 import { recoveryService } from '@/services/recoveryService';
@@ -269,32 +267,36 @@ export default function DashboardScreen() {
 
       void (async () => {
         try {
-          // Import Apple Fitness runs into ONE MORE before summing today's burned calories.
+          // Prefer Apple Active Energy for today's burned total (Move-ring aligned).
           await healthService.sync(user.id, 7).catch(() => undefined);
           if (generation !== loadGenerationRef.current) return;
 
-          const [historyResult, cardioResult] = await Promise.all([
+          const [historyResult, summariesResult] = await Promise.all([
             workoutService.getHistory(user.id, 1),
-            cardioService.getRecent(user.id, 20),
+            healthService.getDailySummaries(user.id, 3),
           ]);
           if (generation !== loadGenerationRef.current) return;
 
           let burned = 0;
           let volumeKg: number | null = null;
 
+          if (summariesResult.success) {
+            const todaySummary = summariesResult.data.find((row) =>
+              isSameCalendarDate(row.date, today),
+            );
+            if (todaySummary?.activeCalories != null && todaySummary.activeCalories > 0) {
+              burned = todaySummary.activeCalories;
+            }
+          }
+
           if (historyResult.success) {
             for (const item of historyResult.data.data) {
               if (!isSameCalendarDate(item.date, today)) continue;
-              if (item.caloriesBurned) burned += item.caloriesBurned;
               if (item.totalVolume != null && item.totalVolume > 0) {
                 volumeKg = (volumeKg ?? 0) + item.totalVolume;
               }
-            }
-          }
-          if (cardioResult.success) {
-            for (const session of cardioResult.data) {
-              if (!isSameCalendarDate(session.startedAt, today)) continue;
-              if (session.caloriesBurned) burned += session.caloriesBurned;
+              // Fallback only when HealthKit Active Energy is missing.
+              if (burned <= 0 && item.caloriesBurned) burned += item.caloriesBurned;
             }
           }
 
@@ -410,15 +412,6 @@ export default function DashboardScreen() {
     });
   }, [user, showWeeklyReview]);
 
-  function handleLogActivity() {
-    const buttons: AlertButton[] = HOME_ACTIVITY_OPTIONS.map((option) => ({
-      text: option.label,
-      onPress: () => router.push(option.route as never),
-    }));
-    buttons.push({ text: 'Cancel', style: 'cancel' });
-    Alert.alert('Log Activity', 'Choose activity type', buttons);
-  }
-
   async function handleAcceptWeeklyPlan() {
     if (!user || !weeklyCloseoutId) {
       router.push('/(features)/next-week-plan');
@@ -505,6 +498,9 @@ export default function DashboardScreen() {
   const proteinTarget = nutritionGoals?.proteinG ?? 0;
   const caloriesRemaining = Math.max(0, calorieTarget - mealAggregation.caloriesConsumed);
   const proteinRemaining = Math.max(0, proteinTarget - mealAggregation.proteinG);
+  const showDeficit = Boolean(
+    user?.fitnessGoals?.some((goal) => goal === 'fat_loss' || goal === 'weight_loss'),
+  );
 
   const coachHeadline = coachGuidance.coachHeadline;
 
@@ -650,6 +646,8 @@ export default function DashboardScreen() {
             mealsCompleted={mealAggregation.mealsCompleted}
             mealsTotal={mealAggregation.mealsTotal}
             caloriesBurnedToday={caloriesBurnedToday}
+            caloriesConsumedToday={mealAggregation.caloriesConsumed}
+            showDeficit={showDeficit}
             workout={
               todaysWorkout
                 ? {
@@ -690,7 +688,6 @@ export default function DashboardScreen() {
             }}
             onStartWorkout={() => todaysWorkout && handleStartNextWorkout(todaysWorkout)}
             onManageDay={handleManageDay}
-            onLogActivity={handleLogActivity}
             tabataModeEnabled={tabataModeEnabled}
             showWorkoutSection={showWorkoutSection}
             isRestDay={!todaysWorkout}

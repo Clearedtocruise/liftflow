@@ -275,17 +275,11 @@ export async function pushRestCompleteToWatch(): Promise<{ sent: boolean; error?
 }
 
 export async function pushCardioStateToWatch(
-  state: WatchCardioState | null,
-  options?: { presentWorkout?: boolean },
+  _state: WatchCardioState | null,
+  _options?: { presentWorkout?: boolean },
 ): Promise<{ sent: boolean; error?: string }> {
-  const payload: Record<string, unknown> = {
-    type: 'cardio_state',
-    state: state,
-  };
-  if (options?.presentWorkout) {
-    payload.presentWorkout = true;
-  }
-  return sendToWatch(payload);
+  // Extra/cardio Watch companion removed — Apple Fitness owns activity tracking.
+  return { sent: false, error: 'Cardio Watch mode disabled' };
 }
 
 let watchSyncGeneration = 0;

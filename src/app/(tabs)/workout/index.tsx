@@ -200,7 +200,7 @@ export default function WorkoutScreen() {
   const handleSelectDay = useCallback(
     (day: WeekDayPlan) => {
       if (day.workout && isConditioningWorkout(day.workout)) {
-        router.push('/(features)/cardio-tracking');
+        router.push('/(features)/healthkit');
         return;
       }
       if (day.workout) {
@@ -387,7 +387,7 @@ export default function WorkoutScreen() {
         onSelectDay={handleSelectDay}
         onEditDay={handleEditDay}
         onManualLog={() => router.push('/(tabs)/workout/manual-log')}
-        onCardio={() => router.push('/(features)/cardio-tracking')}
+        onCardio={() => router.push('/(features)/healthkit')}
       />
 
       {editDayMenu ? (

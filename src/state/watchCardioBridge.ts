@@ -16,15 +16,16 @@ export const watchCardioBridge = {
     return activeCardio;
   },
 
-  /** True while phone is driving the Watch cardio UI — blocks strength workout pushes. */
+  /** Extra/cardio Watch mode removed — strength companion always owns the Watch. */
   isWatchOwnedByCardio(): boolean {
-    return activeCardio != null;
+    return false;
   },
 
   setActive(state: WatchCardioState | null): void {
-    activeCardio = state;
+    // Intentionally ignore cardio ownership — Apple Fitness is the activity source.
+    activeCardio = null;
     for (const listener of activeListeners) {
-      listener(state);
+      listener(null);
     }
   },
 

@@ -47,9 +47,7 @@ struct ContentView: View {
         workoutStatusCard
         metricsRow
 
-        if connectivity.isCardioMode {
-          cardioPanel
-        } else if connectivity.isRestPhase {
+        if connectivity.isRestPhase {
           restPanel
         } else if connectivity.workoutSessionId != nil {
           activeSetPanel
