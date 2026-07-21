@@ -1,7 +1,7 @@
 import { Router } from 'express';
 
 import { mergeIncomingHealthSamples } from '../lib/healthSyncEngine.js';
-import { applyHealthToRecoveryCheckIn, loadHealthContext } from '../lib/loadHealthContext.js';
+import { applyHealthToRecoveryCheckIn, invalidateHealthContextCache, loadHealthContext } from '../lib/loadHealthContext.js';
 import {
     buildStravaAuthUrl,
     exchangeStravaCode,
@@ -90,6 +90,7 @@ integrationsRouter.post('/healthkit/sync', requireUser, async (req: AuthedReques
       { onConflict: 'user_id,provider' },
     );
 
+    invalidateHealthContextCache(userId);
     const context = await loadHealthContext(userId);
     await applyHealthToRecoveryCheckIn(userId, new Date().toISOString().slice(0, 10), context);
 
@@ -111,6 +112,7 @@ integrationsRouter.get('/health/context', requireUser, async (req: AuthedRequest
 integrationsRouter.post('/health/context/refresh', requireUser, async (req: AuthedRequest, res) => {
   try {
     const userId = req.userId!;
+    invalidateHealthContextCache(userId);
     const context = await loadHealthContext(userId);
     await applyHealthToRecoveryCheckIn(userId, new Date().toISOString().slice(0, 10), context);
     res.json(context);
