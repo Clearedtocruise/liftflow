@@ -180,6 +180,9 @@ export const authService = {
     return supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'INITIAL_SESSION') return;
 
+      // Token refresh fires frequently — never re-fetch the full profile on every refresh.
+      if (event === 'TOKEN_REFRESHED') return;
+
       if (!session?.user) {
         callback(null);
         return;
@@ -187,6 +190,9 @@ export const authService = {
 
       const authUser = session.user;
       callback(stubProfileFromAuth(authUser));
+
+      // Only reload profile when the user actually signs in or their account changes.
+      if (event !== 'SIGNED_IN' && event !== 'USER_UPDATED') return;
 
       void withTimeout(
         fetchProfile(authUser.id, authUser.email ?? '', authUser.user_metadata),

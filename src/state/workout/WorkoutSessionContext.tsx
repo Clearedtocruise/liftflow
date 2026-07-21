@@ -11,6 +11,7 @@ import {
 import { AppState } from 'react-native';
 
 import { DEFAULT_REST_SECONDS } from '@/constants/workout';
+import { dedupeInFlight, egressKey } from '@/lib/egressGuard';
 import { pendingSetQueue } from '@/lib/pendingSetQueue';
 import {
     applyOptimisticSetToSession,
@@ -130,20 +131,22 @@ export function WorkoutSessionProvider({
   const refreshSession = useCallback(async () => {
     const sessionId = trackedSessionIdRef.current;
     if (!sessionId) return;
-    const epoch = sessionEpochRef.current;
-    const result = await workoutService.getSession(sessionId);
-    if (epoch !== sessionEpochRef.current || trackedSessionIdRef.current !== sessionId) return;
-    if (!result.success) return;
-    if (result.data.status === 'cancelled' || result.data.status === 'completed') {
-      trackedSessionIdRef.current = null;
-      setActiveSession(null);
-      return;
-    }
+    await dedupeInFlight(egressKey(['refreshSession', sessionId]), async () => {
+      const epoch = sessionEpochRef.current;
+      const result = await workoutService.getSession(sessionId);
+      if (epoch !== sessionEpochRef.current || trackedSessionIdRef.current !== sessionId) return;
+      if (!result.success) return;
+      if (result.data.status === 'cancelled' || result.data.status === 'completed') {
+        trackedSessionIdRef.current = null;
+        setActiveSession(null);
+        return;
+      }
 
-    const pending = (await pendingSetQueue.list()).filter((item) => item.sessionId === sessionId);
-    setActiveSession(
-      pending.length > 0 ? mergePendingSetsIntoSession(result.data, pending) : result.data,
-    );
+      const pending = (await pendingSetQueue.list()).filter((item) => item.sessionId === sessionId);
+      setActiveSession(
+        pending.length > 0 ? mergePendingSetsIntoSession(result.data, pending) : result.data,
+      );
+    });
   }, []);
 
   const hydrate = useCallback(async () => {

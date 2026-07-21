@@ -74,7 +74,9 @@ export async function fetchHealthKitSamples(since: Date): Promise<HealthMetricSa
   if (!hk) return [];
 
   const now = new Date();
-  const filter = { from: since, to: now, limit: 500 };
+  // Keep HealthKit pulls bounded — continuous HR at limit 500 was a major Supabase egress driver.
+  const filter = { from: since, to: now, limit: 200 };
+  const sparseFilter = { from: since, to: now, limit: 40 };
   const samples: HealthMetricSample[] = [];
 
   const steps = await hk.queryQuantitySamples('HKQuantityTypeIdentifierStepCount', filter);
@@ -110,18 +112,12 @@ export async function fetchHealthKitSamples(since: Date): Promise<HealthMetricSa
     });
   }
 
-  const heartRates = await hk.queryQuantitySamples('HKQuantityTypeIdentifierHeartRate', filter);
-  for (const s of heartRates) {
-    samples.push({
-      dataType: 'heart_rate',
-      externalId: s.uuid,
-      value: { bpm: s.quantity },
-      recordedAt: s.endDate.toISOString(),
-      unit: 'bpm',
-    });
-  }
-
-  const restingHr = await hk.queryQuantitySamples('HKQuantityTypeIdentifierRestingHeartRate', filter);
+  // Do not sync continuous heart-rate streams to Supabase (high cardinality).
+  // Resting HR + HRV are enough for recovery summaries.
+  const restingHr = await hk.queryQuantitySamples(
+    'HKQuantityTypeIdentifierRestingHeartRate',
+    sparseFilter,
+  );
   for (const s of restingHr) {
     samples.push({
       dataType: 'resting_heart_rate',
@@ -132,7 +128,10 @@ export async function fetchHealthKitSamples(since: Date): Promise<HealthMetricSa
     });
   }
 
-  const hrv = await hk.queryQuantitySamples('HKQuantityTypeIdentifierHeartRateVariabilitySDNN', filter);
+  const hrv = await hk.queryQuantitySamples(
+    'HKQuantityTypeIdentifierHeartRateVariabilitySDNN',
+    sparseFilter,
+  );
   for (const s of hrv) {
     samples.push({
       dataType: 'hrv',

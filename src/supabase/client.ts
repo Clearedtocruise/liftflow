@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import 'react-native-url-polyfill/auto';
 
+import { recordEgress } from '@/lib/egressGuard';
 import { authStorage } from '@/supabase/authStorage';
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
@@ -21,12 +22,45 @@ function requireConfig(): { url: string; key: string } {
 
 const config = isSupabaseConfigured ? requireConfig() : { url: supabaseUrl, key: supabaseAnonKey };
 
+function instrumentedFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const url =
+    typeof input === 'string'
+      ? input
+      : input instanceof URL
+        ? input.toString()
+        : input.url;
+  let path = url;
+  try {
+    const parsed = new URL(url);
+    // Strip query values to keep telemetry keys stable (keep table/rpc path only).
+    path = parsed.pathname;
+  } catch {
+    // keep raw url
+  }
+
+  const method = (init?.method ?? 'GET').toUpperCase();
+  const started = Date.now();
+
+  return fetch(input, init).then((response) => {
+    // Prefer Content-Length; never clone the body (that would double local work/egress).
+    const bytesEstimate = Number(response.headers.get('content-length') ?? 0);
+    recordEgress(`supabase:${method}:${path}`, {
+      bytesEstimate,
+      meta: { status: response.status, ms: Date.now() - started },
+    });
+    return response;
+  });
+}
+
 export const supabase = createClient(config.url, config.key, {
   auth: {
     storage: authStorage,
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,
+  },
+  global: {
+    fetch: instrumentedFetch,
   },
 });
 

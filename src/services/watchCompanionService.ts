@@ -8,6 +8,7 @@ import {
     type WatchInboundHandlerResult,
 } from '@/integrations/watchSyncBridge';
 import { resolveActiveTrainingDay } from '@/lib/activeTrainingDay';
+import { canRunThrottled, dedupeInFlight, egressKey, markThrottle } from '@/lib/egressGuard';
 import { localDateString } from '@/lib/localDate';
 import { fail, fromError, ok } from '@/lib/serviceResult';
 import { getWeekRange, isConditioningWorkout } from '@/lib/weekPlan';
@@ -27,41 +28,91 @@ import type { ServiceResult } from '@/types/common';
 /** Phone-side commands that must not trigger syncActiveSession + enrichState on the Watch. */
 const LIGHTWEIGHT_INBOUND = new Set(['skip_rest', 'set_weight', 'voice_command', 'log_set']);
 
+const ENRICH_TTL_MS = 90_000;
+const enrichCache = new Map<
+  string,
+  {
+    expiresAt: number;
+    recoveryScore?: number;
+    recoveryLabel?: string;
+    workoutRecommendation?: string;
+    progressionLine?: string;
+  }
+>();
+
+function enrichCacheKey(userId: string, exerciseId?: string): string {
+  return egressKey(['watchEnrich', userId, exerciseId ?? 'idle']);
+}
+
 export const watchCompanionService = {
   async enrichState(userId: string, state: WatchWorkoutAssistantState): Promise<WatchWorkoutAssistantState> {
-    const [recovery, daily, idlePreview] = await Promise.all([
-      recoveryService.getIntelligence(userId),
-      workoutRecommendationService.getDaily(userId),
-      state.activeSet ? Promise.resolve(undefined) : this.buildIdleWorkoutPreview(userId),
-    ]);
-
-    let progressionLine: string | undefined;
-    if (state.activeSet) {
-      const suggested = await watchWorkoutService.suggestProgressionLine(
-        userId,
-        state.activeSet.exerciseId,
-        state.activeSet.targetReps,
-      );
-      progressionLine = suggested;
+    const cacheKey = enrichCacheKey(userId, state.activeSet?.exerciseId);
+    const cached = enrichCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      return {
+        ...state,
+        recoveryScore: cached.recoveryScore,
+        recoveryLabel: cached.recoveryLabel,
+        workoutRecommendation: state.activeSet
+          ? cached.workoutRecommendation
+          : cached.workoutRecommendation,
+        progressionLine: cached.progressionLine,
+        updatedAt: new Date().toISOString(),
+      };
     }
 
-    const dailyLine = daily.success
-      ? daily.data.today.voiceLine ?? daily.data.today.sessionLabel ?? undefined
-      : undefined;
+    return dedupeInFlight(cacheKey, async () => {
+      const [recovery, daily, idlePreview] = await Promise.all([
+        recoveryService.getIntelligence(userId),
+        workoutRecommendationService.getDaily(userId),
+        state.activeSet ? Promise.resolve(undefined) : this.buildIdleWorkoutPreview(userId),
+      ]);
 
-    return {
-      ...state,
-      recoveryScore: recovery.success ? recovery.data.recoveryScore : undefined,
-      recoveryLabel: recovery.success ? recovery.data.recoveryStatusLabel : undefined,
-      workoutRecommendation: state.activeSet
-        ? dailyLine
-        : idlePreview ?? dailyLine,
-      progressionLine,
-      updatedAt: new Date().toISOString(),
-    };
+      let progressionLine: string | undefined;
+      if (state.activeSet) {
+        const suggested = await watchWorkoutService.suggestProgressionLine(
+          userId,
+          state.activeSet.exerciseId,
+          state.activeSet.targetReps,
+        );
+        progressionLine = suggested;
+      }
+
+      const dailyLine = daily.success
+        ? daily.data.today.voiceLine ?? daily.data.today.sessionLabel ?? undefined
+        : undefined;
+
+      const workoutRecommendation = state.activeSet ? dailyLine : idlePreview ?? dailyLine;
+      const recoveryScore = recovery.success ? recovery.data.recoveryScore : undefined;
+      const recoveryLabel = recovery.success ? recovery.data.recoveryStatusLabel : undefined;
+
+      enrichCache.set(cacheKey, {
+        expiresAt: Date.now() + ENRICH_TTL_MS,
+        recoveryScore,
+        recoveryLabel,
+        workoutRecommendation,
+        progressionLine,
+      });
+
+      return {
+        ...state,
+        recoveryScore,
+        recoveryLabel,
+        workoutRecommendation,
+        progressionLine,
+        updatedAt: new Date().toISOString(),
+      };
+    });
   },
 
   async buildIdleWorkoutPreview(userId: string): Promise<string | undefined> {
+    const previewKey = egressKey(['watchIdlePreview', userId]);
+    if (!canRunThrottled(previewKey, 60_000)) {
+      const cached = enrichCache.get(enrichCacheKey(userId));
+      return cached?.workoutRecommendation;
+    }
+    markThrottle(previewKey);
+
     const { data: profile } = await supabase
       .from('profiles')
       .select('timezone')

@@ -1,4 +1,5 @@
 import { mapExercise, mapHistoryItem, mapSession, mapSet } from '@/lib/db-mappers';
+import { dedupeInFlight, egressKey, recordEgress } from '@/lib/egressGuard';
 import { fail, fromError, ok } from '@/lib/serviceResult';
 import type { IWorkoutService } from '@/services/interfaces';
 import { supabase } from '@/supabase/client';
@@ -14,35 +15,54 @@ type PlannedExerciseTemplate = {
   restSeconds?: number;
 };
 
+/** Explicit columns only — never SELECT * on nested workout graphs (major egress source). */
 const SESSION_SELECT = `
-  *,
+  id, user_id, name, status, planned_workout_id, training_phase_id,
+  started_at, ended_at, duration_seconds, total_volume, total_sets,
+  calories_burned, notes, metadata, created_at, updated_at,
   workout_exercises (
-    *,
-    exercises (*),
-    workout_sets (*)
+    id, session_id, block_id, exercise_id, sort_order,
+    suggested_weight, suggested_reps, notes, created_at,
+    exercises (
+      id, name, slug, category, exercise_type, equipment,
+      muscle_groups, secondary_muscles, tutorial_url, instructions,
+      is_system, created_by, created_at, updated_at
+    ),
+    workout_sets (
+      id, workout_exercise_id, set_number, weight, reps, rpe, set_type,
+      duration_seconds, time_under_tension_seconds, rest_seconds,
+      is_pr, notes, logged_at, metadata
+    )
   )
 `;
 
 async function loadSession(sessionId: string): Promise<WorkoutSession | null> {
-  const { data, error } = await supabase
-    .from('workout_sessions')
-    .select(SESSION_SELECT)
-    .eq('id', sessionId)
-    .single();
+  return dedupeInFlight(egressKey(['loadSession', sessionId]), async () => {
+    const { data, error } = await supabase
+      .from('workout_sessions')
+      .select(SESSION_SELECT)
+      .eq('id', sessionId)
+      .single();
 
-  if (error || !data) return null;
-  return mapSession(data);
+    if (error || !data) return null;
+    recordEgress('workout:loadSession', { meta: { sessionId } });
+    return mapSession(data as Parameters<typeof mapSession>[0]);
+  });
 }
 
 async function recalculateSessionTotals(sessionId: string): Promise<void> {
-  const session = await loadSession(sessionId);
-  if (!session) return;
+  // Lightweight aggregate — do not reload the full nested session graph.
+  const { data } = await supabase
+    .from('workout_exercises')
+    .select('workout_sets(weight, reps)')
+    .eq('session_id', sessionId);
 
   let totalSets = 0;
   let totalVolume = 0;
 
-  for (const exercise of session.exercises) {
-    for (const set of exercise.sets) {
+  for (const exercise of data ?? []) {
+    const sets = (exercise.workout_sets ?? []) as Array<{ weight: number | null; reps: number | null }>;
+    for (const set of sets) {
       totalSets += 1;
       if (set.weight && set.reps) {
         totalVolume += set.weight * set.reps;
@@ -73,40 +93,48 @@ async function detectPersonalRecord(
 
   if (!exerciseRow?.exercise_id) return false;
 
-  const { data: userExercises } = await supabase
-    .from('workout_exercises')
-    .select('id, workout_sessions!inner(user_id)')
-    .eq('exercise_id', exerciseRow.exercise_id)
-    .eq('workout_sessions.user_id', userId);
+  const volume = weight * reps;
+  const exerciseId = exerciseRow.exercise_id;
 
-  const exerciseIds = (userExercises ?? []).map((row) => row.id);
-  if (exerciseIds.length === 0) return true;
-
-  let query = supabase
+  // Single nested filter instead of downloading every historical workout_exercise id + all sets.
+  let maxWeightQuery = supabase
     .from('workout_sets')
-    .select('id, weight, reps')
-    .in('workout_exercise_id', exerciseIds);
+    .select('id, weight, workout_exercises!inner(exercise_id, workout_sessions!inner(user_id))')
+    .eq('workout_exercises.exercise_id', exerciseId)
+    .eq('workout_exercises.workout_sessions.user_id', userId)
+    .not('weight', 'is', null)
+    .order('weight', { ascending: false })
+    .limit(1);
 
-  if (excludeSetId) {
-    query = query.neq('id', excludeSetId);
-  }
+  if (excludeSetId) maxWeightQuery = maxWeightQuery.neq('id', excludeSetId);
 
-  const { data: priorSets } = await query;
+  const { data: heaviest } = await maxWeightQuery.maybeSingle();
+  const maxWeight = heaviest?.weight ?? 0;
+  if (weight > maxWeight) return true;
+
+  // Cap volume scan — unbounded set history was a major egress source for frequent lifts.
+  let volumeQuery = supabase
+    .from('workout_sets')
+    .select('id, weight, reps, workout_exercises!inner(exercise_id, workout_sessions!inner(user_id))')
+    .eq('workout_exercises.exercise_id', exerciseId)
+    .eq('workout_exercises.workout_sessions.user_id', userId)
+    .not('weight', 'is', null)
+    .not('reps', 'is', null)
+    .order('weight', { ascending: false })
+    .limit(150);
+
+  if (excludeSetId) volumeQuery = volumeQuery.neq('id', excludeSetId);
+
+  const { data: priorSets } = await volumeQuery;
   if (!priorSets || priorSets.length === 0) return true;
 
-  const volume = weight * reps;
-  let maxWeight = 0;
   let maxVolume = 0;
-
   for (const set of priorSets) {
-    const setWeight = set.weight ?? 0;
-    const setReps = set.reps ?? 0;
-    if (setWeight > maxWeight) maxWeight = setWeight;
-    const setVolume = setWeight * setReps;
+    const setVolume = (set.weight ?? 0) * (set.reps ?? 0);
     if (setVolume > maxVolume) maxVolume = setVolume;
   }
 
-  return weight > maxWeight || volume > maxVolume;
+  return volume > maxVolume;
 }
 
 async function getSessionUserId(workoutExerciseId: string): Promise<string | null> {
@@ -407,7 +435,7 @@ export const workoutService: IWorkoutService = {
 
       if (error) return fail(error.message);
       if (!data) return ok(null);
-      return ok(mapSession(data));
+      return ok(mapSession(data as Parameters<typeof mapSession>[0]));
     } catch (e) {
       return fromError(e);
     }
@@ -545,7 +573,9 @@ export const workoutService: IWorkoutService = {
           is_pr: isPr,
           logged_at: new Date().toISOString(),
         })
-        .select('*')
+        .select(
+          'id, workout_exercise_id, set_number, weight, reps, rpe, set_type, duration_seconds, time_under_tension_seconds, rest_seconds, is_pr, notes, logged_at, metadata',
+        )
         .single();
 
       if (error) return fail(error.message);
@@ -594,7 +624,9 @@ export const workoutService: IWorkoutService = {
         .from('workout_sets')
         .update(updatePayload)
         .eq('id', setId)
-        .select('*')
+        .select(
+          'id, workout_exercise_id, set_number, weight, reps, rpe, set_type, duration_seconds, time_under_tension_seconds, rest_seconds, is_pr, notes, logged_at, metadata',
+        )
         .single();
 
       if (error) return fail(error.message);
@@ -651,7 +683,10 @@ export const workoutService: IWorkoutService = {
 
       const { data, error, count } = await supabase
         .from('workout_sessions')
-        .select('*, workout_exercises(id, workout_sets(is_pr))', { count: 'exact' })
+        .select(
+          'id, user_id, name, status, started_at, ended_at, duration_seconds, total_volume, total_sets, calories_burned, metadata, created_at, updated_at, workout_exercises(id, workout_sets(is_pr))',
+          { count: 'exact' },
+        )
         .eq('user_id', userId)
         .eq('status', 'completed')
         .order('started_at', { ascending: false })
@@ -660,7 +695,7 @@ export const workoutService: IWorkoutService = {
       if (error) return fail(error.message);
 
       const items = (data ?? []).map((row) =>
-        mapHistoryItem({ ...row, workout_exercises: row.workout_exercises }),
+        mapHistoryItem(row as Parameters<typeof mapHistoryItem>[0]),
       );
 
       return ok({

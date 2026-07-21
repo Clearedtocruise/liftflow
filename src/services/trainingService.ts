@@ -1,4 +1,5 @@
 import { api, apiClient } from '@/api/client';
+import { dedupeInFlight, egressKey, recordEgress } from '@/lib/egressGuard';
 import { fail, fromError, ok } from '@/lib/serviceResult';
 import { dedupePlannedWorkoutsByDate } from '@/lib/weekPlan';
 import { withTimeout } from '@/lib/withTimeout';
@@ -18,6 +19,9 @@ import type {
 /** Avoid hammering full program rebuilds when Home/Workout remount. */
 let lastRegenCheckAt = 0;
 const REGEN_CHECK_COOLDOWN_MS = 60_000;
+
+const PLANNED_WORKOUT_SELECT =
+  'id, user_id, template_id, training_phase_id, name, scheduled_date, scheduled_time, status, suggested_muscle_groups, ai_rationale, metadata, created_at';
 
 type PlannedRow = {
   id: string;
@@ -198,53 +202,65 @@ export const trainingService: ITrainingService = {
   async getPlannedWorkouts(userId, from, to, timeZone?: string | null): Promise<
     import('@/types/common').ServiceResult<PlannedWorkout[]>
   > {
-    const fromSupabase = async (): Promise<import('@/types/common').ServiceResult<PlannedWorkout[]>> => {
-      const { data, error } = await supabase
-        .from('planned_workouts')
-        .select('*')
-        .eq('user_id', userId)
-        .gte('scheduled_date', from)
-        .lte('scheduled_date', to)
-        .order('scheduled_date', { ascending: true });
+    return dedupeInFlight(egressKey(['getPlannedWorkouts', userId, from, to]), async (): Promise<
+      import('@/types/common').ServiceResult<PlannedWorkout[]>
+    > => {
+      const fromSupabase = async (): Promise<import('@/types/common').ServiceResult<PlannedWorkout[]>> => {
+        const { data, error } = await supabase
+          .from('planned_workouts')
+          .select(PLANNED_WORKOUT_SELECT)
+          .eq('user_id', userId)
+          .gte('scheduled_date', from)
+          .lte('scheduled_date', to)
+          .order('scheduled_date', { ascending: true });
 
-      if (error) return fail(error.message);
-      return ok(
-        dedupePlannedWorkoutsByDate((data ?? []).map((row) => mapPlanned(row as PlannedRow)), new Date(), timeZone),
-      );
-    };
+        if (error) return fail(error.message);
+        return ok(
+          dedupePlannedWorkoutsByDate(
+            (data ?? []).map((row) => mapPlanned(row as PlannedRow)),
+            new Date(),
+            timeZone,
+          ),
+        );
+      };
 
-    const fromApi = async (): Promise<import('@/types/common').ServiceResult<PlannedWorkout[]>> => {
-      const token = await getAccessToken();
-      const remote = await withTimeout(
-        apiClient.get<PlannedRow[]>(
-          `/api/training/programs/planned?userId=${userId}&from=${from}&to=${to}`,
-          token,
-        ),
-        6_000,
-        'planned workouts API',
-      );
-      return ok(dedupePlannedWorkoutsByDate((remote ?? []).map(mapPlanned), new Date(), timeZone));
-    };
+      const fromApi = async (): Promise<import('@/types/common').ServiceResult<PlannedWorkout[]>> => {
+        const token = await getAccessToken();
+        const remote = await withTimeout(
+          apiClient.get<PlannedRow[]>(
+            `/api/training/programs/planned?userId=${userId}&from=${from}&to=${to}`,
+            token,
+          ),
+          6_000,
+          'planned workouts API',
+        );
+        return ok(dedupePlannedWorkoutsByDate((remote ?? []).map(mapPlanned), new Date(), timeZone));
+      };
 
-    const [apiResult, sbResult] = await Promise.allSettled([fromApi(), fromSupabase()]);
+      // Prefer Supabase first — previously always fetched BOTH API + Supabase in parallel
+      // (doubling bandwidth on every Home/Workout/Watch/nutrition load).
+      const sbResult = await fromSupabase();
+      if (sbResult.success && sbResult.data.length > 0) {
+        recordEgress('planned:supabase-hit', { meta: { count: sbResult.data.length } });
+        return sbResult;
+      }
 
-    const apiData =
-      apiResult.status === 'fulfilled' && apiResult.value.success ? apiResult.value.data : null;
-    const sbData =
-      sbResult.status === 'fulfilled' && sbResult.value.success ? sbResult.value.data : null;
+      let apiResult: import('@/types/common').ServiceResult<PlannedWorkout[]>;
+      try {
+        apiResult = await fromApi();
+      } catch {
+        apiResult = fail('Could not load planned workouts');
+      }
 
-    // Prefer non-empty Supabase (fast after local adaptations). Never treat an empty
-    // Supabase week as authoritative when the API still has planned rows — that made
-    // day screens show "Workout not found" right after a rebuild.
-    if (sbData && sbData.length > 0) return ok(sbData);
-    if (apiData && apiData.length > 0) return ok(apiData);
-    if (sbData) return ok(sbData);
-    if (apiData) return ok(apiData);
+      if (apiResult.success && apiResult.data.length > 0) {
+        recordEgress('planned:api-fallback', { meta: { count: apiResult.data.length } });
+        return apiResult;
+      }
 
-    if (apiResult.status === 'fulfilled' && !apiResult.value.success) return apiResult.value;
-    if (sbResult.status === 'fulfilled' && !sbResult.value.success) return sbResult.value;
-
-    return fail('Could not load planned workouts');
+      if (sbResult.success) return sbResult;
+      if (apiResult.success) return apiResult;
+      return fail('Could not load planned workouts');
+    });
   },
 
   async getPlannedWorkoutById(
@@ -255,7 +271,7 @@ export const trainingService: ITrainingService = {
     try {
       const { data, error } = await supabase
         .from('planned_workouts')
-        .select('*')
+        .select(PLANNED_WORKOUT_SELECT)
         .eq('id', plannedWorkoutId)
         .maybeSingle();
       if (!error && data && data.status !== 'cancelled') {
@@ -266,7 +282,7 @@ export const trainingService: ITrainingService = {
       if (!error && data?.scheduled_date && userId) {
         const { data: replacement } = await supabase
           .from('planned_workouts')
-          .select('*')
+          .select(PLANNED_WORKOUT_SELECT)
           .eq('user_id', userId)
           .eq('scheduled_date', data.scheduled_date as string)
           .eq('status', 'planned')

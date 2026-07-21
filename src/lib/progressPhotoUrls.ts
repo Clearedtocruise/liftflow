@@ -1,7 +1,13 @@
+import { dedupeInFlight, egressKey } from '@/lib/egressGuard';
 import { supabase } from '@/supabase/client';
 import type { ProgressPhoto } from '@/types';
 
 const BUCKET = 'progress-photos';
+const SIGNED_TTL_SECONDS = 60 * 60;
+/** Reuse signed URLs until 10 minutes before expiry. */
+const SIGNED_REUSE_MS = (SIGNED_TTL_SECONDS - 10 * 60) * 1000;
+
+const signedUrlCache = new Map<string, { url: string; expiresAt: number }>();
 
 function storagePathFromPhotoUrl(url: string): string | null {
   if (!url) return null;
@@ -29,9 +35,26 @@ export async function resolveProgressPhotoUrl(photoUrl: string): Promise<string>
   const path = storagePathFromPhotoUrl(photoUrl);
   if (!path) return photoUrl;
 
-  const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(path, 60 * 60);
-  if (error || !data?.signedUrl) return photoUrl;
-  return data.signedUrl;
+  const cached = signedUrlCache.get(path);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.url;
+  }
+
+  return dedupeInFlight(egressKey(['signedUrl', path]), async () => {
+    const stillCached = signedUrlCache.get(path);
+    if (stillCached && stillCached.expiresAt > Date.now()) {
+      return stillCached.url;
+    }
+
+    const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(path, SIGNED_TTL_SECONDS);
+    if (error || !data?.signedUrl) return photoUrl;
+
+    signedUrlCache.set(path, {
+      url: data.signedUrl,
+      expiresAt: Date.now() + SIGNED_REUSE_MS,
+    });
+    return data.signedUrl;
+  });
 }
 
 export async function resolveProgressPhotos(photos: ProgressPhoto[]): Promise<ProgressPhoto[]> {

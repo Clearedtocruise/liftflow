@@ -43,7 +43,7 @@ export function useHealthSync({ userId, autoLoadStatus = true }: UseHealthSyncOp
     if (!userId) return null;
     setSyncing(true);
     setError(null);
-    const result = await healthService.sync(userId, sinceDays);
+    const result = await healthService.sync(userId, sinceDays, { force: true });
     setSyncing(false);
     if (result.success) {
       setLastReport(result.data);

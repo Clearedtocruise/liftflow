@@ -58,6 +58,11 @@ export default function WorkoutScreen() {
   const hydratedFromCacheRef = useRef(false);
   const skipFocusLoadRef = useRef(true);
 
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
+  const weekDaysLengthRef = useRef(weekDays.length);
+  weekDaysLengthRef.current = weekDays.length;
+
   const loadWeekPlan = useCallback(
     async (options?: { silent?: boolean }) => {
       if (!user?.id) {
@@ -66,7 +71,8 @@ export default function WorkoutScreen() {
       }
 
       const generation = ++loadGenerationRef.current;
-      const silent = options?.silent ?? (weekDays.length > 0 || hydratedFromCacheRef.current);
+      const silent =
+        options?.silent ?? (weekDaysLengthRef.current > 0 || hydratedFromCacheRef.current);
 
       if (!silent) setLoadingPlan(true);
       else setRefreshingPlan(true);
@@ -85,7 +91,7 @@ export default function WorkoutScreen() {
 
         const todayKey = localDateString(new Date(), user?.timezone);
         const today = days.find((day) => day.date === todayKey);
-        if (today?.workout && !session) setPlannedWorkout(today.workout);
+        if (today?.workout && !sessionRef.current) setPlannedWorkout(today.workout);
       } catch (error) {
         console.warn('[workout] week plan load failed', error);
         if (!silent) setWeekDays([]);
@@ -96,7 +102,7 @@ export default function WorkoutScreen() {
         }
       }
     },
-    [user?.id, user?.timezone, setPlannedWorkout, weekDays.length, session],
+    [user?.id, user?.timezone, setPlannedWorkout],
   );
 
   useLocalDayRollover(user?.timezone, () => {
@@ -149,7 +155,7 @@ export default function WorkoutScreen() {
     return () => {
       cancelled = true;
     };
-  }, [user?.id, user?.timezone, loadWeekPlan, setPlannedWorkout, session]);
+  }, [user?.id, user?.timezone, loadWeekPlan, setPlannedWorkout]);
 
   useFocusEffect(
     useCallback(() => {
@@ -158,8 +164,8 @@ export default function WorkoutScreen() {
         return;
       }
       if (user?.id) void loadWeekPlan({ silent: true });
-      if (session) void refreshSession();
-    }, [user?.id, loadWeekPlan, session, refreshSession]),
+      if (sessionRef.current) void refreshSession();
+    }, [user?.id, loadWeekPlan, refreshSession]),
   );
 
   useAppResume(() => {

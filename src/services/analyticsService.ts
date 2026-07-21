@@ -66,7 +66,9 @@ export const analyticsService: IAnalyticsService = {
           .gte('started_at', weekStart),
         supabase
           .from('workout_sessions')
-          .select('*, workout_exercises(id)')
+          .select(
+            'id, user_id, name, status, started_at, ended_at, duration_seconds, total_volume, total_sets, calories_burned, metadata, created_at, updated_at, workout_exercises(id)',
+          )
           .eq('user_id', userId)
           .eq('status', 'completed')
           .order('started_at', { ascending: false })
@@ -78,7 +80,11 @@ export const analyticsService: IAnalyticsService = {
           .not('weight_kg', 'is', null)
           .order('recorded_at', { ascending: true })
           .limit(30),
-        supabase.from('goals').select('*').eq('user_id', userId).eq('status', 'active'),
+        supabase
+          .from('goals')
+          .select('id, goal_type, target_value, current_value, status, title, unit')
+          .eq('user_id', userId)
+          .eq('status', 'active'),
         supabase
           .from('meals')
           .select('id, user_id, meal_type, meal_plan_id, name, calories, protein_g, carbs_g, fat_g, instructions, created_at, scheduled_date')
@@ -112,7 +118,7 @@ export const analyticsService: IAnalyticsService = {
         caloriesToday: mealTotals.caloriesConsumed,
         proteinToday: mealTotals.proteinG,
         recentWorkouts: (recentSessions.data ?? []).map((row) =>
-          mapHistoryItem({ ...row, workout_exercises: row.workout_exercises }),
+          mapHistoryItem(row as Parameters<typeof mapHistoryItem>[0]),
         ),
         weightHistory: (metrics.data ?? [])
           .filter((m) => m.weight_kg)
