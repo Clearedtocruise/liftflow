@@ -56,7 +56,7 @@ export default function WeeklyCheckInScreen() {
   const latest = history[0];
 
   return (
-    <ScreenContainer>
+    <ScreenContainer keyboardAvoiding>
       <Pressable onPress={() => router.back()}>
         <AppText variant="body" color="accent">
           ← Back

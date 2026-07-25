@@ -683,6 +683,7 @@ export default function NutritionScreen() {
 
   return (
     <ScreenContainer
+      keyboardAvoiding
       contentContainerStyle={styles.content}
       refreshControl={
         <RefreshControl refreshing={refreshing} onRefresh={() => void handleRefresh()} tintColor={LiftFlowColors.accent} />

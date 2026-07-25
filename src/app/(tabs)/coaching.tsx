@@ -181,6 +181,7 @@ export default function CoachingScreen() {
 
   return (
     <ScreenContainer
+      keyboardAvoiding
       refreshControl={
         isPremium ? <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={LiftFlowColors.accent} /> : undefined
       }>

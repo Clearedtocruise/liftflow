@@ -140,7 +140,7 @@ export default function ManualLogScreen() {
   const isPaused = session.status === 'paused';
 
   return (
-    <ScreenContainer contentContainerStyle={styles.content}>
+    <ScreenContainer keyboardAvoiding contentContainerStyle={styles.content}>
       <View style={styles.header}>
         <AppText variant="title">Quick Log</AppText>
         <PrimaryButton label="Back" variant="ghost" onPress={() => router.back()} />

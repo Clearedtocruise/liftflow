@@ -41,7 +41,7 @@ export default function AppleWatchScreen() {
   }
 
   return (
-    <ScreenContainer>
+    <ScreenContainer keyboardAvoiding>
       <View style={styles.header}>
         <AppText variant="title">Apple Watch</AppText>
         <AppText variant="body" color="textSecondary">

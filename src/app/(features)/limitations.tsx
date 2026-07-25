@@ -72,7 +72,7 @@ export default function LimitationsScreen() {
   }
 
   return (
-    <ScreenContainer>
+    <ScreenContainer keyboardAvoiding>
       <Pressable onPress={() => router.back()}>
         <AppText variant="body" color="accent">
           ← Back

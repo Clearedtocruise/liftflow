@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Alert, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Alert, StyleSheet, TextInput, View } from 'react-native';
 
 import { Card } from '@/components/layout/Card';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
@@ -81,8 +81,8 @@ export default function LogActivityScreen() {
   }
 
   return (
-    <ScreenContainer>
-      <ScrollView contentContainerStyle={styles.content}>
+    <ScreenContainer keyboardAvoiding>
+      <View style={styles.content}>
         <AppText variant="headline">{isSport ? 'Log Sport' : 'Log Activity'}</AppText>
         <AppText variant="body" color="textSecondary">
           Duration, distance, and intensity count toward recovery load.
@@ -158,7 +158,7 @@ export default function LogActivityScreen() {
         </Card>
 
         <PrimaryButton label="Log Activity" onPress={handleLog} loading={logging} size="large" />
-      </ScrollView>
+      </View>
     </ScreenContainer>
   );
 }

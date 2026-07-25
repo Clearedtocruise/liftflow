@@ -1,5 +1,5 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { ScrollView, StyleSheet, View, type ScrollViewProps } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View, type ScrollViewProps } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { LiftFlowColors, Spacing, TabBarHeight } from '@/constants/theme';
@@ -9,6 +9,8 @@ type ScreenContainerProps = ScrollViewProps & {
   padded?: boolean;
   bottomInset?: boolean;
   ambient?: boolean;
+  keyboardAvoiding?: boolean;
+  keyboardVerticalOffset?: number;
   children: React.ReactNode;
 };
 
@@ -17,6 +19,8 @@ export function ScreenContainer({
   padded = true,
   bottomInset = true,
   ambient = true,
+  keyboardAvoiding = false,
+  keyboardVerticalOffset = 0,
   style,
   contentContainerStyle,
   children,
@@ -51,6 +55,33 @@ export function ScreenContainer({
           />
         ) : null}
         {content}
+      </View>
+    );
+  }
+
+  if (keyboardAvoiding) {
+    return (
+      <View style={styles.root}>
+        {ambient ? (
+          <LinearGradient
+            colors={['rgba(31, 107, 255, 0.07)', 'transparent']}
+            style={styles.ambient}
+            pointerEvents="none"
+          />
+        ) : null}
+        <KeyboardAvoidingView
+          style={styles.flex}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          keyboardVerticalOffset={keyboardVerticalOffset}>
+          <ScrollView
+            style={[styles.flex, style]}
+            contentContainerStyle={[contentContainerStyle]}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            {...rest}>
+            {content}
+          </ScrollView>
+        </KeyboardAvoidingView>
       </View>
     );
   }
