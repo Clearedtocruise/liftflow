@@ -37,6 +37,8 @@ import { resolveTimeZone } from '@/lib/localDate';
 import { aggregateDailyMeals, aggregateWeeklyMeals, buildDailySummaryFromMeals, mealsForCalendarDay } from '@/lib/mealAggregation';
 import {
     enrichMealMeta,
+    mealNameFromIngredients,
+    resolveMealMacrosFromIngredients,
     serializeMealMeta,
 } from '@/lib/mealIngredients';
 import {
@@ -578,7 +580,17 @@ export default function NutritionScreen() {
         item.name === ingredientName ? { name: replacement, serving: item.serving } : item,
       );
       meta.status = 'modified';
-      const result = await nutritionService.updateMeal(meal.id, { instructions: serializeMealMeta(meta) });
+      const instructions = serializeMealMeta(meta);
+      const nextName = mealNameFromIngredients(meta.ingredients ?? []) ?? meal.name;
+      const nextMacros = resolveMealMacrosFromIngredients(nextName, instructions);
+      const result = await nutritionService.updateMeal(meal.id, {
+        name: nextName,
+        calories: nextMacros.calories,
+        proteinG: nextMacros.proteinG,
+        carbsG: nextMacros.carbsG,
+        fatG: nextMacros.fatG,
+        instructions,
+      });
       if (!result.success) {
         Alert.alert('Could not update meal', friendlyMealError(result.error));
         return;

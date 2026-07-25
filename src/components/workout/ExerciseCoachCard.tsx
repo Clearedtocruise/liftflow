@@ -67,7 +67,7 @@ export function ExerciseCoachCard({
   const units = useUnits();
   const [initialLoading, setInitialLoading] = useState(true);
   const [fetchError, setFetchError] = useState(false);
-  const [expanded, setExpanded] = useState(variant !== 'compact');
+  const [expanded, setExpanded] = useState(variant === 'default');
   const [prescription, setPrescription] = useState<ExerciseCoachPrescription | null>(null);
   const prescriptionRef = useRef<ExerciseCoachPrescription | null>(null);
   prescriptionRef.current = prescription;

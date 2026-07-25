@@ -9,6 +9,8 @@ export type WeekDayPlan = {
   dayLabel: (typeof WEEKDAY_LABELS)[number];
   workout: PlannedWorkout | null;
   isRestDay: boolean;
+  scheduledWorkout: PlannedWorkout | null;
+  hasScheduledWorkout: boolean;
 };
 
 export function getWeekRange(
@@ -31,10 +33,23 @@ export type WeeklyPlanEntry = {
 
 const PLANNED_STATUS_PRIORITY: Record<string, number> = {
   planned: 3,
+  active: 2,
+  paused: 2,
   in_progress: 2,
   completed: 1,
   cancelled: 0,
 };
+
+const NON_TRAINING_STATUSES = new Set(['cancelled']);
+
+export function isScheduledWorkoutStatus(status?: string | null): boolean {
+  if (!status) return false;
+  return !NON_TRAINING_STATUSES.has(status);
+}
+
+export function isStartableWorkoutStatus(status?: string | null): boolean {
+  return status === 'planned';
+}
 
 /** One canonical planned workout per calendar day (handles duplicate DB rows). */
 export function dedupePlannedWorkoutsByDate(
@@ -116,13 +131,16 @@ export function buildWeekPlan(
   const byDate = new Map(deduped.map((workout) => [workout.scheduledDate, workout]));
 
   return dates.map((date, index) => {
-    const workout = byDate.get(date) ?? null;
-    const isPlanned = workout?.status === 'planned';
+    const scheduledWorkout = byDate.get(date) ?? null;
+    const hasScheduledWorkout = scheduledWorkout ? isScheduledWorkoutStatus(scheduledWorkout.status) : false;
+    const workout = hasScheduledWorkout && isStartableWorkoutStatus(scheduledWorkout?.status) ? scheduledWorkout : null;
     return {
       date,
       dayLabel: WEEKDAY_LABELS[index],
-      workout: isPlanned ? workout : null,
-      isRestDay: !isPlanned,
+      workout,
+      isRestDay: !hasScheduledWorkout,
+      scheduledWorkout: hasScheduledWorkout ? scheduledWorkout : null,
+      hasScheduledWorkout,
     };
   });
 }

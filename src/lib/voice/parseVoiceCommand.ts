@@ -192,6 +192,34 @@ const CONTROL_PATTERNS: PatternDef[] = [
     }),
   },
   {
+    pattern:
+      /^(?<weight>\d+(?:\.\d+)?)\s*(?<unit>lbs?|pounds?|kg|kilos?)?\s*(?:for|x|\*|×)\s*(?<reps>\d+)\s*reps?\.?$/i,
+    build: (m, raw, ctx) => ({
+      intent: 'log_set',
+      exercise: ctx.activeExerciseName,
+      weight: parseFloat(m.groups!.weight!),
+      reps: parseInt(m.groups!.reps!, 10),
+      weightUnit: detectWeightUnit(m.groups!.unit ?? raw) ?? detectWeightUnit(raw),
+      usesContextExercise: !ctx.activeExerciseName,
+      rawText: raw,
+      confidence: ctx.activeExerciseName ? 0.89 : 0.7,
+    }),
+  },
+  {
+    pattern:
+      /^(?<reps>\d+)\s*reps?\s*(?:at|@)\s*(?<weight>\d+(?:\.\d+)?)\s*(?<unit>lbs?|pounds?|kg|kilos?)?\.?$/i,
+    build: (m, raw, ctx) => ({
+      intent: 'log_set',
+      exercise: ctx.activeExerciseName,
+      weight: parseFloat(m.groups!.weight!),
+      reps: parseInt(m.groups!.reps!, 10),
+      weightUnit: detectWeightUnit(m.groups!.unit ?? raw) ?? detectWeightUnit(raw),
+      usesContextExercise: !ctx.activeExerciseName,
+      rawText: raw,
+      confidence: ctx.activeExerciseName ? 0.89 : 0.7,
+    }),
+  },
+  {
     pattern: /^(?<exercise>.+?)\s+(?:felt|feels?)\s+easy\.?$/i,
     build: (m, raw) => ({
       intent: 'feedback',

@@ -213,6 +213,9 @@ export default function WorkoutScreen() {
         router.push({ pathname: '/(tabs)/workout/day', params: { id: day.workout.id } });
         return;
       }
+      if (day.hasScheduledWorkout) {
+        return;
+      }
       router.push({
         pathname: '/(tabs)/workout/rest-day',
         params: { date: day.date, label: day.dayLabel },
@@ -234,7 +237,7 @@ export default function WorkoutScreen() {
           timeZone: user.timezone,
         },
         day.date,
-        day.workout ? () => handleSelectDay(day) : undefined,
+        day.hasScheduledWorkout ? () => handleSelectDay(day) : undefined,
       );
     },
     [user?.id, weekWorkouts, setFromAdaptation, loadWeekPlan, handleSelectDay],

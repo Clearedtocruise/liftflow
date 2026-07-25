@@ -1,6 +1,10 @@
 import { localDateString } from '@/lib/localDate';
 import { trainingLabelFromRecoveryScore } from '@/lib/mealAggregation';
-import { dedupePlannedWorkoutsByDate } from '@/lib/weekPlan';
+import {
+  dedupePlannedWorkoutsByDate,
+  isScheduledWorkoutStatus,
+  isStartableWorkoutStatus,
+} from '@/lib/weekPlan';
 import type { RecoveryIntelligenceReport, TrainingDayRecommendation } from '@/types/recoveryIntelligence';
 import type { PlannedWorkout } from '@/types/training';
 
@@ -8,10 +12,13 @@ import type { PlannedWorkout } from '@/types/training';
 export type ActiveTrainingDay = {
   date: string;
   workout: PlannedWorkout | null;
+  scheduledWorkout: PlannedWorkout | null;
   workoutId: string | null;
   workoutName: string | null;
   /** True only when no planned workout is scheduled for this date. */
   isScheduledRestDay: boolean;
+  /** True only when a planned workout can be started from this assignment. */
+  isStartableWorkoutDay: boolean;
 };
 
 export type CoachTrainingGuidance = {
@@ -53,14 +60,17 @@ export function resolveActiveTrainingDay(
   const reference = options?.reference ?? new Date();
   const date = options?.date ?? localDateString(reference, options?.timeZone);
   const deduped = dedupePlannedWorkoutsByDate(workouts, reference, options?.timeZone);
-  const workout = deduped.find((w) => w.scheduledDate === date && w.status === 'planned') ?? null;
+  const scheduledWorkout = deduped.find((w) => w.scheduledDate === date && isScheduledWorkoutStatus(w.status)) ?? null;
+  const workout = scheduledWorkout && isStartableWorkoutStatus(scheduledWorkout.status) ? scheduledWorkout : null;
 
   return {
     date,
     workout,
-    workoutId: workout?.id ?? null,
-    workoutName: workout?.name ?? null,
-    isScheduledRestDay: workout == null,
+    scheduledWorkout,
+    workoutId: scheduledWorkout?.id ?? null,
+    workoutName: scheduledWorkout?.name ?? null,
+    isScheduledRestDay: scheduledWorkout == null,
+    isStartableWorkoutDay: workout != null,
   };
 }
 
@@ -87,14 +97,14 @@ export function resolveCoachTrainingGuidance(
   if (trainingRecommendation === 'train_light') volumeMultiplier = 0.75;
   else if (trainingRecommendation === 'recovery_session') volumeMultiplier = 0.5;
 
-  const coachHeadline = activeDay.workout
+  const coachHeadline = activeDay.scheduledWorkout
     ? `${trainingLabel} · ${activeDay.workoutName ?? 'Scheduled workout'}`
     : activeDay.isScheduledRestDay
       ? `${trainingLabel} · Rest day`
       : `${trainingLabel} recommended today`;
 
   let coachMessage = recoveryIntel?.rationale ?? '';
-  if (trainingRecommendation === 'train_light' && activeDay.workout) {
+  if (trainingRecommendation === 'train_light' && activeDay.scheduledWorkout) {
     if (!coachMessage.includes('light') && !coachMessage.includes('volume')) {
       coachMessage =
         'Recovery suggests training light today — keep the scheduled workout but reduce volume 20–30% and avoid failure sets.';
