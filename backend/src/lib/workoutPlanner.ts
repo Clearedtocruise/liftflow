@@ -416,8 +416,9 @@ export async function loadUserTrainingProfile(userId: string): Promise<UserTrain
 export async function loadAvailableExercises(
   userId: string,
   equipmentOverride?: string[],
+  profileOverride?: UserTrainingProfile,
 ): Promise<ExerciseRecord[]> {
-  const profile = await loadUserTrainingProfile(userId);
+  const profile = profileOverride ?? await loadUserTrainingProfile(userId);
   const equipment =
     equipmentOverride?.length ? equipmentOverride : profile.availableEquipment;
   const available = expandAvailableEquipment(equipment);
@@ -913,7 +914,13 @@ export async function buildAdaptiveWorkoutPlan(
   options?: BuildWorkoutPlanOptions,
 ): Promise<GeneratedWorkoutPlan> {
   const normalizedMuscles = normalizeTargetMuscleGroups(targetMuscles);
-  const profile = await loadUserTrainingProfile(userId);
+  const profilePromise = loadUserTrainingProfile(userId);
+  const recentSlugsPromise = getRecentExerciseSlugs(userId);
+  const performancePromise = getLastPerformanceBySlug(userId);
+  const limitationsPromise = loadActiveLimitations(userId);
+  const recoveryModsPromise = loadRecoveryModifiers(userId);
+
+  const profile = await profilePromise;
   const basePreset = GOAL_PRESETS[profile.primaryTrainingGoal];
   const preset = blendWorkoutPreset(
     {
@@ -926,12 +933,20 @@ export async function buildAdaptiveWorkoutPlan(
     },
     profile.fitnessGoals,
   );
-  const pool = await loadAvailableExercises(userId, options?.equipmentOverride);
+
+  const poolPromise = loadAvailableExercises(userId, options?.equipmentOverride, profile);
+  const [pool, recentSlugs, performance, limitations, recoveryMods] = await Promise.all([
+    poolPromise,
+    recentSlugsPromise,
+    performancePromise,
+    limitationsPromise,
+    recoveryModsPromise,
+  ]);
+
   const equipmentList = options?.equipmentOverride?.length
     ? options.equipmentOverride
     : profile.availableEquipment;
   const available = expandAvailableEquipment(equipmentList);
-  const recentSlugs = await getRecentExerciseSlugs(userId);
   if (options?.programRecentSlugs) {
     for (const [slug, usedAt] of options.programRecentSlugs) {
       const existing = recentSlugs.get(slug);
@@ -947,9 +962,6 @@ export async function buildAdaptiveWorkoutPlan(
     ? new Set(options.programRecentSlugs.keys())
     : undefined;
   const focusPlan = options?.slotLabel ? resolveDayFocusPlan(options.slotLabel) : null;
-  const performance = await getLastPerformanceBySlug(userId);
-  const limitations = await loadActiveLimitations(userId);
-  const recoveryMods = await loadRecoveryModifiers(userId);
 
   const targetCount = Math.max(
     options?.minimumExercises ?? WORKOUT_MIN_EXERCISES,
