@@ -63,18 +63,59 @@ function run() {
   assert.equal(plannedOnly.caloriesConsumed, 0);
   assert.equal(plannedOnly.plannedCalories, 650);
 
-  // Manual/ad-hoc meals count immediately.
+  // Manual/ad-hoc logs count immediately; planned rows without a plan id do not.
   const manualLog = aggregateDailyMeals([
     meal({
       id: 'c1',
       scheduled_date: today,
       meal_type: 'snack',
       meal_plan_id: null,
+      origin: 'log',
+      status: 'completed',
       calories: 220,
       protein_g: 6,
     }),
   ]);
   assert.equal(manualLog.caloriesConsumed, 220);
+
+  const unplannedPlanRow = aggregateDailyMeals([
+    meal({
+      id: 'c2',
+      scheduled_date: today,
+      meal_type: 'snack',
+      meal_plan_id: null,
+      origin: 'plan',
+      status: 'planned',
+      calories: 220,
+      protein_g: 6,
+    }),
+  ]);
+  assert.equal(unplannedPlanRow.caloriesConsumed, 0);
+
+  // Two distinct snacks on the same day are both kept — not deduped away.
+  const twoSnacks = aggregateDailyMeals([
+    meal({
+      id: 'c3',
+      scheduled_date: today,
+      meal_type: 'snack',
+      meal_plan_id: null,
+      origin: 'log',
+      status: 'completed',
+      calories: 150,
+      protein_g: 5,
+    }),
+    meal({
+      id: 'c4',
+      scheduled_date: today,
+      meal_type: 'snack',
+      meal_plan_id: null,
+      origin: 'log',
+      status: 'completed',
+      calories: 200,
+      protein_g: 8,
+    }),
+  ]);
+  assert.equal(twoSnacks.caloriesConsumed, 350);
 
   // Weekly totals sum deduped daily totals.
   const week = aggregateWeeklyMeals([

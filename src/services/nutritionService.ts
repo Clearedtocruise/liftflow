@@ -1,7 +1,7 @@
 import { api } from '@/api/client';
 import { mapGroceryList, mapMeal, mapMealPlan, mapNutritionGoals } from '@/lib/db-mappers';
 import { aggregateWeeklyGroceries } from '@/lib/groceryAggregation';
-import { resolveTimeZone } from '@/lib/localDate';
+import { localDateString, resolveTimeZone } from '@/lib/localDate';
 import { mealSlotKey, remapApiMealsToClientWeek, type ApiPlanMeal } from '@/lib/mealPlanWeekAlign';
 import { aggregateDailyMeals, mealsForCalendarDay } from '@/lib/mealAggregation';
 import { isReplaceablePlannedMeal, pickMealsToKeep, weekEndDate } from '@/lib/mealCleanup';
@@ -10,14 +10,115 @@ import { fail, fromError, ok } from '@/lib/serviceResult';
 import { getWeekRange } from '@/lib/weekPlan';
 import type { INutritionService } from '@/services/interfaces';
 import { getAccessToken, supabase } from '@/supabase/client';
-import type { DailyNutritionSummary, Meal, MealType } from '@/types';
+import type { DailyNutritionSummary, GroceryList, Meal, MealStatus, MealType } from '@/types';
+
+const MEAL_COLUMNS =
+  'id, user_id, meal_plan_id, meal_type, name, scheduled_date, calories, protein_g, carbs_g, fat_g, instructions, status, origin, consumed_at, client_key, macros_provided, created_at';
 
 function todayDate(): string {
   return localDateString();
 }
 
+function newClientKey(): string {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function normalizeGroceryName(name: string): string {
+  return name.trim().toLowerCase();
+}
+
 function weekStartDate(timeZone?: string | null): string {
   return getWeekRange(new Date(), resolveTimeZone(timeZone)).from;
+}
+
+async function loadGroceryList(listId: string) {
+  const { data, error } = await supabase
+    .from('grocery_lists')
+    .select('*, grocery_list_items(*)')
+    .eq('id', listId)
+    .single();
+
+  if (error) return fail<GroceryList>(error.message);
+  return ok(mapGroceryList(data));
+}
+
+/** One list per user per week, so regenerating updates rows instead of piling up new lists. */
+async function ensureWeeklyGroceryList(userId: string, weekStart: string, mealPlanId?: string) {
+  const { data: existing } = await supabase
+    .from('grocery_lists')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('week_start_date', weekStart)
+    .maybeSingle();
+
+  if (existing?.id) {
+    if (mealPlanId) await supabase.from('grocery_lists').update({ meal_plan_id: mealPlanId }).eq('id', existing.id);
+    return ok(existing.id as string);
+  }
+
+  const { data, error } = await supabase
+    .from('grocery_lists')
+    .insert({ user_id: userId, meal_plan_id: mealPlanId, name: 'Shopping List', week_start_date: weekStart })
+    .select('id')
+    .single();
+
+  if (error) return fail<string>(error.message);
+  return ok(data.id as string);
+}
+
+/**
+ * Reconcile a list against freshly aggregated ingredients without wiping the
+ * user's progress: matching rows are updated in place so `is_checked` survives,
+ * and rows the user already checked are kept even if they left the plan.
+ */
+async function syncGroceryItems(
+  listId: string,
+  aggregated: { name: string; quantity: string; category: string }[],
+): Promise<string | null> {
+  const { data: existing, error } = await supabase
+    .from('grocery_list_items')
+    .select('id, name, is_checked')
+    .eq('grocery_list_id', listId);
+
+  if (error) return error.message;
+
+  const byName = new Map((existing ?? []).map((row) => [normalizeGroceryName(row.name), row]));
+  const desiredNames = new Set<string>();
+
+  for (const [index, item] of aggregated.entries()) {
+    const key = normalizeGroceryName(item.name);
+    desiredNames.add(key);
+    const fields = {
+      name: item.name,
+      quantity: parseFloat(item.quantity) || 1,
+      unit: item.quantity.replace(/^[\d.]+\s*/, '') || 'serving',
+      category: item.category,
+      sort_order: index,
+    };
+
+    const match = byName.get(key);
+    if (match) {
+      const { error: updateError } = await supabase.from('grocery_list_items').update(fields).eq('id', match.id);
+      if (updateError) return updateError.message;
+      continue;
+    }
+
+    const { error: insertError } = await supabase
+      .from('grocery_list_items')
+      .insert({ grocery_list_id: listId, is_checked: false, ...fields });
+    if (insertError) return insertError.message;
+  }
+
+  const staleIds = (existing ?? [])
+    .filter((row) => !row.is_checked && !desiredNames.has(normalizeGroceryName(row.name)))
+    .map((row) => row.id);
+
+  if (staleIds.length > 0) {
+    const { error: deleteError } = await supabase.from('grocery_list_items').delete().in('id', staleIds);
+    if (deleteError) return deleteError.message;
+  }
+
+  return null;
 }
 
 export const nutritionService: INutritionService = {
@@ -66,8 +167,11 @@ export const nutritionService: INutritionService = {
     }
   },
 
-  async logFood(userId, food: { name: string; mealType: MealType; calories?: number; proteinG?: number; carbsG?: number; fatG?: number; date?: string; instructions?: string }) {
+  async logFood(userId, food: { name: string; mealType: MealType; calories?: number; proteinG?: number; carbsG?: number; fatG?: number; date?: string; instructions?: string; clientKey?: string }) {
     try {
+      const macrosProvided =
+        food.calories != null || food.proteinG != null || food.carbsG != null || food.fatG != null;
+
       const { data, error } = await supabase
         .from('meals')
         .insert({
@@ -80,8 +184,13 @@ export const nutritionService: INutritionService = {
           carbs_g: food.carbsG,
           fat_g: food.fatG,
           instructions: food.instructions,
+          status: 'completed',
+          origin: 'log',
+          consumed_at: new Date().toISOString(),
+          client_key: food.clientKey ?? newClientKey(),
+          macros_provided: macrosProvided,
         })
-        .select('*')
+        .select(MEAL_COLUMNS)
         .single();
 
       if (error) return fail(error.message);
@@ -130,7 +239,7 @@ export const nutritionService: INutritionService = {
     }
   },
 
-  async updateMeal(mealId: string, updates: Partial<Pick<Meal, 'name' | 'calories' | 'proteinG' | 'carbsG' | 'fatG' | 'instructions' | 'mealType'>>) {
+  async updateMeal(mealId: string, updates: Partial<Pick<Meal, 'name' | 'calories' | 'proteinG' | 'carbsG' | 'fatG' | 'instructions' | 'mealType' | 'status'>>) {
     try {
       const payload: Record<string, unknown> = {};
       if (updates.name !== undefined) payload.name = updates.name;
@@ -140,8 +249,12 @@ export const nutritionService: INutritionService = {
       if (updates.fatG !== undefined) payload.fat_g = updates.fatG;
       if (updates.instructions !== undefined) payload.instructions = updates.instructions;
       if (updates.mealType !== undefined) payload.meal_type = updates.mealType;
+      if (updates.status !== undefined) payload.status = updates.status;
+      if (updates.calories !== undefined || updates.proteinG !== undefined || updates.carbsG !== undefined || updates.fatG !== undefined) {
+        payload.macros_provided = true;
+      }
 
-      const { data, error } = await supabase.from('meals').update(payload).eq('id', mealId).select('*').single();
+      const { data, error } = await supabase.from('meals').update(payload).eq('id', mealId).select(MEAL_COLUMNS).single();
       if (error) return fail(error.message);
       return ok(mapMeal(data));
     } catch (e) {
@@ -149,17 +262,35 @@ export const nutritionService: INutritionService = {
     }
   },
 
-  async markMealStatus(mealId: string, name: string, instructions: string | undefined, status: 'completed' | 'skipped' | 'modified' | 'planned') {
-    const meta = enrichMealMeta(name, instructions);
-    meta.status = status;
-    return this.updateMeal(mealId, { instructions: serializeMealMeta(meta) });
+  async markMealStatus(mealId: string, name: string, instructions: string | undefined, status: MealStatus) {
+    try {
+      const meta = enrichMealMeta(name, instructions);
+      meta.status = status;
+      const consumed = status === 'completed' || status === 'modified';
+
+      const { data, error } = await supabase
+        .from('meals')
+        .update({
+          status,
+          consumed_at: consumed ? new Date().toISOString() : null,
+          instructions: serializeMealMeta(meta),
+        })
+        .eq('id', mealId)
+        .select(MEAL_COLUMNS)
+        .single();
+
+      if (error) return fail(error.message);
+      return ok(mapMeal(data));
+    } catch (e) {
+      return fromError(e);
+    }
   },
 
   async pruneDuplicateMeals(userId: string, range?: { from?: string; to?: string }) {
     try {
       let query = supabase
         .from('meals')
-        .select('id, user_id, meal_type, meal_plan_id, name, scheduled_date, calories, protein_g, carbs_g, fat_g, instructions, created_at')
+        .select(MEAL_COLUMNS)
         .eq('user_id', userId);
 
       if (range?.from) query = query.gte('scheduled_date', range.from);
@@ -184,7 +315,7 @@ export const nutritionService: INutritionService = {
       const weekEnd = weekEndDate(weekStart);
       const { data, error } = await supabase
         .from('meals')
-        .select('id, user_id, meal_type, meal_plan_id, name, scheduled_date, calories, protein_g, carbs_g, fat_g, instructions, created_at')
+        .select(MEAL_COLUMNS)
         .eq('user_id', userId)
         .gte('scheduled_date', weekStart)
         .lte('scheduled_date', weekEnd);
@@ -228,7 +359,7 @@ export const nutritionService: INutritionService = {
       const [mealsResult, goalsResult, hydrationResult] = await Promise.all([
         supabase
           .from('meals')
-          .select('id, user_id, meal_type, meal_plan_id, name, calories, protein_g, carbs_g, fat_g, instructions, created_at')
+          .select(MEAL_COLUMNS)
           .eq('user_id', userId)
           .eq('scheduled_date', targetDate),
         supabase.from('nutrition_goals').select('*').eq('user_id', userId).eq('is_active', true).limit(1).maybeSingle(),
@@ -271,11 +402,11 @@ export const nutritionService: INutritionService = {
     }
   },
 
-  async generateWeeklyMealPlan(userId, timeZone?: string | null) {
+  async generateWeeklyMealPlan(userId, timeZone?: string | null, prefs?: { dietaryStyle?: string; dietaryRestrictions?: string[]; foodPreferences?: string[] }) {
     try {
       const tz = resolveTimeZone(timeZone);
       const token = await getAccessToken();
-      const plan = await api.generateMealPlan(userId, token);
+      const plan = await api.generateMealPlan({ userId, ...prefs }, token);
       const clientWeekStart = weekStartDate(tz);
       const clientWeekEnd = weekEndDate(clientWeekStart);
       const apiWeekStart = plan.weekStartDate ?? clientWeekStart;
@@ -285,7 +416,7 @@ export const nutritionService: INutritionService = {
 
       const { data: existingMeals } = await supabase
         .from('meals')
-        .select('id, user_id, meal_type, meal_plan_id, name, scheduled_date, calories, protein_g, carbs_g, fat_g, instructions, created_at')
+        .select(MEAL_COLUMNS)
         .eq('user_id', userId)
         .gte('scheduled_date', clientWeekStart)
         .lte('scheduled_date', clientWeekEnd);
@@ -293,8 +424,8 @@ export const nutritionService: INutritionService = {
       const occupiedSlots = new Set(
         (existingMeals ?? [])
           .map(mapMeal)
-          .filter((meal) => !isReplaceablePlannedMeal(meal))
-          .map((meal) => mealSlotKey(meal.scheduledDate, meal.mealType)),
+          .filter((meal) => meal.scheduledDate != null && !isReplaceablePlannedMeal(meal))
+          .map((meal) => mealSlotKey(meal.scheduledDate as string, meal.mealType)),
       );
 
       const apiMeals = (plan.meals ?? []) as ApiPlanMeal[];
@@ -339,9 +470,12 @@ export const nutritionService: INutritionService = {
             carbs_g: m.carbsG,
             fat_g: m.fatG,
             instructions: m.instructions ?? serializeMealMeta(enrichMealMeta(m.name)),
+            status: 'planned',
+            origin: 'plan',
+            macros_provided: true,
           })),
         )
-        .select('*');
+        .select(MEAL_COLUMNS);
 
       if (insertError) {
         await supabase.from('meal_plans').delete().eq('id', saved.id);
@@ -385,42 +519,53 @@ export const nutritionService: INutritionService = {
         planId = latest?.id;
       }
 
-      const meals = mealsResult.data;
-      const aggregated = aggregateWeeklyGroceries(meals);
+      const listResult = await ensureWeeklyGroceryList(userId, weekStartDate(), planId);
+      if (!listResult.success) return listResult;
 
-      const { data: list, error } = await supabase
-        .from('grocery_lists')
-        .insert({
-          user_id: userId,
-          meal_plan_id: planId,
-          name: 'Shopping List',
-          week_start_date: weekStartDate(),
-        })
-        .select('*')
-        .single();
+      const syncError = await syncGroceryItems(listResult.data, aggregateWeeklyGroceries(mealsResult.data));
+      if (syncError) return fail(syncError);
+
+      return loadGroceryList(listResult.data);
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
+  async setGroceryItemChecked(itemId: string, isChecked: boolean) {
+    try {
+      const { error } = await supabase.from('grocery_list_items').update({ is_checked: isChecked }).eq('id', itemId);
+      if (error) return fail(error.message);
+      return ok(undefined);
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
+  async addGroceryItem(listId: string, item: { name: string; quantity?: number; unit?: string; category?: string }) {
+    try {
+      const name = item.name.trim();
+      if (!name) return fail('Item name is required.');
+
+      const { data: existing } = await supabase
+        .from('grocery_list_items')
+        .select('id, name')
+        .eq('grocery_list_id', listId);
+
+      const match = (existing ?? []).find((row) => normalizeGroceryName(row.name) === normalizeGroceryName(name));
+      if (match) return loadGroceryList(listId);
+
+      const { error } = await supabase.from('grocery_list_items').insert({
+        grocery_list_id: listId,
+        name,
+        quantity: item.quantity ?? 1,
+        unit: item.unit ?? 'serving',
+        category: item.category ?? 'other',
+        is_checked: false,
+        sort_order: (existing ?? []).length,
+      });
 
       if (error) return fail(error.message);
-
-      const items = aggregated.map((item, index) => ({
-        grocery_list_id: list.id,
-        name: item.name,
-        quantity: parseFloat(item.quantity) || 1,
-        unit: item.quantity.replace(/^[\d.]+\s*/, '') || 'serving',
-        category: item.category,
-        sort_order: index,
-      }));
-
-      if (items.length > 0) {
-        await supabase.from('grocery_list_items').insert(items);
-      }
-
-      const { data: full } = await supabase
-        .from('grocery_lists')
-        .select('*, grocery_list_items(*)')
-        .eq('id', list.id)
-        .single();
-
-      return ok(mapGroceryList(full!));
+      return loadGroceryList(listId);
     } catch (e) {
       return fromError(e);
     }
@@ -521,30 +666,10 @@ export const nutritionService: INutritionService = {
       const mealsResult = await this.getMealsForWeek(userId, from, to);
       if (!mealsResult.success) return fail(mealsResult.error);
 
-      const aggregated = aggregateWeeklyGroceries(mealsResult.data);
-      await supabase.from('grocery_list_items').delete().eq('grocery_list_id', list.id);
+      const syncError = await syncGroceryItems(list.id, aggregateWeeklyGroceries(mealsResult.data));
+      if (syncError) return fail(syncError);
 
-      const items = aggregated.map((item, index) => ({
-        grocery_list_id: list.id,
-        name: item.name,
-        quantity: parseFloat(item.quantity) || 1,
-        unit: item.quantity.replace(/^[\d.]+\s*/, '') || 'serving',
-        category: item.category,
-        sort_order: index,
-      }));
-
-      if (items.length > 0) {
-        await supabase.from('grocery_list_items').insert(items);
-      }
-
-      const { data: full, error } = await supabase
-        .from('grocery_lists')
-        .select('*, grocery_list_items(*)')
-        .eq('id', list.id)
-        .single();
-
-      if (error) return fail(error.message);
-      return ok(mapGroceryList(full!));
+      return loadGroceryList(list.id);
     } catch (e) {
       return fromError(e);
     }

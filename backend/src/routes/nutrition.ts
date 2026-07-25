@@ -12,10 +12,50 @@ import {
     generateDailyMeals,
     inferWorkoutType,
 } from '../lib/workoutAwareNutrition.js';
+import { inferDietaryStyle, type NutritionPreferenceInput } from '../lib/dietaryRestrictions.js';
 import { authedUserId } from '../middleware/authUser.js';
 import { requireProSubscription } from '../middleware/requireProSubscription.js';
 
 export const nutritionRouter = Router();
+
+const DIETARY_STYLES = ['balanced', 'high_protein', 'low_carb', 'keto', 'mediterranean', 'vegetarian'] as const;
+type DietaryStyleName = (typeof DIETARY_STYLES)[number];
+
+function isDietaryStyle(value: unknown): value is DietaryStyleName {
+  return DIETARY_STYLES.includes(value as DietaryStyleName);
+}
+
+function stringList(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+}
+
+/**
+ * Restrictions the client sends win; otherwise fall back to the saved coach
+ * profile so generation honours them even when the caller omits them.
+ */
+async function resolveNutritionPreferences(
+  userId: string,
+  dietaryRestrictions?: string[],
+  foodPreferences?: string[],
+): Promise<NutritionPreferenceInput> {
+  const fromRequest = {
+    dietaryRestrictions: stringList(dietaryRestrictions),
+    foodPreferences: stringList(foodPreferences),
+  };
+  if (fromRequest.dietaryRestrictions.length > 0 || fromRequest.foodPreferences.length > 0) return fromRequest;
+
+  const { data: profile } = await requireAdmin()
+    .from('profiles')
+    .select('metadata')
+    .eq('id', userId)
+    .maybeSingle();
+
+  const coachProfile = (profile?.metadata as { coachProfile?: Record<string, unknown> } | null)?.coachProfile ?? {};
+  return {
+    dietaryRestrictions: stringList(coachProfile.dietaryRestrictions),
+    foodPreferences: stringList(coachProfile.foodPreferences),
+  };
+}
 
 nutritionRouter.get('/intelligence', requireProSubscription, async (req, res) => {
   try {
@@ -30,7 +70,11 @@ nutritionRouter.get('/intelligence', requireProSubscription, async (req, res) =>
 nutritionRouter.post('/meal-plan/generate', async (req, res) => {
   try {
     const userId = authedUserId(req);
-    const { dietaryStyle } = req.body as { dietaryStyle?: string };
+    const { dietaryStyle, dietaryRestrictions, foodPreferences } = req.body as {
+      dietaryStyle?: string;
+      dietaryRestrictions?: string[];
+      foodPreferences?: string[];
+    };
     let proteinG = 180;
     let calories = 2400;
 
@@ -56,14 +100,14 @@ nutritionRouter.post('/meal-plan/generate', async (req, res) => {
       // Keep goals/defaults — never fail meal generation on coach context.
     }
 
-    const plan = generateWeeklyMealPlan(
-      proteinG,
-      calories,
-      (dietaryStyle as 'balanced' | 'high_protein' | 'low_carb' | 'keto' | 'mediterranean' | 'vegetarian' | undefined) ??
-        'balanced',
-    );
-    if (dietaryStyle && plan.aiRationale && !plan.aiRationale.includes('Style:')) {
-      plan.aiRationale = `${plan.aiRationale} Style: ${dietaryStyle}.`;
+    const prefs = await resolveNutritionPreferences(userId, dietaryRestrictions, foodPreferences);
+    const resolvedStyle =
+      (dietaryStyle as 'balanced' | 'high_protein' | 'low_carb' | 'keto' | 'mediterranean' | 'vegetarian' | undefined)
+      ?? inferDietaryStyle(prefs.dietaryRestrictions);
+
+    const plan = generateWeeklyMealPlan(proteinG, calories, resolvedStyle, prefs);
+    if (plan.aiRationale && !plan.aiRationale.includes('Style:')) {
+      plan.aiRationale = `${plan.aiRationale} Style: ${resolvedStyle}.`;
     }
     res.json(plan);
   } catch (error) {
@@ -74,7 +118,10 @@ nutritionRouter.post('/meal-plan/generate', async (req, res) => {
 nutritionRouter.post('/adaptive-targets', async (req, res) => {
   try {
     const userId = authedUserId(req);
-    const { dietaryStyle } = req.body as { dietaryStyle?: string };
+    const { dietaryStyle, dietaryRestrictions } = req.body as {
+      dietaryStyle?: string;
+      dietaryRestrictions?: string[];
+    };
 
     const ctx = await loadCoachContext(userId);
     const muscleGroups = ctx.plannedWorkout?.muscleGroups ?? [];
@@ -88,6 +135,9 @@ nutritionRouter.post('/adaptive-targets', async (req, res) => {
       .maybeSingle();
 
     const ranked = resolveRankedGoals(profile?.fitness_goals, profile?.primary_training_goal);
+    const adaptiveStyle = isDietaryStyle(dietaryStyle)
+      ? dietaryStyle
+      : inferDietaryStyle((await resolveNutritionPreferences(userId, dietaryRestrictions)).dietaryRestrictions);
 
     const targets = calculateMacroTargets({
       goal: toNutritionGoal(ranked[0]),
@@ -97,7 +147,7 @@ nutritionRouter.post('/adaptive-targets', async (req, res) => {
       recoveryModeActive: ctx.recovery.recoveryModeActive,
       workoutType,
       isTrainingDay: !!ctx.plannedWorkout,
-      dietaryStyle: dietaryStyle as 'balanced' | undefined,
+      dietaryStyle: adaptiveStyle,
     });
 
     res.json({ ...targets, workoutType, recoveryScore: ctx.recovery.score });

@@ -90,24 +90,72 @@ export function calculateMacroTargets(ctx: NutritionContext): MacroTargets {
     notes.push(ageMods.note);
   }
 
+  let maxCarbsG: number | undefined;
   if (ctx.dietaryStyle === 'keto') {
-    carbsG = Math.min(carbsG, 50);
-    fatG = Math.round((calories - proteinG * 4 - carbsG * 4) / 9);
+    maxCarbsG = 50;
+    carbsG = Math.min(carbsG, maxCarbsG);
     notes.push('Keto carb cap applied');
   } else if (ctx.dietaryStyle === 'low_carb') {
     carbsG = Math.round(carbsG * 0.6);
     notes.push('Low carb adjustment');
   }
 
-  fatG = Math.max(fatG, Math.round(bw * 0.6));
-
-  return {
+  const reconciled = reconcileMacros({
     calories,
     proteinG,
     carbsG,
     fatG,
+    minFatG: Math.round(bw * 0.6),
+    maxCarbsG,
+  });
+
+  if (reconciled.calories !== calories) {
+    notes.push('Calories raised to cover protein and essential fat minimums');
+  }
+
+  return {
+    calories: reconciled.calories,
+    proteinG: reconciled.proteinG,
+    carbsG: reconciled.carbsG,
+    fatG: reconciled.fatG,
     rationale: notes.join('. ') + '.',
   };
+}
+
+/**
+ * Force protein/carb/fat grams to actually add up to the calorie target. The
+ * ratio-based splits above never subtracted protein's calories, so the grams
+ * routinely described a different (larger) intake than the stated target.
+ * Protein is treated as fixed, fat has an essential-intake floor, and carbs
+ * absorb whatever energy is left.
+ */
+function reconcileMacros(input: {
+  calories: number;
+  proteinG: number;
+  carbsG: number;
+  fatG: number;
+  minFatG: number;
+  maxCarbsG?: number;
+}): { calories: number; proteinG: number; carbsG: number; fatG: number } {
+  const { proteinG, minFatG, maxCarbsG } = input;
+  let calories = input.calories;
+  let carbsG = maxCarbsG != null ? Math.min(input.carbsG, maxCarbsG) : input.carbsG;
+
+  let fatG = Math.round((calories - proteinG * 4 - carbsG * 4) / 9);
+
+  if (fatG < minFatG) {
+    fatG = minFatG;
+    carbsG = Math.round((calories - proteinG * 4 - fatG * 9) / 4);
+  }
+
+  if (carbsG < 0) {
+    carbsG = 0;
+    // Protein and essential fat alone exceed the target, so raise the target
+    // rather than reporting grams that contradict the calorie number.
+    calories = proteinG * 4 + fatG * 9;
+  }
+
+  return { calories, proteinG, carbsG, fatG };
 }
 
 export function generateDailyMeals(

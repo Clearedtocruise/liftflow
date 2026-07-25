@@ -235,37 +235,82 @@ type MealMacroFields = {
   proteinG?: number;
   carbsG?: number;
   fatG?: number;
+  /** Set when the stored macros are a real measurement, so 0 means zero rather than unknown. */
+  macrosProvided?: boolean;
 };
 
-/** Stored macros when present; otherwise estimate from logged ingredients. */
-export function resolveMealMacros(meal: MealMacroFields): MealMacros {
-  const stored: MealMacros = {
-    calories: meal.calories ?? 0,
-    proteinG: meal.proteinG ?? 0,
-    carbsG: meal.carbsG ?? 0,
-    fatG: meal.fatG ?? 0,
-  };
+const CARB_SHARE_OF_REMAINING_KCAL = 0.55;
 
-  if (stored.calories > 0 || stored.proteinG > 0 || stored.carbsG > 0 || stored.fatG > 0) {
-    return stored;
-  }
+function round1(value: number): number {
+  return Math.round(value * 10) / 10;
+}
 
-  const meta = enrichMealMeta(meal.name, meal.instructions);
-  const ingredients = meta.ingredients ?? [];
-  if (ingredients.length === 0) return stored;
+function macrosFromIngredients(meal: MealMacroFields): MealMacros | null {
+  const ingredients = enrichMealMeta(meal.name, meal.instructions).ingredients ?? [];
+  if (ingredients.length === 0) return null;
 
   return ingredients.reduce<MealMacros>(
     (acc, ingredient) => {
       const estimate = estimateFoodMacrosLocal(ingredient.name, ingredient.serving);
       return {
         calories: acc.calories + estimate.calories,
-        proteinG: Math.round((acc.proteinG + estimate.proteinG) * 10) / 10,
-        carbsG: Math.round((acc.carbsG + estimate.carbsG) * 10) / 10,
-        fatG: Math.round((acc.fatG + estimate.fatG) * 10) / 10,
+        proteinG: round1(acc.proteinG + estimate.proteinG),
+        carbsG: round1(acc.carbsG + estimate.carbsG),
+        fatG: round1(acc.fatG + estimate.fatG),
       };
     },
     { calories: 0, proteinG: 0, carbsG: 0, fatG: 0 },
   );
+}
+
+/**
+ * Fill in macros the user never entered by distributing the calories that
+ * protein/carbs/fat do not already account for. A quick log of "600 kcal, 40 g
+ * protein" otherwise reports zero carbs and zero fat.
+ */
+function distributeRemainingCalories(meal: MealMacroFields): MealMacros {
+  const calories = meal.calories ?? 0;
+  const proteinG = meal.proteinG ?? 0;
+  const carbsMissing = meal.carbsG == null;
+  const fatMissing = meal.fatG == null;
+  const carbsG = meal.carbsG ?? 0;
+  const fatG = meal.fatG ?? 0;
+
+  const remaining = calories - proteinG * 4 - carbsG * 4 - fatG * 9;
+  if (remaining <= 0 || (!carbsMissing && !fatMissing)) {
+    return { calories, proteinG, carbsG, fatG };
+  }
+
+  if (carbsMissing && fatMissing) {
+    return {
+      calories,
+      proteinG,
+      carbsG: round1((remaining * CARB_SHARE_OF_REMAINING_KCAL) / 4),
+      fatG: round1((remaining * (1 - CARB_SHARE_OF_REMAINING_KCAL)) / 9),
+    };
+  }
+
+  return {
+    calories,
+    proteinG,
+    carbsG: carbsMissing ? round1(remaining / 4) : carbsG,
+    fatG: fatMissing ? round1(remaining / 9) : fatG,
+  };
+}
+
+/**
+ * Stored macros when they were actually measured; otherwise estimate from the
+ * logged ingredients. A row explicitly marked as measured keeps its zeros, so a
+ * genuinely calorie-free food is not silently replaced by a guess.
+ */
+export function resolveMealMacros(meal: MealMacroFields): MealMacros {
+  const hasAnyStoredValue =
+    meal.calories != null || meal.proteinG != null || meal.carbsG != null || meal.fatG != null;
+  const measured = meal.macrosProvided ?? hasAnyStoredValue;
+
+  if (measured) return distributeRemainingCalories(meal);
+
+  return macrosFromIngredients(meal) ?? { calories: 0, proteinG: 0, carbsG: 0, fatG: 0 };
 }
 
 export function alternativesForIngredient(ingredientName: string): string[] {

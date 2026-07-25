@@ -1,4 +1,5 @@
 import { answerSmartCoachQuestion, loadCoachContext } from './coachContext.js';
+import type { NutritionPreferenceInput } from './dietaryRestrictions.js';
 import { buildReferenceStyleWorkoutPlan, LIFTING_AI_SYSTEM_PROMPT, SPLIT_VOLUME_TARGETS, splitKeyFromLabel } from './liftingReference/index.js';
 import { loadRecoveryIntelligence } from './loadRecoveryIntelligence.js';
 import { localDateString, weekStartFromDateString } from './localDate.js';
@@ -225,15 +226,23 @@ export async function coachResponse(context: string, message: string, userId: st
   };
 }
 
-export function generateWeeklyMealPlan(proteinG = 180, calories = 2400, dietaryStyle: 'balanced' | 'high_protein' | 'low_carb' | 'keto' | 'mediterranean' | 'vegetarian' = 'balanced') {
+export function generateWeeklyMealPlan(
+  proteinG = 180,
+  calories = 2400,
+  dietaryStyle: 'balanced' | 'high_protein' | 'low_carb' | 'keto' | 'mediterranean' | 'vegetarian' = 'balanced',
+  prefs: NutritionPreferenceInput = {},
+) {
   const weekStart = weekStartFromDateString(localDateString());
-  const meals = generateWeeklyMealPlanMeals(proteinG, calories, dietaryStyle, weekStart);
+  const meals = generateWeeklyMealPlanMeals(proteinG, calories, dietaryStyle, weekStart, prefs);
+  const restrictions = prefs.dietaryRestrictions ?? [];
 
   return {
     name: 'Weekly Meal Plan',
     weekStartDate: weekStart,
     aiGenerated: true,
-    aiRationale: `Balanced plan targeting ~${calories} kcal and ${proteinG}g protein daily with rotating meals across the week.`,
+    aiRationale:
+      `Balanced plan targeting ~${calories} kcal and ${proteinG}g protein daily with rotating meals across the week.`
+      + (restrictions.length > 0 ? ` Respecting: ${restrictions.join(', ')}.` : ''),
     meals,
   };
 }

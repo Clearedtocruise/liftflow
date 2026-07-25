@@ -478,8 +478,22 @@ create table public.meals (
   carbs_g numeric(6,1),
   fat_g numeric(6,1),
   instructions text,
+  -- Planned vs. eaten is tracked explicitly; inferring it from meal_plan_id
+  -- counted untouched plan slots as consumed calories.
+  status text not null default 'planned' check (status in ('planned', 'completed', 'skipped', 'modified')),
+  origin text not null default 'plan' check (origin in ('plan', 'log')),
+  consumed_at timestamptz,
+  -- Client-generated idempotency key; de-duplication keys off this rather than
+  -- (scheduled_date, meal_type), which collides for two legitimate snacks.
+  client_key text,
+  -- Distinguishes "user gave us these macros" from "we have no data".
+  macros_provided boolean not null default false,
   created_at timestamptz not null default now()
 );
+
+create index if not exists meals_user_scheduled_date_idx on public.meals (user_id, scheduled_date);
+create unique index if not exists meals_user_client_key_idx
+  on public.meals (user_id, client_key) where client_key is not null;
 
 create table public.grocery_lists (
   id uuid primary key default gen_random_uuid(),
@@ -500,6 +514,11 @@ create table public.grocery_list_items (
   is_checked boolean default false,
   sort_order integer default 0
 );
+
+create unique index if not exists grocery_lists_user_week_idx
+  on public.grocery_lists (user_id, week_start_date) where week_start_date is not null;
+create unique index if not exists grocery_list_items_list_name_idx
+  on public.grocery_list_items (grocery_list_id, lower(trim(name)));
 
 create table public.hydration_logs (
   id uuid primary key default gen_random_uuid(),
@@ -912,6 +931,7 @@ create policy "Users manage own meal plans" on public.meal_plans for all using (
 create policy "Users manage own meals" on public.meals for all using (auth.uid() = user_id);
 create policy "Users manage own grocery lists" on public.grocery_lists for all using (auth.uid() = user_id);
 create policy "Users manage own hydration" on public.hydration_logs for all using (auth.uid() = user_id);
+create policy "Users manage own nutrition recommendations" on public.nutrition_recommendations for all using (auth.uid() = user_id);
 create policy "Users manage own body comp" on public.body_composition_records for all using (auth.uid() = user_id);
 create policy "Users manage own photos" on public.progress_photos for all using (auth.uid() = user_id);
 create policy "Users manage own transformation projections" on public.transformation_projections for all using (auth.uid() = user_id);

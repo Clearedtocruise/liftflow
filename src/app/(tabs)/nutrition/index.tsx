@@ -1,7 +1,7 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, InteractionManager, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
+import { Alert, InteractionManager, Pressable, RefreshControl, StyleSheet, TextInput, View } from 'react-native';
 
 import { api } from '@/api/client';
 import { Card } from '@/components/layout/Card';
@@ -16,7 +16,7 @@ import { NutritionProgressHeader } from '@/components/nutrition/NutritionProgres
 import { NutritionSectionTabs, type NutritionSection } from '@/components/nutrition/NutritionSectionTabs';
 import { QuickMealLogSheet } from '@/components/nutrition/QuickMealLogSheet';
 import { AppText } from '@/components/ui/AppText';
-import { LiftFlowColors, Spacing } from '@/constants/theme';
+import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import { usePlanAdjustment } from '@/contexts/PlanAdjustmentContext';
 import { useAppResume } from '@/hooks/useAppResume';
 import { useAuth } from '@/hooks/useAuth';
@@ -44,8 +44,14 @@ import type { MealAlternativeOption } from '@/services/nutritionAdvisoryService'
 import { nutritionService } from '@/services/nutritionService';
 import { trainingService } from '@/services/trainingService';
 import { getAccessToken } from '@/supabase/client';
-import type { DailyNutritionSummary, GroceryList, Meal, NutritionGoals } from '@/types';
+import type { DailyNutritionSummary, GroceryList, GroceryListItem, Meal, NutritionGoals } from '@/types';
 import type { MealType } from '@/types/common';
+
+function formatGroceryQuantity(item: GroceryListItem): string {
+  if (item.quantity == null) return item.unit ?? '';
+  const amount = Math.round(item.quantity * 10) / 10;
+  return item.unit ? `${amount} ${item.unit}` : `${amount}`;
+}
 
 export default function NutritionScreen() {
   const { user } = useAuth();
@@ -65,6 +71,8 @@ export default function NutritionScreen() {
   const [replaceIngredientName, setReplaceIngredientName] = useState<string | null>(null);
   const [detailMeal, setDetailMeal] = useState<Meal | null>(null);
   const [quickLogOpen, setQuickLogOpen] = useState(false);
+  const [newItemName, setNewItemName] = useState('');
+  const [addingItem, setAddingItem] = useState(false);
   const [hasWorkoutToday, setHasWorkoutToday] = useState(false);
   const [recoverySleepHours, setRecoverySleepHours] = useState<number | undefined>();
   const [generating, setGenerating] = useState(false);
@@ -80,6 +88,10 @@ export default function NutritionScreen() {
   const dietaryRestrictions = useMemo(
     () => user?.metadata?.coachProfile?.dietaryRestrictions ?? [],
     [user?.metadata?.coachProfile?.dietaryRestrictions],
+  );
+  const foodPreferences = useMemo(
+    () => user?.metadata?.coachProfile?.foodPreferences ?? [],
+    [user?.metadata?.coachProfile?.foodPreferences],
   );
 
   function applyWorkoutTodayFromPlan(planned: Parameters<typeof resolveActiveTrainingDay>[0]) {
@@ -216,16 +228,15 @@ export default function NutritionScreen() {
 
       void (async () => {
         try {
+          const synced = await nutritionService.syncGroceryListFromMeals(user.id, from, to);
+          if (generation !== loadGenerationRef.current) return;
+          if (synced.success && synced.data) {
+            setGroceryList(synced.data);
+            return;
+          }
           const groceryRes = await nutritionService.getGroceryLists(user.id);
           if (generation !== loadGenerationRef.current) return;
-          const mealCount = weekMeals.length;
-          if (mealCount > 0) {
-            const synced = await nutritionService.syncGroceryListFromMeals(user.id, from, to);
-            if (generation !== loadGenerationRef.current) return;
-            if (synced.success && synced.data) setGroceryList(synced.data);
-          } else if (groceryRes.success && groceryRes.data?.[0]) {
-            setGroceryList(groceryRes.data[0]);
-          }
+          if (groceryRes.success && groceryRes.data?.[0]) setGroceryList(groceryRes.data[0]);
         } catch {
           // shopping list is non-critical
         }
@@ -325,6 +336,23 @@ export default function NutritionScreen() {
 
   const groupedShopping = useMemo(() => groupGroceriesByCategory(shoppingItems), [shoppingItems]);
 
+  const groupedGroceryItems = useMemo(() => {
+    const groups: Record<string, GroceryListItem[]> = {};
+    for (const item of groceryList?.items ?? []) {
+      const category = item.category?.trim() || 'Other';
+      (groups[category] ??= []).push(item);
+    }
+    for (const items of Object.values(groups)) {
+      items.sort((a, b) => Number(a.isChecked) - Number(b.isChecked) || a.sortOrder - b.sortOrder);
+    }
+    return groups;
+  }, [groceryList]);
+
+  const checkedCount = useMemo(
+    () => (groceryList?.items ?? []).filter((item) => item.isChecked).length,
+    [groceryList],
+  );
+
   useEffect(() => {
     if (log === '1') setQuickLogOpen(true);
   }, [log]);
@@ -345,14 +373,13 @@ export default function NutritionScreen() {
     mealType: MealType;
     calories?: number;
     proteinG?: number;
+    carbsG?: number;
+    fatG?: number;
   }) {
     if (!user) return;
-    const meta = enrichMealMeta(payload.name, undefined);
-    meta.status = 'completed';
     const result = await nutritionService.logFood(user.id, {
       ...payload,
       date: today,
-      instructions: serializeMealMeta(meta),
     });
     if (result.success) {
       await load();
@@ -380,7 +407,10 @@ export default function NutritionScreen() {
     const { from, to } = getWeekRange(new Date(), user.timezone);
 
     try {
-      const result = await nutritionService.generateWeeklyMealPlan(user.id, tz);
+      const result = await nutritionService.generateWeeklyMealPlan(user.id, tz, {
+        dietaryRestrictions,
+        foodPreferences,
+      });
 
       if (!result.success) {
         Alert.alert('Could not generate meal plan', result.error);
@@ -413,8 +443,51 @@ export default function NutritionScreen() {
   async function handleGenerateShoppingList() {
     if (!user) return;
     const result = await nutritionService.generateGroceryList(user.id);
-    if (result.success) setGroceryList(result.data);
-    else Alert.alert('Error', result.error);
+    if (!result.success) {
+      Alert.alert('Error', result.error);
+      return;
+    }
+    setGroceryList(result.data);
+    const { from, to } = getWeekRange(new Date(), user.timezone);
+    const synced = await nutritionService.syncGroceryListFromMeals(user.id, from, to);
+    if (synced.success && synced.data) setGroceryList(synced.data);
+  }
+
+  async function handleToggleGroceryItem(itemId: string, isChecked: boolean) {
+    setGroceryList((current) =>
+      current
+        ? { ...current, items: current.items.map((item) => (item.id === itemId ? { ...item, isChecked } : item)) }
+        : current,
+    );
+    const result = await nutritionService.setGroceryItemChecked(itemId, isChecked);
+    if (!result.success) {
+      setGroceryList((current) =>
+        current
+          ? {
+              ...current,
+              items: current.items.map((item) => (item.id === itemId ? { ...item, isChecked: !isChecked } : item)),
+            }
+          : current,
+      );
+      Alert.alert('Could not update item', result.error);
+    }
+  }
+
+  async function handleAddGroceryItem() {
+    const name = newItemName.trim();
+    if (!groceryList || !name || addingItem) return;
+    setAddingItem(true);
+    try {
+      const result = await nutritionService.addGroceryItem(groceryList.id, { name });
+      if (!result.success) {
+        Alert.alert('Could not add item', result.error);
+        return;
+      }
+      setGroceryList(result.data);
+      setNewItemName('');
+    } finally {
+      setAddingItem(false);
+    }
   }
 
   async function handleMarkMeal(meal: Meal, status: 'completed' | 'modified' | 'skipped') {
@@ -690,11 +763,78 @@ export default function NutritionScreen() {
               Weekly shopping
             </AppText>
             <AppText variant="body" color="textSecondary">
-              {weekRange.from} – {weekRange.to} · {weekMeals.length} planned meals · {shoppingItems.length} items
+              {weekRange.from} – {weekRange.to} · {weekMeals.length} planned meals ·{' '}
+              {groceryList ? `${checkedCount} / ${groceryList.items.length} picked up` : `${shoppingItems.length} items`}
             </AppText>
           </Card>
           <PrimaryButton label="Refresh Shopping List" variant="secondary" onPress={handleGenerateShoppingList} />
-          {shoppingItems.length === 0 ? (
+
+          {groceryList ? (
+            <>
+              <Card style={styles.shoppingCard}>
+                <AppText variant="caption" color="textSecondary">
+                  Add an item
+                </AppText>
+                <View style={styles.addRow}>
+                  <TextInput
+                    style={styles.addInput}
+                    value={newItemName}
+                    onChangeText={setNewItemName}
+                    placeholder="e.g. Olive oil"
+                    placeholderTextColor={LiftFlowColors.textTertiary}
+                    returnKeyType="done"
+                    onSubmitEditing={() => void handleAddGroceryItem()}
+                  />
+                  <Pressable
+                    onPress={() => void handleAddGroceryItem()}
+                    disabled={!newItemName.trim() || addingItem}
+                    hitSlop={8}
+                    style={styles.addButton}>
+                    <AppText variant="caption" color={newItemName.trim() ? 'accent' : 'textTertiary'}>
+                      Add
+                    </AppText>
+                  </Pressable>
+                </View>
+              </Card>
+              {groceryList.items.length === 0 ? (
+                <Card style={styles.shoppingCard}>
+                  <AppText variant="body" color="textSecondary">
+                    Your shopping list is empty. Generate a meal plan or add items above.
+                  </AppText>
+                </Card>
+              ) : (
+                Object.entries(groupedGroceryItems).map(([category, items]) => (
+                  <Card key={category} style={styles.shoppingCard}>
+                    <AppText variant="label" color="accent">
+                      {category}
+                    </AppText>
+                    {items.map((item) => (
+                      <Pressable
+                        key={item.id}
+                        style={styles.shoppingRow}
+                        onPress={() => void handleToggleGroceryItem(item.id, !item.isChecked)}>
+                        <View style={styles.shoppingLabel}>
+                          <View style={[styles.checkbox, item.isChecked && styles.checkboxChecked]}>
+                            {item.isChecked ? (
+                              <AppText variant="caption" color="accent">
+                                ✓
+                              </AppText>
+                            ) : null}
+                          </View>
+                          <AppText variant="bodyBold" color={item.isChecked ? 'textTertiary' : 'textPrimary'}>
+                            {item.name}
+                          </AppText>
+                        </View>
+                        <AppText variant="footnote" color="textSecondary">
+                          {formatGroceryQuantity(item)}
+                        </AppText>
+                      </Pressable>
+                    ))}
+                  </Card>
+                ))
+              )}
+            </>
+          ) : shoppingItems.length === 0 ? (
             <Card style={styles.shoppingCard}>
               <AppText variant="body" color="textSecondary">
                 Generate a meal plan first.
@@ -825,10 +965,50 @@ const styles = StyleSheet.create({
   },
   shoppingRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
     gap: Spacing.md,
     paddingVertical: Spacing.xs,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: LiftFlowColors.border,
+  },
+  shoppingLabel: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: Radius.sm,
+    borderWidth: 1,
+    borderColor: LiftFlowColors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxChecked: {
+    borderColor: LiftFlowColors.accent,
+    backgroundColor: 'rgba(31, 107, 255, 0.12)',
+  },
+  addRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  addInput: {
+    flex: 1,
+    backgroundColor: LiftFlowColors.backgroundSecondary,
+    borderWidth: 1,
+    borderColor: LiftFlowColors.border,
+    borderRadius: Radius.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    color: LiftFlowColors.textPrimary,
+    fontSize: 16,
+  },
+  addButton: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
   },
 });

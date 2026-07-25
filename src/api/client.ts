@@ -218,8 +218,15 @@ export const api = {
     ),
 
   // Nutrition
-  generateMealPlan: (userId: string, token?: string) =>
-    apiClient.post<import('@/types').MealPlan>('/api/nutrition/meal-plan/generate', { userId }, token),
+  generateMealPlan: (
+    body: {
+      userId: string;
+      dietaryStyle?: string;
+      dietaryRestrictions?: string[];
+      foodPreferences?: string[];
+    },
+    token?: string,
+  ) => apiClient.post<import('@/types').MealPlan>('/api/nutrition/meal-plan/generate', body, token),
 
   // Integrations
   syncHealthKit: (token?: string) =>

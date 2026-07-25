@@ -1,6 +1,6 @@
 import { isSameCalendarDate, localMinutesSinceMidnight, parseScheduledTimeToMinutes } from '@/lib/localDate';
 import { pickMealsToKeep } from '@/lib/mealCleanup';
-import { enrichMealMeta, resolveMealMacros } from '@/lib/mealIngredients';
+import { resolveMealMacros } from '@/lib/mealIngredients';
 import type { MealType } from '@/types/common';
 import type { DailyNutritionSummary, Meal, NutritionGoals } from '@/types/nutrition';
 
@@ -30,19 +30,19 @@ export type WeeklyMealAggregation = Omit<DailyMealAggregation, 'dedupedMeals'> &
 };
 
 function mealStatus(meal: Meal) {
-  return enrichMealMeta(meal.name, meal.instructions).status ?? 'planned';
+  return meal.status;
 }
 
-/** Counts toward daily consumed macros (not skipped plan slots). */
+/**
+ * Counts toward daily consumed macros. Only an explicit completed/modified
+ * status counts — a plan slot the user never touched is not food they ate.
+ */
 export function isConsumedMeal(meal: Meal): boolean {
-  const status = mealStatus(meal);
-  if (status === 'completed' || status === 'modified') return true;
-  if (!meal.mealPlanId && status !== 'skipped') return true;
-  return false;
+  return meal.status === 'completed' || meal.status === 'modified';
 }
 
 function isScheduledMeal(meal: Meal): boolean {
-  return mealStatus(meal) !== 'skipped';
+  return meal.status !== 'skipped';
 }
 
 /** Meals scheduled on a calendar day (YYYY-MM-DD), deduped by meal type. */
