@@ -1,0 +1,90 @@
+name: CI
+
+# No apt/build-essential/python step is needed: the repo no longer depends on any package that
+# compiles native code at install time, so `npm ci` runs with install scripts enabled.
+# (pg-query-parser -> pg-query-native pinned node-gyp 8, which needs Python distutils — removed
+# from Python 3.12+, so it could not build on a current Ubuntu runner.)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Node 20 LTS: backend package.json requires >=20 and neither workspace pins a version.
+  NODE_VERSION: '20'
+
+jobs:
+  backend:
+    name: Backend (typecheck + tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Typecheck
+        working-directory: backend
+        run: npm run typecheck
+
+      - name: Test
+        working-directory: backend
+        run: npm test
+
+  client:
+    name: Client (typecheck)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # The app has a large backlog of pre-existing type errors, so a plain `tsc --noEmit` gate
+      # would be red on every run and tell us nothing. Instead we ratchet: the build fails only
+      # when the error count grows. Lower the baseline as errors are paid down; the goal is 0,
+      # at which point this step becomes a plain `npm run typecheck`.
+      - name: Typecheck (no new errors vs. baseline)
+        env:
+          BASELINE: '84'
+        run: |
+          set +e
+          npm run typecheck > typecheck.log 2>&1
+          set -e
+          count=$(grep -cE 'error TS' typecheck.log || true)
+          echo "TypeScript errors: $count (baseline $BASELINE)"
+          if [ "$count" -gt "$BASELINE" ]; then
+            echo "::error::Client typecheck regressed: $count errors vs. baseline $BASELINE."
+            grep -E 'error TS' typecheck.log || true
+            exit 1
+          fi
+          if [ "$count" -lt "$BASELINE" ]; then
+            echo "::notice::Client typecheck improved to $count errors. Lower BASELINE to $count."
+          fi
+
+      - name: Upload typecheck log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: client-typecheck-log
+          path: typecheck.log
+          if-no-files-found: ignore

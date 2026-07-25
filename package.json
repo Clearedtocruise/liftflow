@@ -34,7 +34,6 @@
     "expo-system-ui": "~6.0.9",
     "expo-updates": "~29.0.18",
     "expo-web-browser": "~15.0.11",
-    "pg-query-parser": "^0.3.0",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-native": "0.81.5",
@@ -60,6 +59,7 @@
     "typescript": "~5.9.2"
   },
   "scripts": {
+    "typecheck": "node ./node_modules/typescript/bin/tsc --noEmit",
     "start": "node ./node_modules/expo/bin/cli start",
     "start:expo-go": "EXPO_USE_METRO_STUBS=1 EXPO_DISABLE_ERROR_OVERLAY=1 node ./node_modules/expo/bin/cli start",
     "start:web": "EXPO_USE_METRO_STUBS=1 EXPO_DISABLE_ERROR_OVERLAY=1 node ./node_modules/expo/bin/cli start --web",
