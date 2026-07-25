@@ -57,8 +57,9 @@ record(
     debug.includes('Advance:'),
 );
 record(
-  'Completion uses completedSets >= targetSets',
-  active.includes('completedAfterLog >= targetSets') && active.includes('allSetsDone = completedSets.length >= targetSets'),
+  'Completion uses completedSets >= effectiveTargetSets',
+  active.includes('completedAfterLog >= effectiveTargetSets') &&
+    active.includes('allSetsDone = completedSets.length >= effectiveTargetSets'),
 );
 
 console.log('\nRule: completedSets >= programmedSets before exercise advance (traditional)');

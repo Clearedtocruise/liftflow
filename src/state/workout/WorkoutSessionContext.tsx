@@ -80,6 +80,7 @@ export function WorkoutSessionProvider({
   const [watchDraftWeightKg, setWatchDraftWeightKg] = useState<number | null>(null);
   const restEndAtRef = useRef<number | null>(null);
   const hapticFiredRef = useRef(false);
+  const endedRestPeriodIdsRef = useRef<Set<string>>(new Set());
   const pausedRemainingRef = useRef<number | null>(null);
   /** Bumped on cancel/end/start so in-flight hydrates cannot restore stale sessions. */
   const sessionEpochRef = useRef(0);
@@ -153,10 +154,6 @@ export function WorkoutSessionProvider({
   }, [activeSession?.id]);
 
   useEffect(() => {
-    setActiveExerciseIndex(0);
-  }, [activeSession?.id]);
-
-  useEffect(() => {
     hydrate();
   }, [hydrate]);
 
@@ -185,16 +182,22 @@ export function WorkoutSessionProvider({
       hapticFiredRef.current = true;
     }
 
-    const finish = async () => {
-      if (!activeRestPeriod) return;
-      const recommended = activeRestPeriod.recommendedSeconds ?? DEFAULT_REST_SECONDS;
-      await workoutService.endRestTimer(activeRestPeriod.id, recommended, false);
-      setActiveRestPeriod(null);
-      setRestSecondsRemaining(null);
-      restEndAtRef.current = null;
-    };
+    if (!activeRestPeriod || endedRestPeriodIdsRef.current.has(activeRestPeriod.id)) return;
+    // The effect re-runs on every state change it triggers, so the write needs its own guard.
+    endedRestPeriodIdsRef.current.add(activeRestPeriod.id);
+    const restPeriodId = activeRestPeriod.id;
+    const recommended = activeRestPeriod.recommendedSeconds ?? DEFAULT_REST_SECONDS;
 
-    finish();
+    void workoutService
+      .endRestTimer(restPeriodId, recommended, false)
+      .catch((error) => {
+        console.warn('[workoutSession] endRestTimer failed', error);
+      })
+      .finally(() => {
+        setActiveRestPeriod((current) => (current?.id === restPeriodId ? null : current));
+        setRestSecondsRemaining(null);
+        restEndAtRef.current = null;
+      });
   }, [restSecondsRemaining, activeRestPeriod, restTimerHaptics]);
 
   useEffect(() => {

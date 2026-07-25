@@ -69,7 +69,8 @@ export const INTERVAL_MODE_DEFAULTS: Record<
   { workSeconds: number; restSeconds: number; rounds: number }
 > = {
   hiit: { workSeconds: 45, restSeconds: 15, rounds: 8 },
-  tabata: { workSeconds: 20, restSeconds: 20, rounds: 10 },
+  // Canonical Tabata protocol (Tabata et al., 1996): 20s work / 10s rest x 8 rounds = 4:00.
+  tabata: { workSeconds: 20, restSeconds: 10, rounds: 8 },
 };
 
 export const CIRCUIT_MODE_DEFAULTS = {

@@ -17,6 +17,7 @@ import {
     resolveActiveTrainingDay,
     validateWorkoutAssignmentConsistency,
 } from '@/lib/activeTrainingDay';
+import { INTERVAL_MODE_DEFAULTS } from '@/constants/workoutExecutionModes';
 import { localDateString } from '@/lib/localDate';
 import { planDataCache } from '@/lib/planDataCache';
 import { warmWeekPlanData } from '@/lib/planDataPrefetch';
@@ -264,7 +265,7 @@ export default function WorkoutScreen() {
       ? exercises
       : exercisesForSessionStart(plannedWorkout, sessionTabata);
 
-    const planForSession = enrichWithSupersetGroups(
+    const basePlan =
       draftExercises.length > 0
         ? draftExercises
         : [...session.exercises]
@@ -272,21 +273,25 @@ export default function WorkoutScreen() {
             .map((exercise) => ({
               id: exercise.id,
               name: exercise.exercise?.name ?? 'Exercise',
-              sets: sessionTabata ? 10 : 3,
+              // Tabata rounds are not strength sets, so the set count stays mode-independent.
+              sets: 3,
               repRange: exercise.suggestedReps ?? '8-10',
-              restSeconds: sessionTabata ? 20 : 90,
+              restSeconds: sessionTabata ? INTERVAL_MODE_DEFAULTS.tabata.restSeconds : 90,
+              intervalRounds: sessionTabata ? INTERVAL_MODE_DEFAULTS.tabata.rounds : undefined,
+              intervalWorkSeconds: sessionTabata ? INTERVAL_MODE_DEFAULTS.tabata.workSeconds : undefined,
               executionMode: sessionTabata ? ('tabata' as const) : undefined,
-            })),
-    );
+            }));
 
     const executionMode = inferExecutionModeFromPlan(
-      planForSession,
+      basePlan,
       normalizeExecutionMode(
         draftExercises[0]?.executionMode ??
           plannedWorkout?.metadata?.executionMode ??
           (sessionTabata ? 'tabata' : undefined),
       ),
     );
+
+    const planForSession = enrichWithSupersetGroups(basePlan, executionMode);
 
     return (
       <ActiveWorkoutScreen

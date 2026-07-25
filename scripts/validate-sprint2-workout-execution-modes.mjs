@@ -58,7 +58,10 @@ record('PlannedWorkoutMetadata stores executionMode', training.includes('executi
 record('EditableWorkoutExercise stores executionMode', workoutExecution.includes('executionMode'));
 
 record('HIIT defaults 45/15/8', constants.includes('workSeconds: 45') && constants.includes('rounds: 8'));
-record('Tabata defaults 20/20/10', constants.includes('workSeconds: 20') && constants.includes('restSeconds: 20') && constants.includes('rounds: 10'));
+record(
+  'Tabata defaults 20/10/8 (canonical protocol)',
+  constants.includes('tabata: { workSeconds: 20, restSeconds: 10, rounds: 8 }'),
+);
 
 const sprint2Files = [
   'src/types/workoutExecutionMode.ts',
