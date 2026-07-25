@@ -255,7 +255,7 @@ export async function converseWithCoach(
   if (escalated) {
     const parsed = await chatCompletionJson<{ shortAnswer?: unknown; detailedAnswer?: unknown }>({
       system:
-        'You are LiftFlow Coach. Give evidence-based fitness coaching using the user context. Respond in JSON with shortAnswer (1-2 sentences) and detailedAnswer (3-5 sentences). Never diagnose medical conditions.',
+        'You are ONE MORE Coach. Give evidence-based fitness coaching using the user context. Respond in JSON with shortAnswer (1-2 sentences) and detailedAnswer (3-5 sentences). Never diagnose medical conditions.',
       user: asPromptData('COACH_REQUEST', {
         question: message,
         topic,

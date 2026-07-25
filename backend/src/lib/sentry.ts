@@ -1,9 +1,9 @@
 /**
  * Sprint 8.5/8.6 — Sentry backend integration (@sentry/node v9).
  */
-import type { Express } from 'express';
 import * as Sentry from '@sentry/node';
 import { expressIntegration, setupExpressErrorHandler } from '@sentry/node';
+import type { Express } from 'express';
 
 let initialized = false;
 
@@ -66,7 +66,7 @@ export function captureTestException(context?: {
   route?: string;
   tags?: Record<string, string>;
 }): string | undefined {
-  const error = new Error('LiftFlow Sentry test exception — Sprint 8.6');
+  const error = new Error('ONE MORE Sentry test exception — Sprint 8.6');
   error.name = 'SentryTestError';
   return captureException(error, {
     userId: context?.userId ?? '00000000-0000-0000-0000-000000000001',

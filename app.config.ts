@@ -13,7 +13,7 @@ const sentryOrganization = process.env.SENTRY_ORG ?? sentryFromDsn?.orgId ?? '';
 const sentryProject = process.env.SENTRY_PROJECT ?? sentryFromDsn?.projectId ?? '';
 
 const config: ExpoConfig = {
-  name: 'ONE MORE',
+  name: 'One More Fitness',
   slug: 'liftflow',
   version: '1.0.0',
   runtimeVersion: {

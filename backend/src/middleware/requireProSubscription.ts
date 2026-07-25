@@ -52,7 +52,7 @@ export async function requireProSubscription(req: ProRequest, res: Response, nex
     if (error) throw error;
     if (!isProTier(data)) {
       res.status(403).json({
-        message: 'LiftFlow Pro subscription required',
+        message: 'ONE MORE Pro subscription required',
         code: 'PRO_REQUIRED',
       });
       return;

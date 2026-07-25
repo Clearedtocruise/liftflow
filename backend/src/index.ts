@@ -92,7 +92,7 @@ setupSentryExpressErrorHandler(app);
 app.use(apiErrorHandler);
 
 app.listen(PORT, () => {
-  console.log(`LiftFlow API listening on port ${PORT}`);
+  console.log(`ONE MORE API listening on port ${PORT}`);
   console.log(`OpenAI: ${hasOpenAI() ? 'configured' : 'NOT SET — AI routes use fallbacks'}`);
   console.log(`Supabase admin: ${supabaseAdmin ? 'configured' : 'NOT SET — body/export routes may fail'}`);
   console.log('Routes: /health, /api/voice, /api/ai, /api/workouts, /api/training,');

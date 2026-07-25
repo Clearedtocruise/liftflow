@@ -3,7 +3,7 @@ export const FOUNDER_DASHBOARD_HTML = `<!DOCTYPE html>
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>LiftFlow Founder Dashboard</title>
+  <title>ONE MORE Founder Dashboard</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <style>
     :root {
@@ -68,7 +68,7 @@ export const FOUNDER_DASHBOARD_HTML = `<!DOCTYPE html>
 <body>
   <header>
     <div class="brand">
-      <h1>LiftFlow Founder Dashboard</h1>
+      <h1>ONE MORE Founder Dashboard</h1>
       <p>Outcome intelligence — evidence, not opinions</p>
     </div>
     <div class="toolbar">

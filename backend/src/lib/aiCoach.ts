@@ -196,7 +196,7 @@ export async function coachResponse(context: string, message: string, userId: st
   if (hasOpenAI()) {
     const completion = await chatCompletionText({
       system:
-        'You are LiftFlow AI coach. Give concise, evidence-based fitness advice. Use workout history, recovery score, limitations, and nutrition data. NEVER diagnose medical conditions. Recommend consulting clinicians for injury/pain.',
+        'You are ONE MORE AI coach. Give concise, evidence-based fitness advice. Use workout history, recovery score, limitations, and nutrition data. NEVER diagnose medical conditions. Recommend consulting clinicians for injury/pain.',
       user: [
         asPromptData('USER_QUESTION', message),
         asPromptData('CLIENT_CONTEXT_LABEL', context),

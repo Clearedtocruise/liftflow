@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 
-/** LiftFlow Sprint 5.0 — Premium performance brand system */
+/** ONE MORE — Premium performance brand system */
 export const LiftFlowColors = {
   background: '#080B10',
   backgroundSecondary: '#111318',

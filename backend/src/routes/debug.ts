@@ -15,7 +15,7 @@ debugRouter.get('/debug-sentry', (_req, _res) => {
     _res.status(404).json({ message: 'Not found' });
     return;
   }
-  throw new Error('LiftFlow Sentry test exception — /debug-sentry (non-production)');
+  throw new Error('ONE MORE Sentry test exception — /debug-sentry (non-production)');
 });
 
 /** Founder-authenticated prod-safe test — captures without crashing the process */
@@ -41,7 +41,7 @@ debugRouter.post('/debug-sentry/capture', requireFounderAdmin, async (_req, res)
 /** AI subsystem Sentry correlation test */
 debugRouter.post('/debug-sentry/ai', requireFounderAdmin, async (_req, res) => {
   const userId = SYNTHETIC_USER_ID;
-  const testError = new Error('LiftFlow AI route Sentry test — Sprint 8.6');
+  const testError = new Error('ONE MORE AI route Sentry test — Sprint 8.6');
   captureAiError(testError, '/api/ai/converse', userId);
   await flushSentry();
 
