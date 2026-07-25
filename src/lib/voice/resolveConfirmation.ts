@@ -1,15 +1,28 @@
 import type { ConfirmationMode } from '@/types/common';
-import type { VoiceSettings } from '@/types/voice';
+import type { ParsedVoiceCommandExtended, VoiceSettings } from '@/types/voice';
 
-const SMART_CONFIDENCE_THRESHOLD = 0.8;
+import { CONFIRM_CONFIDENCE } from './voicePlausibility';
 
+/**
+ * Mirrors `backend/src/lib/voiceConfirmation.ts`. `blockAutoCommit` outranks every preference:
+ * a value that failed a range check is corrupt data, and no setting should let it into the log
+ * without the user seeing it.
+ */
 export function resolveRequiresConfirmation(params: {
   confidence: number;
   confirmationMode: ConfirmationMode;
   autoLog: boolean;
-  lowConfidenceFallback?: boolean;
+  blockAutoCommit?: boolean;
+  blockReason?: string;
 }): { requiresConfirmation: boolean; confirmationReason?: string } {
-  const { confidence, confirmationMode, autoLog, lowConfidenceFallback = true } = params;
+  const { confidence, confirmationMode, autoLog, blockAutoCommit = false, blockReason } = params;
+
+  if (blockAutoCommit) {
+    return {
+      requiresConfirmation: true,
+      confirmationReason: blockReason ?? 'Values look implausible — please confirm',
+    };
+  }
 
   if (confirmationMode === 'none') {
     return { requiresConfirmation: false };
@@ -20,31 +33,30 @@ export function resolveRequiresConfirmation(params: {
   }
 
   // smart mode
-  if (autoLog && confidence >= SMART_CONFIDENCE_THRESHOLD) {
+  if (!autoLog) {
+    return { requiresConfirmation: true, confirmationReason: 'Auto-log is off — please confirm' };
+  }
+
+  if (confidence >= CONFIRM_CONFIDENCE) {
     return { requiresConfirmation: false };
   }
 
-  if (confidence >= SMART_CONFIDENCE_THRESHOLD) {
-    return { requiresConfirmation: false };
-  }
-
-  if (lowConfidenceFallback) {
-    return {
-      requiresConfirmation: true,
-      confirmationReason: 'Low confidence parse — please confirm',
-    };
-  }
-
-  return { requiresConfirmation: false };
+  return {
+    requiresConfirmation: true,
+    confirmationReason: 'Low confidence parse — please confirm',
+  };
 }
 
 export function resolveFromVoiceSettings(
   confidence: number,
   settings: Pick<VoiceSettings, 'confirmationMode' | 'autoLog'>,
+  parsed?: Pick<ParsedVoiceCommandExtended, 'implausible' | 'validationReason'>,
 ): { requiresConfirmation: boolean; confirmationReason?: string } {
   return resolveRequiresConfirmation({
     confidence,
     confirmationMode: settings.confirmationMode,
     autoLog: settings.autoLog,
+    blockAutoCommit: parsed?.implausible === true,
+    blockReason: parsed?.validationReason,
   });
 }

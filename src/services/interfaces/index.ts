@@ -211,16 +211,44 @@ export interface INutritionService {
       fatG?: number;
       date?: string;
       instructions?: string;
+      clientKey?: string;
     },
   ): Promise<ServiceResult<import('@/types').Meal>>;
   getMealsForDate(userId: string, date: string): Promise<ServiceResult<import('@/types').Meal[]>>;
   getDailySummary(userId: string, date?: string): Promise<ServiceResult<import('@/types').DailyNutritionSummary>>;
   getMealPlans(userId: string): Promise<ServiceResult<MealPlan[]>>;
-  generateWeeklyMealPlan(userId: string, timeZone?: string | null): Promise<ServiceResult<MealPlan>>;
+  generateWeeklyMealPlan(
+    userId: string,
+    timeZone?: string | null,
+    prefs?: { dietaryStyle?: string; dietaryRestrictions?: string[]; foodPreferences?: string[] },
+  ): Promise<ServiceResult<MealPlan>>;
   pruneDuplicateMeals(userId: string, range?: { from?: string; to?: string }): Promise<ServiceResult<number>>;
   getMealsForWeek(userId: string, from: string, to: string): Promise<ServiceResult<import('@/types').Meal[]>>;
   generateGroceryList(userId: string, mealPlanId?: string): Promise<ServiceResult<GroceryList>>;
   getGroceryLists(userId: string): Promise<ServiceResult<GroceryList[]>>;
+  setGroceryItemChecked(itemId: string, isChecked: boolean): Promise<ServiceResult<void>>;
+  addGroceryItem(
+    listId: string,
+    item: { name: string; quantity?: number; unit?: string; category?: string },
+  ): Promise<ServiceResult<GroceryList>>;
+  syncGroceryListFromMeals(userId: string, from: string, to: string): Promise<ServiceResult<GroceryList | null>>;
+  ensureWeekMealCoverage(userId: string, timeZone?: string | null): Promise<ServiceResult<number>>;
+  updateMeal(
+    mealId: string,
+    updates: Partial<
+      Pick<
+        import('@/types').Meal,
+        'name' | 'calories' | 'proteinG' | 'carbsG' | 'fatG' | 'instructions' | 'mealType' | 'status'
+      >
+    >,
+  ): Promise<ServiceResult<import('@/types').Meal>>;
+  markMealStatus(
+    mealId: string,
+    name: string,
+    instructions: string | undefined,
+    status: import('@/types').MealStatus,
+  ): Promise<ServiceResult<import('@/types').Meal>>;
+  removePlannedMealsForWeek(userId: string, weekStart: string): Promise<ServiceResult<number>>;
   logHydration(userId: string, amountMl: number): Promise<ServiceResult<HydrationLog>>;
   getAdaptiveTargets(userId: string): Promise<ServiceResult<import('@/types/coaching').AdaptiveMacroTargets>>;
   generateDailyPlan(userId: string, dietaryStyle?: string): Promise<ServiceResult<import('@/types/coaching').DailyMealPlan>>;

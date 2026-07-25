@@ -15,12 +15,12 @@ export const CARDIO_ACTIVITIES: CardioActivity[] = [
   {
     id: 'tabata',
     label: 'Tabata',
-    description: '20 sec work · 20 sec rest · 10 rounds',
+    description: '20 sec work · 10 sec rest · 8 rounds',
     type: 'hiit',
     mode: 'tabata',
     workSeconds: 20,
-    restSeconds: 20,
-    rounds: 10,
+    restSeconds: 10,
+    rounds: 8,
   },
   {
     id: 'hiit-40-20',

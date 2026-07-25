@@ -5,12 +5,14 @@ import {
     parseVoiceCommandLocal,
     resolveFromVoiceSettings,
 } from '@/lib/voice';
+import { FAST_PATH_CONFIDENCE } from '@/lib/voice/voicePlausibility';
 import { voiceSettingsFromUser } from '@/lib/voice/voicePreferences';
 import type { IVoiceService } from '@/services/interfaces';
 import { userService } from '@/services/userService';
 import { supabase } from '@/supabase/client';
 import type { ParseVoiceRequest } from '@/types';
 import type { ParsedVoiceCommandExtended, ProcessVoiceResult, VoiceParseContext, VoiceSettings } from '@/types/voice';
+import { DEFAULT_VOICE_SETTINGS } from '@/types/voice';
 
 function buildContext(request: ParseVoiceRequest): VoiceParseContext {
   const ctx = request.context ?? {};
@@ -45,10 +47,11 @@ export async function processVoiceTranscript(
     const local = parseVoiceCommandLocal(request.transcript, context);
     const enrichedLocal = local ? enrichParsedCommand(local, context) : null;
 
-    if (enrichedLocal && (enrichedLocal.confidence ?? 0) >= 0.88) {
+    if (enrichedLocal && (enrichedLocal.confidence ?? 0) >= FAST_PATH_CONFIDENCE) {
       const { requiresConfirmation, confirmationReason } = resolveFromVoiceSettings(
         enrichedLocal.confidence ?? 0.85,
         settings,
+        enrichedLocal,
       );
       return ok({
         parsed: enrichedLocal,
@@ -67,18 +70,26 @@ export async function processVoiceTranscript(
       const { requiresConfirmation, confirmationReason } = resolveFromVoiceSettings(
         remote.confidence,
         settings,
+        parsed,
       );
+      // An implausible value must survive a "never confirm" preference, so the parsed flags win
+      // over confirmationMode here rather than being short-circuited by it.
       return ok({
         parsed,
         confidence: remote.confidence,
-        requiresConfirmation: settings.confirmationMode === 'none' ? false : remote.requiresConfirmation || requiresConfirmation,
-        confirmationReason: remote.confirmationReason ?? confirmationReason,
+        requiresConfirmation: parsed.implausible === true
+          ? true
+          : settings.confirmationMode === 'none'
+            ? false
+            : remote.requiresConfirmation || requiresConfirmation,
+        confirmationReason: parsed.validationReason ?? remote.confirmationReason ?? confirmationReason,
       });
     } catch {
       if (enrichedLocal) {
         const { requiresConfirmation, confirmationReason } = resolveFromVoiceSettings(
           enrichedLocal.confidence ?? 0.6,
           settings,
+          enrichedLocal,
         );
         return ok({
           parsed: enrichedLocal,
@@ -106,24 +117,28 @@ export const voiceService: IVoiceService = {
     const local = parseVoiceCommandLocal(request.transcript, context);
     const enriched = local ? enrichParsedCommand(local, context) : null;
 
-    if (enriched && (enriched.confidence ?? 0) >= 0.88) {
+    // No userId here, so the user's stored preferences are unavailable — the defaults still go
+    // through the shared resolver so the implausibility gate cannot be bypassed by entry point.
+    if (enriched && (enriched.confidence ?? 0) >= FAST_PATH_CONFIDENCE) {
+      const confidence = enriched.confidence ?? 0.85;
       return ok({
         parsed: enriched,
-        confidence: enriched.confidence ?? 0.85,
-        requiresConfirmation: (enriched.confidence ?? 0) < 0.8,
+        confidence,
+        ...resolveFromVoiceSettings(confidence, DEFAULT_VOICE_SETTINGS, enriched),
       });
     }
 
     try {
       const remote = await api.parseVoice({ ...request, context: context as Record<string, unknown> });
+      const parsed = enrichParsedCommand(
+        { ...remote.parsed, intent: remote.parsed.intent ?? 'log_set' } as ParsedVoiceCommandExtended,
+        context,
+      );
       return ok({
-        parsed: enrichParsedCommand(
-          { ...remote.parsed, intent: remote.parsed.intent ?? 'log_set' } as ParsedVoiceCommandExtended,
-          context,
-        ),
+        parsed,
         confidence: remote.confidence,
-        requiresConfirmation: remote.requiresConfirmation,
-        confirmationReason: remote.confirmationReason,
+        requiresConfirmation: remote.requiresConfirmation || parsed.implausible === true,
+        confirmationReason: parsed.validationReason ?? remote.confirmationReason,
       });
     } catch {
       if (enriched) {

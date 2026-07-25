@@ -38,7 +38,7 @@ const modes = read('src/constants/workoutExecutionModes.ts');
 const cardio = read('src/constants/cardioActivities.ts');
 
 record('Traditional default 90s', engine.includes('DEFAULT_REST_SECONDS') || modes.includes('restSeconds: 90'));
-record('Tabata defaults 20/20/10', modes.includes('workSeconds: 20') && modes.includes('restSeconds: 20') && modes.includes('rounds: 10'));
+record('Tabata defaults 20/10/8 (canonical protocol)', modes.includes('tabata: { workSeconds: 20, restSeconds: 10, rounds: 8 }'));
 record('Interval skip round', engine.includes('skipIntervalRound') && overlay.includes('Skip round'));
 record('Interval phase cues', fs.existsSync(path.join(root, 'src/lib/intervalTimerFeedback.ts')));
 record('Tabata auto-start in active workout', active.includes('startIntervalTimer(undefined, executionMode === \'tabata\')'));
@@ -50,7 +50,7 @@ record('Workout overlay interval config', overlay.includes('Work (sec)') && over
 record('Workout overlay circuit transition', overlay.includes('Circuit'));
 record('Active workout uses timer engine', active.includes('useWorkoutTimerEngine'));
 record('Active workout passes execution mode', read('src/app/(tabs)/workout/index.tsx').includes('executionMode'));
-record('Cardio tabata 10 rounds', cardio.includes('rounds: 10'));
+record('Cardio tabata 8 rounds', cardio.includes('rounds: 8'));
 record('Interval panel uses timer engine', read('src/components/cardio/IntervalTimerPanel.tsx').includes('timerEngine'));
 
 console.log('\nTimer architecture: timerEngine → useWorkoutTimerEngine → WorkoutTimerOverlay');

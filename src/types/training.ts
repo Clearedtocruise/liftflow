@@ -130,5 +130,6 @@ export type SuggestedMuscleGroups = {
   primaryGroups: string[];
   secondaryGroups: string[];
   rationale: string;
-  recoveryScore?: number;
+  /** Muscle groups with no logged volume this week. Not a recovery measurement. */
+  untrainedGroupCount?: number;
 };

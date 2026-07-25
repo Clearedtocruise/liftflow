@@ -6,7 +6,9 @@ import type {
     GroceryList,
     GroceryListItem,
     Meal,
+    MealOrigin,
     MealPlan,
+    MealStatus,
     NutritionGoals,
     ProgressPhoto,
     UserMetric,
@@ -373,9 +375,37 @@ type MealRow = {
   fat_g: number | null;
   instructions: string | null;
   created_at: string;
+  status?: string | null;
+  origin?: string | null;
+  consumed_at?: string | null;
+  client_key?: string | null;
+  macros_provided?: boolean | null;
 };
 
+const MEAL_STATUSES: MealStatus[] = ['planned', 'completed', 'skipped', 'modified'];
+
+/** Rows written before migration 029 keep their status inside the instructions JSON. */
+function legacyStatus(instructions: string | null): MealStatus | null {
+  if (!instructions || !instructions.trimStart().startsWith('{')) return null;
+  try {
+    const parsed = JSON.parse(instructions) as { status?: unknown };
+    const status = parsed.status;
+    return MEAL_STATUSES.find((candidate) => candidate === status) ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function mapMeal(row: MealRow): Meal {
+  const origin: MealOrigin = row.origin === 'log' || row.origin === 'plan'
+    ? row.origin
+    : row.meal_plan_id
+      ? 'plan'
+      : 'log';
+  const status = MEAL_STATUSES.find((candidate) => candidate === row.status)
+    ?? legacyStatus(row.instructions)
+    ?? (origin === 'log' ? 'completed' : 'planned');
+
   return {
     id: row.id,
     mealPlanId: row.meal_plan_id ?? undefined,
@@ -388,6 +418,11 @@ export function mapMeal(row: MealRow): Meal {
     carbsG: row.carbs_g ?? undefined,
     fatG: row.fat_g ?? undefined,
     instructions: row.instructions ?? undefined,
+    status,
+    origin,
+    consumedAt: row.consumed_at ?? undefined,
+    clientKey: row.client_key ?? undefined,
+    macrosProvided: row.macros_provided ?? row.calories != null,
     createdAt: row.created_at,
   };
 }

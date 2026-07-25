@@ -1,5 +1,5 @@
+import { mealOrigin, mealStatus, type MealCleanupRow } from './mealCleanup.js';
 import { prePostWorkoutNamesForDate } from './mealPlanTemplates.js';
-import { parseMealStatus } from './nutritionPreferenceEngine.js';
 import { requireAdmin } from './supabase.js';
 import { resolveRankedGoals, toNutritionGoal } from './trainingGoals.js';
 import {
@@ -31,18 +31,7 @@ type PlannedWorkoutRow = {
   metadata?: { sessionKind?: string } | null;
 };
 
-type MealRow = {
-  id: string;
-  meal_type: string;
-  name: string;
-  scheduled_date: string;
-  calories: number | null;
-  protein_g: number | null;
-  carbs_g: number | null;
-  fat_g: number | null;
-  instructions: string | null;
-  meal_plan_id: string | null;
-};
+type MealRow = MealCleanupRow;
 
 function hydrationNote(bodyWeightKg: number, sessionKind: 'rest' | 'strength' | 'cardio' | 'mobility'): string {
   const ml = Math.round(
@@ -222,7 +211,8 @@ export async function syncNutritionForDate(userId: string, date: string): Promis
   const targetTypes = new Set<string>(targetMeals.map((m) => m.mealType));
 
   const existing = (mealsRes.data ?? []) as MealRow[];
-  const byType = new Map(existing.map((m) => [m.meal_type, m]));
+  // Only plan slots are adjusted; a user's own log for the same meal type is left alone.
+  const byType = new Map(existing.filter((m) => mealOrigin(m) === 'plan').map((m) => [m.meal_type, m]));
 
   let mealsUpdated = 0;
   let mealsInserted = 0;
@@ -231,8 +221,7 @@ export async function syncNutritionForDate(userId: string, date: string): Promis
   for (const target of targetMeals) {
     const row = byType.get(target.mealType);
     if (row) {
-      const status = parseMealStatus(row.instructions);
-      if (status !== 'planned') continue;
+      if (mealStatus(row) !== 'planned') continue;
       await db
         .from('meals')
         .update({
@@ -241,6 +230,9 @@ export async function syncNutritionForDate(userId: string, date: string): Promis
           protein_g: target.proteinG,
           carbs_g: target.carbsG,
           fat_g: target.fatG,
+          status: 'planned',
+          origin: 'plan',
+          macros_provided: true,
           instructions: JSON.stringify({
             status: 'planned',
             planAdapted: true,
@@ -259,6 +251,10 @@ export async function syncNutritionForDate(userId: string, date: string): Promis
         protein_g: target.proteinG,
         carbs_g: target.carbsG,
         fat_g: target.fatG,
+        status: 'planned',
+        origin: 'plan',
+        macros_provided: true,
+        client_key: `daysync:${date}:${target.mealType}`,
         instructions: JSON.stringify({ status: 'planned', planAdapted: true, adaptedAt: new Date().toISOString() }),
       });
       mealsInserted += 1;
@@ -267,7 +263,8 @@ export async function syncNutritionForDate(userId: string, date: string): Promis
 
   for (const row of existing) {
     if (targetTypes.has(row.meal_type)) continue;
-    if (parseMealStatus(row.instructions) !== 'planned') continue;
+    // Never remove something the user logged or already acted on.
+    if (mealOrigin(row) !== 'plan' || mealStatus(row) !== 'planned') continue;
     await db.from('meals').delete().eq('id', row.id);
     mealsRemoved += 1;
   }

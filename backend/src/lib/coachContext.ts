@@ -1,11 +1,10 @@
-import { ageYearsFromDateOfBirth } from './ageAdjustments.js';
+import { loadDailyMacroInputs, macroContextFrom } from './dailyMacroInputs.js';
 import type { LimitationContext } from './exerciseSubstitution.js';
 import { parseLimitationFromVoice } from './exerciseSubstitution.js';
 import { getProgramDashboard } from './programEngine.js';
 import { calculateRecoveryScore, mergeTrainingLoadScore } from './recoveryScore.js';
 import { requireAdmin } from './supabase.js';
-import { resolveRankedGoals, toNutritionGoal } from './trainingGoals.js';
-import { calculateMacroTargets, inferWorkoutType } from './workoutAwareNutrition.js';
+import { calculateMacroTargets } from './workoutAwareNutrition.js';
 
 export type CoachContext = {
   recovery: {
@@ -21,6 +20,10 @@ export type CoachContext = {
   plannedWorkout?: { name: string; muscleGroups: string[]; rationale?: string };
   weeklyCheckIn?: Record<string, unknown>;
   macroTargets?: ReturnType<typeof calculateMacroTargets>;
+  /** The user's saved display unit, so coach replies never guess it from magnitude. */
+  weightUnit: 'lb' | 'kg';
+  /** Today in the user's own timezone, so callers don't recompute it in UTC. */
+  today: string;
   program?: {
     name: string;
     currentWeek: number;
@@ -34,7 +37,8 @@ export type CoachContext = {
 
 export async function loadCoachContext(userId: string): Promise<CoachContext> {
   const db = requireAdmin();
-  const today = new Date().toISOString().slice(0, 10);
+  const macroInputs = await loadDailyMacroInputs(userId);
+  const today = macroInputs.today;
 
   const [
     recoveryRow,
@@ -43,9 +47,7 @@ export async function loadCoachContext(userId: string): Promise<CoachContext> {
     lastSets,
     goals,
     todayMeals,
-    plannedToday,
     weeklyCheckIn,
-    profile,
   ] = await Promise.all([
     db
       .from('recovery_assessments')
@@ -70,21 +72,12 @@ export async function loadCoachContext(userId: string): Promise<CoachContext> {
     db.from('nutrition_goals').select('*').eq('user_id', userId).eq('is_active', true).limit(1).maybeSingle(),
     db.from('meals').select('calories, protein_g').eq('user_id', userId).eq('scheduled_date', today),
     db
-      .from('planned_workouts')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('scheduled_date', today)
-      .neq('status', 'cancelled')
-      .limit(1)
-      .maybeSingle(),
-    db
       .from('weekly_coach_check_ins')
       .select('*')
       .eq('user_id', userId)
       .order('week_start_date', { ascending: false })
       .limit(1)
       .maybeSingle(),
-    db.from('profiles').select('weight_kg, primary_training_goal, fitness_goals, date_of_birth').eq('id', userId).maybeSingle(),
   ]);
 
   const limitationContexts: LimitationContext[] = (limitations.data ?? []).map((row) => ({
@@ -96,21 +89,14 @@ export async function loadCoachContext(userId: string): Promise<CoachContext> {
   }));
 
   const recoveryScore = recoveryRow.data?.recovery_score ?? undefined;
-  const muscleGroups = plannedToday.data?.suggested_muscle_groups ?? [];
-  const workoutType = muscleGroups.length ? inferWorkoutType(muscleGroups) : 'rest';
+  const todaysWorkout = macroInputs.todaysWorkout;
 
-  const rankedGoals = resolveRankedGoals(profile.data?.fitness_goals, profile.data?.primary_training_goal);
-
-  const macroTargets = calculateMacroTargets({
-    goal: toNutritionGoal(rankedGoals[0]),
-    bodyWeightKg: profile.data?.weight_kg ?? undefined,
-    recoveryScore,
-    recoveryModeActive: recoveryRow.data?.recovery_mode_active ?? false,
-    workoutType,
-    isTrainingDay: !!plannedToday.data,
-    dietaryStyle: 'balanced',
-    ageYears: ageYearsFromDateOfBirth(profile.data?.date_of_birth),
-  });
+  const macroTargets = calculateMacroTargets(
+    macroContextFrom(macroInputs, {
+      recoveryScore,
+      recoveryModeActive: recoveryRow.data?.recovery_mode_active ?? false,
+    }),
+  );
 
   // Never let dashboard/regen load block meal-plan or coach replies.
   let programDashboard: Awaited<ReturnType<typeof getProgramDashboard>> = null;
@@ -148,15 +134,17 @@ export async function loadCoachContext(userId: string): Promise<CoachContext> {
       caloriesToday: (todayMeals.data ?? []).reduce((s, m) => s + Number(m.calories ?? 0), 0),
       proteinToday: (todayMeals.data ?? []).reduce((s, m) => s + Number(m.protein_g ?? 0), 0),
     },
-    plannedWorkout: plannedToday.data
+    plannedWorkout: todaysWorkout
       ? {
-          name: plannedToday.data.name,
-          muscleGroups: plannedToday.data.suggested_muscle_groups ?? [],
-          rationale: plannedToday.data.ai_rationale ?? undefined,
+          name: todaysWorkout.name,
+          muscleGroups: todaysWorkout.muscleGroups,
+          rationale: todaysWorkout.rationale,
         }
       : undefined,
     weeklyCheckIn: weeklyCheckIn.data ?? undefined,
     macroTargets,
+    weightUnit: macroInputs.preferredWeightUnit,
+    today,
     program: programDashboard
       ? {
           name: programDashboard.program.name as string,
@@ -177,13 +165,15 @@ export function answerSmartCoachQuestion(message: string, ctx: CoachContext): st
   if (/what weight|how much weight|what should i lift/.test(q)) {
     const last = ctx.lastPerformance[0];
     if (!last) return 'No recent sets logged — start conservative and add weight when reps feel solid.';
-    return `Last ${last.exercise}: ${last.weight} lb × ${last.reps}. Try ${last.weight + 5} lb if you hit the top of your rep range last session.`;
+    const unit = ctx.weightUnit;
+    const step = unit === 'kg' ? 2.5 : 5;
+    return `Last ${last.exercise}: ${last.weight} ${unit} × ${last.reps}. Try ${last.weight + step} ${unit} if you hit the top of your rep range last session.`;
   }
 
   if (/last time|what did i do|previous/.test(q)) {
     const last = ctx.lastPerformance[0];
     if (!last) return 'No logged history yet for this movement — log your first set to unlock progression tracking.';
-    return `Last session for ${last.exercise}: ${last.weight} lb × ${last.reps} on ${new Date(last.date).toLocaleDateString()}.`;
+    return `Last session for ${last.exercise}: ${last.weight} ${ctx.weightUnit} × ${last.reps} on ${new Date(last.date).toLocaleDateString()}.`;
   }
 
   if (/why.*exercise|why.*choose|why this/.test(q)) {

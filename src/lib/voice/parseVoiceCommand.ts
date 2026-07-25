@@ -1,5 +1,17 @@
 import type { ParsedVoiceCommandExtended, VoiceIntent, VoiceParseContext } from '@/types/voice';
 
+import {
+  AMBIGUOUS_CONFIDENCE,
+  checkSetValues,
+  cleanExerciseName,
+  hasAdditionalSets,
+  IMPLAUSIBLE_CONFIDENCE,
+  looksLikeNonExercise,
+  orderWeightAndReps,
+  stripTrailingFiller,
+  TRUNCATED_CONFIDENCE,
+} from './voicePlausibility';
+
 function detectWeightUnit(text: string): 'lb' | 'kg' | undefined {
   if (/\bkg\b|kilos?\b/i.test(text)) return 'kg';
   if (/\blbs?\b|pounds?\b/i.test(text)) return 'lb';
@@ -99,7 +111,7 @@ const CONTROL_PATTERNS: PatternDef[] = [
     pattern: /^(?:i'm|im|i am)\s+(?:doing|starting|on)\s+(?<exercise>.+?)\.?$/i,
     build: (m, raw) => ({
       intent: 'declare_exercise',
-      exercise: m.groups!.exercise!.trim(),
+      exercise: cleanExerciseName(m.groups!.exercise),
       rawText: raw,
       confidence: 0.9,
     }),
@@ -108,7 +120,7 @@ const CONTROL_PATTERNS: PatternDef[] = [
     pattern: /^(?:starting|switching to)\s+(?<exercise>.+?)\.?$/i,
     build: (m, raw) => ({
       intent: 'declare_exercise',
-      exercise: m.groups!.exercise!.trim(),
+      exercise: cleanExerciseName(m.groups!.exercise),
       rawText: raw,
       confidence: 0.88,
     }),
@@ -183,7 +195,7 @@ const CONTROL_PATTERNS: PatternDef[] = [
     pattern: /^(?<exercise>.+?)\s+(?:felt|feels?)\s+easy\.?$/i,
     build: (m, raw) => ({
       intent: 'feedback',
-      exercise: m.groups!.exercise!.trim(),
+      exercise: cleanExerciseName(m.groups!.exercise),
       feedback: 'easy',
       rawText: raw,
       confidence: 0.9,
@@ -193,7 +205,7 @@ const CONTROL_PATTERNS: PatternDef[] = [
     pattern: /^(?<exercise>.+?)\s+(?:felt|feels?)\s+(?:hard|heavy)\.?$/i,
     build: (m, raw) => ({
       intent: 'feedback',
-      exercise: m.groups!.exercise!.trim(),
+      exercise: cleanExerciseName(m.groups!.exercise),
       feedback: 'hard',
       rawText: raw,
       confidence: 0.9,
@@ -211,56 +223,75 @@ const CONTROL_PATTERNS: PatternDef[] = [
   },
 ];
 
-const SET_PATTERNS: PatternDef[] = [
+type SetPattern = {
+  pattern: RegExp;
+  confidence: number;
+  /** True when the wording itself says which number is weight and which is reps. */
+  orderExplicit: boolean;
+};
+
+const SET_PATTERNS: SetPattern[] = [
   {
     pattern:
       /^(?<exercise>.+?)\s+(?<weight>\d+(?:\.\d+)?)\s*(?<unit>lbs?|pounds?|kg|kilos?)?\s*(?:for|x|\*|×)\s*(?<reps>\d+)/i,
-    build: (m, raw) => ({
-      intent: 'log_set',
-      exercise: m.groups!.exercise!.trim(),
-      weight: parseFloat(m.groups!.weight!),
-      reps: parseInt(m.groups!.reps!, 10),
-      weightUnit: detectWeightUnit(m.groups!.unit ?? raw) ?? detectWeightUnit(raw),
-      rawText: raw,
-      confidence: 0.92,
-    }),
+    confidence: 0.92,
+    orderExplicit: true,
   },
   {
     pattern:
       /^(?<exercise>.+?)\s+(?<reps>\d+)\s*(?:reps?|rep)\s*(?:at|@)\s*(?<weight>\d+(?:\.\d+)?)\s*(?<unit>lbs?|pounds?|kg|kilos?)?/i,
-    build: (m, raw) => ({
-      intent: 'log_set',
-      exercise: m.groups!.exercise!.trim(),
-      weight: parseFloat(m.groups!.weight!),
-      reps: parseInt(m.groups!.reps!, 10),
-      weightUnit: detectWeightUnit(m.groups!.unit ?? raw) ?? detectWeightUnit(raw),
-      rawText: raw,
-      confidence: 0.9,
-    }),
+    confidence: 0.9,
+    orderExplicit: true,
   },
   {
+    // "bench press 225 8" — only a unit on the first number says which one is the weight.
     pattern: /^(?<exercise>.+?)\s+(?<weight>\d+(?:\.\d+)?)\s*(?<unit>lbs?|pounds?|kg|kilos?)?\s+(?<reps>\d+)/i,
-    build: (m, raw) => ({
-      intent: 'log_set',
-      exercise: m.groups!.exercise!.trim(),
-      weight: parseFloat(m.groups!.weight!),
-      reps: parseInt(m.groups!.reps!, 10),
-      weightUnit: detectWeightUnit(m.groups!.unit ?? raw) ?? detectWeightUnit(raw),
-      rawText: raw,
-      confidence: 0.88,
-    }),
+    confidence: 0.88,
+    orderExplicit: false,
   },
   {
     pattern: /^(?<exercise>.+?)\s+(?<reps>\d+)\s*reps?$/i,
-    build: (m, raw) => ({
-      intent: 'log_set',
-      exercise: m.groups!.exercise!.trim(),
-      reps: parseInt(m.groups!.reps!, 10),
-      rawText: raw,
-      confidence: 0.72,
-    }),
+    confidence: 0.72,
+    orderExplicit: true,
   },
 ];
+
+/**
+ * Applies the checks that must run on every set regardless of which pattern produced it: name
+ * cleanup, range validation, and the confidence ceilings that force confirmation when a value
+ * was guessed rather than heard.
+ */
+function finalizeSetCommand(
+  command: ParsedVoiceCommandExtended,
+  remainder = '',
+): ParsedVoiceCommandExtended {
+  const next: ParsedVoiceCommandExtended = { ...command };
+
+  if (next.exercise) {
+    const cleaned = cleanExerciseName(next.exercise);
+    next.exercise = looksLikeNonExercise(cleaned) ? undefined : cleaned;
+  }
+
+  if (hasAdditionalSets(remainder)) {
+    next.multipleSetsHeard = true;
+    next.validationReason = 'Heard more than one set — only the first was parsed. Please confirm.';
+    next.confidence = Math.min(next.confidence ?? 1, TRUNCATED_CONFIDENCE);
+  }
+
+  if (next.ambiguousOrder) {
+    next.confidence = Math.min(next.confidence ?? 1, AMBIGUOUS_CONFIDENCE);
+    next.validationReason ??= 'Could not tell weight from reps — please confirm.';
+  }
+
+  const check = checkSetValues({ weight: next.weight, reps: next.reps, weightUnit: next.weightUnit });
+  if (check.implausible) {
+    next.implausible = true;
+    next.validationReason = check.validationReason;
+    next.confidence = Math.min(next.confidence ?? 1, check.confidenceCeiling ?? IMPLAUSIBLE_CONFIDENCE);
+  }
+
+  return next;
+}
 
 export function parseVoiceCommandLocal(
   transcript: string,
@@ -268,22 +299,49 @@ export function parseVoiceCommandLocal(
 ): ParsedVoiceCommandExtended | null {
   const raw = transcript.trim();
   if (!raw) return null;
-  const text = raw.toLowerCase();
+  // Real speech ends in politeness and punctuation; the `$` anchors above must not see it.
+  const matchable = stripTrailingFiller(raw);
+  if (!matchable) return null;
+  const text = matchable.toLowerCase();
 
   for (const { pattern, build } of CONTROL_PATTERNS) {
-    const match = text.match(pattern) ?? raw.match(pattern);
+    const match = text.match(pattern) ?? matchable.match(pattern);
     if (match) {
       const result = build(match, raw, context);
-      if (result) return result;
+      if (result) return result.intent === 'log_set' ? finalizeSetCommand(result) : result;
     }
   }
 
-  for (const { pattern, build } of SET_PATTERNS) {
-    const match = text.match(pattern) ?? raw.match(pattern);
-    if (match) {
-      const result = build(match, raw, context);
-      if (result) return result;
+  for (const { pattern, confidence, orderExplicit } of SET_PATTERNS) {
+    const match = text.match(pattern) ?? matchable.match(pattern);
+    if (!match?.groups) continue;
+
+    const weightUnit = detectWeightUnit(match.groups.unit ?? raw) ?? detectWeightUnit(raw);
+    const first = match.groups.weight != null ? parseFloat(match.groups.weight) : undefined;
+    const second = match.groups.reps != null ? parseInt(match.groups.reps, 10) : undefined;
+
+    let weight = first;
+    let reps = second;
+    let ambiguousOrder = false;
+    if (!orderExplicit && !match.groups.unit && first != null && second != null) {
+      ({ weight, reps } = orderWeightAndReps(first, second));
+      ambiguousOrder = true;
     }
+
+    const remainder = matchable.slice((match.index ?? 0) + match[0].length);
+    return finalizeSetCommand(
+      {
+        intent: 'log_set',
+        exercise: match.groups.exercise,
+        weight,
+        reps,
+        weightUnit,
+        ambiguousOrder,
+        rawText: raw,
+        confidence,
+      },
+      remainder,
+    );
   }
 
   return null;
@@ -296,7 +354,7 @@ export function enrichParsedCommand(
   const next = { ...parsed };
   if (!next.intent) next.intent = 'log_set';
   if (!next.exercise && context.activeExerciseName && (next.usesContextExercise || next.intent === 'log_set')) {
-    next.exercise = context.activeExerciseName;
+    next.exercise = cleanExerciseName(context.activeExerciseName);
   }
   if (next.weight == null && next.usesContextWeight && context.lastWeight != null) {
     next.weight = context.lastWeight;

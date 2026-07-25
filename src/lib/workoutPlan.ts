@@ -1,27 +1,53 @@
+import { INTERVAL_MODE_DEFAULTS } from '@/constants/workoutExecutionModes';
 import { enrichWithSupersetGroups } from '@/lib/supersetFlow';
 import { normalizeExecutionMode, prescribeExerciseExecution } from '@/lib/workoutExecutionMode';
 import type { PlannedWorkout, TemplateExercise } from '@/types/training';
+import type { WorkoutExercise } from '@/types/workout';
 import type { EditableWorkoutExercise } from '@/types/workoutExecution';
 import type { WorkoutExecutionMode } from '@/types/workoutExecutionMode';
 
-function setsFromPrescription(
-  prescription: ReturnType<typeof prescribeExerciseExecution>,
-  fallback: number,
-): number {
+type Prescription = ReturnType<typeof prescribeExerciseExecution>;
+
+/**
+ * Strength-training set count. Interval and circuit prescriptions carry `rounds`, which is a
+ * different concept, so they keep the exercise's programmed set count untouched.
+ */
+function setsFromPrescription(prescription: Prescription, fallback: number): number {
   if (prescription.scheme === 'set_rep' || prescription.scheme === 'superset') return prescription.sets;
-  if (prescription.scheme === 'interval') return prescription.rounds;
-  if (prescription.scheme === 'circuit') return prescription.rounds;
   return fallback;
 }
 
+function roundsFromPrescription(prescription: Prescription): number | undefined {
+  if (prescription.scheme === 'interval' || prescription.scheme === 'circuit') return prescription.rounds;
+  return undefined;
+}
+
 function restFromPrescription(
-  prescription: ReturnType<typeof prescribeExerciseExecution>,
+  prescription: Prescription,
   fallback?: number,
 ): number | undefined {
   if (prescription.scheme === 'set_rep') return prescription.restSeconds;
-  if (prescription.scheme === 'interval') return prescription.restSeconds;
   if (prescription.scheme === 'superset') return prescription.restBetweenRoundSetsSeconds;
+  if (prescription.scheme === 'circuit') return prescription.restBetweenRoundsSeconds;
+  // Interval rest is the in-round rest and lives in `intervalRestSeconds`.
   return fallback;
+}
+
+function restBetweenExercisesFromPrescription(prescription: Prescription): number | undefined {
+  if (prescription.scheme === 'circuit' || prescription.scheme === 'superset') {
+    return prescription.restBetweenExercisesSeconds;
+  }
+  return undefined;
+}
+
+function intervalTimingFromPrescription(
+  prescription: Prescription,
+): { intervalWorkSeconds?: number; intervalRestSeconds?: number } {
+  if (prescription.scheme !== 'interval') return {};
+  return {
+    intervalWorkSeconds: prescription.workSeconds,
+    intervalRestSeconds: prescription.restSeconds,
+  };
 }
 
 function templateToEditable(
@@ -44,6 +70,9 @@ function templateToEditable(
     exerciseId: exercise.exerciseId,
     name,
     sets: setsFromPrescription(prescription, exercise.sets ?? 3),
+    intervalRounds: roundsFromPrescription(prescription),
+    ...intervalTimingFromPrescription(prescription),
+    restBetweenExercisesSeconds: restBetweenExercisesFromPrescription(prescription),
     repRange:
       prescription.scheme === 'set_rep' || prescription.scheme === 'circuit' || prescription.scheme === 'superset'
         ? prescription.repRange
@@ -58,7 +87,10 @@ function templateToEditable(
 export function exercisesFromPlannedWorkout(workout: PlannedWorkout | null): EditableWorkoutExercise[] {
   const raw = workout?.metadata?.exercises ?? [];
   const defaultMode = normalizeExecutionMode(workout?.metadata?.executionMode);
-  return enrichWithSupersetGroups(raw.map((exercise, index) => templateToEditable(exercise, index, defaultMode)));
+  return enrichWithSupersetGroups(
+    raw.map((exercise, index) => templateToEditable(exercise, index, defaultMode)),
+    defaultMode,
+  );
 }
 
 /** Session-only timing remap — preserves exercise identity (name, id, weight). */
@@ -79,6 +111,10 @@ export function remapExercisesForExecutionMode(
       id: exercise.id || `plan-${index}-${exercise.name.toLowerCase().replace(/\s+/g, '-')}`,
       executionMode: mode,
       sets: setsFromPrescription(prescription, exercise.sets),
+      intervalRounds: roundsFromPrescription(prescription) ?? exercise.intervalRounds,
+      ...intervalTimingFromPrescription(prescription),
+      restBetweenExercisesSeconds:
+        restBetweenExercisesFromPrescription(prescription) ?? exercise.restBetweenExercisesSeconds,
       repRange:
         prescription.scheme === 'set_rep' || prescription.scheme === 'circuit' || prescription.scheme === 'superset'
           ? prescription.repRange
@@ -97,13 +133,57 @@ export function exercisesForSessionStart(
   return remapExercisesForExecutionMode(base, 'tabata');
 }
 
+const WORKING_SECONDS_PER_SET = 45;
+
 export function estimateWorkoutDurationMinutes(exercises: EditableWorkoutExercise[]): number {
   if (exercises.length === 0) return 60;
-  const minutes = exercises.reduce((total, exercise) => {
-    const restMinutes = ((exercise.restSeconds ?? 90) / 60) * Math.max(exercise.sets - 1, 0);
-    return total + Math.max(exercise.sets * 2, 6) + restMinutes;
+  const seconds = exercises.reduce((total, exercise) => {
+    const rounds = exercise.intervalRounds;
+    if (rounds && rounds > 0 && (exercise.intervalWorkSeconds || exercise.intervalRestSeconds)) {
+      const work = exercise.intervalWorkSeconds ?? INTERVAL_MODE_DEFAULTS.tabata.workSeconds;
+      const rest = exercise.intervalRestSeconds ?? INTERVAL_MODE_DEFAULTS.tabata.restSeconds;
+      return total + rounds * (work + rest) + (exercise.restBetweenExercisesSeconds ?? 0);
+    }
+    const sets = Math.max(exercise.sets, 1);
+    return total + sets * WORKING_SECONDS_PER_SET + (exercise.restSeconds ?? 90) * Math.max(sets - 1, 0);
   }, 0);
-  return Math.max(45, Math.min(75, Math.round(minutes)));
+  return Math.max(10, Math.round(seconds / 60));
+}
+
+/**
+ * The plan array and the live session's exercise array drift apart whenever an exercise is
+ * skipped, reordered or added mid-session, so positional lookups land on the wrong slot.
+ * Returns exactly one plan entry per session exercise, in session order.
+ */
+export function alignPlanExercisesToSession(
+  planExercises: EditableWorkoutExercise[],
+  sessionExercises: WorkoutExercise[],
+): EditableWorkoutExercise[] {
+  const slots = planExercises.map((exercise) => ({ exercise, used: false }));
+  const takeMatch = (predicate: (plan: EditableWorkoutExercise) => boolean) => {
+    const slot = slots.find((candidate) => !candidate.used && predicate(candidate.exercise));
+    if (!slot) return undefined;
+    slot.used = true;
+    return slot.exercise;
+  };
+
+  return [...sessionExercises]
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .map((sessionExercise) => {
+      const name = sessionExercise.exercise?.name ?? '';
+      const matched =
+        (sessionExercise.exerciseId
+          ? takeMatch((plan) => plan.exerciseId === sessionExercise.exerciseId)
+          : undefined) ?? (name ? takeMatch((plan) => plan.name.toLowerCase() === name.toLowerCase()) : undefined);
+      if (matched) return matched;
+      return {
+        id: `session-${sessionExercise.id}`,
+        exerciseId: sessionExercise.exerciseId,
+        name: name || 'Exercise',
+        sets: Math.max(sessionExercise.sets.length, 3),
+        repRange: sessionExercise.suggestedReps,
+      };
+    });
 }
 
 export function parseTargetReps(repRange?: string): number {

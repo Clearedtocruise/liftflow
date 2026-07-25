@@ -2,20 +2,21 @@ import { Router } from 'express';
 import { randomUUID } from 'node:crypto';
 
 import { exportByType } from '../lib/pdfExport.js';
+import { authedUserId } from '../middleware/authUser.js';
 
 export const exportRouter = Router();
 
 exportRouter.post('/', async (req, res) => {
   try {
-    const { userId, contentType, title, sourceEntityId } = req.body as {
-      userId?: string;
+    const userId = authedUserId(req);
+    const { contentType, title, sourceEntityId } = req.body as {
       contentType?: string;
       title?: string;
       sourceEntityId?: string;
     };
 
-    if (!userId || !contentType) {
-      res.status(400).json({ message: 'userId and contentType are required' });
+    if (!contentType) {
+      res.status(400).json({ message: 'contentType is required' });
       return;
     }
 
@@ -34,15 +35,15 @@ exportRouter.post('/', async (req, res) => {
 
 exportRouter.post('/pdf', async (req, res) => {
   try {
-    const { userId, contentType, title, sourceEntityId } = req.body as {
-      userId?: string;
+    const userId = authedUserId(req);
+    const { contentType, title, sourceEntityId } = req.body as {
       contentType?: string;
       title?: string;
       sourceEntityId?: string;
     };
 
-    if (!userId || !contentType) {
-      res.status(400).json({ message: 'userId and contentType are required' });
+    if (!contentType) {
+      res.status(400).json({ message: 'contentType is required' });
       return;
     }
 

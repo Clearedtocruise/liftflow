@@ -55,11 +55,11 @@ import {
     intervalPhaseLabel,
     resolveTraditionalRestSeconds,
 } from '@/lib/timerEngine';
-import { TABATA_BETWEEN_EXERCISE_REST_BOUNDS, TABATA_BETWEEN_EXERCISE_REST_DEFAULT, TABATA_INTERVAL_BOUNDS, TABATA_PREP_SECONDS_DEFAULT, clampTabataBetweenExerciseRest, clampTabataIntervalSeconds } from '@/lib/trainingPreferences';
+import { TABATA_BETWEEN_EXERCISE_REST_BOUNDS, TABATA_BETWEEN_EXERCISE_REST_DEFAULT, TABATA_INTERVAL_BOUNDS, TABATA_PREP_SECONDS_DEFAULT, clampTabataBetweenExerciseRest, clampTabataIntervalSeconds, tabataModeSummary } from '@/lib/trainingPreferences';
 import { formatWorkoutWeightForInput } from '@/lib/unitConversion';
 import { pickWorkoutChallenge } from '@/lib/workoutChallengeFlow';
 import { normalizeExecutionMode } from '@/lib/workoutExecutionMode';
-import { parseTargetReps } from '@/lib/workoutPlan';
+import { alignPlanExercisesToSession, parseTargetReps } from '@/lib/workoutPlan';
 import { logWorkoutProgressionDecision } from '@/lib/workoutProgressionDebug';
 import { resolveBetweenExerciseUpNext, resolveTabataPrepUpNext, resolveWorkoutUpNext } from '@/lib/workoutUpNext';
 import { workoutService } from '@/services/workoutService';
@@ -91,7 +91,7 @@ type ActiveWorkoutScreenProps = {
 
 export function ActiveWorkoutScreen({
   session,
-  planExercises,
+  planExercises: planExercisesProp,
   executionMode: executionModeProp = 'traditional',
   challengeRecords,
   onChallengeRecord,
@@ -112,6 +112,7 @@ export function ActiveWorkoutScreen({
     startCircuitTransition,
     skipCircuitTimer,
     dismissCircuitTimer,
+    setTimersPaused,
   } = useWorkoutTimerEngine(executionMode);
 
   const handleIntervalConfigChange = useCallback(
@@ -166,6 +167,15 @@ export function ActiveWorkoutScreen({
     [session.exercises],
   );
 
+  /**
+   * Every index below (superset groups, circuit stations, set targets) is a session index, so the
+   * plan has to be re-ordered to match the session exactly — one entry per session exercise.
+   */
+  const planExercises = useMemo(
+    () => alignPlanExercisesToSession(planExercisesProp, sortedExercises),
+    [planExercisesProp, sortedExercises],
+  );
+
   const [currentIndex, setCurrentIndex] = useState(0);
   useEffect(() => {
     setActiveExerciseIndex(currentIndex);
@@ -210,12 +220,11 @@ export function ActiveWorkoutScreen({
   const [supersetBannerTick, setSupersetBannerTick] = useState(0);
   const tabataBetweenExercisePendingRef = useRef(false);
   const tabataExercisePrepPendingRef = useRef(false);
-  const tabataSkipPrepAfterTransitionRef = useRef(false);
+  const tabataPrepDoneForExerciseRef = useRef<string | null>(null);
+  const intervalStartedForExerciseRef = useRef<string | null>(null);
 
   const currentExercise = sortedExercises[currentIndex];
-  const planMeta = planExercises[currentIndex] ?? planExercises.find(
-    (item) => item.name.toLowerCase() === currentExercise?.exercise?.name?.toLowerCase(),
-  );
+  const planMeta = planExercises[currentIndex];
   const targetSets = planMeta?.sets ?? 3;
   const coachRecommendedSets = coachPrescription?.targets.sets ?? targetSets;
   const coachExtraSets = Math.max(0, coachRecommendedSets - targetSets);
@@ -428,7 +437,8 @@ export function ActiveWorkoutScreen({
     setIsTabataPrepActive(false);
     tabataBetweenExercisePendingRef.current = false;
     tabataExercisePrepPendingRef.current = false;
-    tabataSkipPrepAfterTransitionRef.current = false;
+    tabataPrepDoneForExerciseRef.current = null;
+    intervalStartedForExerciseRef.current = null;
     setPendingAdvanceIndex(null);
 
     if (!executionModeUsesIntervalTimer(executionMode)) {
@@ -560,41 +570,42 @@ export function ActiveWorkoutScreen({
     };
   }, [currentExercise?.id, currentExercise?.exerciseId, currentExercise?.exercise, currentExercise?.suggestedWeight, repRange, user]);
 
+  /**
+   * Prep countdown and interval start are one decision keyed on the exercise, so re-running this
+   * effect (which the circuit timer's own lifecycle forces) can never restart either of them.
+   */
   useEffect(() => {
     if (!executionModeUsesIntervalTimer(executionMode) || showComplete) return;
-    if (circuitTimer && circuitTimer.phase !== 'done') return;
+    if (circuitTimer) return;
 
-    if (executionMode === 'tabata') {
-      const skipPrep = tabataSkipPrepAfterTransitionRef.current;
-      tabataSkipPrepAfterTransitionRef.current = false;
-      if (!skipPrep) {
-        tabataExercisePrepPendingRef.current = true;
-        setIsTabataPrepActive(true);
-        startCircuitTransition('transition', 1, {
-          restBetweenExercisesSeconds: TABATA_PREP_SECONDS_DEFAULT,
-        }, TABATA_PREP_SECONDS_DEFAULT);
-        return;
-      }
+    const exerciseKey = currentExercise?.id ?? null;
+    if (intervalStartedForExerciseRef.current === exerciseKey) return;
+
+    if (executionMode === 'tabata' && tabataPrepDoneForExerciseRef.current !== exerciseKey) {
+      tabataExercisePrepPendingRef.current = true;
+      setIsTabataPrepActive(true);
+      startCircuitTransition('transition', 1, {
+        restBetweenExercisesSeconds: TABATA_PREP_SECONDS_DEFAULT,
+      }, TABATA_PREP_SECONDS_DEFAULT);
+      return;
     }
 
+    intervalStartedForExerciseRef.current = exerciseKey;
     startIntervalTimer(undefined, executionMode === 'tabata');
     setIntervalOverlayOpen(false);
-  }, [currentExercise?.id, executionMode, showComplete, startIntervalTimer, circuitTimer?.phase]);
+  }, [currentExercise?.id, executionMode, showComplete, startIntervalTimer, startCircuitTransition, circuitTimer]);
 
+  // For interval modes the protocol's rounds decide when the exercise is done, not the set count.
   useEffect(() => {
-    if (executionMode !== 'tabata' || showComplete || isPaused) return;
+    if (!executionModeUsesIntervalTimer(executionMode) || showComplete || isPaused) return;
     if (intervalTimer?.phase !== 'done') return;
-    if (completedSets.length < effectiveTargetSets) return;
     setShowComplete(true);
     setExerciseHadPr(completedSets.some((set) => set.isPr));
-  }, [
-    executionMode,
-    showComplete,
-    isPaused,
-    intervalTimer?.phase,
-    completedSets,
-    effectiveTargetSets,
-  ]);
+  }, [executionMode, showComplete, isPaused, intervalTimer?.phase, completedSets]);
+
+  useEffect(() => {
+    setTimersPaused(isPaused);
+  }, [isPaused, setTimersPaused]);
 
   const scheduleAutoExerciseAdvance = useCallback(() => {
     if (autoAdvanceTimeoutRef.current) clearTimeout(autoAdvanceTimeoutRef.current);
@@ -626,24 +637,24 @@ export function ActiveWorkoutScreen({
 
     if (tabataExercisePrepPendingRef.current) {
       tabataExercisePrepPendingRef.current = false;
+      tabataPrepDoneForExerciseRef.current = currentExercise?.id ?? null;
       setIsTabataPrepActive(false);
       dismissCircuitTimer();
-      startIntervalTimer(undefined, true);
-      setIntervalOverlayOpen(false);
       return;
     }
 
     if (!tabataBetweenExercisePendingRef.current) return;
     tabataBetweenExercisePendingRef.current = false;
-    tabataSkipPrepAfterTransitionRef.current = true;
     if (pendingAdvanceRef.current != null) {
+      // The between-exercise rest already served as the prep countdown for the next exercise.
+      tabataPrepDoneForExerciseRef.current = sortedExercises[pendingAdvanceRef.current]?.id ?? null;
       setCurrentIndex(pendingAdvanceRef.current);
       pendingAdvanceRef.current = null;
     }
     setPendingAdvanceIndex(null);
     dismissCircuitTimer();
     setShowComplete(false);
-  }, [circuitTimer, dismissCircuitTimer, startIntervalTimer]);
+  }, [circuitTimer, currentExercise?.id, dismissCircuitTimer, sortedExercises]);
 
   useEffect(() => {
     setBonusSets(0);
@@ -662,13 +673,15 @@ export function ActiveWorkoutScreen({
   }, [coachExtraSets, currentExercise?.id]);
 
   useEffect(() => {
+    // Interval modes own their own completion signal; a set count must not override it.
+    if (executionModeUsesIntervalTimer(executionMode)) return;
     if (groupComplete && completedSets.length > 0 && allSetsDone) {
       setShowComplete(true);
       setExerciseHadPr(completedSets.some((set) => set.isPr));
     } else {
       setShowComplete(false);
     }
-  }, [groupComplete, completedSets, allSetsDone]);
+  }, [groupComplete, completedSets, allSetsDone, executionMode]);
 
   function handleAddSet() {
     setBonusSets((count) => count + 1);
@@ -1220,7 +1233,7 @@ export function ActiveWorkoutScreen({
                   ) : (
                     <AppText variant="footnote" color="textSecondary">
                       {executionMode === 'tabata'
-                        ? 'Work & rest 20s default · adjust 10–45s each in timer · 10 rounds'
+                        ? `${tabataModeSummary()} · adjust ${TABATA_INTERVAL_BOUNDS.minSeconds}–${TABATA_INTERVAL_BOUNDS.maxSeconds}s each in timer`
                         : 'Configurable work, rest, and rounds'}
                     </AppText>
                   )}

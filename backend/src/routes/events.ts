@@ -7,8 +7,8 @@ export const eventsRouter = Router();
 
 eventsRouter.post('/track', async (req, res) => {
   try {
-    const { userId, sessionId, eventName, properties, appVersion, appEnvironment, platform } = req.body as {
-      userId?: string;
+    const userId = req.userId;
+    const { sessionId, eventName, properties, appVersion, appEnvironment, platform } = req.body as {
       sessionId?: string;
       eventName?: string;
       properties?: Record<string, unknown>;
@@ -34,7 +34,7 @@ eventsRouter.post('/track', async (req, res) => {
 
     res.json({ id: row.id, tracked: true });
   } catch (error) {
-    captureException(error, { userId: req.body?.userId, route: '/api/events/track' });
+    captureException(error, { userId: req.userId, route: '/api/events/track' });
     res.status(500).json({ message: error instanceof Error ? error.message : 'Track failed' });
   }
 });

@@ -152,6 +152,14 @@ export const FOUNDER_DASHBOARD_HTML = `<!DOCTYPE html>
     const keyInput = document.getElementById('adminKey');
     if (sessionStorage.getItem('lf_founder_key')) keyInput.value = sessionStorage.getItem('lf_founder_key');
 
+    // The page gate accepts ?key=…; strip it from the URL so the admin key is not kept in history.
+    var urlKey = new URLSearchParams(location.search).get('key');
+    if (urlKey) {
+      keyInput.value = urlKey;
+      sessionStorage.setItem('lf_founder_key', urlKey);
+      history.replaceState(null, '', location.pathname);
+    }
+
     function headers() {
       const key = keyInput.value.trim();
       sessionStorage.setItem('lf_founder_key', key);

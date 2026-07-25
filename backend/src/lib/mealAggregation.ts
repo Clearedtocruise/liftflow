@@ -1,6 +1,6 @@
-import { pickMealsToKeep, type MealCleanupRow } from './mealCleanup.js';
+import { mealStatus, pickMealsToKeep, type MealCleanupRow, type MealStatus } from './mealCleanup.js';
 
-export type MealStatus = 'planned' | 'completed' | 'modified' | 'skipped';
+export type { MealStatus };
 export type MealRow = MealCleanupRow;
 
 const MEAL_TYPE_ORDER: Record<string, number> = {
@@ -27,27 +27,13 @@ export type WeeklyMealAggregation = DailyMealAggregation & {
   byDate: Record<string, DailyMealAggregation>;
 };
 
-function parseMealStatus(instructions: string | null | undefined): MealStatus {
-  if (!instructions) return 'planned';
-  if (instructions === 'supplement') return 'planned';
-  try {
-    const parsed = JSON.parse(instructions) as { status?: MealStatus };
-    return parsed.status ?? 'planned';
-  } catch {
-    return 'planned';
-  }
-}
-
-function mealStatus(meal: MealRow): MealStatus {
-  return parseMealStatus(meal.instructions);
-}
-
-/** Counts toward daily consumed macros (not skipped plan slots). */
+/**
+ * Counts toward daily consumed macros. Only an explicit completed/modified
+ * status counts — a plan slot the user never touched is not food they ate.
+ */
 export function isConsumedMeal(meal: MealRow): boolean {
   const status = mealStatus(meal);
-  if (status === 'completed' || status === 'modified') return true;
-  if (!meal.meal_plan_id && status !== 'skipped') return true;
-  return false;
+  return status === 'completed' || status === 'modified';
 }
 
 function isScheduledMeal(meal: MealRow): boolean {

@@ -7,17 +7,14 @@ import {
     getWeeklyCloseoutStatus,
     prepareWeeklyCloseout,
 } from '../lib/weeklyCloseoutEngine.js';
+import { authedUserId } from '../middleware/authUser.js';
 
 export const weeklyRouter = Router();
 
 weeklyRouter.get('/summary', async (req, res) => {
   try {
-    const userId = req.query.userId as string | undefined;
+    const userId = authedUserId(req);
     const weekStart = (req.query.weekStart as string | undefined) ?? weekStartDateString(new Date().toISOString().slice(0, 10));
-    if (!userId) {
-      res.status(400).json({ message: 'userId is required' });
-      return;
-    }
     const summary = await buildWeeklyCloseoutSummary(userId, weekStart);
     res.json(summary);
   } catch (error) {
@@ -27,12 +24,8 @@ weeklyRouter.get('/summary', async (req, res) => {
 
 weeklyRouter.get('/closeout/status', async (req, res) => {
   try {
-    const userId = req.query.userId as string | undefined;
+    const userId = authedUserId(req);
     const weekStart = req.query.weekStart as string | undefined;
-    if (!userId) {
-      res.status(400).json({ message: 'userId is required' });
-      return;
-    }
     const record = await getWeeklyCloseoutStatus(userId, weekStart);
     res.json(record);
   } catch (error) {
@@ -42,11 +35,8 @@ weeklyRouter.get('/closeout/status', async (req, res) => {
 
 weeklyRouter.post('/closeout/prepare', async (req, res) => {
   try {
-    const { userId, referenceDate } = req.body as { userId?: string; referenceDate?: string };
-    if (!userId) {
-      res.status(400).json({ message: 'userId is required' });
-      return;
-    }
+    const userId = authedUserId(req);
+    const { referenceDate } = req.body as { referenceDate?: string };
     const record = await prepareWeeklyCloseout(userId, referenceDate);
     res.json(record);
   } catch (error) {
@@ -56,9 +46,10 @@ weeklyRouter.post('/closeout/prepare', async (req, res) => {
 
 weeklyRouter.post('/closeout/accept', async (req, res) => {
   try {
-    const { userId, closeoutId } = req.body as { userId?: string; closeoutId?: string };
-    if (!userId || !closeoutId) {
-      res.status(400).json({ message: 'userId and closeoutId are required' });
+    const userId = authedUserId(req);
+    const { closeoutId } = req.body as { closeoutId?: string };
+    if (!closeoutId) {
+      res.status(400).json({ message: 'closeoutId is required' });
       return;
     }
     const record = await acceptWeeklyCloseout(userId, closeoutId);

@@ -65,7 +65,7 @@ export type ParseVoiceRequest = {
 };
 
 export type ParseVoiceResponse = {
-  parsed: import('./workout').ParsedVoiceCommand;
+  parsed: import('./voice').ParsedVoiceCommandExtended;
   confidence: number;
   requiresConfirmation: boolean;
   confirmationReason?: string;

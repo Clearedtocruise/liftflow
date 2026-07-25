@@ -17,14 +17,30 @@ type QuickMealLogSheetProps = {
     mealType: MealType;
     calories?: number;
     proteinG?: number;
+    carbsG?: number;
+    fatG?: number;
   }) => Promise<void>;
 };
+
+const MAX_MACRO_G = 2000;
+const MAX_CALORIES = 20000;
+
+/** Returns undefined for blank/garbage input so "unknown" stays distinct from 0. */
+function parseAmount(raw: string, max: number): number | undefined {
+  const trimmed = raw.trim();
+  if (!trimmed) return undefined;
+  const value = Number(trimmed.replace(',', '.'));
+  if (!Number.isFinite(value) || value < 0 || value > max) return undefined;
+  return Math.round(value * 10) / 10;
+}
 
 export function QuickMealLogSheet({ visible, onClose, onSubmit }: QuickMealLogSheetProps) {
   const [name, setName] = useState('');
   const [mealType, setMealType] = useState<MealType>('lunch');
   const [calories, setCalories] = useState('');
   const [protein, setProtein] = useState('');
+  const [carbs, setCarbs] = useState('');
+  const [fat, setFat] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -33,6 +49,8 @@ export function QuickMealLogSheet({ visible, onClose, onSubmit }: QuickMealLogSh
     setMealType('lunch');
     setCalories('');
     setProtein('');
+    setCarbs('');
+    setFat('');
   }, [visible]);
 
   async function handleSave() {
@@ -42,8 +60,10 @@ export function QuickMealLogSheet({ visible, onClose, onSubmit }: QuickMealLogSh
       await onSubmit({
         name: name.trim(),
         mealType,
-        calories: calories.trim() ? Number.parseInt(calories, 10) : undefined,
-        proteinG: protein.trim() ? Number.parseInt(protein, 10) : undefined,
+        calories: parseAmount(calories, MAX_CALORIES),
+        proteinG: parseAmount(protein, MAX_MACRO_G),
+        carbsG: parseAmount(carbs, MAX_MACRO_G),
+        fatG: parseAmount(fat, MAX_MACRO_G),
       });
       onClose();
     } finally {
@@ -114,6 +134,35 @@ export function QuickMealLogSheet({ visible, onClose, onSubmit }: QuickMealLogSh
                 style={styles.input}
                 value={protein}
                 onChangeText={setProtein}
+                keyboardType="number-pad"
+                placeholder="Optional"
+                placeholderTextColor={LiftFlowColors.textTertiary}
+              />
+            </View>
+          </View>
+
+          <View style={styles.macros}>
+            <View style={styles.macroField}>
+              <AppText variant="caption" color="textSecondary">
+                Carbs (g)
+              </AppText>
+              <TextInput
+                style={styles.input}
+                value={carbs}
+                onChangeText={setCarbs}
+                keyboardType="number-pad"
+                placeholder="Optional"
+                placeholderTextColor={LiftFlowColors.textTertiary}
+              />
+            </View>
+            <View style={styles.macroField}>
+              <AppText variant="caption" color="textSecondary">
+                Fat (g)
+              </AppText>
+              <TextInput
+                style={styles.input}
+                value={fat}
+                onChangeText={setFat}
                 keyboardType="number-pad"
                 placeholder="Optional"
                 placeholderTextColor={LiftFlowColors.textTertiary}

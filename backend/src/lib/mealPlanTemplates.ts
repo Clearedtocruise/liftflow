@@ -1,3 +1,4 @@
+import { adaptMealName, violatesRestrictions, type NutritionPreferenceInput } from './dietaryRestrictions.js';
 import { addCalendarDays, localDateString, weekStartFromDateString } from './localDate.js';
 
 export type MealSlotTemplate = {
@@ -301,21 +302,35 @@ const MEAL_POOLS: Record<DietaryStyle, Record<'breakfast' | 'lunch' | 'dinner' |
   },
 };
 
+/**
+ * Prefer a pool entry that already satisfies the user's restrictions; only fall
+ * back to renaming when every option in the pool is blocked.
+ */
+function pickAllowedFromPool<T extends { name: string }>(
+  pool: T[],
+  dayIndex: number,
+  restrictions: string[] | undefined,
+): T {
+  const allowed = pool.filter((item) => !violatesRestrictions(item.name, restrictions));
+  return pickFromPool(allowed.length > 0 ? allowed : pool, dayIndex);
+}
+
 export function selectDailyCoreMeals(
   date: string,
   macros: { calories: number; proteinG: number; carbsG: number; fatG: number },
   style: DietaryStyle = 'balanced',
+  prefs: NutritionPreferenceInput = {},
 ): MealSlotTemplate[] {
   const dayIndex = dayIndexFromDate(date);
   const pools = MEAL_POOLS[style] ?? MEAL_POOLS.balanced;
   const split = { breakfast: 0.25, lunch: 0.35, dinner: 0.3, snack: 0.1 } as const;
 
   return (['breakfast', 'lunch', 'dinner', 'snack'] as const).map((mealType) => {
-    const picked = pickFromPool(pools[mealType], dayIndex);
+    const picked = pickAllowedFromPool(pools[mealType], dayIndex, prefs.dietaryRestrictions);
     const ratio = split[mealType];
     return {
       mealType,
-      name: picked.name,
+      name: adaptMealName(picked.name, mealType, prefs).name,
       calories: Math.round(macros.calories * ratio),
       proteinG: Math.round(macros.proteinG * ratio),
       carbsG: Math.round(macros.carbsG * ratio),
@@ -329,22 +344,22 @@ export function generateWeeklyMealPlanMeals(
   calories = BASE_CALORIES,
   style: DietaryStyle = 'balanced',
   weekStart = weekStartFromDateString(localDateString()),
+  prefs: NutritionPreferenceInput = {},
 ) {
   const meals: Array<MealSlotTemplate & { scheduledDate: string }> = [];
+  // Carbs take whatever energy protein and fat leave, so the grams add up to
+  // the calorie target instead of overshooting it.
+  const fatG = Math.round((calories * 0.25) / 9);
+  const carbsG = Math.max(0, Math.round((calories - proteinG * 4 - fatG * 9) / 4));
 
   for (let dayIndex = 0; dayIndex < 7; dayIndex += 1) {
     const dateStr = addCalendarDays(weekStart, dayIndex);
-    const pre = scaleMeal(pickFromPool(PRE_WORKOUT_POOL, dayIndex), calories, proteinG);
-    const post = scaleMeal(pickFromPool(POST_WORKOUT_POOL, dayIndex), calories, proteinG);
-    const core = selectDailyCoreMeals(dateStr, {
-      calories,
-      proteinG,
-      carbsG: Math.round((calories * 0.4) / 4),
-      fatG: Math.round((calories * 0.25) / 9),
-    }, style);
+    const pre = scaleMeal(pickAllowedFromPool(PRE_WORKOUT_POOL, dayIndex, prefs.dietaryRestrictions), calories, proteinG);
+    const post = scaleMeal(pickAllowedFromPool(POST_WORKOUT_POOL, dayIndex, prefs.dietaryRestrictions), calories, proteinG);
+    const core = selectDailyCoreMeals(dateStr, { calories, proteinG, carbsG, fatG }, style, prefs);
 
     for (const meal of [pre, post, ...core]) {
-      meals.push({ ...meal, scheduledDate: dateStr });
+      meals.push({ ...meal, name: adaptMealName(meal.name, meal.mealType, prefs).name, scheduledDate: dateStr });
     }
   }
 

@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { AppState } from 'react-native';
 
 import { cueIntervalPhase } from '@/lib/intervalTimerFeedback';
 import {
     skipIntervalRound as advanceIntervalRound,
+    advanceCircuitTimerToNow,
+    advanceIntervalPhase,
+    advanceIntervalTimerToNow,
     createCircuitTimerState,
     createIntervalTimerState,
-    tickCircuitTimer,
-    tickIntervalTimer,
     type CircuitPhase,
     type CircuitTimerConfig,
     type CircuitTimerState,
@@ -30,6 +32,8 @@ export function useWorkoutTimerEngine(executionMode: WorkoutExecutionMode) {
   const lastIntervalPhaseRef = useRef<IntervalPhase | null>(null);
   const intervalDeadlineRef = useRef<number | null>(null);
   const circuitDeadlineRef = useRef<number | null>(null);
+  const intervalPausedBySessionRef = useRef(false);
+  const circuitPausedBySessionRef = useRef(false);
 
   const syncIntervalDeadline = useCallback((secondsRemaining: number) => {
     intervalDeadlineRef.current = Date.now() + secondsRemaining * 1000;
@@ -41,65 +45,75 @@ export function useWorkoutTimerEngine(executionMode: WorkoutExecutionMode) {
 
   const readIntervalRemaining = useCallback(() => {
     const endAt = intervalDeadlineRef.current;
-    if (!endAt) return 0;
+    if (endAt == null) return null;
     return Math.max(0, Math.ceil((endAt - Date.now()) / 1000));
   }, []);
 
-  const readCircuitRemaining = useCallback(() => {
-    const endAt = circuitDeadlineRef.current;
-    if (!endAt) return 0;
-    return Math.max(0, Math.ceil((endAt - Date.now()) / 1000));
+  /** Recompute phase, round and remaining seconds purely from the deadline and the clock. */
+  const resyncIntervalToNow = useCallback(() => {
+    setIntervalTimer((current) => {
+      if (!current || !current.running || current.phase === 'done') return current;
+      const deadline = intervalDeadlineRef.current;
+      if (deadline == null) return current;
+
+      const advanced = advanceIntervalTimerToNow(current, deadline, Date.now());
+      intervalDeadlineRef.current = advanced.state.phase === 'done' ? null : advanced.deadlineMs;
+      const next = advanced.state;
+      if (
+        next.phase === current.phase &&
+        next.round === current.round &&
+        next.secondsRemaining === current.secondsRemaining
+      ) {
+        return current;
+      }
+      return next;
+    });
+  }, []);
+
+  const resyncCircuitToNow = useCallback(() => {
+    setCircuitTimer((current) => {
+      if (!current || !current.running || current.phase === 'done') return current;
+      const deadline = circuitDeadlineRef.current;
+      if (deadline == null) return current;
+
+      const next = advanceCircuitTimerToNow(current, deadline, Date.now());
+      if (next.phase === 'done') circuitDeadlineRef.current = null;
+      if (next.phase === current.phase && next.secondsRemaining === current.secondsRemaining) {
+        return current;
+      }
+      return next;
+    });
   }, []);
 
   useEffect(() => {
     if (!intervalTimer?.running || intervalTimer.phase === 'done') return;
-
-    const handle = setInterval(() => {
-      setIntervalTimer((current) => {
-        if (!current || !current.running || current.phase === 'done') return current;
-
-        const remaining = readIntervalRemaining();
-        if (remaining > 0) {
-          if (current.secondsRemaining === remaining) return current;
-          return { ...current, secondsRemaining: remaining };
-        }
-
-        const transitioned = tickIntervalTimer({ ...current, secondsRemaining: 0 });
-        if (transitioned.phase === 'done') {
-          intervalDeadlineRef.current = null;
-          return transitioned;
-        }
-
-        const nextSeconds = secondsForPhase(transitioned);
-        syncIntervalDeadline(nextSeconds);
-        return { ...transitioned, secondsRemaining: nextSeconds };
-      });
-    }, TICK_MS);
-
+    const handle = setInterval(resyncIntervalToNow, TICK_MS);
     return () => clearInterval(handle);
-  }, [intervalTimer?.running, intervalTimer?.phase, readIntervalRemaining, syncIntervalDeadline]);
+  }, [intervalTimer?.running, intervalTimer?.phase, resyncIntervalToNow]);
 
   useEffect(() => {
     if (!circuitTimer?.running || circuitTimer.phase === 'done') return;
-
-    const handle = setInterval(() => {
-      setCircuitTimer((current) => {
-        if (!current || !current.running || current.phase === 'done') return current;
-
-        const remaining = readCircuitRemaining();
-        if (remaining > 0) {
-          if (current.secondsRemaining === remaining) return current;
-          return { ...current, secondsRemaining: remaining };
-        }
-
-        const transitioned = tickCircuitTimer({ ...current, secondsRemaining: 0 });
-        circuitDeadlineRef.current = null;
-        return transitioned;
-      });
-    }, TICK_MS);
-
+    const handle = setInterval(resyncCircuitToNow, TICK_MS);
     return () => clearInterval(handle);
-  }, [circuitTimer?.running, circuitTimer?.phase, readCircuitRemaining]);
+  }, [circuitTimer?.running, circuitTimer?.phase, resyncCircuitToNow]);
+
+  // Intervals stop firing while the app is backgrounded, so catch up on the way back in.
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (status) => {
+      if (status !== 'active') return;
+      resyncIntervalToNow();
+      resyncCircuitToNow();
+    });
+    return () => subscription.remove();
+  }, [resyncIntervalToNow, resyncCircuitToNow]);
+
+  useEffect(
+    () => () => {
+      intervalDeadlineRef.current = null;
+      circuitDeadlineRef.current = null;
+    },
+    [],
+  );
 
   useEffect(() => {
     if (executionMode === 'hiit' || executionMode === 'tabata') return;
@@ -116,9 +130,9 @@ export function useWorkoutTimerEngine(executionMode: WorkoutExecutionMode) {
       return;
     }
     if (lastIntervalPhaseRef.current === intervalTimer.phase) return;
-    if (lastIntervalPhaseRef.current != null) {
-      cueIntervalPhase(intervalTimer.phase, { speak: false });
-    }
+    // A phase the user hasn't started yet gets no cue; the first work interval does.
+    if (!intervalTimer.running && intervalTimer.phase !== 'done') return;
+    cueIntervalPhase(intervalTimer.phase);
     lastIntervalPhaseRef.current = intervalTimer.phase;
   }, [intervalTimer?.phase, intervalTimer]);
 
@@ -150,7 +164,7 @@ export function useWorkoutTimerEngine(executionMode: WorkoutExecutionMode) {
         return { ...next, running: true };
       }
       if (current.running) {
-        const remaining = readIntervalRemaining() || current.secondsRemaining;
+        const remaining = readIntervalRemaining() ?? current.secondsRemaining;
         intervalDeadlineRef.current = null;
         return { ...current, running: false, secondsRemaining: remaining };
       }
@@ -172,12 +186,12 @@ export function useWorkoutTimerEngine(executionMode: WorkoutExecutionMode) {
       setIntervalTimer((current) => {
         if (!current) return current;
         const config = { ...current.config, ...patch };
-        const secondsRemaining =
-          current.phase === 'work'
-            ? config.workSeconds
-            : current.phase === 'rest'
-              ? config.restSeconds
-              : current.secondsRemaining;
+        if (current.phase === 'done') return { ...current, config };
+
+        // Retuning the length mid-phase must not restart the phase the user is already inside.
+        const elapsed = Math.max(0, secondsForPhase(current) - current.secondsRemaining);
+        const nextTotal = current.phase === 'work' ? config.workSeconds : config.restSeconds;
+        const secondsRemaining = Math.max(0, nextTotal - elapsed);
         if (current.running) syncIntervalDeadline(secondsRemaining);
         return { ...current, config, secondsRemaining };
       });
@@ -185,33 +199,32 @@ export function useWorkoutTimerEngine(executionMode: WorkoutExecutionMode) {
     [syncIntervalDeadline],
   );
 
+  /** Skipping keeps the paused/running state the user chose — it is not a resume button. */
+  const applyIntervalSkip = useCallback(
+    (advance: (state: IntervalTimerState) => IntervalTimerState) => {
+      setIntervalTimer((current) => {
+        if (!current || current.phase === 'done') return current;
+        const transitioned = advance(current);
+        if (transitioned.phase === 'done') {
+          intervalDeadlineRef.current = null;
+          return transitioned;
+        }
+        const nextSeconds = secondsForPhase(transitioned);
+        if (current.running) syncIntervalDeadline(nextSeconds);
+        else intervalDeadlineRef.current = null;
+        return { ...transitioned, secondsRemaining: nextSeconds, running: current.running };
+      });
+    },
+    [syncIntervalDeadline],
+  );
+
   const skipIntervalPhase = useCallback(() => {
-    setIntervalTimer((current) => {
-      if (!current || current.phase === 'done') return current;
-      const transitioned = tickIntervalTimer({ ...current, secondsRemaining: 0, running: true });
-      if (transitioned.phase === 'done') {
-        intervalDeadlineRef.current = null;
-        return transitioned;
-      }
-      const nextSeconds = secondsForPhase(transitioned);
-      syncIntervalDeadline(nextSeconds);
-      return { ...transitioned, secondsRemaining: nextSeconds, running: true };
-    });
-  }, [syncIntervalDeadline]);
+    applyIntervalSkip((current) => advanceIntervalPhase({ ...current, secondsRemaining: 0 }));
+  }, [applyIntervalSkip]);
 
   const skipIntervalRound = useCallback(() => {
-    setIntervalTimer((current) => {
-      if (!current || current.phase === 'done') return current;
-      const transitioned = advanceIntervalRound(current);
-      if (transitioned.phase === 'done') {
-        intervalDeadlineRef.current = null;
-        return transitioned;
-      }
-      const nextSeconds = secondsForPhase(transitioned);
-      syncIntervalDeadline(nextSeconds);
-      return { ...transitioned, secondsRemaining: nextSeconds, running: true };
-    });
-  }, [syncIntervalDeadline]);
+    applyIntervalSkip(advanceIntervalRound);
+  }, [applyIntervalSkip]);
 
   const startCircuitTransition = useCallback(
     (
@@ -245,10 +258,17 @@ export function useWorkoutTimerEngine(executionMode: WorkoutExecutionMode) {
       setCircuitTimer((current) => {
         if (!current) return current;
         const config = { ...current.config, ...patch };
-        const secondsRemaining =
+        if (current.phase === 'done') return { ...current, config };
+
+        const previousTotal =
+          current.phase === 'round_rest'
+            ? current.config.restBetweenRoundsSeconds
+            : current.config.restBetweenExercisesSeconds;
+        const nextTotal =
           current.phase === 'round_rest'
             ? config.restBetweenRoundsSeconds
             : config.restBetweenExercisesSeconds;
+        const secondsRemaining = Math.max(0, nextTotal - Math.max(0, previousTotal - current.secondsRemaining));
         if (current.running) syncCircuitDeadline(secondsRemaining);
         return { ...current, config, secondsRemaining };
       });
@@ -256,7 +276,49 @@ export function useWorkoutTimerEngine(executionMode: WorkoutExecutionMode) {
     [syncCircuitDeadline],
   );
 
+  /**
+   * Pausing the workout must freeze its sub-timers too. Only timers this call paused are
+   * resumed, so a timer the user paused by hand stays paused.
+   */
+  const setTimersPaused = useCallback(
+    (paused: boolean) => {
+      setIntervalTimer((current) => {
+        if (!current || current.phase === 'done') return current;
+        if (paused) {
+          if (!current.running) return current;
+          const remaining = readIntervalRemaining() ?? current.secondsRemaining;
+          intervalDeadlineRef.current = null;
+          intervalPausedBySessionRef.current = true;
+          return { ...current, running: false, secondsRemaining: remaining };
+        }
+        if (current.running || !intervalPausedBySessionRef.current) return current;
+        intervalPausedBySessionRef.current = false;
+        syncIntervalDeadline(current.secondsRemaining);
+        return { ...current, running: true };
+      });
+
+      setCircuitTimer((current) => {
+        if (!current || current.phase === 'done') return current;
+        if (paused) {
+          if (!current.running) return current;
+          const endAt = circuitDeadlineRef.current;
+          const remaining =
+            endAt == null ? current.secondsRemaining : Math.max(0, Math.ceil((endAt - Date.now()) / 1000));
+          circuitDeadlineRef.current = null;
+          circuitPausedBySessionRef.current = true;
+          return { ...current, running: false, secondsRemaining: remaining };
+        }
+        if (current.running || !circuitPausedBySessionRef.current) return current;
+        circuitPausedBySessionRef.current = false;
+        syncCircuitDeadline(current.secondsRemaining);
+        return { ...current, running: true };
+      });
+    },
+    [readIntervalRemaining, syncCircuitDeadline, syncIntervalDeadline],
+  );
+
   return {
+    setTimersPaused,
     intervalTimer,
     circuitTimer,
     startIntervalTimer,

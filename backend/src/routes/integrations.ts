@@ -1,6 +1,7 @@
 import { Router } from 'express';
 
 import { mergeIncomingHealthSamples } from '../lib/healthSyncEngine.js';
+import { signOAuthState, verifyOAuthState } from '../lib/oauthState.js';
 import { applyHealthToRecoveryCheckIn, invalidateHealthContextCache, loadHealthContext } from '../lib/loadHealthContext.js';
 import {
     buildStravaAuthUrl,
@@ -192,21 +193,19 @@ integrationsRouter.post('/watch/sync', requireUser, async (req: AuthedRequest, r
   }
 });
 
-/** Strava OAuth — start authorization (pass userId from authenticated client) */
-integrationsRouter.get('/strava/authorize', (req, res) => {
+/**
+ * Strava OAuth — start authorization. The user is taken from the verified token and sealed into
+ * the OAuth state with an HMAC, so the callback cannot be replayed to attach a Strava account to
+ * a different user's row.
+ */
+integrationsRouter.get('/strava/authorize', requireUser, (req: AuthedRequest, res) => {
   if (!isStravaConfigured()) {
     res.status(503).json({ message: 'Strava not configured. Set STRAVA_CLIENT_ID, STRAVA_CLIENT_SECRET, STRAVA_REDIRECT_URI on backend.' });
     return;
   }
 
   const redirectUri = (req.query.redirect_uri as string) ?? process.env.STRAVA_REDIRECT_URI!;
-  const userId = req.query.userId as string | undefined;
-  if (!userId) {
-    res.status(400).json({ message: 'userId query parameter required' });
-    return;
-  }
-
-  const state = Buffer.from(JSON.stringify({ redirectUri, userId, ts: Date.now() })).toString('base64url');
+  const state = signOAuthState({ redirectUri, userId: req.userId! });
   res.redirect(buildStravaAuthUrl(state, process.env.STRAVA_REDIRECT_URI!));
 });
 
@@ -221,7 +220,12 @@ integrationsRouter.get('/strava/callback', async (req, res) => {
       return;
     }
 
-    const state = JSON.parse(Buffer.from(stateRaw, 'base64url').toString()) as { redirectUri: string; userId: string };
+    const state = verifyOAuthState(stateRaw);
+    if (!state) {
+      res.status(400).send('Invalid or expired OAuth state');
+      return;
+    }
+
     const tokens = await exchangeStravaCode(code);
     const db = requireAdmin();
 

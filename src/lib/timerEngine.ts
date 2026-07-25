@@ -150,11 +150,25 @@ export function skipIntervalRound(state: IntervalTimerState): IntervalTimerState
     phase: 'work',
     round: state.round + 1,
     secondsRemaining: config.workSeconds,
-    running: true,
   };
 }
 
-/** Advance interval timer after a second elapses (returns null when unchanged). */
+/** Phase transition only — the caller owns how much time has elapsed. */
+export function advanceIntervalPhase(state: IntervalTimerState): IntervalTimerState {
+  const { config } = state;
+
+  if (state.phase === 'work') {
+    return { ...state, phase: 'rest', secondsRemaining: config.restSeconds };
+  }
+
+  if (state.round >= config.rounds) {
+    return { ...state, phase: 'done', running: false, secondsRemaining: 0 };
+  }
+
+  return { ...state, phase: 'work', round: state.round + 1, secondsRemaining: config.workSeconds };
+}
+
+/** Advance interval timer after a second elapses. */
 export function tickIntervalTimer(state: IntervalTimerState): IntervalTimerState {
   if (!state.running || state.phase === 'done') return state;
 
@@ -162,31 +176,34 @@ export function tickIntervalTimer(state: IntervalTimerState): IntervalTimerState
     return { ...state, secondsRemaining: state.secondsRemaining - 1 };
   }
 
-  const { config } = state;
+  return advanceIntervalPhase(state);
+}
 
-  if (state.phase === 'work') {
-    return {
-      ...state,
-      phase: 'rest',
-      secondsRemaining: config.restSeconds,
-    };
+/**
+ * Re-derive the timer from wall-clock time. JS timers stop firing while the app is backgrounded,
+ * so a whole Tabata block can elapse unobserved — stepping one phase per tick would be wrong.
+ * `deadlineMs` is when the current phase expires; the returned deadline anchors the new phase.
+ */
+export function advanceIntervalTimerToNow(
+  state: IntervalTimerState,
+  deadlineMs: number,
+  now: number,
+): { state: IntervalTimerState; deadlineMs: number } {
+  if (!state.running || state.phase === 'done') return { state, deadlineMs };
+
+  let current = state;
+  let deadline = deadlineMs;
+  const maxPhases = Math.max(state.config.rounds, 1) * 2 + 2;
+
+  for (let step = 0; now >= deadline && current.phase !== 'done' && step < maxPhases; step += 1) {
+    current = advanceIntervalPhase(current);
+    if (current.phase === 'done') break;
+    deadline += current.secondsRemaining * 1000;
   }
 
-  if (state.round >= config.rounds) {
-    return {
-      ...state,
-      phase: 'done',
-      running: false,
-      secondsRemaining: 0,
-    };
-  }
-
-  return {
-    ...state,
-    phase: 'work',
-    round: state.round + 1,
-    secondsRemaining: config.workSeconds,
-  };
+  const secondsRemaining =
+    current.phase === 'done' ? 0 : Math.max(0, Math.ceil((deadline - now) / 1000));
+  return { state: { ...current, secondsRemaining }, deadlineMs: deadline };
 }
 
 export function tickCircuitTimer(state: CircuitTimerState): CircuitTimerState {
@@ -202,6 +219,16 @@ export function tickCircuitTimer(state: CircuitTimerState): CircuitTimerState {
     running: false,
     secondsRemaining: 0,
   };
+}
+
+export function advanceCircuitTimerToNow(
+  state: CircuitTimerState,
+  deadlineMs: number,
+  now: number,
+): CircuitTimerState {
+  if (!state.running || state.phase === 'done') return state;
+  if (now >= deadlineMs) return { ...state, phase: 'done', running: false, secondsRemaining: 0 };
+  return { ...state, secondsRemaining: Math.max(0, Math.ceil((deadlineMs - now) / 1000)) };
 }
 
 export function executionModeUsesIntervalTimer(mode: WorkoutExecutionMode): mode is 'hiit' | 'tabata' {

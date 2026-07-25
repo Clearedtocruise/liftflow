@@ -4,14 +4,7 @@ import { hasPremiumProfileAccess } from '../lib/premiumAccessOverride.js';
 import { requireAdmin } from '../lib/supabase.js';
 import type { AuthedRequest } from './authUser.js';
 
-type ProRequest = AuthedRequest & {
-  query?: { userId?: string };
-  body?: { userId?: string };
-};
-
-function getUserId(req: ProRequest): string | undefined {
-  return req.userId ?? req.body?.userId ?? (req.query?.userId as string | undefined);
-}
+type ProRequest = AuthedRequest;
 
 function isProTier(row: { tier?: string; status?: string; current_period_end?: string | null } | null): boolean {
   if (!row || row.tier === 'free') return false;
@@ -22,12 +15,16 @@ function isProTier(row: { tier?: string; status?: string; current_period_end?: s
   return false;
 }
 
-/** Blocks Pro-only API routes when subscription is free/expired. */
+/**
+ * Blocks Pro-only API routes when the subscription is free/expired.
+ * Must be chained after requireUser: identity comes only from the verified token, so the
+ * paywall can never be evaluated against a UUID supplied in the query string or body.
+ */
 export async function requireProSubscription(req: ProRequest, res: Response, next: NextFunction) {
   try {
-    const userId = getUserId(req);
+    const userId = req.userId;
     if (!userId) {
-      res.status(400).json({ message: 'userId is required', code: 'USER_ID_REQUIRED' });
+      res.status(401).json({ message: 'Authorization required', code: 'UNAUTHENTICATED' });
       return;
     }
 

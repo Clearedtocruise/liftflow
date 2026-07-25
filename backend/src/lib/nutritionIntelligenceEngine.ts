@@ -13,7 +13,8 @@ export type NutritionCoachingAction =
   | 'increase_carbs'
   | 'reduce_calories'
   | 'increase_protein'
-  | 'hydration_reminder';
+  | 'hydration_reminder'
+  | 'log_meals';
 
 export type NutritionEngineInput = {
   userId: string;
@@ -24,6 +25,9 @@ export type NutritionEngineInput = {
   recoveryStatus: string;
   recoveryModeActive: boolean;
   trainingVolume7d: number;
+  /** The user's own 4-week weekly volume, so this week's load can be judged against it. */
+  trainingVolumeBaseline7d?: number;
+  ageYears?: number | null;
   upcomingWorkout?: {
     date: string;
     name: string;
@@ -31,6 +35,15 @@ export type NutritionEngineInput = {
     isTrainingDay: boolean;
     sessionKind?: 'strength' | 'cardio' | 'mobility';
   };
+  /** Each scheduled session in the next 7 days, so the forecast varies by day's own split. */
+  plannedWeek?: Array<{
+    date: string;
+    name?: string;
+    muscleGroups: string[];
+    sessionKind?: 'strength' | 'cardio' | 'mobility';
+  }>;
+  /** Hour of day (0-23) in the user's timezone; suppresses deficit nags before mid-day. */
+  localHour?: number;
   /** When set, today's meal suggestions reflect the user's stored meal plan (post-adaptation). */
   todayPlanMeals?: MealSuggestion[];
   weightTrend: WeightTrend;
@@ -91,6 +104,7 @@ export type NutritionIntelligenceReport = {
     recoveryScore: number;
     recoveryStatus: string;
     trainingVolume7d: number;
+    trainingVolumeBaseline7d?: number;
     upcomingWorkout?: {
       date: string;
       name: string;
@@ -213,6 +227,11 @@ function buildCoachingTips(
 ): DailyCoachingTip[] {
   const tips: DailyCoachingTip[] = [];
   const { upcomingWorkout, recoveryScore, intakeToday, adherencePct } = input;
+  // A remaining-macro "deficit" is trivially true before any meal is logged, so intake-gap
+  // nags wait until the user has had a realistic chance to eat.
+  const hour = input.localHour;
+  const pastMidday = hour == null || hour >= 12;
+  const pastMorning = hour == null || hour >= 10;
 
   if (upcomingWorkout?.isTrainingDay && gaps.carbsRemainingG > 40) {
     tips.push({
@@ -246,7 +265,7 @@ function buildCoachingTips(
     });
   }
 
-  if (gaps.proteinRemainingG > 25 || (recoveryScore < 50 && gaps.proteinRemainingG > 10)) {
+  if (pastMidday && (gaps.proteinRemainingG > 25 || (recoveryScore < 50 && gaps.proteinRemainingG > 10))) {
     tips.push({
       action: 'increase_protein',
       title: 'Increase protein',
@@ -258,7 +277,7 @@ function buildCoachingTips(
     });
   }
 
-  if (gaps.hydrationRemainingMl > 500 || intakeToday.waterMl < macros.hydrationMl * 0.5) {
+  if (pastMorning && (gaps.hydrationRemainingMl > 500 || intakeToday.waterMl < macros.hydrationMl * 0.5)) {
     tips.push({
       action: 'hydration_reminder',
       title: 'Hydration reminder',
@@ -269,7 +288,7 @@ function buildCoachingTips(
 
   if (adherencePct < 50) {
     tips.push({
-      action: 'increase_protein',
+      action: 'log_meals',
       title: 'Log your meals',
       message: `Only ${input.nutritionLogDays7d}/7 days logged — consistent tracking improves recommendations.`,
       priority: 5,
@@ -291,7 +310,45 @@ function mealNameToGroceryItems(mealName: string): GroceryItemSuggestion[] {
   return items;
 }
 
-function buildGroceryList(meals: MealSuggestion[], weeklyPlan: WeeklyNutritionDay[]): GroceryItemSuggestion[] {
+/** Training-day staples per dietary style, so the list cannot contradict the macro targets. */
+const TRAINING_DAY_STAPLES: Record<NonNullable<NutritionContext['dietaryStyle']>, GroceryItemSuggestion[]> = {
+  balanced: [
+    { name: 'Bananas', category: 'Produce' },
+    { name: 'Brown rice', category: 'Grains' },
+    { name: 'Chicken breast', category: 'Protein' },
+  ],
+  high_protein: [
+    { name: 'Chicken breast', category: 'Protein' },
+    { name: 'Greek yogurt', category: 'Dairy' },
+    { name: 'Whey protein', category: 'Supplements' },
+  ],
+  low_carb: [
+    { name: 'Eggs', category: 'Protein' },
+    { name: 'Chicken breast', category: 'Protein' },
+    { name: 'Berries', category: 'Produce' },
+  ],
+  keto: [
+    { name: 'Avocados', category: 'Produce' },
+    { name: 'Eggs', category: 'Protein' },
+    { name: 'Olive oil', category: 'Pantry' },
+  ],
+  mediterranean: [
+    { name: 'Salmon fillets', category: 'Protein' },
+    { name: 'Quinoa', category: 'Grains' },
+    { name: 'Olive oil', category: 'Pantry' },
+  ],
+  vegetarian: [
+    { name: 'Bananas', category: 'Produce' },
+    { name: 'Brown rice', category: 'Grains' },
+    { name: 'Lentils', category: 'Pantry' },
+  ],
+};
+
+function buildGroceryList(
+  meals: MealSuggestion[],
+  weeklyPlan: WeeklyNutritionDay[],
+  style: NonNullable<NutritionContext['dietaryStyle']>,
+): GroceryItemSuggestion[] {
   const seen = new Set<string>();
   const items: GroceryItemSuggestion[] = [];
 
@@ -305,11 +362,11 @@ function buildGroceryList(meals: MealSuggestion[], weeklyPlan: WeeklyNutritionDa
   }
 
   if (weeklyPlan.some((d) => d.isTrainingDay)) {
-    for (const extra of ['Bananas', 'Brown rice', 'Chicken breast']) {
-      const key = extra.toLowerCase();
+    for (const extra of TRAINING_DAY_STAPLES[style] ?? TRAINING_DAY_STAPLES.balanced) {
+      const key = extra.name.toLowerCase();
       if (!seen.has(key)) {
         seen.add(key);
-        items.push({ name: extra, category: extra.includes('Chicken') ? 'Protein' : 'Pantry' });
+        items.push({ ...extra });
       }
     }
   }
@@ -319,25 +376,37 @@ function buildGroceryList(meals: MealSuggestion[], weeklyPlan: WeeklyNutritionDa
 
 function buildWeeklyPlan(
   input: NutritionEngineInput,
-  baseMacros: MacroTargets,
   style: NutritionContext['dietaryStyle'],
 ): WeeklyNutritionDay[] {
+  const plannedByDate = new Map((input.plannedWeek ?? []).map((day) => [day.date, day]));
   const trainingDays = new Set(input.trainingDaysThisWeek ?? []);
   if (input.upcomingWorkout?.isTrainingDay) trainingDays.add(input.today);
 
   const days: WeeklyNutritionDay[] = [];
   for (let i = 0; i < 7; i++) {
     const date = addDays(input.today, i);
-    const isTrainingDay = trainingDays.has(date) || (i === 0 && !!input.upcomingWorkout?.isTrainingDay);
-    const workoutType = isTrainingDay
-      ? inferWorkoutType(input.upcomingWorkout?.muscleGroups ?? ['full'])
-      : 'rest';
+    const planned = plannedByDate.get(date);
+    const isTrainingDay = trainingDays.has(date);
+    // Each day is typed from its own scheduled split; projecting today's muscle groups across
+    // the week propagated a leg-day carb bump into every forecast day.
+    const sessionKind = isTrainingDay ? planned?.sessionKind : undefined;
+    const workoutType = !isTrainingDay
+      ? 'rest'
+      : sessionKind === 'cardio'
+        ? 'cardio'
+        : sessionKind === 'mobility'
+          ? 'rest'
+          : inferWorkoutType(planned?.muscleGroups?.length ? planned.muscleGroups : ['full']);
     const dayMacros = calculateMacroTargets({
       goal: input.goal,
       bodyWeightKg: input.bodyWeightKg,
+      ageYears: input.ageYears,
       recoveryScore: input.recoveryScore,
       recoveryModeActive: input.recoveryModeActive,
+      trainingVolume: input.trainingVolume7d,
+      trainingVolumeBaseline: input.trainingVolumeBaseline7d,
       workoutType,
+      sessionKind,
       isTrainingDay,
       dietaryStyle: style,
     });
@@ -352,7 +421,13 @@ function buildWeeklyPlan(
       carbsG: dayMacros.carbsG,
       fatG: dayMacros.fatG,
       isTrainingDay,
-      focus: isTrainingDay ? 'Higher carbs for training' : 'Recovery & lower carbs',
+      focus: !isTrainingDay
+        ? 'Recovery & lower carbs'
+        : workoutType === 'leg' || workoutType === 'full'
+          ? 'Higher carbs for training'
+          : workoutType === 'cardio'
+            ? 'Endurance fuelling'
+            : 'Steady carbs for upper-body work',
     });
   }
   return days;
@@ -375,8 +450,11 @@ function buildVoiceLines(
 }
 
 export function computeNutritionIntelligence(input: NutritionEngineInput): NutritionIntelligenceReport {
-  const muscleGroups = input.upcomingWorkout?.muscleGroups ?? [];
-  const sessionKind = input.upcomingWorkout?.sessionKind;
+  const isTrainingDay = input.upcomingWorkout?.isTrainingDay ?? false;
+  // `upcomingWorkout` may describe a *future* session when today has none; its split must not
+  // shape today's macros.
+  const muscleGroups = isTrainingDay ? (input.upcomingWorkout?.muscleGroups ?? []) : [];
+  const sessionKind = isTrainingDay ? input.upcomingWorkout?.sessionKind : undefined;
   const workoutType =
     sessionKind === 'cardio'
       ? 'cardio'
@@ -384,15 +462,18 @@ export function computeNutritionIntelligence(input: NutritionEngineInput): Nutri
         ? 'rest'
         : muscleGroups.length
           ? inferWorkoutType(muscleGroups)
-          : 'rest';
-  const isTrainingDay = input.upcomingWorkout?.isTrainingDay ?? false;
+          : isTrainingDay
+            ? 'full'
+            : 'rest';
 
   let baseMacros = calculateMacroTargets({
     goal: input.goal,
     bodyWeightKg: input.bodyWeightKg,
+    ageYears: input.ageYears,
     recoveryScore: input.recoveryScore,
     recoveryModeActive: input.recoveryModeActive,
     trainingVolume: input.trainingVolume7d,
+    trainingVolumeBaseline: input.trainingVolumeBaseline7d,
     workoutType,
     sessionKind,
     isTrainingDay,
@@ -430,8 +511,8 @@ export function computeNutritionIntelligence(input: NutritionEngineInput): Nutri
           rationale: isTrainingDay && m.mealType === 'lunch' ? 'Fuel before training' : undefined,
         }));
 
-  const weeklyPlan = buildWeeklyPlan(input, baseMacros, input.dietaryStyle ?? 'balanced');
-  const groceryList = buildGroceryList(mealSuggestions, weeklyPlan);
+  const weeklyPlan = buildWeeklyPlan(input, input.dietaryStyle ?? 'balanced');
+  const groceryList = buildGroceryList(mealSuggestions, weeklyPlan, input.dietaryStyle ?? 'balanced');
   const voice = buildVoiceLines(macroTargets, mealSuggestions, coachingTips, groceryList);
 
   const rationaleParts = [
@@ -455,6 +536,7 @@ export function computeNutritionIntelligence(input: NutritionEngineInput): Nutri
       recoveryScore: input.recoveryScore,
       recoveryStatus: input.recoveryStatus,
       trainingVolume7d: input.trainingVolume7d,
+      trainingVolumeBaseline7d: input.trainingVolumeBaseline7d,
       upcomingWorkout: input.upcomingWorkout
         ? { ...input.upcomingWorkout, workoutType: workoutType ?? 'rest' }
         : undefined,

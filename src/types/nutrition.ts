@@ -20,6 +20,11 @@ export type MealPlan = BaseEntity & {
   meals: Meal[];
 };
 
+export type MealStatus = 'planned' | 'completed' | 'skipped' | 'modified';
+
+/** `plan` = generated slot, `log` = something the user actually ate. */
+export type MealOrigin = 'plan' | 'log';
+
 export type Meal = BaseEntity & {
   mealPlanId?: string;
   userId: string;
@@ -31,6 +36,12 @@ export type Meal = BaseEntity & {
   carbsG?: number;
   fatG?: number;
   instructions?: string;
+  status: MealStatus;
+  origin: MealOrigin;
+  consumedAt?: string;
+  clientKey?: string;
+  /** True when the macros on this row came from a measurement rather than a guess. */
+  macrosProvided: boolean;
 };
 
 export type GroceryList = BaseEntity & {

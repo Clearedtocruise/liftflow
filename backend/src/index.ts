@@ -5,7 +5,10 @@ import './loadEnv.js';
 import { hasOpenAI } from './lib/openai.js';
 import { initSentry, setupSentryExpressErrorHandler } from './lib/sentry.js';
 import { supabaseAdmin } from './lib/supabase.js';
+import { optionalUser, requireUser } from './middleware/authUser.js';
 import { apiErrorHandler } from './middleware/errorHandler.js';
+import { requireFounderAdminPage } from './middleware/requireFounder.js';
+import { aiLimiter, allowedOrigins, corsOptions, globalLimiter } from './middleware/security.js';
 import { aiRouter } from './routes/ai.js';
 import { analyticsRouter } from './routes/analytics.js';
 import { authRouter } from './routes/auth.js';
@@ -37,8 +40,14 @@ const PORT = process.env.PORT ?? 3000;
 
 initSentry();
 
-app.use(cors());
-app.use(express.json({ limit: '10mb' }));
+// Render terminates TLS in front of the app; without this the client IP seen by the rate
+// limiter is the proxy's, which would put every caller in one bucket.
+app.set('trust proxy', 1);
+app.disable('x-powered-by');
+
+app.use(cors(corsOptions));
+app.use(express.json({ limit: '2mb' }));
+app.use(globalLimiter);
 
 // Health
 app.use('/health', healthRouter);
@@ -47,33 +56,37 @@ app.use('/auth', authRouter);
 app.use('/legal', legalRouter);
 
 // Legacy parse route (redirect to voice)
-app.use('/api/parse', parseRouter);
+app.use('/api/parse', requireUser, aiLimiter, parseRouter);
 
-// Domain routes — all scaffolded with 501 placeholders
-app.use('/api/voice', voiceRouter);
-app.use('/api/watch', watchRouter);
-app.use('/api/ai', aiRouter);
-app.use('/api/workouts', workoutsRouter);
-app.use('/api/training', trainingRouter);
-app.use('/api/weekly', weeklyRouter);
-app.use('/api/nutrition', nutritionRouter);
-app.use('/api/body', bodyRouter);
-app.use('/api/analytics', analyticsRouter);
-app.use('/api/goals', goalsRouter);
+// Authenticated domain routes. requireUser is mounted here rather than per-handler so a new
+// route in any of these files cannot be added without authentication.
+app.use('/api/voice', requireUser, aiLimiter, voiceRouter);
+app.use('/api/watch', requireUser, watchRouter);
+app.use('/api/ai', requireUser, aiLimiter, aiRouter);
+app.use('/api/workouts', requireUser, workoutsRouter);
+app.use('/api/training', requireUser, trainingRouter);
+app.use('/api/weekly', requireUser, weeklyRouter);
+app.use('/api/nutrition', requireUser, nutritionRouter);
+app.use('/api/body', requireUser, aiLimiter, bodyRouter);
+app.use('/api/analytics', requireUser, analyticsRouter);
+app.use('/api/goals', requireUser, goalsRouter);
+app.use('/api/cardio', requireUser, cardioRouter);
+app.use('/api/subscriptions', requireUser, subscriptionsRouter);
+app.use('/api/ads', requireUser, adsRouter);
+app.use('/api/notifications', requireUser, notificationsRouter);
+app.use('/api/export', requireUser, exportRouter);
+app.use('/api/user', requireUser, userRouter);
+
+// Mixed routers: gate per-route because they also expose OAuth callbacks, founder-only
+// endpoints, or endpoints that legitimately accept anonymous traffic.
 app.use('/api/integrations', integrationsRouter);
-app.use('/api/cardio', cardioRouter);
-app.use('/api/subscriptions', subscriptionsRouter);
-app.use('/api/ads', adsRouter);
-app.use('/api/notifications', notificationsRouter);
-app.use('/api/export', exportRouter);
-app.use('/api/user', userRouter);
 app.use('/api/outcome', outcomeRouter);
 app.use('/api/founder', founderRouter);
-app.use('/api/feedback', feedbackRouter);
-app.use('/api/events', eventsRouter);
-app.use('/api/beta', betaRouter);
+app.use('/api/feedback', optionalUser, feedbackRouter);
+app.use('/api/events', optionalUser, eventsRouter);
+app.use('/api/beta', optionalUser, betaRouter);
 
-app.get('/admin/founder', serveFounderDashboard);
+app.get('/admin/founder', requireFounderAdminPage, serveFounderDashboard);
 
 setupSentryExpressErrorHandler(app);
 app.use(apiErrorHandler);
@@ -88,4 +101,5 @@ app.listen(PORT, () => {
   console.log('        /api/outcome, /api/founder, /admin/founder');
   console.log('        /api/feedback, /api/events, /api/beta');
   console.log(`Sentry: ${process.env.SENTRY_DSN ? 'configured' : 'NOT SET'}`);
+  console.log(`CORS allowlist: ${allowedOrigins().join(', ')}`);
 });

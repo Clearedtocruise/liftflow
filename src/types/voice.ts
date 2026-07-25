@@ -31,7 +31,11 @@ export type VoiceIntent =
   | 'transformation_progress'
   | 'transformation_target_bf';
 
-export type ParsedVoiceCommandExtended = ParsedVoiceCommand & {
+/**
+ * `intent` is omitted before widening: intersecting two optional unions narrows the property to
+ * their overlap, which silently made every control intent below unassignable.
+ */
+export type ParsedVoiceCommandExtended = Omit<ParsedVoiceCommand, 'intent'> & {
   intent?: VoiceIntent;
   /** Explicit target weight e.g. "increase to 235" */
   targetWeight?: number;
@@ -46,6 +50,13 @@ export type ParsedVoiceCommandExtended = ParsedVoiceCommand & {
   groceryVoiceLine?: string;
   targetBodyFatPct?: number;
   transformationVoiceLine?: string;
+  /** A value failed a range check — must never auto-commit. */
+  implausible?: boolean;
+  /** Weight/reps order was inferred from magnitude, not from the wording. */
+  ambiguousOrder?: boolean;
+  /** The utterance described more sets than were parsed. */
+  multipleSetsHeard?: boolean;
+  validationReason?: string;
 };
 
 export type VoiceParseContext = {

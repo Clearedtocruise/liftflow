@@ -2,6 +2,10 @@ import { Router } from 'express';
 
 import { captureAiError } from '../lib/aiErrorReporting.js';
 import { captureTestException, flushSentry, isSentryConfigured } from '../lib/sentry.js';
+import { requireFounderAdmin } from '../middleware/requireFounder.js';
+
+/** Placeholder subject for synthetic Sentry events — never a real user's id. */
+const SYNTHETIC_USER_ID = '00000000-0000-0000-0000-000000000001';
 
 export const debugRouter = Router();
 
@@ -15,21 +19,13 @@ debugRouter.get('/debug-sentry', (_req, _res) => {
 });
 
 /** Founder-authenticated prod-safe test — captures without crashing the process */
-debugRouter.post('/debug-sentry/capture', async (req, res) => {
-  const adminKey = process.env.FOUNDER_ADMIN_KEY;
-  const provided = req.headers['x-founder-key'] ?? req.headers.authorization?.replace(/^Bearer\s+/i, '');
-
-  if (!adminKey || provided !== adminKey) {
-    res.status(401).json({ message: 'Unauthorized' });
-    return;
-  }
-
+debugRouter.post('/debug-sentry/capture', requireFounderAdmin, async (_req, res) => {
   if (!isSentryConfigured()) {
     res.status(503).json({ message: 'SENTRY_DSN not configured' });
     return;
   }
 
-  const userId = (req.body as { userId?: string })?.userId ?? '00000000-0000-0000-0000-000000000001';
+  const userId = SYNTHETIC_USER_ID;
   const eventId = captureTestException({ userId, route: '/debug-sentry/capture' });
   await flushSentry();
 
@@ -43,16 +39,8 @@ debugRouter.post('/debug-sentry/capture', async (req, res) => {
 });
 
 /** AI subsystem Sentry correlation test */
-debugRouter.post('/debug-sentry/ai', async (req, res) => {
-  const adminKey = process.env.FOUNDER_ADMIN_KEY;
-  const provided = req.headers['x-founder-key'] ?? req.headers.authorization?.replace(/^Bearer\s+/i, '');
-
-  if (!adminKey || provided !== adminKey) {
-    res.status(401).json({ message: 'Unauthorized' });
-    return;
-  }
-
-  const userId = (req.body as { userId?: string })?.userId ?? '00000000-0000-0000-0000-000000000001';
+debugRouter.post('/debug-sentry/ai', requireFounderAdmin, async (_req, res) => {
+  const userId = SYNTHETIC_USER_ID;
   const testError = new Error('LiftFlow AI route Sentry test — Sprint 8.6');
   captureAiError(testError, '/api/ai/converse', userId);
   await flushSentry();

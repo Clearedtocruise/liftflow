@@ -1,3 +1,6 @@
+export type MealStatus = 'planned' | 'completed' | 'modified' | 'skipped';
+export type MealOrigin = 'plan' | 'log';
+
 export type MealCleanupRow = {
   id: string;
   scheduled_date: string | null;
@@ -10,11 +13,18 @@ export type MealCleanupRow = {
   protein_g?: number | null;
   carbs_g?: number | null;
   fat_g?: number | null;
+  status?: string | null;
+  origin?: string | null;
+  consumed_at?: string | null;
+  client_key?: string | null;
+  macros_provided?: boolean | null;
 };
 
 type MealRow = MealCleanupRow;
 
-type MealStatus = 'planned' | 'completed' | 'modified' | 'skipped';
+/** Columns every meal read needs so status/origin are never inferred. */
+export const MEAL_COLUMNS =
+  'id, user_id, meal_plan_id, meal_type, name, scheduled_date, calories, protein_g, carbs_g, fat_g, instructions, status, origin, consumed_at, client_key, macros_provided, created_at';
 
 const STATUS_RANK: Record<MealStatus, number> = {
   completed: 4,
@@ -23,35 +33,61 @@ const STATUS_RANK: Record<MealStatus, number> = {
   skipped: 1,
 };
 
-function parseMealStatus(instructions: string | null | undefined): MealStatus {
-  if (!instructions) return 'planned';
+const STATUSES: MealStatus[] = ['planned', 'completed', 'modified', 'skipped'];
+
+/** Rows written before migration 029 keep their status inside the instructions JSON. */
+function legacyStatus(instructions: string | null | undefined): MealStatus | null {
+  if (!instructions || !instructions.trimStart().startsWith('{')) return null;
   try {
-    const parsed = JSON.parse(instructions) as { status?: MealStatus };
-    return parsed.status ?? 'planned';
+    const parsed = JSON.parse(instructions) as { status?: unknown };
+    return STATUSES.find((candidate) => candidate === parsed.status) ?? null;
   } catch {
-    return 'planned';
+    return null;
   }
 }
 
-function slotKey(row: MealRow): string | null {
-  if (!row.scheduled_date) return null;
-  return `${row.scheduled_date}:${row.meal_type}`;
+export function mealOrigin(row: MealRow): MealOrigin {
+  if (row.origin === 'plan' || row.origin === 'log') return row.origin;
+  return row.meal_plan_id ? 'plan' : 'log';
 }
 
-/** Pick one keeper per date+meal_type; prefer completed/modified, then newest. */
+export function mealStatus(row: MealRow): MealStatus {
+  return (
+    STATUSES.find((candidate) => candidate === row.status)
+    ?? legacyStatus(row.instructions)
+    ?? (mealOrigin(row) === 'log' ? 'completed' : 'planned')
+  );
+}
+
+/**
+ * Identity used for de-duplication. Only rows that provably describe the same
+ * record collapse: a shared client key, or a plan slot for the same day and
+ * meal type (which repeated plan generation can create twice). User-logged
+ * meals without a client key have no identity, so two snacks on the same day
+ * are never mistaken for duplicates.
+ */
+function identityKey(row: MealRow): string | null {
+  if (row.client_key) return `key:${row.client_key}`;
+  if (mealOrigin(row) !== 'plan' || !row.scheduled_date) return null;
+  return `plan:${row.scheduled_date}:${row.meal_type}`;
+}
+
+/** Pick one keeper per meal identity; prefer completed/modified, then newest. */
 export function pickMealsToKeep(meals: MealRow[]): { keep: MealRow[]; removeIds: string[] } {
   const groups = new Map<string, MealRow[]>();
+  const keep: MealRow[] = [];
+  const removeIds: string[] = [];
 
   for (const meal of meals) {
-    const key = slotKey(meal);
-    if (!key) continue;
+    const key = identityKey(meal);
+    if (!key) {
+      keep.push(meal);
+      continue;
+    }
     const bucket = groups.get(key) ?? [];
     bucket.push(meal);
     groups.set(key, bucket);
   }
-
-  const keep: MealRow[] = [];
-  const removeIds: string[] = [];
 
   for (const group of groups.values()) {
     if (group.length === 1) {
@@ -60,7 +96,7 @@ export function pickMealsToKeep(meals: MealRow[]): { keep: MealRow[]; removeIds:
     }
 
     const sorted = [...group].sort((a, b) => {
-      const rankDiff = STATUS_RANK[parseMealStatus(b.instructions)] - STATUS_RANK[parseMealStatus(a.instructions)];
+      const rankDiff = STATUS_RANK[mealStatus(b)] - STATUS_RANK[mealStatus(a)];
       if (rankDiff !== 0) return rankDiff;
       return b.created_at.localeCompare(a.created_at);
     });
@@ -71,14 +107,14 @@ export function pickMealsToKeep(meals: MealRow[]): { keep: MealRow[]; removeIds:
     }
   }
 
-  const slottedIds = new Set(keep.map((meal) => meal.id));
-  for (const meal of meals) {
-    if (!slotKey(meal) && !slottedIds.has(meal.id)) {
-      keep.push(meal);
-    }
-  }
-
   return { keep, removeIds };
+}
+
+/** Untouched plan slots may be replaced by a regenerated plan; logs may not. */
+export function isReplaceablePlannedMeal(row: MealRow): boolean {
+  if (mealOrigin(row) !== 'plan') return false;
+  const status = mealStatus(row);
+  return status === 'planned' || status === 'skipped';
 }
 
 export function weekEndDate(weekStart: string): string {
@@ -95,17 +131,12 @@ export async function removePlannedMealsForWeek(
 ): Promise<number> {
   const { data } = await db
     .from('meals')
-    .select('id, instructions')
+    .select(MEAL_COLUMNS)
     .eq('user_id', userId)
     .gte('scheduled_date', weekStart)
     .lte('scheduled_date', weekEnd);
 
-  const removeIds = ((data ?? []) as Array<{ id: string; instructions: string | null }>)
-    .filter((row) => {
-      const status = parseMealStatus(row.instructions);
-      return status === 'planned' || status === 'skipped';
-    })
-    .map((row) => row.id);
+  const removeIds = ((data ?? []) as MealRow[]).filter(isReplaceablePlannedMeal).map((row) => row.id);
 
   if (removeIds.length === 0) return 0;
 
@@ -119,7 +150,7 @@ export async function pruneDuplicateMeals(
   userId: string,
   range?: { from?: string; to?: string },
 ): Promise<number> {
-  let query = db.from('meals').select('id, scheduled_date, meal_type, instructions, created_at').eq('user_id', userId);
+  let query = db.from('meals').select(MEAL_COLUMNS).eq('user_id', userId);
   if (range?.from) query = query.gte('scheduled_date', range.from);
   if (range?.to) query = query.lte('scheduled_date', range.to);
 

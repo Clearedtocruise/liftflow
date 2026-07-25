@@ -1,4 +1,4 @@
-import { CIRCUIT_MODE_DEFAULTS, SUPERSET_MODE_DEFAULTS } from '@/constants/workoutExecutionModes';
+import { CIRCUIT_MODE_DEFAULTS } from '@/constants/workoutExecutionModes';
 import type { WorkoutPositionLabels } from '@/lib/workoutUpNext';
 import { resolveWorkoutUpNext } from '@/lib/workoutUpNext';
 import type { WorkoutExercise } from '@/types/workout';
@@ -33,8 +33,16 @@ export type CircuitStation = {
   memberIndices: number[];
 };
 
-/** Pair consecutive exercises (0–1, 2–3, …) when no explicit groups exist. */
-export function enrichWithSupersetGroups(exercises: EditableWorkoutExercise[]): EditableWorkoutExercise[] {
+/**
+ * Pair consecutive exercises (0–1, 2–3, …) when no explicit groups exist. Only applies to
+ * plans that actually asked for superset execution — auto-pairing every plan would make
+ * traditional (and every other) execution mode unreachable.
+ */
+export function enrichWithSupersetGroups(
+  exercises: EditableWorkoutExercise[],
+  executionMode: WorkoutExecutionMode | undefined,
+): EditableWorkoutExercise[] {
+  if (executionMode !== 'superset') return exercises;
   if (exercises.some((e) => e.supersetGroupId)) return exercises;
   if (exercises.length < 2) return exercises;
 
@@ -210,6 +218,25 @@ export function executionModeUsesSupersetRotation(mode: WorkoutExecutionMode): b
   return mode === 'superset' || mode === 'circuit';
 }
 
+export type CircuitPlanConfig = {
+  rounds: number;
+  restBetweenExercisesSeconds: number;
+  restBetweenRoundsSeconds: number;
+};
+
+/** Circuit timing comes from the plan when it carries any, otherwise from the mode defaults. */
+export function resolveCircuitPlanConfig(planExercises: EditableWorkoutExercise[]): CircuitPlanConfig {
+  const withRounds = planExercises.find((exercise) => (exercise.intervalRounds ?? 0) > 0);
+  const withTransition = planExercises.find((exercise) => exercise.restBetweenExercisesSeconds != null);
+  const withRoundRest = planExercises.find((exercise) => (exercise.restSeconds ?? 0) > 0);
+  return {
+    rounds: withRounds?.intervalRounds ?? CIRCUIT_MODE_DEFAULTS.rounds,
+    restBetweenExercisesSeconds:
+      withTransition?.restBetweenExercisesSeconds ?? CIRCUIT_MODE_DEFAULTS.restBetweenExercisesSeconds,
+    restBetweenRoundsSeconds: withRoundRest?.restSeconds ?? CIRCUIT_MODE_DEFAULTS.restBetweenRoundsSeconds,
+  };
+}
+
 export function resolvePostSetFlowAction(
   currentIndex: number,
   planExercises: EditableWorkoutExercise[],
@@ -233,8 +260,7 @@ export function resolvePostSetFlowAction(
 
   const setsJustLogged =
     setsJustLoggedOverride ?? sessionExercises[currentIndex]?.sets?.length ?? 0;
-  const group = getSupersetGroupForIndex(currentIndex, planExercises);
-  const config = CIRCUIT_MODE_DEFAULTS;
+  const config = resolveCircuitPlanConfig(planExercises);
 
   if (supersetAction.immediateAdvanceIndex != null) {
     return {
@@ -251,7 +277,7 @@ export function resolvePostSetFlowAction(
       afterRestAdvanceIndex: supersetAction.afterRestAdvanceIndex,
       circuitTimer: {
         phase: 'transition',
-        seconds: SUPERSET_MODE_DEFAULTS.restBetweenExercisesSeconds,
+        seconds: config.restBetweenExercisesSeconds,
         round: circuitRound,
         advanceIndex: supersetAction.afterRestAdvanceIndex,
       },
@@ -263,9 +289,10 @@ export function resolvePostSetFlowAction(
     return { ...supersetAction, circuitTimer: null };
   }
 
+  // A member with a lower target finishes early; it must not hold the station open forever.
   const stationComplete = station.memberIndices.every((index) => {
     const logged = sessionExercises[index]?.sets?.length ?? 0;
-    return logged >= setsJustLogged;
+    return logged >= Math.min(setsJustLogged, targetSetsForIndex(index, planExercises));
   });
 
   if (!stationComplete) {
@@ -312,23 +339,27 @@ export function resolvePostSetFlowAction(
   };
 }
 
+/**
+ * Next exercise that is not part of the group. Groups can be non-contiguous, so jumping past
+ * the highest member index would silently skip the exercises interleaved between members.
+ */
 export function nextExerciseIndexAfterGroup(
   group: SupersetGroup,
   totalExercises: number,
 ): number | null {
-  const lastInGroup = Math.max(...group.memberIndices);
-  const next = lastInGroup + 1;
-  return next < totalExercises ? next : null;
+  const members = new Set(group.memberIndices);
+  for (let next = Math.min(...group.memberIndices) + 1; next < totalExercises; next += 1) {
+    if (!members.has(next)) return next;
+  }
+  return null;
 }
 
-/** Use superset rotation when the plan pairs exercises, unless user chose tabata/circuit/hiit. */
+/** An explicit mode choice always wins; only an unopinionated plan infers superset from its groups. */
 export function inferExecutionModeFromPlan(
   planExercises: EditableWorkoutExercise[],
   preferred: WorkoutExecutionMode,
 ): WorkoutExecutionMode {
-  if (preferred === 'tabata' || preferred === 'circuit' || preferred === 'hiit') {
-    return preferred;
-  }
+  if (preferred !== 'traditional') return preferred;
   if (buildSupersetGroups(planExercises).length > 0) {
     return 'superset';
   }
