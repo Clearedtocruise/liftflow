@@ -9,6 +9,7 @@ import {
     type ReactNode,
 } from 'react';
 import { AccessibilityInfo, AppState, Vibration } from 'react-native';
+import * as Speech from 'expo-speech';
 
 import { DEFAULT_REST_SECONDS } from '@/constants/workout';
 import { isStaleWorkoutSession } from '@/lib/staleWorkoutSession';
@@ -86,16 +87,19 @@ export function WorkoutSessionProvider({
   const sessionEpochRef = useRef(0);
   const trackedSessionIdRef = useRef<string | null>(null);
   const dismissedSessionIdsRef = useRef<Set<string>>(new Set());
-  const clearLocalSessionState = useCallback(() => {
-    trackedSessionIdRef.current = null;
-    setActiveSession(null);
+  const clearRestState = useCallback(() => {
     setActiveRestPeriod(null);
     setRestSecondsRemaining(null);
-    setWatchDraftReps(null);
-    setWatchDraftWeightKg(null);
     restEndAtRef.current = null;
     pausedRemainingRef.current = null;
   }, []);
+  const clearLocalSessionState = useCallback(() => {
+    trackedSessionIdRef.current = null;
+    setActiveSession(null);
+    clearRestState();
+    setWatchDraftReps(null);
+    setWatchDraftWeightKg(null);
+  }, [clearRestState]);
 
   const refreshSession = useCallback(async () => {
     const sessionId = trackedSessionIdRef.current;
@@ -186,9 +190,10 @@ export function WorkoutSessionProvider({
     // The effect re-runs on every state change it triggers, so the write needs its own guard.
     endedRestPeriodIdsRef.current.add(activeRestPeriod.id);
 
-    // A vibration is the only other end-of-rest cue, and it is silent to a screen reader user who
-    // is not holding the phone. Sits behind the same once-per-period guard as the write above.
+    // A vibration is silent if the user set the phone down, so speak the completion cue as well.
     AccessibilityInfo.announceForAccessibility('Rest complete. Ready for your next set.');
+    Speech.stop();
+    Speech.speak('Rest complete. Ready for your next set.', { rate: 1, pitch: 1 });
     const restPeriodId = activeRestPeriod.id;
     const recommended = activeRestPeriod.recommendedSeconds ?? DEFAULT_REST_SECONDS;
 
@@ -199,8 +204,11 @@ export function WorkoutSessionProvider({
       })
       .finally(() => {
         setActiveRestPeriod((current) => (current?.id === restPeriodId ? null : current));
-        setRestSecondsRemaining(null);
-        restEndAtRef.current = null;
+        setRestSecondsRemaining((current) => (current === 0 ? null : current));
+        if (restEndAtRef.current != null && Date.now() >= restEndAtRef.current) {
+          restEndAtRef.current = null;
+        }
+        pausedRemainingRef.current = null;
       });
   }, [restSecondsRemaining, activeRestPeriod, restTimerHaptics]);
 
@@ -291,6 +299,18 @@ export function WorkoutSessionProvider({
 
   const logSet = useCallback(
     async (payload: CreateSetPayload) => {
+      if (payload.skipRest) {
+        if (activeRestPeriod) {
+          const elapsed = Math.floor((Date.now() - new Date(activeRestPeriod.startedAt).getTime()) / 1000);
+          try {
+            await workoutService.endRestTimer(activeRestPeriod.id, elapsed, true);
+          } catch (error) {
+            console.warn('[workoutSession] end prior rest timer failed', error);
+          }
+        }
+        clearRestState();
+      }
+
       const result = await workoutService.logSet(payload);
       if (!result.success) return null;
 
@@ -321,7 +341,7 @@ export function WorkoutSessionProvider({
 
       return result.data;
     },
-    [activeSession, refreshSession, userId],
+    [activeRestPeriod, activeSession, clearRestState, refreshSession, userId],
   );
 
   const updateSet = useCallback(
