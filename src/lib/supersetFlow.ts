@@ -33,26 +33,14 @@ export type CircuitStation = {
   memberIndices: number[];
 };
 
-/**
- * Pair consecutive exercises (0–1, 2–3, …) when no explicit groups exist. Only applies to
- * plans that actually asked for superset execution — auto-pairing every plan would make
- * traditional (and every other) execution mode unreachable.
- */
 export function enrichWithSupersetGroups(
   exercises: EditableWorkoutExercise[],
-  executionMode: WorkoutExecutionMode | undefined,
+  _executionMode: WorkoutExecutionMode | undefined,
 ): EditableWorkoutExercise[] {
-  if (executionMode !== 'superset') return exercises;
-  if (exercises.some((e) => e.supersetGroupId)) return exercises;
-  if (exercises.length < 2) return exercises;
-
-  const result = exercises.map((e) => ({ ...e }));
-  for (let i = 0; i + 1 < result.length; i += 2) {
-    const groupId = `ss-${Math.floor(i / 2) + 1}`;
-    result[i] = { ...result[i], supersetGroupId: groupId };
-    result[i + 1] = { ...result[i + 1], supersetGroupId: groupId };
-  }
-  return result;
+  // Group ids must come from the generated plan or explicit draft edits. Blindly pairing every
+  // adjacent exercise when a workout is in superset mode turns partially-grouped plans into
+  // "everything is a superset", which is exactly the production bug we want to avoid.
+  return exercises;
 }
 
 export function buildSupersetGroups(planExercises: EditableWorkoutExercise[]): SupersetGroup[] {

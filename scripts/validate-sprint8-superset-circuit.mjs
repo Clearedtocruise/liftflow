@@ -35,7 +35,7 @@ const active = read('src/components/workout/execution/ActiveWorkoutScreen.tsx');
 const detail = read('src/components/workout/execution/WorkoutExerciseDetailList.tsx');
 const program = read('backend/src/lib/programEngine.ts');
 
-record('Pairs from index 0 (Bench+Row)', flow.includes('for (let i = 0; i + 1 < result.length; i += 2)'));
+record('No blanket auto-pairing fallback', !flow.includes('for (let i = 0; i + 1 < result.length; i += 2)'));
 record('A1/A2 station labels', flow.includes('formatSupersetStationLabel') && flow.includes('formatExerciseStationLabel'));
 record('Circuit station builder', flow.includes('buildCircuitStations'));
 record('Post-set flow resolver', flow.includes('resolvePostSetFlowAction'));
@@ -44,7 +44,7 @@ record('Circuit round tracking in active workout', active.includes('circuitRound
 record('Uses resolvePostSetFlowAction', active.includes('resolvePostSetFlowAction'));
 record('Station label in active workout', active.includes('formatExerciseStationLabel'));
 record('Replace/day overview station labels', detail.includes('formatExerciseStationLabel'));
-record('Backend superset enrichment', program.includes('enrichExercisesWithSupersetGroups'));
+record('Backend planner owns smart superset enrichment', read('backend/src/lib/workoutPlanner.ts').includes('enrichWithSmartSupersetGroups'));
 record('Auto superset execution mode', flow.includes('inferExecutionModeFromPlan'));
 record('Superset position resolver', flow.includes('resolveSupersetWorkoutPosition'));
 record('Superset prep detection', flow.includes('shouldShowSupersetPrep'));
@@ -53,7 +53,7 @@ record('Workout tab infers superset mode', read('src/app/(tabs)/workout/index.ts
 record('Active workout superset banner', active.includes('SupersetPrepBanner'));
 record('Watch rest-only sync', read('src/services/watchCompanionService.ts').includes('pushRestTimerOnly'));
 
-console.log('\nFlow: enrichWithSupersetGroups → resolvePostSetFlowAction → timer/advance');
+console.log('\nFlow: explicit plan groups → resolvePostSetFlowAction → timer/advance');
 console.log('Labels: A1 Bench Press · A2 Row · Circuit Round N');
 
 const pass = checks.filter((c) => c.pass).length;
