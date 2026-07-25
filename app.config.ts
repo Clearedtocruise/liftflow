@@ -52,6 +52,7 @@ const config: ExpoConfig = {
     package: 'com.liftflow.app',
     versionCode: 14,
     permissions: [
+      'android.permission.RECORD_AUDIO',
       'android.permission.ACCESS_COARSE_LOCATION',
       'android.permission.ACCESS_FINE_LOCATION',
       'android.permission.health.READ_STEPS',

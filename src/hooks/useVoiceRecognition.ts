@@ -1,9 +1,19 @@
-import { useCallback, useRef, useState } from 'react';
+import type { Audio } from 'expo-av';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { api } from '@/api/client';
+import {
+    cancelRecording,
+    hasMicrophonePermission,
+    MAX_RECORDING_MS,
+    startRecording,
+    stopRecording,
+} from '@/lib/voice/recordAudio';
+import { getAccessToken } from '@/supabase/client';
 import type { VoiceInputMode } from '@/types/voice';
 
-/** Voice disabled for Build 155 stabilization — no native speech module loads. */
-const VOICE_DISABLED_MESSAGE = 'Voice logging is temporarily unavailable.';
+/** The real states of a capture attempt — the UI shows one hint per state instead of guessing. */
+export type VoiceCaptureState = 'idle' | 'recording' | 'transcribing' | 'error';
 
 export type VoiceRecognitionOptions = {
   enabled?: boolean;
@@ -12,33 +22,152 @@ export type VoiceRecognitionOptions = {
   lang?: string;
 };
 
-export function useVoiceRecognition(_options: VoiceRecognitionOptions = {}) {
-  const transcriptRef = useRef('');
-  const [isListening] = useState(false);
+const PERMISSION_DENIED = 'Microphone access is off. Enable it in Settings to log sets by voice.';
 
-  const noop = useCallback(() => {}, []);
-  const noopAsync = useCallback(async () => false, []);
+export function useVoiceRecognition(options: VoiceRecognitionOptions = {}) {
+  const { enabled = true, inputMode = 'push_to_talk', onFinalTranscript } = options;
+
+  const transcriptRef = useRef('');
+  const recordingRef = useRef<Audio.Recording | null>(null);
+  const autoStopRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mountedRef = useRef(true);
+
+  const [state, setState] = useState<VoiceCaptureState>('idle');
+  const [finalTranscript, setFinalTranscript] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  const clearAutoStop = useCallback(() => {
+    if (autoStopRef.current) {
+      clearTimeout(autoStopRef.current);
+      autoStopRef.current = null;
+    }
+  }, []);
+
+  const clearTranscript = useCallback(() => {
+    transcriptRef.current = '';
+    setFinalTranscript('');
+    setError(null);
+    setState((current) => (current === 'error' ? 'idle' : current));
+  }, []);
+
+  const stopListening = useCallback(async () => {
+    clearAutoStop();
+    const active = recordingRef.current;
+    if (!active) return;
+    recordingRef.current = null;
+
+    setState('transcribing');
+    try {
+      const recorded = await stopRecording(active);
+      if (!recorded || recorded.bytes.byteLength === 0) {
+        throw new Error('No audio was recorded. Hold the button while you speak.');
+      }
+
+      const token = await getAccessToken();
+      const { transcript } = await api.transcribeVoice(recorded.bytes, recorded.contentType, token);
+
+      if (!mountedRef.current) return;
+      transcriptRef.current = transcript;
+      setFinalTranscript(transcript);
+      setState('idle');
+      onFinalTranscript?.(transcript);
+    } catch (e) {
+      if (!mountedRef.current) return;
+      // The backend already returns user-facing messages; anything else gets a generic one.
+      setError(e instanceof Error ? e.message : 'Could not transcribe that. Try again.');
+      setState('error');
+    }
+  }, [clearAutoStop, onFinalTranscript]);
+
+  const startListening = useCallback(async () => {
+    if (!enabled || recordingRef.current) return false;
+
+    setError(null);
+    try {
+      if (!(await hasMicrophonePermission())) {
+        setError(PERMISSION_DENIED);
+        setState('error');
+        return false;
+      }
+
+      const recording = await startRecording();
+      if (!mountedRef.current) {
+        void cancelRecording(recording);
+        return false;
+      }
+
+      recordingRef.current = recording;
+      setState('recording');
+      autoStopRef.current = setTimeout(() => void stopListening(), MAX_RECORDING_MS);
+      return true;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not start recording.');
+      setState('error');
+      return false;
+    }
+  }, [enabled, stopListening]);
+
+  const abortListening = useCallback(() => {
+    clearAutoStop();
+    const active = recordingRef.current;
+    recordingRef.current = null;
+    if (active) void cancelRecording(active);
+    setState('idle');
+  }, [clearAutoStop]);
+
+  useEffect(
+    () => () => {
+      mountedRef.current = false;
+      clearAutoStop();
+      const active = recordingRef.current;
+      recordingRef.current = null;
+      if (active) void cancelRecording(active);
+    },
+    [clearAutoStop],
+  );
+
+  const handlePressIn = useCallback(async () => {
+    if (inputMode !== 'push_to_talk') return false;
+    return startListening();
+  }, [inputMode, startListening]);
+
+  const handlePressOut = useCallback(() => {
+    if (inputMode !== 'push_to_talk') return;
+    void stopListening();
+  }, [inputMode, stopListening]);
+
+  const handleMicPress = useCallback(async () => {
+    if (inputMode === 'push_to_talk') return false;
+    if (recordingRef.current) {
+      await stopListening();
+      return true;
+    }
+    return startListening();
+  }, [inputMode, startListening, stopListening]);
 
   return {
-    isAvailable: false,
-    isListening,
+    isAvailable: enabled,
+    state,
+    isListening: state === 'recording',
+    isTranscribing: state === 'transcribing',
+    /** Kept for compatibility: this pipeline has no partial results, only a final transcript. */
     interimTranscript: '',
-    finalTranscript: '',
-    transcript: '',
+    finalTranscript,
+    transcript: finalTranscript,
     transcriptRef,
-    error: VOICE_DISABLED_MESSAGE,
-    inputMode: 'tap_toggle' as VoiceInputMode,
-    startListening: noopAsync,
-    stopListening: noop,
-    abortListening: noop,
-    clearTranscript: noop,
-    handlePressIn: noopAsync,
-    handlePressOut: noop,
-    handleMicPress: noopAsync,
+    error,
+    inputMode,
+    startListening,
+    stopListening,
+    abortListening,
+    clearTranscript,
+    handlePressIn,
+    handlePressOut,
+    handleMicPress,
   };
 }
 
-/** Simple tap-to-toggle STT for nutrition/coach screens */
-export function useVoiceLogging() {
-  return useVoiceRecognition({ inputMode: 'tap_toggle' });
+/** Simple tap-to-toggle capture for nutrition/coach screens */
+export function useVoiceLogging(options: VoiceRecognitionOptions = {}) {
+  return useVoiceRecognition({ inputMode: 'tap_toggle', ...options });
 }
