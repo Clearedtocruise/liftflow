@@ -2,7 +2,7 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
-import { LayoutChangeEvent, ScrollView, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, LayoutChangeEvent, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -67,77 +67,84 @@ export function OnboardingShell({
         colors={['rgba(31, 107, 255, 0.08)', 'transparent']}
         style={styles.topGlow}
       />
-      <View style={[styles.inner, { paddingTop: insets.top + Spacing.md, paddingBottom: insets.bottom + Spacing.lg }]}>
-        <View style={styles.progressHeader}>
-          <View style={styles.logoRow}>
-            <LogoMark size={32} glow={false} />
-            <AppText variant="caption" color="textTertiary">
-              Build My Plan
-            </AppText>
-          </View>
-          <View style={styles.progressRow}>
-            <AppText variant="caption" color="textSecondary">
-              Step {step} of {totalSteps}
-            </AppText>
-            <AppText variant="caption" color="accent">
-              {pct}% Complete
-            </AppText>
-          </View>
-          <View style={styles.track} onLayout={onTrackLayout}>
-            <Animated.View style={[styles.fillWrap, barStyle]}>
-              <LinearGradient
-                colors={[LiftFlowColors.primary, LiftFlowColors.accent]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.fill}
-              />
-            </Animated.View>
-          </View>
-          <AppText variant="footnote" color="textSecondary">
-            Building Your Personalized Fitness System
-          </AppText>
-          {helperText ? (
-            <AppText variant="callout" color="textPrimary" style={styles.helper}>
-              {helperText}
-            </AppText>
-          ) : null}
-        </View>
-
-        <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-          {heroImage ? (
-            <View style={styles.heroWrap}>
-              <Image source={{ uri: heroImage }} style={styles.hero} contentFit="cover" />
-              <LinearGradient colors={['transparent', 'rgba(8,11,16,0.95)']} style={styles.heroFade} />
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View style={[styles.inner, { paddingTop: insets.top + Spacing.md, paddingBottom: insets.bottom + Spacing.lg }]}>
+          <View style={styles.progressHeader}>
+            <View style={styles.logoRow}>
+              <LogoMark size={32} glow={false} />
+              <AppText variant="caption" color="textTertiary">
+                Build My Plan
+              </AppText>
             </View>
-          ) : null}
-
-          <View style={styles.copy}>
-            <AppText variant="title">{title}</AppText>
-            {subtitle ? (
-              <AppText variant="body" color="textSecondary">
-                {subtitle}
+            <View style={styles.progressRow}>
+              <AppText variant="caption" color="textSecondary">
+                Step {step} of {totalSteps}
+              </AppText>
+              <AppText variant="caption" color="accent">
+                {pct}% Complete
+              </AppText>
+            </View>
+            <View style={styles.track} onLayout={onTrackLayout}>
+              <Animated.View style={[styles.fillWrap, barStyle]}>
+                <LinearGradient
+                  colors={[LiftFlowColors.primary, LiftFlowColors.accent]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.fill}
+                />
+              </Animated.View>
+            </View>
+            <AppText variant="footnote" color="textSecondary">
+              Building Your Personalized Fitness System
+            </AppText>
+            {helperText ? (
+              <AppText variant="callout" color="textPrimary" style={styles.helper}>
+                {helperText}
               </AppText>
             ) : null}
           </View>
 
-          {children}
+          <ScrollView
+            contentContainerStyle={styles.scroll}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled">
+            {heroImage ? (
+              <View style={styles.heroWrap}>
+                <Image source={{ uri: heroImage }} style={styles.hero} contentFit="cover" />
+                <LinearGradient colors={['transparent', 'rgba(8,11,16,0.95)']} style={styles.heroFade} />
+              </View>
+            ) : null}
 
-          {insight ? <InsightCard insight={insight} compact /> : null}
-        </ScrollView>
+            <View style={styles.copy}>
+              <AppText variant="title">{title}</AppText>
+              {subtitle ? (
+                <AppText variant="body" color="textSecondary">
+                  {subtitle}
+                </AppText>
+              ) : null}
+            </View>
 
-        <View style={styles.actions}>
-          {onBack ? (
-            <PrimaryButton label="Back" variant="secondary" onPress={onBack} disabled={loading} />
-          ) : null}
-          <PrimaryButton
-            label={continueLabel}
-            onPress={onContinue}
-            disabled={continueDisabled}
-            loading={loading}
-            size="large"
-          />
+            {children}
+
+            {insight ? <InsightCard insight={insight} compact /> : null}
+          </ScrollView>
+
+          <View style={styles.actions}>
+            {onBack ? (
+              <PrimaryButton label="Back" variant="secondary" onPress={onBack} disabled={loading} />
+            ) : null}
+            <PrimaryButton
+              label={continueLabel}
+              onPress={onContinue}
+              disabled={continueDisabled}
+              loading={loading}
+              size="large"
+            />
+          </View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </View>
   );
 }
@@ -146,6 +153,9 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: LiftFlowColors.background,
+  },
+  flex: {
+    flex: 1,
   },
   topGlow: {
     position: 'absolute',

@@ -227,7 +227,7 @@ export default function ProgressScreen() {
   }
 
   return (
-    <ScreenContainer>
+    <ScreenContainer keyboardAvoiding>
       <View style={styles.header}>
         <AppText variant="headline">Your Transformation</AppText>
         <AppText variant="body" color="textSecondary">

@@ -103,7 +103,7 @@ export default function SendFeedbackScreen() {
   const active = TYPES.find((t) => t.id === feedbackType);
 
   return (
-    <ScreenContainer>
+    <ScreenContainer keyboardAvoiding>
       <AppText variant="title">Send Feedback</AppText>
       <AppText variant="body" color="textSecondary" style={styles.subtitle}>
         Beta feedback goes directly to the ONE MORE team with device and app metadata.

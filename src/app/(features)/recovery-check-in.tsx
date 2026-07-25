@@ -33,7 +33,7 @@ export default function RecoveryCheckInScreen() {
   if (!user) return null;
 
   return (
-    <ScreenContainer>
+    <ScreenContainer keyboardAvoiding>
       <Pressable onPress={() => router.back()}>
         <AppText variant="body" color="accent">
           ← Back
