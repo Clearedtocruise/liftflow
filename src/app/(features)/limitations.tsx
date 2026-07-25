@@ -6,7 +6,6 @@ import { Card } from '@/components/layout/Card';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { AppText } from '@/components/ui/AppText';
-import { VoiceComingSoonBanner } from '@/components/workout/VoiceComingSoonBanner';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 import { limitationService } from '@/services/limitationService';
@@ -120,7 +119,6 @@ export default function LimitationsScreen() {
           onChangeText={setDescription}
           multiline
         />
-        <VoiceComingSoonBanner />
         <TextInput
           style={[styles.input, styles.painInput]}
           placeholder="Pain 1–10"

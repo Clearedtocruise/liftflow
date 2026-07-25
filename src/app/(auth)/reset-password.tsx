@@ -15,6 +15,7 @@ export default function ResetPasswordScreen() {
   const [confirm, setConfirm] = useState('');
   const [ready, setReady] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -29,23 +30,28 @@ export default function ResetPasswordScreen() {
   }, []);
 
   async function handleUpdate() {
+    if (loading) return;
+
+    // Validation errors stay next to the fields they refer to; a modal alert made the user
+    // dismiss it before they could see which field was wrong.
     if (password.length < 8) {
-      Alert.alert('Password too short', 'Use at least 8 characters.');
+      setError('Use at least 8 characters.');
       return;
     }
     if (password !== confirm) {
-      Alert.alert('Passwords do not match');
+      setError('Those passwords don\u2019t match.');
       return;
     }
 
+    setError(null);
     setLoading(true);
     try {
       await authService.updatePassword(password);
       Alert.alert('Password updated', 'You can now sign in with your new password.', [
         { text: 'OK', onPress: () => router.replace('/(auth)/login') },
       ]);
-    } catch (error) {
-      Alert.alert('Error', error instanceof Error ? error.message : 'Could not update password');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not update your password. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -54,14 +60,46 @@ export default function ResetPasswordScreen() {
   return (
     <AuthFormContainer title="Set New Password" subtitle="Choose a strong password for your account.">
       {!ready ? (
-        <AppText variant="body" color="textSecondary">
-          Open the reset link from your email to continue.
-        </AppText>
+        // Previously a dead end: no reset link in hand meant no way out of this screen.
+        <View style={styles.form}>
+          <AppText variant="body" color="textSecondary">
+            Open the reset link from your email to continue.
+          </AppText>
+          <PrimaryButton
+            label="Back to log in"
+            variant="secondary"
+            onPress={() => router.replace('/(auth)/login')}
+          />
+        </View>
       ) : (
         <View style={styles.form}>
-          <TextField label="New password" value={password} onChangeText={setPassword} secureTextEntry autoCapitalize="none" />
-          <TextField label="Confirm password" value={confirm} onChangeText={setConfirm} secureTextEntry autoCapitalize="none" />
-          <PrimaryButton label={loading ? 'Saving…' : 'Update Password'} onPress={handleUpdate} disabled={loading} />
+          <TextField
+            label="New password"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+            autoCapitalize="none"
+            textContentType="newPassword"
+            autoComplete="new-password"
+            editable={!loading}
+            error={error ?? undefined}
+          />
+          <TextField
+            label="Confirm password"
+            value={confirm}
+            onChangeText={setConfirm}
+            secureTextEntry
+            autoCapitalize="none"
+            textContentType="newPassword"
+            autoComplete="new-password"
+            editable={!loading}
+          />
+          <PrimaryButton
+            label="Update password"
+            onPress={handleUpdate}
+            loading={loading}
+            disabled={loading}
+          />
         </View>
       )}
     </AuthFormContainer>

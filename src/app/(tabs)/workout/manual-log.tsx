@@ -4,6 +4,7 @@ import { ActivityIndicator, Alert, StyleSheet, View } from 'react-native';
 
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
+import { ErrorStateCard } from '@/components/layout/StateCard';
 import { SectionHeader } from '@/components/layout/SectionHeader';
 import { AppText } from '@/components/ui/AppText';
 import { ManualSetEntry, type ManualSetLogPayload } from '@/components/workout/ManualSetEntry';
@@ -36,24 +37,33 @@ export default function ManualLogScreen() {
   } = useWorkoutSession();
 
   const [starting, setStarting] = useState(false);
+  const [startFailed, setStartFailed] = useState(false);
   const [editSet, setEditSet] = useState<WorkoutSet | null>(null);
   const [editExerciseName, setEditExerciseName] = useState('');
 
   useEffect(() => {
-    if (session || isLoading || !user) return;
+    if (session || isLoading || !user || startFailed) return;
 
     void (async () => {
       setStarting(true);
       const location = pickDefaultLocation(locations, selectedId);
-      await startSession({
-        name: buildWorkoutSessionName(user, location),
-        gymName: location?.name ?? user.primaryGymName ?? undefined,
-        trainingLocation: location?.locationType ?? user.trainingLocation,
-        workoutLocationId: location?.id,
-      });
-      setStarting(false);
+      try {
+        const started = await startSession({
+          name: buildWorkoutSessionName(user, location),
+          gymName: location?.name ?? user.primaryGymName ?? undefined,
+          trainingLocation: location?.locationType ?? user.trainingLocation,
+          workoutLocationId: location?.id,
+        });
+        // A failed start left `session` null forever, so the screen sat on a spinner with no
+        // explanation and no way to retry.
+        if (!started) setStartFailed(true);
+      } catch {
+        setStartFailed(true);
+      } finally {
+        setStarting(false);
+      }
     })();
-  }, [session, isLoading, user, locations, selectedId, startSession]);
+  }, [session, isLoading, user, locations, selectedId, startSession, startFailed]);
 
   async function handleManualLog(payload: ManualSetLogPayload) {
     if (!session || session.status === 'paused') return false;
@@ -107,9 +117,21 @@ export default function ManualLogScreen() {
     }
   }
 
+  if (startFailed && !session) {
+    return (
+      <ScreenContainer contentContainerStyle={styles.content}>
+        <ErrorStateCard
+          title="Couldn't start logging"
+          message="We couldn't start a workout session. Check your connection and try again."
+          onRetry={() => setStartFailed(false)}
+        />
+      </ScreenContainer>
+    );
+  }
+
   if (isLoading || starting || !session) {
     return (
-      <View style={styles.loading}>
+      <View style={styles.loading} accessible accessibilityLabel="Starting your workout">
         <ActivityIndicator size="large" color={LiftFlowColors.accent} />
       </View>
     );

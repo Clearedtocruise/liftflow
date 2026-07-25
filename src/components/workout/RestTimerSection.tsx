@@ -20,6 +20,16 @@ function formatTime(totalSeconds: number): string {
   return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 }
 
+/** "2:05" is read out as "two oh five" by screen readers; spell the duration out instead. */
+function spokenTime(totalSeconds: number): string {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  const parts: string[] = [];
+  if (minutes > 0) parts.push(`${minutes} minute${minutes === 1 ? '' : 's'}`);
+  if (seconds > 0 || minutes === 0) parts.push(`${seconds} second${seconds === 1 ? '' : 's'}`);
+  return parts.join(' ');
+}
+
 export function RestTimerSection({
   secondsRemaining = null,
   recommendedSeconds = DEFAULT_REST_SECONDS,
@@ -49,7 +59,15 @@ export function RestTimerSection({
         )}
       </View>
 
-      <AppText variant="timer" color="restTimer" style={styles.timer}>
+      {/* Not a live region on purpose: announcing every tick would talk over everything else.
+          The value is readable on demand, and completion is announced by the session screen. */}
+      <AppText
+        variant="timer"
+        color="restTimer"
+        style={styles.timer}
+        accessibilityLabel={
+          isActive ? `${spokenTime(displaySeconds)} of rest remaining` : `Rest timer set to ${spokenTime(displaySeconds)}`
+        }>
         {formatTime(displaySeconds)}
       </AppText>
 
@@ -73,14 +91,14 @@ export function RestTimerSection({
                 style={({ pressed }) => [styles.adjustButton, pressed && styles.adjustPressed]}
                 onPress={() => onAdjust?.(delta)}
                 accessibilityRole="button"
-                accessibilityLabel={label}>
+                accessibilityLabel={`${delta < 0 ? 'Subtract' : 'Add'} ${Math.abs(delta)} seconds of rest`}>
                 <AppText variant="caption" color="textPrimary">
                   {label}
                 </AppText>
               </Pressable>
             ))}
           </View>
-          <PrimaryButton label="Skip Rest" onPress={() => onSkip?.()} variant="secondary" />
+          <PrimaryButton label="Skip rest" onPress={() => onSkip?.()} variant="secondary" />
         </>
       ) : null}
     </Card>

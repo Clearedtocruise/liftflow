@@ -18,6 +18,8 @@ function stubProfileFromAuth(user: { id: string; email?: string | null; user_met
     preferredUnits: 'imperial',
     ...DEFAULT_UNIT_PREFERENCES,
     confirmationMode: 'smart',
+    // Optimistic: assume the common case (an existing, onboarded user) so the app can render
+    // immediately. Callers must not route on this until the real profile has hydrated.
     onboardingCompleted: true,
     createdAt: new Date().toISOString(),
   };
@@ -176,25 +178,32 @@ export const authService = {
     return fetchProfile(user.id, user.email ?? '', user.user_metadata);
   },
 
-  onAuthStateChange(callback: (profile: UserProfile | null) => void) {
+  /**
+   * `hydrated` is false for the optimistic stub and true once the stored profile has been read,
+   * so subscribers can avoid routing on stub-only fields such as `onboardingCompleted`.
+   */
+  onAuthStateChange(callback: (profile: UserProfile | null, hydrated: boolean) => void) {
     return supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'INITIAL_SESSION') return;
 
       if (!session?.user) {
-        callback(null);
+        callback(null, true);
         return;
       }
 
       const authUser = session.user;
-      callback(stubProfileFromAuth(authUser));
+      const stub = stubProfileFromAuth(authUser);
+      callback(stub, false);
 
       void withTimeout(
         fetchProfile(authUser.id, authUser.email ?? '', authUser.user_metadata),
         15_000,
         'profile load',
       )
-        .then(callback)
-        .catch(() => undefined);
+        .then((profile) => callback(profile, true))
+        // Never leave the session permanently un-hydrated: fall back to the stub so navigation
+        // gated on hydration can proceed rather than hanging on the splash screen.
+        .catch(() => callback(stub, true));
     });
   },
 };

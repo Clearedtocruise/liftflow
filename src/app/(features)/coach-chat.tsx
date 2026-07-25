@@ -1,43 +1,30 @@
-import { router } from 'expo-router';
-import { useCallback, useState } from 'react';
-import { RefreshControl, StyleSheet } from 'react-native';
+import { StyleSheet } from 'react-native';
 
 import { ConversationalCoachPanel } from '@/components/coaching/ConversationalCoachPanel';
-import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { FeatureGate } from '@/components/subscription/PremiumGate';
 import { AppText } from '@/components/ui/AppText';
-import { LiftFlowColors, Spacing } from '@/constants/theme';
+import { Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 
+/**
+ * Pull-to-refresh used to remount the panel, which threw away the conversation and whatever the
+ * user had half-typed. The panel loads its own history, so there is nothing to refresh here.
+ */
 export default function CoachChatScreen() {
   const { user } = useAuth();
-  const [refreshing, setRefreshing] = useState(false);
-  const [refreshKey, setRefreshKey] = useState(0);
-
-  const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    setRefreshKey((k) => k + 1);
-    setRefreshing(false);
-  }, []);
 
   if (!user) return null;
 
   return (
-    <ScreenContainer
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={LiftFlowColors.accent} />
-      }>
-      <AppText variant="title">ONE MORE Coach</AppText>
+    <ScreenContainer>
       <AppText variant="body" color="textSecondary" style={styles.subtitle}>
         Ask about training, nutrition, fatigue, plateaus, and progression
       </AppText>
 
       <FeatureGate featureId="ai-coach">
-        <ConversationalCoachPanel key={refreshKey} context="general" />
+        <ConversationalCoachPanel context="general" />
       </FeatureGate>
-
-      <PrimaryButton label="Back" onPress={() => router.back()} variant="secondary" />
     </ScreenContainer>
   );
 }

@@ -1,7 +1,16 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, InteractionManager, Pressable, RefreshControl, StyleSheet, TextInput, View } from 'react-native';
+import {
+  AccessibilityInfo,
+  Alert,
+  InteractionManager,
+  Pressable,
+  RefreshControl,
+  StyleSheet,
+  TextInput,
+  View,
+} from 'react-native';
 
 import { api } from '@/api/client';
 import { Card } from '@/components/layout/Card';
@@ -47,6 +56,17 @@ import { getAccessToken } from '@/supabase/client';
 import type { DailyNutritionSummary, GroceryList, GroceryListItem, Meal, NutritionGoals } from '@/types';
 import type { MealType } from '@/types/common';
 
+/** Service errors surface raw transport strings like "API error 500"; users need plain language. */
+function friendlyMealError(raw: string): string {
+  if (/network|fetch|timeout|timed out/i.test(raw)) {
+    return "We couldn't reach your meal plan. Check your connection and try again.";
+  }
+  if (/^API error|\b(4\d\d|5\d\d)\b/.test(raw)) {
+    return 'Something went wrong on our end. Please try again in a moment.';
+  }
+  return raw;
+}
+
 function formatGroceryQuantity(item: GroceryListItem): string {
   if (item.quantity == null) return item.unit ?? '';
   const amount = Math.round(item.quantity * 10) / 10;
@@ -73,6 +93,7 @@ export default function NutritionScreen() {
   const [quickLogOpen, setQuickLogOpen] = useState(false);
   const [newItemName, setNewItemName] = useState('');
   const [addingItem, setAddingItem] = useState(false);
+  const [markingMealId, setMarkingMealId] = useState<string | null>(null);
   const [hasWorkoutToday, setHasWorkoutToday] = useState(false);
   const [recoverySleepHours, setRecoverySleepHours] = useState<number | undefined>();
   const [generating, setGenerating] = useState(false);
@@ -384,7 +405,7 @@ export default function NutritionScreen() {
     if (result.success) {
       await load();
     } else {
-      Alert.alert('Could not log meal', result.error);
+      Alert.alert('Could not log meal', friendlyMealError(result.error));
     }
   }
 
@@ -413,7 +434,7 @@ export default function NutritionScreen() {
       });
 
       if (!result.success) {
-        Alert.alert('Could not generate meal plan', result.error);
+        Alert.alert('Could not generate meal plan', friendlyMealError(result.error));
         return;
       }
 
@@ -444,7 +465,7 @@ export default function NutritionScreen() {
     if (!user) return;
     const result = await nutritionService.generateGroceryList(user.id);
     if (!result.success) {
-      Alert.alert('Error', result.error);
+      Alert.alert('Could not update meal', friendlyMealError(result.error));
       return;
     }
     setGroceryList(result.data);
@@ -469,7 +490,7 @@ export default function NutritionScreen() {
             }
           : current,
       );
-      Alert.alert('Could not update item', result.error);
+      Alert.alert('Could not update item', friendlyMealError(result.error));
     }
   }
 
@@ -480,7 +501,7 @@ export default function NutritionScreen() {
     try {
       const result = await nutritionService.addGroceryItem(groceryList.id, { name });
       if (!result.success) {
-        Alert.alert('Could not add item', result.error);
+        Alert.alert('Could not add item', friendlyMealError(result.error));
         return;
       }
       setGroceryList(result.data);
@@ -491,8 +512,31 @@ export default function NutritionScreen() {
   }
 
   async function handleMarkMeal(meal: Meal, status: 'completed' | 'modified' | 'skipped') {
-    await nutritionService.markMealStatus(meal.id, meal.name, meal.instructions, status);
-    load();
+    // Fire-and-forget meant a second tap logged the same meal twice against the day's calories.
+    if (markingMealId) return;
+    setMarkingMealId(meal.id);
+    try {
+      const result = await nutritionService.markMealStatus(
+        meal.id,
+        meal.name,
+        meal.instructions,
+        status,
+      );
+      if (!result.success) {
+        Alert.alert('Could not update meal', friendlyMealError(result.error));
+        return;
+      }
+      AccessibilityInfo.announceForAccessibility(
+        status === 'completed'
+          ? `${meal.name} logged`
+          : status === 'skipped'
+            ? `${meal.name} skipped`
+            : `${meal.name} updated`,
+      );
+      await load();
+    } finally {
+      setMarkingMealId(null);
+    }
   }
 
   async function handleReplaceMeal(meal: Meal, option: MealAlternativeOption) {
@@ -509,7 +553,7 @@ export default function NutritionScreen() {
       instructions: serializeMealMeta(meta),
     });
     if (!result.success) {
-      Alert.alert('Error', result.error);
+      Alert.alert('Could not update meal', friendlyMealError(result.error));
       return;
     }
     void syncGroceriesAfterReplace();
@@ -527,7 +571,7 @@ export default function NutritionScreen() {
     meta.status = 'modified';
     const result = await nutritionService.updateMeal(meal.id, { instructions: serializeMealMeta(meta) });
     if (!result.success) {
-      Alert.alert('Error', result.error);
+      Alert.alert('Could not update meal', friendlyMealError(result.error));
       return;
     }
     void syncGroceriesAfterReplace();
@@ -554,17 +598,14 @@ export default function NutritionScreen() {
         mode,
         ingredientName ?? undefined,
         {
-          items: payload.items.map((item) => ({
-            foodName: item.foodName,
-            servingSize: item.servingSize,
-            macros: item.macros,
-          })),
+          foodName: payload.foodName,
+          servingSize: payload.servingSize,
           macros: payload.macros,
         },
       );
       const result = await nutritionService.updateMeal(target.id, updates);
       if (!result.success) {
-        Alert.alert('Error', result.error);
+        Alert.alert('Could not update meal', friendlyMealError(result.error));
         return;
       }
       savedMeals.push(result.data);
@@ -701,6 +742,7 @@ export default function NutritionScreen() {
                   setReplaceIngredientName(ingredientName);
                 }}
                 onOpenDetail={() => setDetailMeal(meal)}
+                pending={markingMealId === meal.id}
               />
             ))
           )}
@@ -799,7 +841,8 @@ export default function NutritionScreen() {
               {groceryList.items.length === 0 ? (
                 <Card style={styles.shoppingCard}>
                   <AppText variant="body" color="textSecondary">
-                    Your shopping list is empty. Generate a meal plan or add items above.
+                    Nothing on your list yet. Add items above, or generate a meal plan to fill it
+                    from your meals.
                   </AppText>
                 </Card>
               ) : (
@@ -812,7 +855,10 @@ export default function NutritionScreen() {
                       <Pressable
                         key={item.id}
                         style={styles.shoppingRow}
-                        onPress={() => void handleToggleGroceryItem(item.id, !item.isChecked)}>
+                        onPress={() => void handleToggleGroceryItem(item.id, !item.isChecked)}
+                        accessibilityRole="checkbox"
+                        accessibilityState={{ checked: item.isChecked }}
+                        accessibilityLabel={`${item.name}, ${formatGroceryQuantity(item)}`}>
                         <View style={styles.shoppingLabel}>
                           <View style={[styles.checkbox, item.isChecked && styles.checkboxChecked]}>
                             {item.isChecked ? (
@@ -837,10 +883,13 @@ export default function NutritionScreen() {
           ) : shoppingItems.length === 0 ? (
             <Card style={styles.shoppingCard}>
               <AppText variant="body" color="textSecondary">
-                Generate a meal plan first.
+                Your shopping list is empty. Generate a meal plan and its ingredients will show up
+                here.
               </AppText>
             </Card>
           ) : (
+            // Read-only view: these come straight from the meal plan rather than a saved list, so
+            // the rows deliberately have no checkboxes.
             Object.entries(groupedShopping).map(([category, items]) => (
               <Card key={category} style={styles.shoppingCard}>
                 <AppText variant="label" color="accent">
@@ -895,6 +944,7 @@ export default function NutritionScreen() {
               }
             : undefined
         }
+        pending={detailMeal != null && markingMealId === detailMeal.id}
         onMarkComplete={(status) => {
           if (detailMeal) void handleMarkMeal(detailMeal, status);
           setDetailMeal(null);

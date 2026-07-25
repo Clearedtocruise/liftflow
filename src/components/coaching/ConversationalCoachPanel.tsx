@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+    AccessibilityInfo,
     ActivityIndicator,
-    Alert,
     Pressable,
     ScrollView,
     StyleSheet,
@@ -12,15 +12,14 @@ import {
 import { Card } from '@/components/layout/Card';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { AppText } from '@/components/ui/AppText';
-import { VoiceComingSoonBanner } from '@/components/workout/VoiceComingSoonBanner';
-import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
+import { LiftFlowColors, Radius, Spacing, TouchTarget } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 import { conversationalCoachService } from '@/services/conversationalCoachService';
 import { COACH_STARTER_QUESTIONS, type ConversationalCoachResponse } from '@/types/conversationalCoach';
 
 type ChatMessage = {
   id: string;
-  role: 'user' | 'coach';
+  role: 'user' | 'coach' | 'error';
   text: string;
   shortAnswer?: string;
   detailedAnswer?: string;
@@ -34,6 +33,12 @@ type ConversationalCoachPanelProps = {
   context?: 'workout' | 'recovery' | 'nutrition' | 'general';
 };
 
+const DETAIL_LABELS: Record<DetailLevel, string> = {
+  short: 'Short',
+  detailed: 'Detailed',
+  voice: 'Voice',
+};
+
 export function ConversationalCoachPanel({ compact = false, context = 'general' }: ConversationalCoachPanelProps) {
   const { user } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -41,6 +46,8 @@ export function ConversationalCoachPanel({ compact = false, context = 'general' 
   const [detailLevel, setDetailLevel] = useState<DetailLevel>('detailed');
   const [loading, setLoading] = useState(false);
   const [memorySummary, setMemorySummary] = useState<string | null>(null);
+  const threadRef = useRef<ScrollView | null>(null);
+  const lastQuestionRef = useRef<{ question: string; level: DetailLevel } | null>(null);
 
   const loadHistory = useCallback(async () => {
     if (!user) return;
@@ -68,9 +75,13 @@ export function ConversationalCoachPanel({ compact = false, context = 'general' 
   }, [loadHistory]);
 
   async function sendQuestion(question: string, level: DetailLevel = detailLevel) {
-    if (!user || !question.trim()) return;
+    if (!user || !question.trim() || loading) return;
 
-    setMessages((prev) => [...prev, { id: `${Date.now()}-u`, role: 'user', text: question.trim() }]);
+    lastQuestionRef.current = { question: question.trim(), level };
+    setMessages((prev) => [
+      ...prev.filter((msg) => msg.role !== 'error'),
+      { id: `${Date.now()}-u`, role: 'user', text: question.trim() },
+    ]);
     setInput('');
     setLoading(true);
 
@@ -84,7 +95,17 @@ export function ConversationalCoachPanel({ compact = false, context = 'general' 
     setLoading(false);
 
     if (!result.success) {
-      Alert.alert('Coach unavailable', result.error);
+      // An alert used to leave the user's question sitting in the thread with no reply and no way
+      // to retry, and it surfaced raw strings like "API error 500".
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `${Date.now()}-e`,
+          role: 'error',
+          text: "Your coach couldn't answer that just now. Check your connection and try again.",
+        },
+      ]);
+      AccessibilityInfo.announceForAccessibility('Coach unavailable. Tap retry to try again.');
       return;
     }
 
@@ -105,7 +126,11 @@ export function ConversationalCoachPanel({ compact = false, context = 'general' 
         referencesUsed: data.referencesUsed,
       },
     ]);
+    AccessibilityInfo.announceForAccessibility(text);
   }
+
+  const hasError = messages.some((msg) => msg.role === 'error');
+  const starterQuestions = compact ? COACH_STARTER_QUESTIONS.slice(0, 3) : COACH_STARTER_QUESTIONS;
 
   return (
     <Card style={styles.card}>
@@ -116,41 +141,69 @@ export function ConversationalCoachPanel({ compact = false, context = 'general' 
 
       {memorySummary ? (
         <AppText variant="footnote" color="textTertiary">
-          Memory: {memorySummary}
+          Your coach remembers: {memorySummary}
         </AppText>
       ) : null}
 
-      <View style={styles.levelRow}>
+      <View style={styles.levelRow} accessibilityRole="radiogroup">
         {(['short', 'detailed', 'voice'] as DetailLevel[]).map((level) => (
           <Pressable
             key={level}
+            accessibilityRole="radio"
+            accessibilityLabel={`${DETAIL_LABELS[level]} answers`}
+            accessibilityState={{ selected: detailLevel === level }}
+            hitSlop={8}
             style={[styles.levelChip, detailLevel === level && styles.levelChipActive]}
             onPress={() => setDetailLevel(level)}>
             <AppText variant="caption" color={detailLevel === level ? 'accent' : 'textSecondary'}>
-              {level === 'short' ? 'Short' : level === 'voice' ? 'Voice' : 'Detailed'}
+              {DETAIL_LABELS[level]}
             </AppText>
           </Pressable>
         ))}
       </View>
 
-      {!compact ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-          {COACH_STARTER_QUESTIONS.map((q) => (
-            <Pressable key={q.topic} style={styles.chip} onPress={() => sendQuestion(q.label)}>
-              <AppText variant="caption" color="textSecondary">
-                {q.label}
-              </AppText>
-            </Pressable>
-          ))}
-        </ScrollView>
-      ) : null}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+        {starterQuestions.map((q) => (
+          <Pressable
+            key={q.topic}
+            accessibilityRole="button"
+            accessibilityLabel={q.label}
+            accessibilityState={{ disabled: loading }}
+            disabled={loading}
+            style={[styles.chip, loading && styles.chipDisabled]}
+            onPress={() => sendQuestion(q.label)}>
+            <AppText variant="caption" color="textSecondary">
+              {q.label}
+            </AppText>
+          </Pressable>
+        ))}
+      </ScrollView>
 
-      <View style={styles.thread}>
+      <ScrollView
+        ref={threadRef}
+        style={styles.thread}
+        contentContainerStyle={styles.threadContent}
+        accessibilityLiveRegion="polite"
+        onContentSizeChange={() => threadRef.current?.scrollToEnd({ animated: true })}>
+        {messages.length === 0 && !loading ? (
+          <AppText variant="footnote" color="textTertiary">
+            Ask anything about your training, recovery, or nutrition — or tap a question above to start.
+          </AppText>
+        ) : null}
         {messages.map((msg) => (
           <View
             key={msg.id}
-            style={[styles.bubble, msg.role === 'user' ? styles.userBubble : styles.coachBubble]}>
-            <AppText variant="footnote" color={msg.role === 'user' ? 'accent' : 'textPrimary'}>
+            style={[
+              styles.bubble,
+              msg.role === 'user'
+                ? styles.userBubble
+                : msg.role === 'error'
+                  ? styles.errorBubble
+                  : styles.coachBubble,
+            ]}>
+            <AppText
+              variant="footnote"
+              color={msg.role === 'user' ? 'accent' : msg.role === 'error' ? 'error' : 'textPrimary'}>
               {msg.text}
             </AppText>
             {msg.role === 'coach' && msg.referencesUsed?.length ? (
@@ -160,12 +213,34 @@ export function ConversationalCoachPanel({ compact = false, context = 'general' 
             ) : null}
           </View>
         ))}
-        {loading ? <ActivityIndicator color={LiftFlowColors.accent} /> : null}
-      </View>
+        {loading ? (
+          <View
+            accessible
+            accessibilityLabel="Coach is thinking"
+            style={[styles.bubble, styles.coachBubble, styles.thinkingBubble]}>
+            <ActivityIndicator color={LiftFlowColors.accent} />
+            <AppText variant="footnote" color="textSecondary">
+              Coach is thinking…
+            </AppText>
+          </View>
+        ) : null}
+      </ScrollView>
+
+      {hasError && lastQuestionRef.current ? (
+        <PrimaryButton
+          label="Retry"
+          variant="secondary"
+          onPress={() => {
+            const last = lastQuestionRef.current;
+            if (last) void sendQuestion(last.question, last.level);
+          }}
+        />
+      ) : null}
 
       <View style={styles.inputRow}>
         <TextInput
           style={styles.input}
+          accessibilityLabel="Ask your coach a question"
           placeholder="Ask your coach…"
           placeholderTextColor={LiftFlowColors.textTertiary}
           value={input}
@@ -174,9 +249,12 @@ export function ConversationalCoachPanel({ compact = false, context = 'general' 
         />
       </View>
 
-      <VoiceComingSoonBanner />
-
-      <PrimaryButton label="Ask Coach" onPress={() => sendQuestion(input)} disabled={loading || !input.trim()} />
+      <PrimaryButton
+        label="Ask Coach"
+        loading={loading}
+        onPress={() => sendQuestion(input)}
+        disabled={loading || !input.trim()}
+      />
     </Card>
   );
 }
@@ -185,8 +263,9 @@ const styles = StyleSheet.create({
   card: { gap: Spacing.md, marginBottom: Spacing.xl },
   levelRow: { flexDirection: 'row', gap: Spacing.sm },
   levelChip: {
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: Spacing.xs,
+    minHeight: TouchTarget.min,
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.md,
     borderRadius: Radius.sm,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: LiftFlowColors.border,
@@ -194,19 +273,30 @@ const styles = StyleSheet.create({
   levelChipActive: { borderColor: LiftFlowColors.accent },
   chipRow: { gap: Spacing.sm, paddingVertical: Spacing.xs },
   chip: {
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: Spacing.xs,
+    minHeight: TouchTarget.min,
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.md,
     borderRadius: Radius.sm,
     backgroundColor: LiftFlowColors.surfaceElevated,
   },
-  thread: { gap: Spacing.sm, maxHeight: 280 },
+  chipDisabled: { opacity: 0.5 },
+  thread: { maxHeight: 280 },
+  threadContent: { gap: Spacing.sm },
   bubble: { borderRadius: Radius.md, padding: Spacing.sm },
   userBubble: { alignSelf: 'flex-end', backgroundColor: LiftFlowColors.surfaceElevated, maxWidth: '90%' },
   coachBubble: { alignSelf: 'flex-start', backgroundColor: LiftFlowColors.background, borderWidth: StyleSheet.hairlineWidth, borderColor: LiftFlowColors.border, maxWidth: '95%' },
+  errorBubble: {
+    alignSelf: 'stretch',
+    backgroundColor: LiftFlowColors.background,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: LiftFlowColors.error,
+  },
+  thinkingBubble: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   refLine: { marginTop: Spacing.xs },
   inputRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   input: {
     flex: 1,
+    minHeight: TouchTarget.min,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: LiftFlowColors.border,
     borderRadius: Radius.md,

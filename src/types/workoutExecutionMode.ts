@@ -22,6 +22,17 @@ export const WORKOUT_EXECUTION_MODES: WorkoutExecutionMode[] = [
   'superset',
 ];
 
+/** User-facing names — the raw ids leaked into workout summaries as e.g. "superset_rotation". */
+export const WORKOUT_EXECUTION_MODE_LABELS: Record<WorkoutExecutionMode, string> = {
+  traditional: 'Traditional sets',
+  hypertrophy: 'Hypertrophy',
+  strength: 'Strength',
+  hiit: 'HIIT',
+  tabata: 'Tabata',
+  circuit: 'Circuit',
+  superset: 'Supersets',
+};
+
 /** How sets are structured for a given mode prescription. */
 export type ExecutionScheme = 'set_rep' | 'interval' | 'circuit' | 'superset';
 

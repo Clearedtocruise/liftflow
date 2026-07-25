@@ -43,7 +43,11 @@ export function PrimaryButton({
         accessibilityRole="button"
         accessibilityState={{ disabled: isDisabled }}>
         <LinearGradient
-          colors={isDisabled ? [LiftFlowColors.surfaceHighlight, LiftFlowColors.surfaceElevated] : ['#1F6BFF', '#1860EB']}
+          colors={
+            isDisabled
+              ? [LiftFlowColors.surfaceHighlight, LiftFlowColors.surfaceElevated]
+              : [LiftFlowColors.primary, LiftFlowColors.primaryMuted]
+          }
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={[styles.base, size === 'large' && styles.large, styles.primaryGradient, !isDisabled && Shadows.glow]}>

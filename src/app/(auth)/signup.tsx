@@ -59,7 +59,7 @@ export default function SignUpScreen() {
             Open the link on your phone, then return here to log in. If you do not see the email, check spam.
           </AppText>
         </View>
-        <PrimaryButton label="Go to Login" onPress={() => router.replace('/(auth)/login')} size="large" />
+        <PrimaryButton label="Go to log in" onPress={() => router.replace('/(auth)/login')} size="large" />
       </AuthFormContainer>
     );
   }
@@ -98,7 +98,11 @@ export default function SignUpScreen() {
       />
 
       {error ? (
-        <AppText variant="footnote" color="error" style={styles.error}>
+        <AppText
+          variant="footnote"
+          color="error"
+          style={styles.error}
+          accessibilityLiveRegion="assertive">
           {error}
         </AppText>
       ) : null}
@@ -114,7 +118,12 @@ export default function SignUpScreen() {
         <AppText variant="footnote" color="textSecondary">
           Already have an account?{' '}
         </AppText>
-        <Pressable onPress={() => router.push('/(auth)/login')} disabled={loading}>
+        <Pressable
+          onPress={() => router.push('/(auth)/login')}
+          disabled={loading}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Log in">
           <AppText variant="footnote" style={textStyles.link}>
             Log in
           </AppText>

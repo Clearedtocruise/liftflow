@@ -8,17 +8,13 @@ import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { AppSymbol } from '@/components/ui/AppSymbol';
 import { AppText } from '@/components/ui/AppText';
 import type { FeatureDefinition } from '@/constants/features';
-import { PHASE_LABELS } from '@/constants/features';
 import { LiftFlowColors, Spacing } from '@/constants/theme';
 
 type FeaturePlaceholderScreenProps = {
   feature: FeatureDefinition;
 };
 
-/**
- * Reusable placeholder for features not yet implemented.
- * Displays feature metadata, planned phase, and architecture status.
- */
+/** Reusable placeholder for features not yet implemented. */
 export function FeaturePlaceholderScreen({ feature }: FeaturePlaceholderScreenProps) {
   const router = useRouter();
 
@@ -39,41 +35,23 @@ export function FeaturePlaceholderScreen({ feature }: FeaturePlaceholderScreenPr
         </AppText>
       </View>
 
+      {/* Intentionally free of build-status detail: "Architecture Ready", "TypeScript types ✓"
+          and similar told users about our internals rather than about the feature. */}
       <Card style={styles.statusCard}>
         <AppText variant="caption" color="accent">
-          {PHASE_LABELS[feature.phase].toUpperCase()}
+          COMING SOON
         </AppText>
         <AppText variant="bodyBold" style={styles.statusTitle}>
-          Architecture Ready
+          We&apos;re still building this
         </AppText>
         <AppText variant="footnote" color="textSecondary">
-          Database schema, TypeScript types, service interfaces, and API route placeholders
-          are in place. Implementation is planned for {PHASE_LABELS[feature.phase]}.
+          {feature.title} isn&apos;t ready yet. It&apos;s on our roadmap, and we&apos;ll let you know
+          in the app as soon as you can use it.
         </AppText>
       </Card>
 
-      <Card style={styles.scaffoldCard}>
-        <ScaffoldRow label="Database tables" status="ready" />
-        <ScaffoldRow label="TypeScript types" status="ready" />
-        <ScaffoldRow label="Service interface" status="ready" />
-        <ScaffoldRow label="API routes" status="ready" />
-        <ScaffoldRow label="Navigation route" status="ready" />
-        <ScaffoldRow label="UI implementation" status="planned" />
-      </Card>
-
-      <PrimaryButton label="Go Back" onPress={() => router.back()} variant="secondary" />
+      <PrimaryButton label="Go back" onPress={() => router.back()} variant="secondary" />
     </ScreenContainer>
-  );
-}
-
-function ScaffoldRow({ label, status }: { label: string; status: 'ready' | 'planned' }) {
-  return (
-    <View style={styles.scaffoldRow}>
-      <AppText variant="callout">{label}</AppText>
-      <AppText variant="caption" color={status === 'ready' ? 'accent' : 'textTertiary'}>
-        {status === 'ready' ? '✓ Ready' : '○ Planned'}
-      </AppText>
-    </View>
   );
 }
 
@@ -93,19 +71,10 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.sm,
   },
   statusCard: {
-    marginBottom: Spacing.lg,
+    marginBottom: Spacing.xxl,
     gap: Spacing.sm,
   },
   statusTitle: {
     marginTop: Spacing.xs,
-  },
-  scaffoldCard: {
-    marginBottom: Spacing.xxl,
-    gap: Spacing.md,
-  },
-  scaffoldRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
   },
 });

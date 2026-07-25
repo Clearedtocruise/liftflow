@@ -51,6 +51,12 @@ import { workoutLocationService } from '@/services/workoutLocationService';
 
 const TOTAL_STEPS = 16;
 
+const EXPERIENCE_LEVELS = [
+  { id: 'beginner', label: 'Beginner — under a year of consistent training' },
+  { id: 'intermediate', label: 'Intermediate — a year or more' },
+  { id: 'advanced', label: 'Advanced — several years, structured programs' },
+] as const;
+
 type UserProfileSex = 'male' | 'female' | 'other' | 'prefer_not_to_say';
 
 const STEP_META: Record<
@@ -362,6 +368,9 @@ export default function ProfileOnboardingScreen() {
     if (step > 1 && step < 15) setStep((s) => s - 1);
   }
 
+  const gymLabel = GYM_PROFILES.find((opt) => opt.id === trainingLocation)?.label ?? 'Not set';
+  const timelineLabel = TIMELINE_OPTIONS.find((opt) => opt.id === timeline)?.label ?? 'Not set';
+
   function renderStepContent() {
     switch (step) {
       case 1:
@@ -527,13 +536,19 @@ export default function ProfileOnboardingScreen() {
           </View>
         );
       case 11:
+        // Was a free-text field whose value was lowercased straight into a three-value enum, so
+        // anything other than the exact words was silently stored as an invalid level.
         return (
-          <TextField
-            label="Experience level"
-            placeholder="beginner / intermediate / advanced"
-            value={experience}
-            onChangeText={setExperience}
-          />
+          <ChipGrid>
+            {EXPERIENCE_LEVELS.map((opt) => (
+              <SelectableChip
+                key={opt.id}
+                label={opt.label}
+                selected={experience === opt.id}
+                onPress={() => setExperience(opt.id)}
+              />
+            ))}
+          </ChipGrid>
         );
       case 12:
       case 13:
@@ -545,13 +560,15 @@ export default function ProfileOnboardingScreen() {
           </AppText>
         );
       case 14:
+        // The review step showed raw option ids such as "commercial_gym" and "aggressive_12w";
+        // reuse the same labels the user picked from.
         return (
           <View style={styles.review}>
             <AppText variant="body">Goals: {premiumGoals.length} selected</AppText>
             <AppText variant="body">Lifting: {daysPerWeek} days/week · {minutesPerWorkout} min</AppText>
-            <AppText variant="body">Gym: {trainingLocation ?? '—'}</AppText>
+            <AppText variant="body">Gym: {gymLabel}</AppText>
             <AppText variant="body">Equipment: {equipment.length} items</AppText>
-            <AppText variant="body">Timeline: {timeline ?? '—'}</AppText>
+            <AppText variant="body">Timeline: {timelineLabel}</AppText>
           </View>
         );
       case 15:

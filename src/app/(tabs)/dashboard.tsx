@@ -11,21 +11,26 @@ import { useAuth } from '@/hooks/useAuth';
 import { useTodayDashboard } from '@/hooks/useTodayDashboard';
 
 export default function DashboardScreen() {
-  const { user, isProfileReady } = useAuth();
+  const { user, isProfileHydrated } = useAuth();
   const {
     todaysWorkout,
     loading,
+    error,
+    hasProgram,
     starting,
     generating,
+    refresh,
     startWorkout,
     generateWorkout,
   } = useTodayDashboard();
 
+  // Waits for the real profile: the optimistic stub reports onboarding as complete, so acting on
+  // it here would let a new user briefly land on a dashboard they should not see yet.
   useEffect(() => {
-    if (isProfileReady && user && !user.onboardingCompleted) {
+    if (isProfileHydrated && user && !user.onboardingCompleted) {
       router.replace('/(onboarding)/legal');
     }
-  }, [isProfileReady, user]);
+  }, [isProfileHydrated, user]);
 
   async function handleStart() {
     const ok = await startWorkout();
@@ -49,6 +54,14 @@ export default function DashboardScreen() {
 
         {loading ? (
           <ActivityIndicator color={LiftFlowColors.accent} style={styles.loader} />
+        ) : error ? (
+          <>
+            <AppText variant="title">Can't load today</AppText>
+            <AppText variant="footnote" color="textSecondary">
+              We couldn't reach your training plan. Check your connection and try again.
+            </AppText>
+            <PrimaryButton label="Try again" onPress={() => void refresh()} size="large" />
+          </>
         ) : todaysWorkout ? (
           <>
             <AppText variant="title">{todaysWorkout.name}</AppText>
@@ -60,11 +73,25 @@ export default function DashboardScreen() {
               size="large"
             />
           </>
+        ) : !hasProgram ? (
+          <>
+            <AppText variant="title">Let's build your plan</AppText>
+            <AppText variant="footnote" color="textSecondary">
+              You don't have a training program yet. Generate your first week to get started.
+            </AppText>
+            <PrimaryButton
+              label="Build my plan"
+              onPress={handleGenerate}
+              loading={generating}
+              disabled={generating}
+              size="large"
+            />
+          </>
         ) : (
           <>
             <AppText variant="title">Rest day</AppText>
             <AppText variant="footnote" color="textSecondary">
-              No workout scheduled. Generate one when you're ready to train.
+              Nothing scheduled today. Generate an extra session if you want to train anyway.
             </AppText>
             <PrimaryButton
               label="Generate workout"
@@ -81,6 +108,10 @@ export default function DashboardScreen() {
         <SecondaryAction
           label="Log workout"
           onPress={() => router.push('/(tabs)/workout/manual-log')}
+        />
+        <SecondaryAction
+          label="Log a meal"
+          onPress={() => router.push('/(tabs)/nutrition?log=1')}
         />
         <SecondaryAction
           label="Body check-in"

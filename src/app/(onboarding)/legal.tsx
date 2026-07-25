@@ -1,12 +1,12 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { AuthFormContainer } from '@/components/auth/AuthFormContainer';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
-import { AppText } from '@/components/ui/AppText';
-import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
+import { AppText, textStyles } from '@/components/ui/AppText';
+import { LiftFlowColors, Radius, Spacing, TouchTarget } from '@/constants/theme';
 
 const LEGAL_ITEMS = [
   {
@@ -41,7 +41,7 @@ export default function LegalOnboardingScreen() {
                 end={{ x: 1, y: 1 }}
                 style={styles.cardBorder}>
                 <View style={styles.card}>
-                  <View style={styles.iconBubble}>
+                  <View style={styles.iconBubble} accessibilityElementsHidden importantForAccessibility="no">
                     <AppText variant="title">{item.icon}</AppText>
                   </View>
                   <View style={styles.cardText}>
@@ -57,8 +57,31 @@ export default function LegalOnboardingScreen() {
         ))}
       </View>
 
+      {/* Accepting terms you cannot read is not meaningful consent, so the full documents are
+          reachable from the point of acceptance. */}
+      <View style={styles.links}>
+        <Pressable
+          onPress={() => router.push('/legal/terms')}
+          style={styles.link}
+          accessibilityRole="button"
+          accessibilityLabel="Read the Terms of Service">
+          <AppText variant="footnote" style={textStyles.link}>
+            Terms of Service
+          </AppText>
+        </Pressable>
+        <Pressable
+          onPress={() => router.push('/legal/privacy')}
+          style={styles.link}
+          accessibilityRole="button"
+          accessibilityLabel="Read the Privacy Policy">
+          <AppText variant="footnote" style={textStyles.link}>
+            Privacy Policy
+          </AppText>
+        </Pressable>
+      </View>
+
       <PrimaryButton
-        label="I Accept — Continue"
+        label="I accept — continue"
         size="large"
         onPress={() => router.push('/(onboarding)/profile')}
       />
@@ -98,5 +121,14 @@ const styles = StyleSheet.create({
   cardText: {
     flex: 1,
     gap: Spacing.xs,
+  },
+  links: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: Spacing.xl,
+  },
+  link: {
+    minHeight: TouchTarget.min,
+    justifyContent: 'center',
   },
 });

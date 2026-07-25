@@ -8,7 +8,7 @@ import {
     useState,
     type ReactNode,
 } from 'react';
-import { AppState, Vibration } from 'react-native';
+import { AccessibilityInfo, AppState, Vibration } from 'react-native';
 
 import { DEFAULT_REST_SECONDS } from '@/constants/workout';
 import { isStaleWorkoutSession } from '@/lib/staleWorkoutSession';
@@ -185,6 +185,10 @@ export function WorkoutSessionProvider({
     if (!activeRestPeriod || endedRestPeriodIdsRef.current.has(activeRestPeriod.id)) return;
     // The effect re-runs on every state change it triggers, so the write needs its own guard.
     endedRestPeriodIdsRef.current.add(activeRestPeriod.id);
+
+    // A vibration is the only other end-of-rest cue, and it is silent to a screen reader user who
+    // is not holding the phone. Sits behind the same once-per-period guard as the write above.
+    AccessibilityInfo.announceForAccessibility('Rest complete. Ready for your next set.');
     const restPeriodId = activeRestPeriod.id;
     const recommended = activeRestPeriod.recommendedSeconds ?? DEFAULT_REST_SECONDS;
 

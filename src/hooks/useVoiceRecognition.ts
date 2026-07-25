@@ -67,6 +67,15 @@ export function useVoiceRecognition(options: VoiceRecognitionOptions = {}) {
       const { transcript } = await api.transcribeVoice(recorded.bytes, recorded.contentType, token);
 
       if (!mountedRef.current) return;
+
+      // Silent audio transcribes successfully to an empty string, which downstream parsing reports
+      // as bad phrasing — telling a user who mumbled that their wording was wrong.
+      if (!transcript.trim()) {
+        setError("Didn't catch that. Hold the button and speak clearly.");
+        setState('error');
+        return;
+      }
+
       transcriptRef.current = transcript;
       setFinalTranscript(transcript);
       setState('idle');
@@ -136,14 +145,15 @@ export function useVoiceRecognition(options: VoiceRecognitionOptions = {}) {
     void stopListening();
   }, [inputMode, stopListening]);
 
+  // Deliberately mode-independent: screen readers can only fire onPress, so push-to-talk callers
+  // fall back to this tap-toggle rather than being left with a dead microphone.
   const handleMicPress = useCallback(async () => {
-    if (inputMode === 'push_to_talk') return false;
     if (recordingRef.current) {
       await stopListening();
       return true;
     }
     return startListening();
-  }, [inputMode, startListening, stopListening]);
+  }, [startListening, stopListening]);
 
   return {
     isAvailable: enabled,

@@ -4,7 +4,7 @@ import { Card } from '@/components/layout/Card';
 import { EmptyStateCard } from '@/components/layout/StateCard';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { AppText } from '@/components/ui/AppText';
-import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
+import { LiftFlowColors, Radius, Spacing, TouchTarget } from '@/constants/theme';
 import {
     isConditioningWorkout,
     isToday,
@@ -65,6 +65,15 @@ export function WorkoutWeeklyPlanScreen({
         </AppText>
       ) : null}
 
+      {!loading && days.length === 0 ? (
+        <EmptyStateCard
+          title="No week planned yet"
+          message="Once you have a training program, your seven-day plan shows up here."
+          actionLabel="Quick log a workout"
+          onAction={onManualLog}
+        />
+      ) : null}
+
       {!loading
         ? days.map((day) => {
             const hasWorkout = Boolean(day.workout);
@@ -74,7 +83,14 @@ export function WorkoutWeeklyPlanScreen({
               <Card
                 key={day.date}
                 style={[styles.dayCard, styles.dayCardActive, isToday(day.date, timeZone) && styles.dayCardToday]}>
-                <Pressable onPress={() => onSelectDay(day)} style={styles.dayPressable}>
+                <Pressable
+                  onPress={() => onSelectDay(day)}
+                  style={styles.dayPressable}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${day.dayLabel}${isToday(day.date, timeZone) ? ', today' : ''}: ${
+                    hasWorkout ? day.workout!.name : restDayLabel(day.dayLabel)
+                  }`}
+                  accessibilityHint={hasWorkout ? 'Opens this session' : undefined}>
                   <View style={styles.dayHeader}>
                     <View style={styles.dayHeaderText}>
                       <AppText variant="label" color={isToday(day.date, timeZone) ? 'accent' : 'textSecondary'}>
@@ -112,7 +128,7 @@ export function WorkoutWeeklyPlanScreen({
                   )}
                 </Pressable>
                 <PrimaryButton
-                  label="Edit Day"
+                  label="Edit day"
                   variant="ghost"
                   onPress={() => onEditDay(day)}
                   loading={adaptingPlan}
@@ -123,7 +139,12 @@ export function WorkoutWeeklyPlanScreen({
           })
         : null}
 
-      <Pressable onPress={onManualLog}>
+      <Pressable
+        onPress={onManualLog}
+        style={styles.quickLog}
+        accessibilityRole="button"
+        accessibilityLabel="Quick log a workout"
+        accessibilityHint="Starts an empty session you can log sets into">
         <AppText variant="footnote" color="accent" align="center">
           Quick log
         </AppText>
@@ -167,6 +188,10 @@ const styles = StyleSheet.create({
   },
   dayCard: {
     gap: Spacing.sm,
+  },
+  quickLog: {
+    minHeight: TouchTarget.min,
+    justifyContent: 'center',
   },
   dayPressable: {
     gap: Spacing.sm,

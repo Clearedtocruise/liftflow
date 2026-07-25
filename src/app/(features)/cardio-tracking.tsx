@@ -1,6 +1,6 @@
-import { router } from 'expo-router';
+import { Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { CardioActivityPicker } from '@/components/cardio/CardioActivityPicker';
 import { CardioSessionPanel } from '@/components/cardio/CardioSessionPanel';
@@ -10,17 +10,17 @@ import { CARDIO_ACTIVITIES, type CardioActivity } from '@/constants/cardioActivi
 import { Spacing } from '@/constants/theme';
 
 export default function CardioTrackingScreen() {
-  const [selected, setSelected] = useState<CardioActivity>(CARDIO_ACTIVITIES[0]);
+  const params = useLocalSearchParams<{ activity?: string; title?: string }>();
+  const [selected, setSelected] = useState<CardioActivity>(
+    () => CARDIO_ACTIVITIES.find((activity) => activity.id === params.activity) ?? CARDIO_ACTIVITIES[0],
+  );
 
   return (
     <ScreenContainer contentContainerStyle={styles.content}>
-      <Pressable onPress={() => router.back()}>
-        <AppText variant="footnote" color="accent">
-          ← Back
-        </AppText>
-      </Pressable>
+      {/* Named after the planned session when opened from a conditioning day, so the header
+          matches the card the user just tapped. */}
+      <Stack.Screen options={{ title: params.title ?? 'Cardio & HIIT' }} />
 
-      <AppText variant="headline">Cardio & HIIT</AppText>
       <AppText variant="body" color="textSecondary">
         Choose a conditioning session for cardio days, recovery work, or Tabata intervals.
       </AppText>

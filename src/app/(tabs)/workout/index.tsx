@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
+import { ErrorStateCard } from '@/components/layout/StateCard';
 import { ActiveWorkoutScreen } from '@/components/workout/execution/ActiveWorkoutScreen';
 import { WorkoutWeeklyPlanScreen } from '@/components/workout/execution/WorkoutWeeklyPlanScreen';
 import { LiftFlowColors } from '@/constants/theme';
@@ -24,7 +25,13 @@ import { warmWeekPlanData } from '@/lib/planDataPrefetch';
 import { showWeeklyEditDayMenu } from '@/lib/planDayActions';
 import { logStartup } from '@/lib/startupLogger';
 import { enrichWithSupersetGroups, inferExecutionModeFromPlan } from '@/lib/supersetFlow';
-import { buildWeekPlan, getWeekRange, isConditioningWorkout, type WeekDayPlan } from '@/lib/weekPlan';
+import {
+  buildWeekPlan,
+  conditioningActivityId,
+  getWeekRange,
+  isConditioningWorkout,
+  type WeekDayPlan,
+} from '@/lib/weekPlan';
 import { serializeChallengeNotes } from '@/lib/workoutChallengeFlow';
 import { normalizeExecutionMode } from '@/lib/workoutExecutionMode';
 import { exercisesForSessionStart } from '@/lib/workoutPlan';
@@ -48,6 +55,9 @@ export default function WorkoutScreen() {
   const [refreshingPlan, setRefreshingPlan] = useState(false);
   const [adaptingPlan, setAdaptingPlan] = useState(false);
   const [challengeRecords, setChallengeRecords] = useState<WorkoutChallengeRecord[]>([]);
+  const [planError, setPlanError] = useState(false);
+  const [finishing, setFinishing] = useState(false);
+  const finishingRef = useRef(false);
   const loadGenerationRef = useRef(0);
   const hydratedFromCacheRef = useRef(false);
   const skipFocusLoadRef = useRef(true);
@@ -70,6 +80,9 @@ export default function WorkoutScreen() {
         const result = await trainingService.getPlannedWorkouts(user.id, from, to, user.timezone);
         if (generation !== loadGenerationRef.current) return;
 
+        // A failed fetch used to render as a legitimately empty week, so the user was told they
+        // had no training scheduled when in fact the request never came back.
+        setPlanError(!result.success);
         const days = buildWeekPlan(result.success ? result.data : [], new Date(), user?.timezone);
         setWeekDays(days);
         if (result.success) {
@@ -82,6 +95,7 @@ export default function WorkoutScreen() {
         if (today?.workout) setPlannedWorkout(today.workout);
       } catch (error) {
         console.warn('[workout] week plan load failed', error);
+        setPlanError(true);
         if (!silent) setWeekDays([]);
       } finally {
         if (generation === loadGenerationRef.current) {
@@ -182,7 +196,16 @@ export default function WorkoutScreen() {
   const handleSelectDay = useCallback(
     (day: WeekDayPlan) => {
       if (day.workout && isConditioningWorkout(day.workout)) {
-        router.push('/(features)/cardio-tracking');
+        setPlannedWorkout(day.workout);
+        // Without params the cardio screen always defaults to Tabata, so the planned conditioning
+        // session the user just tapped is silently discarded.
+        router.push({
+          pathname: '/(features)/cardio-tracking',
+          params: {
+            title: day.workout.name,
+            activity: conditioningActivityId(day.workout),
+          },
+        });
         return;
       }
       if (day.workout) {
@@ -218,27 +241,36 @@ export default function WorkoutScreen() {
   );
 
   const handleFinishWorkout = useCallback(async () => {
-    const completed = await endSession();
-    if (!completed || !user) return;
+    // Ending a session is two sequential round trips, so a second tap would end it twice.
+    if (finishingRef.current) return;
+    finishingRef.current = true;
+    setFinishing(true);
+    try {
+      const completed = await endSession();
+      if (!completed || !user) return;
 
-    if (challengeRecords.length > 0) {
-      const notes = serializeChallengeNotes(challengeRecords);
-      if (notes) {
-        await workoutService.updateSession(completed.id, { notes });
+      if (challengeRecords.length > 0) {
+        const notes = serializeChallengeNotes(challengeRecords);
+        if (notes) {
+          await workoutService.updateSession(completed.id, { notes });
+        }
       }
+
+      void productAnalyticsService.trackWorkoutCompleted(user.id, completed.id);
+      const challengesPayload = challengeRecords;
+      setChallengeRecords([]);
+
+      router.push({
+        pathname: '/(tabs)/workout/summary',
+        params: {
+          sessionId: completed.id,
+          challenges: JSON.stringify(challengesPayload),
+        },
+      });
+    } finally {
+      finishingRef.current = false;
+      setFinishing(false);
     }
-
-    void productAnalyticsService.trackWorkoutCompleted(user.id, completed.id);
-    const challengesPayload = challengeRecords;
-    setChallengeRecords([]);
-
-    router.push({
-      pathname: '/(tabs)/workout/summary',
-      params: {
-        sessionId: completed.id,
-        challenges: JSON.stringify(challengesPayload),
-      },
-    });
   }, [challengeRecords, endSession, user]);
 
   const handleChallengeRecord = useCallback((record: WorkoutChallengeRecord) => {
@@ -302,7 +334,20 @@ export default function WorkoutScreen() {
         onChallengeRecord={handleChallengeRecord}
         onFinish={handleFinishWorkout}
         onCancel={cancelSession}
+        finishing={finishing}
       />
+    );
+  }
+
+  if (planError && weekDays.every((day) => day.workout == null)) {
+    return (
+      <ScreenContainer contentContainerStyle={styles.content}>
+        <ErrorStateCard
+          title="Couldn't load your week"
+          message="We couldn't reach your training plan. Check your connection and try again."
+          onRetry={() => void loadWeekPlan()}
+        />
+      </ScreenContainer>
     );
   }
 
