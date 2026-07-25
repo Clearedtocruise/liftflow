@@ -56,6 +56,29 @@ class ApiClient {
   delete<T>(path: string, token?: string) {
     return this.request<T>(path, { method: 'DELETE', token });
   }
+
+  /**
+   * Raw-body upload for recorded audio. Deliberately not routed through `request`: that helper
+   * pins Content-Type to application/json and JSON.stringifies the body, either of which would
+   * corrupt binary audio.
+   */
+  async postBinary<T>(path: string, body: Uint8Array, contentType: string, token?: string): Promise<T> {
+    const headers: Record<string, string> = { 'Content-Type': contentType };
+    if (token) headers.Authorization = `Bearer ${token}`;
+
+    const response = await fetch(`${this.baseUrl}${path}`, {
+      method: 'POST',
+      headers,
+      body: body as unknown as BodyInit,
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: response.statusText }));
+      throw new Error(error.message ?? `API error ${response.status}`);
+    }
+
+    return response.json() as Promise<T>;
+  }
 }
 
 export const apiClient = new ApiClient(API_BASE);
@@ -67,6 +90,8 @@ export const api = {
   // Voice & AI
   parseVoice: (body: import('@/types').ParseVoiceRequest, token?: string) =>
     apiClient.post<import('@/types').ParseVoiceResponse>('/api/voice/parse', body, token),
+  transcribeVoice: (audio: Uint8Array, contentType: string, token?: string) =>
+    apiClient.postBinary<{ transcript: string }>('/api/voice/transcribe', audio, contentType, token),
   askCoach: (body: import('@/types').CoachingRequest & { userId: string }, token?: string) =>
     apiClient.post<import('@/types').AICoachingSession>('/api/ai/coach', body, token),
   getRecommendations: (userId: string, token?: string) =>

@@ -9,7 +9,7 @@ import { AppText } from '@/components/ui/AppText';
 import { ManualSetEntry, type ManualSetLogPayload } from '@/components/workout/ManualSetEntry';
 import { QuickCorrectionButtons } from '@/components/workout/QuickCorrectionButtons';
 import { SetEditModal } from '@/components/workout/SetEditModal';
-import { VoiceComingSoonBanner } from '@/components/workout/VoiceComingSoonBanner';
+import { VoiceSetLogger } from '@/components/workout/VoiceSetLogger';
 import { WorkoutCard } from '@/components/workout/WorkoutCard';
 import { LiftFlowColors, Spacing } from '@/constants/theme';
 import { buildWorkoutSessionName, pickDefaultLocation } from '@/constants/trainingProfile';
@@ -131,7 +131,15 @@ export default function ManualLogScreen() {
       <SectionHeader title="Log Set" subtitle="Fields adapt to the exercise type" />
       <ManualSetEntry exercises={session.exercises} onLogSet={handleManualLog} disabled={isPaused} />
 
-      <VoiceComingSoonBanner />
+      <SectionHeader title="Voice Log" subtitle="Speak a set instead of typing it" />
+      <VoiceSetLogger
+        userId={user?.id}
+        onLogSet={handleManualLog}
+        activeExerciseName={session.exercises.at(-1)?.exercise?.name}
+        lastWeightKg={lastLoggedSet?.weight ?? undefined}
+        lastReps={lastLoggedSet?.reps ?? undefined}
+        disabled={isPaused}
+      />
 
       <SectionHeader title="Logged Exercises" />
 
