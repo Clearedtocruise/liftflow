@@ -4,20 +4,22 @@ import { getMonitoringSnapshot, getProductMetrics } from '../lib/betaMetrics.js'
 import { listChangelog, listReleaseNotes, redeemBetaInvite } from '../lib/betaOps.js';
 import { getBetaRetentionMetrics, getBetaSoakStatus, getLaunchBlockers } from '../lib/betaSoak.js';
 import { captureException } from '../lib/sentry.js';
+import { authedUserId, requireUser } from '../middleware/authUser.js';
 import { requireFounderAdmin } from '../middleware/requireFounder.js';
 
 export const betaRouter = Router();
 
-betaRouter.post('/invite/redeem', async (req, res) => {
+betaRouter.post('/invite/redeem', requireUser, async (req, res) => {
   try {
-    const { userId, code } = req.body as { userId?: string; code?: string };
-    if (!userId || !code?.trim()) {
-      res.status(400).json({ message: 'userId and code are required' });
+    const userId = authedUserId(req);
+    const { code } = req.body as { code?: string };
+    if (!code?.trim()) {
+      res.status(400).json({ message: 'code is required' });
       return;
     }
     res.json(await redeemBetaInvite(userId, code));
   } catch (error) {
-    captureException(error, { userId: req.body?.userId, route: '/api/beta/invite/redeem' });
+    captureException(error, { userId: req.userId, route: '/api/beta/invite/redeem' });
     res.status(400).json({ message: error instanceof Error ? error.message : 'Redeem failed' });
   }
 });

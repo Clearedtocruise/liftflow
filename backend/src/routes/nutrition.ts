@@ -12,17 +12,14 @@ import {
     generateDailyMeals,
     inferWorkoutType,
 } from '../lib/workoutAwareNutrition.js';
+import { authedUserId } from '../middleware/authUser.js';
 import { requireProSubscription } from '../middleware/requireProSubscription.js';
 
 export const nutritionRouter = Router();
 
 nutritionRouter.get('/intelligence', requireProSubscription, async (req, res) => {
   try {
-    const userId = req.query.userId as string | undefined;
-    if (!userId) {
-      res.status(400).json({ message: 'userId is required' });
-      return;
-    }
+    const userId = authedUserId(req);
     const report = await loadNutritionIntelligence(userId);
     res.json(report);
   } catch (error) {
@@ -32,32 +29,31 @@ nutritionRouter.get('/intelligence', requireProSubscription, async (req, res) =>
 
 nutritionRouter.post('/meal-plan/generate', async (req, res) => {
   try {
-    const { userId, dietaryStyle } = req.body as { userId?: string; dietaryStyle?: string };
+    const userId = authedUserId(req);
+    const { dietaryStyle } = req.body as { dietaryStyle?: string };
     let proteinG = 180;
     let calories = 2400;
 
-    if (userId) {
-      const db = requireAdmin();
-      const { data: goals } = await db
-        .from('nutrition_goals')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('is_active', true)
-        .limit(1)
-        .maybeSingle();
-      if (goals) {
-        proteinG = goals.protein_g ?? proteinG;
-        calories = goals.daily_calories ?? calories;
+    const db = requireAdmin();
+    const { data: goals } = await db
+      .from('nutrition_goals')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('is_active', true)
+      .limit(1)
+      .maybeSingle();
+    if (goals) {
+      proteinG = goals.protein_g ?? proteinG;
+      calories = goals.daily_calories ?? calories;
+    }
+    try {
+      const ctx = await loadCoachContext(userId);
+      if (ctx.macroTargets) {
+        proteinG = ctx.macroTargets.proteinG;
+        calories = ctx.macroTargets.calories;
       }
-      try {
-        const ctx = await loadCoachContext(userId);
-        if (ctx.macroTargets) {
-          proteinG = ctx.macroTargets.proteinG;
-          calories = ctx.macroTargets.calories;
-        }
-      } catch {
-        // Keep goals/defaults — never fail meal generation on coach context.
-      }
+    } catch {
+      // Keep goals/defaults — never fail meal generation on coach context.
     }
 
     const plan = generateWeeklyMealPlan(
@@ -66,7 +62,7 @@ nutritionRouter.post('/meal-plan/generate', async (req, res) => {
       (dietaryStyle as 'balanced' | 'high_protein' | 'low_carb' | 'keto' | 'mediterranean' | 'vegetarian' | undefined) ??
         'balanced',
     );
-    if (dietaryStyle && userId && plan.aiRationale && !plan.aiRationale.includes('Style:')) {
+    if (dietaryStyle && plan.aiRationale && !plan.aiRationale.includes('Style:')) {
       plan.aiRationale = `${plan.aiRationale} Style: ${dietaryStyle}.`;
     }
     res.json(plan);
@@ -77,11 +73,8 @@ nutritionRouter.post('/meal-plan/generate', async (req, res) => {
 
 nutritionRouter.post('/adaptive-targets', async (req, res) => {
   try {
-    const { userId } = req.body as { userId?: string; dietaryStyle?: string };
-    if (!userId) {
-      res.status(400).json({ message: 'userId is required' });
-      return;
-    }
+    const userId = authedUserId(req);
+    const { dietaryStyle } = req.body as { dietaryStyle?: string };
 
     const ctx = await loadCoachContext(userId);
     const muscleGroups = ctx.plannedWorkout?.muscleGroups ?? [];
@@ -104,7 +97,7 @@ nutritionRouter.post('/adaptive-targets', async (req, res) => {
       recoveryModeActive: ctx.recovery.recoveryModeActive,
       workoutType,
       isTrainingDay: !!ctx.plannedWorkout,
-      dietaryStyle: (req.body as { dietaryStyle?: string }).dietaryStyle as 'balanced' | undefined,
+      dietaryStyle: dietaryStyle as 'balanced' | undefined,
     });
 
     res.json({ ...targets, workoutType, recoveryScore: ctx.recovery.score });
@@ -115,9 +108,10 @@ nutritionRouter.post('/adaptive-targets', async (req, res) => {
 
 nutritionRouter.post('/sync-dates', async (req, res) => {
   try {
-    const { userId, dates } = req.body as { userId?: string; dates?: string[] };
-    if (!userId || !Array.isArray(dates) || dates.length === 0) {
-      res.status(400).json({ message: 'userId and dates[] are required' });
+    const userId = authedUserId(req);
+    const { dates } = req.body as { dates?: string[] };
+    if (!Array.isArray(dates) || dates.length === 0) {
+      res.status(400).json({ message: 'dates[] is required' });
       return;
     }
 
@@ -130,16 +124,11 @@ nutritionRouter.post('/sync-dates', async (req, res) => {
 
 nutritionRouter.post('/daily-plan', async (req, res) => {
   try {
-    const { userId, date, dietaryStyle } = req.body as {
-      userId?: string;
+    const userId = authedUserId(req);
+    const { date, dietaryStyle } = req.body as {
       date?: string;
       dietaryStyle?: 'high_protein' | 'low_carb' | 'keto' | 'mediterranean' | 'vegetarian' | 'balanced';
     };
-
-    if (!userId) {
-      res.status(400).json({ message: 'userId is required' });
-      return;
-    }
 
     const targetDate = date ?? new Date().toISOString().slice(0, 10);
     const ctx = await loadCoachContext(userId);

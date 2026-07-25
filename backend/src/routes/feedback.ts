@@ -8,8 +8,8 @@ export const feedbackRouter = Router();
 
 feedbackRouter.post('/submit', async (req, res) => {
   try {
+    const userId = req.userId;
     const {
-      userId,
       feedbackType,
       subject,
       body,
@@ -20,7 +20,6 @@ feedbackRouter.post('/submit', async (req, res) => {
       area,
       issueCategory,
     } = req.body as {
-      userId?: string;
       feedbackType?: 'bug' | 'feature' | 'support' | 'confusion';
       subject?: string;
       body?: string;
@@ -52,12 +51,12 @@ feedbackRouter.post('/submit', async (req, res) => {
 
     res.json({ id: row.id, createdAt: row.created_at, message: 'Feedback received — thank you' });
   } catch (error) {
-    captureException(error, { userId: req.body?.userId, route: '/api/feedback/submit' });
+    captureException(error, { userId: req.userId, route: '/api/feedback/submit' });
     res.status(500).json({ message: error instanceof Error ? error.message : 'Feedback submit failed' });
   }
 });
 
-feedbackRouter.get('/summary', async (_req, res) => {
+feedbackRouter.get('/summary', requireFounderAdmin, async (_req, res) => {
   try {
     res.json(await getFeedbackSummary());
   } catch (error) {

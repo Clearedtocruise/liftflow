@@ -30,6 +30,7 @@ import {
     type CreateProgramInput,
 } from '../lib/programEngine.js';
 import { requireAdmin } from '../lib/supabase.js';
+import { authedUserId } from '../middleware/authUser.js';
 import { requireProSubscription } from '../middleware/requireProSubscription.js';
 
 export const trainingRouter = Router();
@@ -44,11 +45,7 @@ function weekStartDate(): string {
 
 trainingRouter.get('/suggest-muscles', async (req, res) => {
   try {
-    const userId = req.query.userId as string | undefined;
-    if (!userId) {
-      res.status(400).json({ message: 'userId query param required' });
-      return;
-    }
+    const userId = authedUserId(req);
     res.json(await suggestMuscleGroups(userId));
   } catch (error) {
     res.status(500).json({ message: error instanceof Error ? error.message : 'Suggest muscles failed' });
@@ -57,11 +54,7 @@ trainingRouter.get('/suggest-muscles', async (req, res) => {
 
 trainingRouter.get('/recovery', async (req, res) => {
   try {
-    const userId = req.query.userId as string | undefined;
-    if (!userId) {
-      res.status(400).json({ message: 'userId query param required' });
-      return;
-    }
+    const userId = authedUserId(req);
     res.json(await assessRecovery(userId));
   } catch (error) {
     res.status(500).json({ message: error instanceof Error ? error.message : 'Recovery assessment failed' });
@@ -70,11 +63,7 @@ trainingRouter.get('/recovery', async (req, res) => {
 
 trainingRouter.get('/recovery/today', async (req, res) => {
   try {
-    const userId = req.query.userId as string | undefined;
-    if (!userId) {
-      res.status(400).json({ message: 'userId query param required' });
-      return;
-    }
+    const userId = authedUserId(req);
 
     const db = requireAdmin();
     const today = new Date().toISOString().slice(0, 10);
@@ -93,11 +82,7 @@ trainingRouter.get('/recovery/today', async (req, res) => {
 
 trainingRouter.get('/recommendations/daily', requireProSubscription, async (req, res) => {
   try {
-    const userId = req.query.userId as string | undefined;
-    if (!userId) {
-      res.status(400).json({ message: 'userId query param required' });
-      return;
-    }
+    const userId = authedUserId(req);
     res.json(await loadWorkoutRecommendations(userId));
   } catch (error) {
     res.status(500).json({ message: error instanceof Error ? error.message : 'Workout recommendations failed' });
@@ -106,11 +91,7 @@ trainingRouter.get('/recommendations/daily', requireProSubscription, async (req,
 
 trainingRouter.get('/recovery/intelligence', requireProSubscription, async (req, res) => {
   try {
-    const userId = req.query.userId as string | undefined;
-    if (!userId) {
-      res.status(400).json({ message: 'userId query param required' });
-      return;
-    }
+    const userId = authedUserId(req);
     res.json(await loadRecoveryIntelligence(userId));
   } catch (error) {
     res.status(500).json({ message: error instanceof Error ? error.message : 'Recovery intelligence failed' });
@@ -119,15 +100,15 @@ trainingRouter.get('/recovery/intelligence', requireProSubscription, async (req,
 
 trainingRouter.post('/progression/smart', requireProSubscription, async (req, res) => {
   try {
-    const { userId, exerciseId, sessionId, currentSessionSets } = req.body as {
-      userId?: string;
+    const userId = authedUserId(req);
+    const { exerciseId, sessionId, currentSessionSets } = req.body as {
       exerciseId?: string;
       sessionId?: string;
       currentSessionSets?: Array<{ weightKg: number; reps: number; setNumber?: number; isFailure?: boolean }>;
     };
 
-    if (!userId || !exerciseId) {
-      res.status(400).json({ message: 'userId and exerciseId are required' });
+    if (!exerciseId) {
+      res.status(400).json({ message: 'exerciseId is required' });
       return;
     }
 
@@ -144,12 +125,8 @@ trainingRouter.post('/progression/smart', requireProSubscription, async (req, re
 
 trainingRouter.get('/progression/:exerciseId', async (req, res) => {
   try {
-    const userId = req.query.userId as string | undefined;
+    const userId = authedUserId(req);
     const { exerciseId } = req.params;
-    if (!userId) {
-      res.status(400).json({ message: 'userId query param required' });
-      return;
-    }
     res.json(await loadSmartProgression(userId, exerciseId));
   } catch (error) {
     res.status(500).json({ message: error instanceof Error ? error.message : 'Smart progression failed' });
@@ -158,11 +135,7 @@ trainingRouter.get('/progression/:exerciseId', async (req, res) => {
 
 trainingRouter.get('/recovery/trend', async (req, res) => {
   try {
-    const userId = req.query.userId as string | undefined;
-    if (!userId) {
-      res.status(400).json({ message: 'userId query param required' });
-      return;
-    }
+    const userId = authedUserId(req);
 
     const db = requireAdmin();
     const since = new Date();
@@ -184,26 +157,20 @@ trainingRouter.get('/recovery/trend', async (req, res) => {
 
 trainingRouter.post('/recovery/check-in', async (req, res) => {
   try {
+    const userId = authedUserId(req);
     const {
-      userId,
       sleepHours,
       sleepQuality,
       energyLevel,
       stressLevel,
       sorenessLevel,
     } = req.body as {
-      userId?: string;
       sleepHours?: number;
       sleepQuality?: number;
       energyLevel?: number;
       stressLevel?: number;
       sorenessLevel?: number;
     };
-
-    if (!userId) {
-      res.status(400).json({ message: 'userId is required' });
-      return;
-    }
 
     const db = requireAdmin();
     const today = new Date().toISOString().slice(0, 10);
@@ -284,26 +251,20 @@ trainingRouter.post('/recovery/check-in', async (req, res) => {
 
 trainingRouter.post('/weekly-check-in', async (req, res) => {
   try {
+    const userId = authedUserId(req);
     const {
-      userId,
       weightKg,
       waistCm,
       compliancePct,
       energyScore,
       sleepScore,
     } = req.body as {
-      userId?: string;
       weightKg?: number;
       waistCm?: number;
       compliancePct?: number;
       energyScore?: number;
       sleepScore?: number;
     };
-
-    if (!userId) {
-      res.status(400).json({ message: 'userId is required' });
-      return;
-    }
 
     const db = requireAdmin();
     const weekStart = weekStartDate();
@@ -398,11 +359,7 @@ trainingRouter.post('/weekly-check-in', async (req, res) => {
 
 trainingRouter.get('/weekly-check-in/trend', async (req, res) => {
   try {
-    const userId = req.query.userId as string | undefined;
-    if (!userId) {
-      res.status(400).json({ message: 'userId query param required' });
-      return;
-    }
+    const userId = authedUserId(req);
 
     const db = requireAdmin();
     const { data } = await db
@@ -420,12 +377,8 @@ trainingRouter.get('/weekly-check-in/trend', async (req, res) => {
 
 trainingRouter.get('/limitations', async (req, res) => {
   try {
-    const userId = req.query.userId as string | undefined;
+    const userId = authedUserId(req);
     const activeOnly = req.query.active !== 'false';
-    if (!userId) {
-      res.status(400).json({ message: 'userId query param required' });
-      return;
-    }
 
     const db = requireAdmin();
     let query = db.from('training_limitations').select('*').eq('user_id', userId).order('created_at', { ascending: false });
@@ -441,8 +394,8 @@ trainingRouter.get('/limitations', async (req, res) => {
 
 trainingRouter.post('/limitations', async (req, res) => {
   try {
+    const userId = authedUserId(req);
     const {
-      userId,
       limitationType,
       bodyArea,
       severity,
@@ -453,7 +406,6 @@ trainingRouter.post('/limitations', async (req, res) => {
       affectedMovements,
       voiceText,
     } = req.body as {
-      userId?: string;
       limitationType?: string;
       bodyArea?: string;
       severity?: number;
@@ -464,11 +416,6 @@ trainingRouter.post('/limitations', async (req, res) => {
       affectedMovements?: string[];
       voiceText?: string;
     };
-
-    if (!userId) {
-      res.status(400).json({ message: 'userId is required' });
-      return;
-    }
 
     let parsed = voiceText ? parseLimitationFromVoice(voiceText) : null;
 
@@ -499,6 +446,7 @@ trainingRouter.post('/limitations', async (req, res) => {
 
 trainingRouter.patch('/limitations/:id', async (req, res) => {
   try {
+    const userId = authedUserId(req);
     const { id } = req.params;
     const updates = req.body as Record<string, unknown>;
     const db = requireAdmin();
@@ -513,7 +461,13 @@ trainingRouter.patch('/limitations/:id', async (req, res) => {
     if (updates.severity !== undefined) payload.severity = updates.severity;
     if (updates.description !== undefined) payload.description = updates.description;
 
-    const { data, error } = await db.from('training_limitations').update(payload).eq('id', id).select('*').single();
+    const { data, error } = await db
+      .from('training_limitations')
+      .update(payload)
+      .eq('id', id)
+      .eq('user_id', userId)
+      .select('*')
+      .single();
     if (error) throw error;
     res.json(data);
   } catch (error) {
@@ -523,11 +477,7 @@ trainingRouter.patch('/limitations/:id', async (req, res) => {
 
 trainingRouter.get('/coach-context', async (req, res) => {
   try {
-    const userId = req.query.userId as string | undefined;
-    if (!userId) {
-      res.status(400).json({ message: 'userId query param required' });
-      return;
-    }
+    const userId = authedUserId(req);
     res.json(await loadCoachContext(userId));
   } catch (error) {
     res.status(500).json({ message: error instanceof Error ? error.message : 'Coach context failed' });
@@ -536,11 +486,8 @@ trainingRouter.get('/coach-context', async (req, res) => {
 
 trainingRouter.post('/coach/ask', async (req, res) => {
   try {
-    const { userId, message = '' } = req.body as { userId?: string; message?: string };
-    if (!userId) {
-      res.status(400).json({ message: 'userId is required' });
-      return;
-    }
+    const userId = authedUserId(req);
+    const { message = '' } = req.body as { message?: string };
 
     const ctx = await loadCoachContext(userId);
     const smart = answerSmartCoachQuestion(message, ctx);
@@ -556,11 +503,7 @@ trainingRouter.post('/coach/ask', async (req, res) => {
 
 trainingRouter.post('/coach/activate', async (req, res) => {
   try {
-    const { userId } = req.body as { userId?: string };
-    if (!userId) {
-      res.status(400).json({ message: 'userId is required' });
-      return;
-    }
+    const userId = authedUserId(req);
     const result = await activateCoachSystem(userId);
     res.json(result);
   } catch (error) {
@@ -570,9 +513,10 @@ trainingRouter.post('/coach/activate', async (req, res) => {
 
 trainingRouter.post('/coach/post-workout', async (req, res) => {
   try {
-    const { userId, sessionId } = req.body as { userId?: string; sessionId?: string };
-    if (!userId || !sessionId) {
-      res.status(400).json({ message: 'userId and sessionId are required' });
+    const userId = authedUserId(req);
+    const { sessionId } = req.body as { sessionId?: string };
+    if (!sessionId) {
+      res.status(400).json({ message: 'sessionId is required' });
       return;
     }
     res.json(await generatePostWorkoutCoachSummary(userId, sessionId));
@@ -583,11 +527,7 @@ trainingRouter.post('/coach/post-workout', async (req, res) => {
 
 trainingRouter.post('/programs/regenerate', async (req, res) => {
   try {
-    const { userId } = req.body as { userId?: string };
-    if (!userId) {
-      res.status(400).json({ message: 'userId is required' });
-      return;
-    }
+    const userId = authedUserId(req);
     const result = await regenerateActiveProgram(userId, { force: Boolean((req.body as { force?: boolean }).force) });
     res.json(result);
   } catch (error) {
@@ -597,9 +537,9 @@ trainingRouter.post('/programs/regenerate', async (req, res) => {
 
 trainingRouter.post('/programs/generate', async (req, res) => {
   try {
-    const body = req.body as CreateProgramInput;
-    if (!body.userId || !body.programType || !body.frequency) {
-      res.status(400).json({ message: 'userId, programType, and frequency are required' });
+    const body: CreateProgramInput = { ...(req.body as CreateProgramInput), userId: authedUserId(req) };
+    if (!body.programType || !body.frequency) {
+      res.status(400).json({ message: 'programType and frequency are required' });
       return;
     }
     const result = await generateTrainingProgram(body);
@@ -611,11 +551,7 @@ trainingRouter.post('/programs/generate', async (req, res) => {
 
 trainingRouter.get('/programs/dashboard', async (req, res) => {
   try {
-    const userId = req.query.userId as string | undefined;
-    if (!userId) {
-      res.status(400).json({ message: 'userId query param required' });
-      return;
-    }
+    const userId = authedUserId(req);
     const dashboard = await getProgramDashboard(userId);
     res.json(dashboard);
   } catch (error) {
@@ -625,11 +561,11 @@ trainingRouter.get('/programs/dashboard', async (req, res) => {
 
 trainingRouter.get('/programs/planned', async (req, res) => {
   try {
-    const userId = req.query.userId as string | undefined;
+    const userId = authedUserId(req);
     const from = req.query.from as string | undefined;
     const to = req.query.to as string | undefined;
-    if (!userId || !from || !to) {
-      res.status(400).json({ message: 'userId, from, and to query params required' });
+    if (!from || !to) {
+      res.status(400).json({ message: 'from and to query params are required' });
       return;
     }
     res.json(await getPlannedWorkoutsInRangeWithRefresh(userId, from, to));
@@ -640,13 +576,14 @@ trainingRouter.get('/programs/planned', async (req, res) => {
 
 trainingRouter.patch('/programs/planned/:id/reschedule', async (req, res) => {
   try {
+    const userId = authedUserId(req);
     const { id } = req.params;
     const { scheduledDate } = req.body as { scheduledDate?: string };
     if (!scheduledDate) {
       res.status(400).json({ message: 'scheduledDate is required' });
       return;
     }
-    res.json(await reschedulePlannedWorkout(id, scheduledDate));
+    res.json(await reschedulePlannedWorkout(id, scheduledDate, userId));
   } catch (error) {
     res.status(500).json({ message: error instanceof Error ? error.message : 'Reschedule failed' });
   }
@@ -654,8 +591,8 @@ trainingRouter.patch('/programs/planned/:id/reschedule', async (req, res) => {
 
 trainingRouter.post('/plan/adapt', async (req, res) => {
   try {
-    const { userId, change } = req.body as {
-      userId?: string;
+    const userId = authedUserId(req);
+    const { change } = req.body as {
       change?: {
         type?: string;
         workoutId?: string;
@@ -665,8 +602,8 @@ trainingRouter.post('/plan/adapt', async (req, res) => {
         activity?: string;
       };
     };
-    if (!userId || !change?.type) {
-      res.status(400).json({ message: 'userId and change.type are required' });
+    if (!change?.type) {
+      res.status(400).json({ message: 'change.type is required' });
       return;
     }
 
@@ -736,11 +673,7 @@ trainingRouter.post('/plan/adapt', async (req, res) => {
 
 trainingRouter.post('/programs/adapt', async (req, res) => {
   try {
-    const { userId } = req.body as { userId?: string };
-    if (!userId) {
-      res.status(400).json({ message: 'userId is required' });
-      return;
-    }
+    const userId = authedUserId(req);
     res.json(await adaptActiveProgram(userId));
   } catch (error) {
     res.status(500).json({ message: error instanceof Error ? error.message : 'Program adaptation failed' });
@@ -749,11 +682,8 @@ trainingRouter.post('/programs/adapt', async (req, res) => {
 
 trainingRouter.post('/preferences/adapt', async (req, res) => {
   try {
-    const { userId, trigger } = req.body as { userId?: string; trigger?: 'equipment' | 'nutrition' | 'all' };
-    if (!userId) {
-      res.status(400).json({ message: 'userId is required' });
-      return;
-    }
+    const userId = authedUserId(req);
+    const { trigger } = req.body as { trigger?: 'equipment' | 'nutrition' | 'all' };
     res.json(await adaptToPreferenceChanges(userId, trigger ?? 'all'));
   } catch (error) {
     res.status(500).json({ message: error instanceof Error ? error.message : 'Preference adaptation failed' });
@@ -762,13 +692,13 @@ trainingRouter.post('/preferences/adapt', async (req, res) => {
 
 trainingRouter.post('/coaching/exercise-prescription', requireProSubscription, async (req, res) => {
   try {
-    const { userId, exerciseId, plan } = req.body as {
-      userId?: string;
+    const userId = authedUserId(req);
+    const { exerciseId, plan } = req.body as {
       exerciseId?: string;
       plan?: Record<string, unknown>;
     };
-    if (!userId || !exerciseId) {
-      res.status(400).json({ message: 'userId and exerciseId are required' });
+    if (!exerciseId) {
+      res.status(400).json({ message: 'exerciseId is required' });
       return;
     }
     res.json(await loadExerciseCoachPrescription(userId, exerciseId, plan as Parameters<typeof loadExerciseCoachPrescription>[2]));
@@ -779,12 +709,12 @@ trainingRouter.post('/coaching/exercise-prescription', requireProSubscription, a
 
 trainingRouter.post('/coaching/workout-prescriptions', requireProSubscription, async (req, res) => {
   try {
-    const { userId, exercises } = req.body as {
-      userId?: string;
+    const userId = authedUserId(req);
+    const { exercises } = req.body as {
       exercises?: Parameters<typeof loadWorkoutExercisePrescriptions>[1];
     };
-    if (!userId || !exercises?.length) {
-      res.status(400).json({ message: 'userId and exercises are required' });
+    if (!exercises?.length) {
+      res.status(400).json({ message: 'exercises is required' });
       return;
     }
     res.json(await loadWorkoutExercisePrescriptions(userId, exercises));

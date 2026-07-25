@@ -719,7 +719,7 @@ export async function getProgramDashboard(userId: string): Promise<ProgramDashbo
   };
 }
 
-export async function reschedulePlannedWorkout(plannedWorkoutId: string, newDate: string) {
+export async function reschedulePlannedWorkout(plannedWorkoutId: string, newDate: string, ownerUserId?: string) {
   const db = requireAdmin();
   const { data: existing } = await db
     .from('planned_workouts')
@@ -727,6 +727,7 @@ export async function reschedulePlannedWorkout(plannedWorkoutId: string, newDate
     .eq('id', plannedWorkoutId)
     .single();
   if (!existing) throw new Error('Planned workout not found');
+  if (ownerUserId && existing.user_id !== ownerUserId) throw new Error('Planned workout not found');
 
   const prevMeta = (existing.metadata ?? {}) as Record<string, unknown>;
   let weekNumber =

@@ -3,10 +3,8 @@ import type { NextFunction, Request, Response } from 'express';
 import { captureException } from '../lib/sentry.js';
 
 export function apiErrorHandler(err: unknown, req: Request, res: Response, _next: NextFunction): void {
-  const userId = (req.body as { userId?: string })?.userId ?? (req.query.userId as string | undefined);
-
   captureException(err, {
-    userId,
+    userId: req.userId,
     route: req.path,
     tags: { method: req.method },
   });

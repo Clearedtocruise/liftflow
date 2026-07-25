@@ -7,15 +7,16 @@ import {
 } from '../lib/transformationEngine.js';
 import { getOpenAI, hasOpenAI } from '../lib/openai.js';
 import { requireAdmin } from '../lib/supabase.js';
+import { authedUserId } from '../middleware/authUser.js';
 import { requireProSubscription } from '../middleware/requireProSubscription.js';
 
 export const bodyRouter = Router();
 
 bodyRouter.post('/estimate-body-fat', requireProSubscription, async (req, res) => {
   try {
-    const { photoUrl, userId, photoId } = req.body as {
+    const userId = authedUserId(req);
+    const { photoUrl, photoId } = req.body as {
       photoUrl?: string;
-      userId?: string;
       photoId?: string;
     };
 
@@ -47,11 +48,15 @@ bodyRouter.post('/estimate-body-fat', requireProSubscription, async (req, res) =
 
       const result = JSON.parse(completion.choices[0]?.message?.content ?? '{}');
 
-      if (userId && result.bodyFatPct) {
+      if (result.bodyFatPct) {
         const db = requireAdmin();
         await db.from('profiles').update({ body_fat_pct: result.bodyFatPct }).eq('id', userId);
         if (photoId) {
-          await db.from('progress_photos').update({ metadata: { bodyFatEstimate: result.bodyFatPct } }).eq('id', photoId);
+          await db
+            .from('progress_photos')
+            .update({ metadata: { bodyFatEstimate: result.bodyFatPct } })
+            .eq('id', photoId)
+            .eq('user_id', userId);
         }
       }
 
@@ -70,19 +75,24 @@ bodyRouter.post('/estimate-body-fat', requireProSubscription, async (req, res) =
 
 bodyRouter.post('/projection', requireProSubscription, async (req, res) => {
   try {
-    const { userId, photoId, targetBodyFatPct } = req.body as {
-      userId?: string;
+    const userId = authedUserId(req);
+    const { photoId, targetBodyFatPct } = req.body as {
       photoId?: string;
       targetBodyFatPct?: number;
     };
 
-    if (!userId || !photoId || targetBodyFatPct === undefined) {
-      res.status(400).json({ message: 'userId, photoId, and targetBodyFatPct are required' });
+    if (!photoId || targetBodyFatPct === undefined) {
+      res.status(400).json({ message: 'photoId and targetBodyFatPct are required' });
       return;
     }
 
     const db = requireAdmin();
-    const { data: photo } = await db.from('progress_photos').select('photo_url').eq('id', photoId).single();
+    const { data: photo } = await db
+      .from('progress_photos')
+      .select('photo_url')
+      .eq('id', photoId)
+      .eq('user_id', userId)
+      .maybeSingle();
     if (!photo) {
       res.status(404).json({ message: 'Photo not found' });
       return;
@@ -151,15 +161,15 @@ bodyRouter.post('/projection', requireProSubscription, async (req, res) => {
 
 bodyRouter.post('/transformation/run', requireProSubscription, async (req, res) => {
   try {
-    const { userId, targetBodyFatPct, beforePhotoId, currentPhotoId } = req.body as {
-      userId?: string;
+    const userId = authedUserId(req);
+    const { targetBodyFatPct, beforePhotoId, currentPhotoId } = req.body as {
       targetBodyFatPct?: number;
       beforePhotoId?: string;
       currentPhotoId?: string;
     };
 
-    if (!userId || targetBodyFatPct === undefined) {
-      res.status(400).json({ message: 'userId and targetBodyFatPct are required' });
+    if (targetBodyFatPct === undefined) {
+      res.status(400).json({ message: 'targetBodyFatPct is required' });
       return;
     }
 
@@ -175,11 +185,7 @@ bodyRouter.post('/transformation/run', requireProSubscription, async (req, res) 
 
 bodyRouter.get('/transformation/latest', requireProSubscription, async (req, res) => {
   try {
-    const userId = req.query.userId as string | undefined;
-    if (!userId) {
-      res.status(400).json({ message: 'userId query param required' });
-      return;
-    }
+    const userId = authedUserId(req);
     const latest = await getLatestTransformationProjection(userId);
     res.json(latest);
   } catch (error) {
@@ -189,11 +195,7 @@ bodyRouter.get('/transformation/latest', requireProSubscription, async (req, res
 
 bodyRouter.get('/transformation/history', requireProSubscription, async (req, res) => {
   try {
-    const userId = req.query.userId as string | undefined;
-    if (!userId) {
-      res.status(400).json({ message: 'userId query param required' });
-      return;
-    }
+    const userId = authedUserId(req);
     const limit = Number(req.query.limit ?? 10);
     const history = await listTransformationProjections(userId, limit);
     res.json({ projections: history });

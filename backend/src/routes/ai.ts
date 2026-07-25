@@ -27,47 +27,39 @@ import { generateExerciseAlternatives } from '../lib/exerciseReplacementEngine.j
 import { searchExercisesOnline } from '../lib/exerciseOnlineSearch.js';
 import { estimateFoodMacros } from '../lib/foodMacroEstimator.js';
 import { requireAdmin } from '../lib/supabase.js';
+import { authedUserId } from '../middleware/authUser.js';
 import { requireProSubscription } from '../middleware/requireProSubscription.js';
 
 export const aiRouter = Router();
 
-function getUserId(req: { body?: { userId?: string }; query?: { userId?: string } }): string | undefined {
-  return req.body?.userId ?? (req.query?.userId as string | undefined);
-}
-
 aiRouter.post('/coach', requireProSubscription, async (req, res) => {
   try {
-    const { context = 'general', message = '', userId } = req.body as {
+    const userId = authedUserId(req);
+    const { context = 'general', message = '' } = req.body as {
       context?: string;
       message?: string;
-      userId?: string;
     };
-
-    if (!userId) {
-      res.status(400).json({ message: 'userId is required' });
-      return;
-    }
 
     const result = await coachResponse(context, message, userId);
     res.json(result);
   } catch (error) {
-    captureAiError(error, '/api/ai/coach', getUserId(req));
+    captureAiError(error, '/api/ai/coach', req.userId);
     res.status(500).json({ message: error instanceof Error ? error.message : 'Coach failed' });
   }
 });
 
 aiRouter.post('/converse', requireProSubscription, async (req, res) => {
   try {
-    const { userId, message, context, includeHistory, detailLevel } = req.body as {
-      userId?: string;
+    const userId = authedUserId(req);
+    const { message, context, includeHistory, detailLevel } = req.body as {
       message?: string;
       context?: string;
       includeHistory?: boolean;
       detailLevel?: 'short' | 'detailed' | 'voice';
     };
 
-    if (!userId || !message?.trim()) {
-      res.status(400).json({ message: 'userId and message are required' });
+    if (!message?.trim()) {
+      res.status(400).json({ message: 'message is required' });
       return;
     }
 
@@ -78,19 +70,14 @@ aiRouter.post('/converse', requireProSubscription, async (req, res) => {
     });
     res.json(result);
   } catch (error) {
-    captureAiError(error, '/api/ai/converse', getUserId(req));
+    captureAiError(error, '/api/ai/converse', req.userId);
     res.status(500).json({ message: error instanceof Error ? error.message : 'Conversational coach failed' });
   }
 });
 
 aiRouter.get('/converse/history', requireProSubscription, async (req, res) => {
   try {
-    const userId = getUserId(req);
-    if (!userId) {
-      res.status(400).json({ message: 'userId query param required' });
-      return;
-    }
-
+    const userId = authedUserId(req);
     const limit = Number(req.query.limit ?? 20);
     const history = await loadConversationalCoachHistory(userId, limit);
     res.json(history);
@@ -101,13 +88,7 @@ aiRouter.get('/converse/history', requireProSubscription, async (req, res) => {
 
 aiRouter.get('/recommendations', requireProSubscription, async (req, res) => {
   try {
-    const userId = getUserId(req);
-    if (!userId) {
-      res.status(400).json({ message: 'userId query param required' });
-      return;
-    }
-
-    const recommendations = await generateRecommendations(userId);
+    const recommendations = await generateRecommendations(authedUserId(req));
     res.json(recommendations);
   } catch (error) {
     res.status(500).json({ message: error instanceof Error ? error.message : 'Recommendations failed' });
@@ -116,12 +97,7 @@ aiRouter.get('/recommendations', requireProSubscription, async (req, res) => {
 
 aiRouter.post('/refresh', requireProSubscription, async (req, res) => {
   try {
-    const { userId } = req.body as { userId?: string };
-    if (!userId) {
-      res.status(400).json({ message: 'userId is required' });
-      return;
-    }
-
+    const userId = authedUserId(req);
     const recommendations = await generateRecommendations(userId);
     const db = requireAdmin();
 
@@ -150,8 +126,11 @@ aiRouter.get('/progression/:exerciseId', async (req, res) => {
 
     const { data: sets } = await db
       .from('workout_sets')
-      .select('weight, reps, logged_at, workout_exercises!inner(exercise_id, exercises(name))')
+      .select(
+        'weight, reps, logged_at, workout_exercises!inner(exercise_id, exercises(name), workout_sessions!inner(user_id))',
+      )
       .eq('workout_exercises.exercise_id', exerciseId)
+      .eq('workout_exercises.workout_sessions.user_id', authedUserId(req))
       .order('logged_at', { ascending: false })
       .limit(5);
 
@@ -179,12 +158,7 @@ aiRouter.get('/progression/:exerciseId', async (req, res) => {
 
 aiRouter.post('/workout/generate', requireProSubscription, async (req, res) => {
   try {
-    const { userId } = req.body as { userId?: string };
-    if (!userId) {
-      res.status(400).json({ message: 'userId is required' });
-      return;
-    }
-
+    const userId = authedUserId(req);
     const plan = await generateWorkoutPlan(userId);
     const db = requireAdmin();
 
@@ -261,8 +235,8 @@ aiRouter.post('/advisory/nutrition/food-macros', async (req, res) => {
 
 aiRouter.post('/advisory/workout/exercise-alternatives', async (req, res) => {
   try {
-    const { userId, exerciseName, muscleGroups, goal, programType, availableEquipment } = req.body as {
-      userId?: string;
+    const userId = authedUserId(req);
+    const { exerciseName, muscleGroups, goal, programType, availableEquipment } = req.body as {
       exerciseName?: string;
       muscleGroups?: string[];
       goal?: string;
@@ -270,8 +244,8 @@ aiRouter.post('/advisory/workout/exercise-alternatives', async (req, res) => {
       availableEquipment?: string[];
     };
 
-    if (!userId || !exerciseName) {
-      res.status(400).json({ message: 'userId and exerciseName are required' });
+    if (!exerciseName) {
+      res.status(400).json({ message: 'exerciseName is required' });
       return;
     }
 
