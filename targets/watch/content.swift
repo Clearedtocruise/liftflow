@@ -5,6 +5,7 @@ private let accent = Color(red: 0.05, green: 0.56, blue: 1.0)
 struct ContentView: View {
   @StateObject private var connectivity = WorkoutConnectivity()
   @StateObject private var heartRate = HeartRateReader()
+  @StateObject private var workoutSession = WorkoutSessionManager()
 
   var body: some View {
     ScrollView {
@@ -27,13 +28,24 @@ struct ContentView: View {
             .foregroundStyle(connectivity.lastSpokenResponse.contains("iPhone") ? .orange : .secondary)
             .lineLimit(3)
         }
+
+        if let sessionError = workoutSession.lastError {
+          Text(sessionError)
+            .font(.caption2)
+            .foregroundStyle(.orange)
+            .lineLimit(2)
+        }
       }
       .padding(.horizontal, 6)
     }
     .onAppear {
       heartRate.requestAuthorization()
       heartRate.start()
+      workoutSession.requestAuthorization()
       connectivity.requestPhoneSync()
+      // A workout may already be in progress when the view first appears (wrist raise after the
+      // phone started one), so mirror the current state rather than waiting for a change.
+      if connectivity.workoutSessionId != nil { workoutSession.start() }
     }
     .onDisappear {
       heartRate.stop()
@@ -41,6 +53,13 @@ struct ContentView: View {
     .onChange(of: heartRate.bpm) { newValue in
       if let newValue {
         connectivity.recordHeartRate(newValue)
+      }
+    }
+    .onChange(of: connectivity.workoutSessionId) { sessionId in
+      if sessionId != nil {
+        workoutSession.start()
+      } else {
+        workoutSession.end()
       }
     }
   }
@@ -101,7 +120,7 @@ struct ContentView: View {
 
   private var metricsRow: some View {
     HStack(spacing: 10) {
-      if let hr = heartRate.bpm ?? connectivity.heartRateBpm {
+      if let hr = workoutSession.heartRateBpm ?? heartRate.bpm ?? connectivity.heartRateBpm {
         Label("\(hr)", systemImage: "heart.fill")
           .font(.caption)
           .foregroundStyle(.pink)
@@ -173,13 +192,20 @@ struct ContentView: View {
         .buttonStyle(.borderedProminent)
         .tint(accent)
 
+      // TextFieldLink rather than presentTextInputController: the latter needs a WatchKit
+      // interface controller, which does not exist under the SwiftUI app lifecycle.
       HStack(spacing: 6) {
-        Button("Say Reps") { connectivity.voiceReps() }
-          .buttonStyle(.bordered)
-          .tint(accent)
-        Button("Say Weight") { connectivity.voiceWeight() }
-          .buttonStyle(.bordered)
-          .tint(accent)
+        TextFieldLink("Say Reps", prompt: Text("Reps")) { text in
+          connectivity.submitSpokenReps(text)
+        }
+        .buttonStyle(.bordered)
+        .tint(accent)
+
+        TextFieldLink("Say Weight", prompt: Text("Weight (lb)")) { text in
+          connectivity.submitSpokenWeight(text)
+        }
+        .buttonStyle(.bordered)
+        .tint(accent)
       }
 
       Button("End Workout") { connectivity.cancelWorkout() }
