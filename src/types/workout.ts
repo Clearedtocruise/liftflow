@@ -160,4 +160,6 @@ export type StartSessionPayload = {
   gymName?: string;
   trainingLocation?: string;
   workoutLocationId?: string;
+  /** Optional exercise plan applied on start (includes Tabata intervalRounds / executionMode). */
+  exercisePlan?: import('./workoutExecution').EditableWorkoutExercise[];
 };
