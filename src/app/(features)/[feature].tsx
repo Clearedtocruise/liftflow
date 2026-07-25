@@ -6,45 +6,24 @@ import { AppText } from '@/components/ui/AppText';
 import { FEATURE_MAP } from '@/constants/features';
 import { LiftFlowColors } from '@/constants/theme';
 
-import AppleWatchScreen from './apple-watch';
-import CardioTrackingScreen from './cardio-tracking';
-import NutritionPreferencesScreen from './nutrition-preferences';
-import EquipmentScreen from './equipment';
-import HealthKitScreen from './healthkit';
-import SubscriptionScreen from './subscription';
-import TrainingGoalsScreen from './training-goals';
-import TrainingProfileScreen from './training-profile';
-
 /**
  * Dynamic feature route — renders placeholder for any registered future feature.
  * Route: /(features)/[feature] e.g. /(features)/ai-coaching
+ *
+ * Slugs that have their own file in this directory never reach here: expo-router matches the
+ * static route first, so re-exporting those screens from this file only created dead branches.
  */
 export default function FeatureScreen() {
   const { feature } = useLocalSearchParams<{ feature: string }>();
-
-  if (feature === 'training-goals') return <TrainingGoalsScreen />;
-  if (feature === 'equipment') return <EquipmentScreen />;
-  if (feature === 'nutrition-preferences') return <NutritionPreferencesScreen />;
-  if (feature === 'subscription') return <SubscriptionScreen />;
-  if (feature === 'healthkit') return <HealthKitScreen />;
-  if (feature === 'training-profile') return <TrainingProfileScreen />;
-  // 'rep-counting' and 'motion-detection' intentionally fall through to the planned-feature
-  // placeholder: no rep detection ships today, so they must not resolve to a working screen.
-  if (feature === 'apple-watch') {
-    return <AppleWatchScreen />;
-  }
-  if (feature === 'cardio-tracking') {
-    return <CardioTrackingScreen />;
-  }
 
   const definition = feature ? FEATURE_MAP[feature] : undefined;
 
   if (!definition) {
     return (
       <View style={styles.error}>
-        <AppText variant="headline">Feature Not Found</AppText>
-        <AppText variant="body" color="textSecondary">
-          Unknown feature: {feature}
+        <AppText variant="headline">This isn&apos;t available yet</AppText>
+        <AppText variant="body" color="textSecondary" align="center">
+          We couldn&apos;t find that feature. Head back and try another one.
         </AppText>
       </View>
     );

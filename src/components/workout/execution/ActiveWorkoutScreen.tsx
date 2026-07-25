@@ -1,6 +1,6 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import { AccessibilityInfo, Alert, Pressable, StyleSheet, View } from 'react-native';
 
 import { ExerciseMusclePanel } from '@/components/exercise/ExerciseMusclePanel';
 import { Card } from '@/components/layout/Card';
@@ -17,7 +17,7 @@ import { WorkoutChallengeModal } from '@/components/workout/execution/WorkoutCha
 import { WorkoutTimerOverlay } from '@/components/workout/execution/WorkoutTimerOverlay';
 import { WorkoutUpNextCard } from '@/components/workout/execution/WorkoutUpNextCard';
 import { ExerciseCoachCard } from '@/components/workout/ExerciseCoachCard';
-import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
+import { LiftFlowColors, Radius, Spacing, TouchTarget } from '@/constants/theme';
 import { useAppResume } from '@/hooks/useAppResume';
 import { useAuth } from '@/hooks/useAuth';
 import { useUnits } from '@/hooks/useUnits';
@@ -87,6 +87,7 @@ type ActiveWorkoutScreenProps = {
   onChallengeRecord: (record: WorkoutChallengeRecord) => void;
   onFinish: () => void;
   onCancel: () => void;
+  finishing?: boolean;
 };
 
 export function ActiveWorkoutScreen({
@@ -97,6 +98,7 @@ export function ActiveWorkoutScreen({
   onChallengeRecord,
   onFinish,
   onCancel,
+  finishing = false,
 }: ActiveWorkoutScreenProps) {
   const executionMode = normalizeExecutionMode(executionModeProp);
   const {
@@ -267,6 +269,10 @@ export function ActiveWorkoutScreen({
     supersetBannerTick >= 0 &&
     supersetPrepGroup != null &&
     !dismissedSupersetGroupsRef.current.has(supersetPrepGroup.id);
+  const isFinalExercise =
+    usesSupersetRotation && inSuperset && supersetGroup
+      ? nextExerciseIndexAfterGroup(supersetGroup, sortedExercises.length) === null
+      : isLastExercise;
 
   const workoutPosition = useMemo(() => {
     if (
@@ -786,7 +792,7 @@ export function ActiveWorkoutScreen({
   }, 0);
 
   async function handleLogSet() {
-    if (!currentExercise || isPaused) return;
+    if (!currentExercise || isPaused || allSetsDone) return;
 
     setLogging(true);
     try {
@@ -842,6 +848,12 @@ export function ActiveWorkoutScreen({
       if (logged?.isPr) {
         setExerciseHadPr(true);
       }
+
+      // The set list updates silently, so a screen-reader user gets no confirmation that the tap
+      // registered — and the rest timer that follows is equally unannounced.
+      AccessibilityInfo.announceForAccessibility(
+        `Set ${completedAfterLog} of ${effectiveTargetSets} logged${logged?.isPr ? '. New personal record' : ''}`,
+      );
 
       await refreshSession();
 
@@ -915,7 +927,7 @@ export function ActiveWorkoutScreen({
     watchDraftReps,
   ]);
 
-  function performExerciseAdvanceDirect() {
+  function performExerciseAdvanceDirect(options?: { auto?: boolean }) {
     if (autoAdvanceTimeoutRef.current) {
       clearTimeout(autoAdvanceTimeoutRef.current);
       autoAdvanceTimeoutRef.current = null;
@@ -939,7 +951,9 @@ export function ActiveWorkoutScreen({
       }
     }
     if (isLastExercise) {
-      onFinish();
+      // Ending a session is destructive and unrecoverable, so the last exercise waits for an
+      // explicit press instead of letting the auto-advance timer finish the workout unprompted.
+      if (!options?.auto) onFinish();
       return;
     }
     if (executionMode === 'tabata') {
@@ -956,7 +970,7 @@ export function ActiveWorkoutScreen({
     setShowComplete(false);
   }
 
-  advanceExerciseRef.current = performExerciseAdvanceDirect;
+  advanceExerciseRef.current = () => performExerciseAdvanceDirect({ auto: true });
 
   function performExerciseAdvance() {
     performExerciseAdvanceDirect();
@@ -1016,7 +1030,7 @@ export function ActiveWorkoutScreen({
         <AppText variant="body" color="textSecondary">
           No exercises in this session.
         </AppText>
-        <PrimaryButton label="Finish" onPress={onFinish} />
+        <PrimaryButton label="Finish" loading={finishing} disabled={finishing} onPress={onFinish} />
       </ScreenContainer>
     );
   }
@@ -1251,7 +1265,14 @@ export function ActiveWorkoutScreen({
               {executionModeUsesTraditionalRest(executionMode) ? (
               <View style={styles.restPresetRow}>
                 {[60, 90, 120, 150].map((seconds) => (
-                  <Pressable key={seconds} onPress={() => setRestTargetSeconds(seconds)}>
+                  <Pressable
+                    key={seconds}
+                    accessibilityRole="radio"
+                    accessibilityLabel={`${seconds} second rest`}
+                    accessibilityState={{ selected: restTargetSeconds === seconds }}
+                    hitSlop={12}
+                    style={styles.restPresetChip}
+                    onPress={() => setRestTargetSeconds(seconds)}>
                     <AppText variant="caption" color={restTargetSeconds === seconds ? 'accent' : 'textSecondary'}>
                       {seconds}s rest
                     </AppText>
@@ -1278,7 +1299,7 @@ export function ActiveWorkoutScreen({
                     label={allSetsDone ? 'All sets logged' : `Log Set ${nextSetNumber}`}
                     size="large"
                     loading={logging}
-                    disabled={isPaused}
+                    disabled={isPaused || allSetsDone}
                     onPress={handleLogSet}
                   />
                   <View style={styles.extraActions}>
@@ -1337,17 +1358,19 @@ export function ActiveWorkoutScreen({
             volumeKg={exerciseVolume}
             hasPr={exerciseHadPr}
             onNext={handleNextExercise}
-            autoAdvancing={!restActive && !activeChallenge}
-            isLastExercise={
-              usesSupersetRotation && inSuperset
-                ? nextExerciseIndexAfterGroup(supersetGroup!, sortedExercises.length) === null
-                : isLastExercise
-            }
+            autoAdvancing={!restActive && !activeChallenge && !isFinalExercise}
+            isLastExercise={isFinalExercise}
           />
         ) : null}
 
         <View style={styles.footerActions}>
-          <PrimaryButton label="Finish Workout" variant="secondary" onPress={onFinish} />
+          <PrimaryButton
+            label="Finish Workout"
+            variant="secondary"
+            loading={finishing}
+            disabled={finishing}
+            onPress={onFinish}
+          />
           <PrimaryButton
             label="Cancel Workout"
             variant="ghost"
@@ -1522,6 +1545,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: Spacing.md,
+  },
+  restPresetChip: {
+    minHeight: TouchTarget.min,
+    justifyContent: 'center',
   },
   intervalBanner: {
     gap: Spacing.sm,

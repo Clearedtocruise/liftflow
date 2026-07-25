@@ -1,4 +1,5 @@
-import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { AccessibilityInfo, ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
 import { AppSymbol, SYMBOL_FALLBACKS } from '@/components/ui/AppSymbol';
 
@@ -21,12 +22,13 @@ type MicrophoneButtonProps = {
 
 function hintText(inputMode: VoiceInputMode, state: VoiceCaptureState): string {
   if (state === 'transcribing') return 'Transcribing…';
-  if (state === 'error') return 'Tap to try again';
 
   const listening = state === 'recording';
   if (inputMode === 'push_to_talk') {
+    if (state === 'error') return 'Hold to try again';
     return listening ? 'Release to log…' : 'Hold to log a set';
   }
+  if (state === 'error') return 'Tap to try again';
   if (inputMode === 'continuous') {
     return listening ? 'Listening continuously…' : 'Tap for continuous listening';
   }
@@ -43,12 +45,33 @@ export function MicrophoneButton({
   interimTranscript,
   errorMessage,
 }: MicrophoneButtonProps) {
-  const usePushToTalk = inputMode === 'push_to_talk';
+  const [screenReaderOn, setScreenReaderOn] = useState(false);
+
+  // Screen readers activate a button via onPress only, never onPressIn/onPressOut, so push-to-talk
+  // leaves the microphone completely inert for VoiceOver and TalkBack users.
+  useEffect(() => {
+    let active = true;
+    void AccessibilityInfo.isScreenReaderEnabled().then((enabled) => {
+      if (active) setScreenReaderOn(enabled);
+    });
+    const subscription = AccessibilityInfo.addEventListener('screenReaderChanged', setScreenReaderOn);
+    return () => {
+      active = false;
+      subscription.remove();
+    };
+  }, []);
+
+  const usePushToTalk = inputMode === 'push_to_talk' && !screenReaderOn;
   const isListening = state === 'recording';
   const isTranscribing = state === 'transcribing';
   // Pressing mid-transcription would start a second capture over the in-flight upload.
   const isBlocked = disabled || isTranscribing;
   const hint = hintText(inputMode, state);
+  const accessibilityHint = screenReaderOn
+    ? isListening
+      ? 'Double tap to stop recording'
+      : 'Double tap to start recording'
+    : undefined;
 
   return (
     <View style={styles.wrapper}>
@@ -66,7 +89,8 @@ export function MicrophoneButton({
         ]}
         accessibilityRole="button"
         accessibilityState={{ disabled: isBlocked, busy: isTranscribing }}
-        accessibilityLabel={hint}>
+        accessibilityLabel={screenReaderOn ? (isListening ? 'Stop recording' : 'Log a set by voice') : hint}
+        accessibilityHint={accessibilityHint}>
         <View style={styles.innerRing}>
           {isTranscribing ? (
             <ActivityIndicator size="large" color={LiftFlowColors.accent} />

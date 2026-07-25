@@ -11,6 +11,11 @@ type AuthContextValue = {
   user: UserProfile | null;
   isLoading: boolean;
   isProfileReady: boolean;
+  /**
+   * True once `user` reflects the stored profile rather than the optimistic stub. Gate any
+   * navigation that reads `onboardingCompleted` on this to avoid routing on a guessed value.
+   */
+  isProfileHydrated: boolean;
   isAuthenticated: boolean;
   signIn: (payload: SignInPayload) => Promise<UserProfile>;
   signUp: (payload: SignUpPayload) => Promise<SignUpResult>;
@@ -27,6 +32,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isProfileReady, setIsProfileReady] = useState(false);
+  const [isProfileHydrated, setIsProfileHydrated] = useState(false);
 
   useAuthDeepLink();
 
@@ -41,6 +47,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!authUser) {
           setUser(null);
           setIsProfileReady(true);
+          setIsProfileHydrated(true);
           logStartup('AUTH_READY', { authenticated: false });
           return;
         }
@@ -62,11 +69,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (cancelled) return;
 
         setUser(profile);
+        setIsProfileHydrated(true);
         logStartup('PROFILE_LOADED');
       } catch {
         if (!cancelled) {
           setUser(null);
           setIsProfileReady(true);
+          setIsProfileHydrated(true);
           logStartup('AUTH_READY', { authenticated: false });
         }
       } finally {
@@ -74,9 +83,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     })();
 
-    const { data: subscription } = authService.onAuthStateChange((profile) => {
+    const { data: subscription } = authService.onAuthStateChange((profile, hydrated) => {
       setUser(profile);
       setIsProfileReady(true);
+      if (hydrated) setIsProfileHydrated(true);
       if (profile) {
         logStartup('PROFILE_LOADED');
         logStartup('PROFILE_READY');
@@ -94,6 +104,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const stub = authService.stubProfileFromAuth(authUser);
     setUser(stub);
     setIsProfileReady(true);
+    setIsProfileHydrated(false);
     startPlanPrefetch(authUser.id, stub.timezone);
 
     void authService
@@ -104,7 +115,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
       .catch((error) => {
         console.warn('[auth] profile load after sign-in failed', error);
-      });
+      })
+      .finally(() => setIsProfileHydrated(true));
 
     return stub;
   }, []);
@@ -114,6 +126,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (result.status === 'session') {
       setUser(result.profile);
       setIsProfileReady(true);
+      setIsProfileHydrated(true);
       startPlanPrefetch(result.profile.id, result.profile.timezone);
     }
     return result;
@@ -123,6 +136,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await authService.signOut();
     setUser(null);
     setIsProfileReady(true);
+    setIsProfileHydrated(true);
   }, []);
 
   const resetPassword = useCallback(async (payload: PasswordResetPayload) => {
@@ -137,12 +151,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await authService.deleteAccount();
     setUser(null);
     setIsProfileReady(true);
+    setIsProfileHydrated(true);
   }, []);
 
   const refreshProfile = useCallback(async () => {
     const profile = await authService.getSession();
     setUser(profile);
     setIsProfileReady(true);
+    setIsProfileHydrated(true);
   }, []);
 
   const value = useMemo<AuthContextValue>(
@@ -150,6 +166,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       isLoading,
       isProfileReady,
+      isProfileHydrated,
       isAuthenticated: Boolean(user),
       signIn,
       signUp,
@@ -163,6 +180,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       isLoading,
       isProfileReady,
+      isProfileHydrated,
       signIn,
       signUp,
       signOut,

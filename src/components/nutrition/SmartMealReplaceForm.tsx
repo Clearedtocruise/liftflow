@@ -6,7 +6,6 @@ import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import { nutritionAdvisoryService } from '@/services/nutritionAdvisoryService';
-import { sumMealMacros } from '@/services/nutritionService';
 import type { FoodMacroEstimate, MealReplacementScope } from '@/types/nutrition';
 
 type SmartMealReplaceFormProps = {
@@ -32,17 +31,20 @@ export function SmartMealReplaceForm({ replacingLabel, onConfirm }: SmartMealRep
   const [loading, setLoading] = useState(false);
   const [macros, setMacros] = useState<FoodMacroEstimate | null>(null);
   const [reasoning, setReasoning] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   async function handleCalculate() {
     if (!foodName.trim() || !servingSize.trim()) return;
     setLoading(true);
     setMacros(null);
+    setError(null);
     const result = await nutritionAdvisoryService.estimateFoodMacros(foodName.trim(), servingSize.trim());
     if (result.success) {
-      const results = [{ macros: result.data }];
-      sumMealMacros(results.map((item) => item.macros));
       setMacros(result.data);
       setReasoning(result.data.reasoning ?? null);
+    } else {
+      // Without this the button just returns to idle and the estimate silently never appears.
+      setError("We couldn't estimate that food. Check the name and serving size, then try again.");
     }
     setLoading(false);
   }
@@ -78,6 +80,12 @@ export function SmartMealReplaceForm({ replacingLabel, onConfirm }: SmartMealRep
         <View style={styles.loading}>
           <ActivityIndicator color={LiftFlowColors.accent} />
         </View>
+      ) : null}
+
+      {error ? (
+        <AppText variant="caption" color="error">
+          {error}
+        </AppText>
       ) : null}
 
       {macros ? (

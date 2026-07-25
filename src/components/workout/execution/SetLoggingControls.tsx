@@ -31,6 +31,10 @@ type NumericFieldProps = {
 };
 
 function NumericField({ label, value, onChangeText, onDecrease, onIncrease, stepLabel, disabled }: NumericFieldProps) {
+  // The visible labels are display-cased ("WEIGHT (LB)"); screen readers get a spoken form, and
+  // each stepper says what it changes instead of announcing a bare "minus 5".
+  const spoken = label.toLowerCase();
+
   return (
     <View style={styles.field}>
       <AppText variant="caption" color="textSecondary">
@@ -40,7 +44,10 @@ function NumericField({ label, value, onChangeText, onDecrease, onIncrease, step
         <Pressable
           style={({ pressed }) => [styles.stepButton, pressed && styles.stepButtonPressed]}
           onPress={onDecrease}
-          disabled={disabled}>
+          disabled={disabled}
+          accessibilityRole="button"
+          accessibilityLabel={`Decrease ${spoken} by ${stepLabel}`}
+          accessibilityState={{ disabled: Boolean(disabled) }}>
           <AppText variant="bodyBold">−{stepLabel}</AppText>
         </Pressable>
         <TextInput
@@ -50,11 +57,16 @@ function NumericField({ label, value, onChangeText, onDecrease, onIncrease, step
           keyboardType="decimal-pad"
           editable={!disabled}
           selectTextOnFocus
+          accessibilityLabel={spoken}
+          accessibilityValue={{ text: value }}
         />
         <Pressable
           style={({ pressed }) => [styles.stepButton, pressed && styles.stepButtonPressed]}
           onPress={onIncrease}
-          disabled={disabled}>
+          disabled={disabled}
+          accessibilityRole="button"
+          accessibilityLabel={`Increase ${spoken} by ${stepLabel}`}
+          accessibilityState={{ disabled: Boolean(disabled) }}>
           <AppText variant="bodyBold">+{stepLabel}</AppText>
         </Pressable>
       </View>

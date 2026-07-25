@@ -15,6 +15,7 @@ import { estimateWorkoutDurationMinutes } from '@/lib/workoutPlan';
 import type { ExerciseAlternativeOption } from '@/services/exerciseAdvisoryService';
 import type { PlannedWorkout } from '@/types/training';
 import type { EditableWorkoutExercise } from '@/types/workoutExecution';
+import { WORKOUT_EXECUTION_MODE_LABELS } from '@/types/workoutExecutionMode';
 
 type WorkoutDayOverviewScreenProps = {
   workout: PlannedWorkout;
@@ -46,6 +47,8 @@ export function WorkoutDayOverviewScreen({
   onReplaceExercise,
 }: WorkoutDayOverviewScreenProps) {
   const durationMin = estimateWorkoutDurationMinutes(exercises);
+  const mode = workout.metadata?.executionMode;
+  const executionModeLabel = mode ? (WORKOUT_EXECUTION_MODE_LABELS[mode] ?? null) : null;
   const sessionMuscles = aggregateWorkoutMuscles(exercises.map((item) => item.name));
   const [replaceIndex, setReplaceIndex] = useState<number | null>(null);
   const replaceExercise = replaceIndex != null ? exercises[replaceIndex] ?? null : null;
@@ -62,7 +65,7 @@ export function WorkoutDayOverviewScreen({
         <AppText variant="title">{workout.name}</AppText>
         <AppText variant="footnote" color="textSecondary">
           {workoutMuscleGroups(workout)} · {exercises.length} exercises · ~{durationMin} min
-          {workout.metadata?.executionMode ? ` · ${workout.metadata.executionMode}` : ''}
+          {executionModeLabel ? ` · ${executionModeLabel}` : ''}
         </AppText>
       </Card>
 

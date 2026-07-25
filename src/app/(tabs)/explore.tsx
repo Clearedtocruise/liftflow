@@ -52,16 +52,18 @@ export default function ExploreScreen() {
 function FeatureLink({ feature }: { feature: FeatureDefinition }) {
   const isMvp = feature.phase === 'mvp';
 
+  // Navigating by id instead of route sent every feature whose id and filename differ to the
+  // "planned feature" placeholder — Peak Music Sync ships today but resolved to a stub.
   function handlePress() {
-    if (isMvp && feature.route.startsWith('/(tabs)')) {
-      router.push(feature.route as '/(tabs)/workout' | '/(tabs)/history');
-    } else if (!isMvp) {
-      router.push(`/(features)/${feature.id}` as `/(features)/${string}`);
-    }
+    router.push(feature.route as '/(tabs)/workout');
   }
 
   return (
-    <Pressable onPress={handlePress}>
+    <Pressable
+      onPress={handlePress}
+      accessibilityRole="button"
+      accessibilityLabel={`${feature.title}. ${isMvp ? 'Available' : PHASE_LABELS[feature.phase]}`}
+      accessibilityHint={feature.description}>
       <Card style={styles.featureCard}>
         <View style={styles.featureRow}>
           <AppSymbol

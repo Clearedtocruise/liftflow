@@ -2,7 +2,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { AppText } from '@/components/ui/AppText';
-import { LiftFlowColors, Spacing } from '@/constants/theme';
+import { LiftFlowColors, Spacing, TouchTarget } from '@/constants/theme';
 import { enrichMealMeta } from '@/lib/mealIngredients';
 import { mealTypeLabel } from '@/lib/mealSchedule';
 import type { Meal } from '@/types';
@@ -14,6 +14,7 @@ type MealDetailSheetProps = {
   onClose: () => void;
   onReplace?: () => void;
   onMarkComplete?: (status: 'completed' | 'modified' | 'skipped') => void;
+  pending?: boolean;
 };
 
 export function MealDetailSheet({
@@ -23,6 +24,7 @@ export function MealDetailSheet({
   onClose,
   onReplace,
   onMarkComplete,
+  pending = false,
 }: MealDetailSheetProps) {
   if (!meal) return null;
 
@@ -46,21 +48,43 @@ export function MealDetailSheet({
           ))}
         </View>
 
-        <AppText variant="body" color="textSecondary">
+        <AppText
+          variant="body"
+          color="textSecondary"
+          accessibilityLabel={`${meal.calories ?? 0} calories, ${Math.round(meal.proteinG ?? 0)} grams protein, ${Math.round(meal.carbsG ?? 0)} grams carbs, ${Math.round(meal.fatG ?? 0)} grams fat`}>
           {meal.calories ?? 0} cal · {Math.round(meal.proteinG ?? 0)}P · {Math.round(meal.carbsG ?? 0)}C ·{' '}
           {Math.round(meal.fatG ?? 0)}F
         </AppText>
 
         {!completed && onMarkComplete ? (
           <View style={styles.actions}>
-            <PrimaryButton label="Ate as planned" onPress={() => onMarkComplete('completed')} />
+            <PrimaryButton
+              label="Ate as planned"
+              loading={pending}
+              disabled={pending}
+              onPress={() => onMarkComplete('completed')}
+            />
             <View style={styles.secondaryRow}>
-              <Pressable onPress={() => onMarkComplete('modified')}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Log as modified"
+                accessibilityState={{ disabled: pending }}
+                disabled={pending}
+                hitSlop={8}
+                style={styles.linkButton}
+                onPress={() => onMarkComplete('modified')}>
                 <AppText variant="caption" color="textSecondary">
                   Modified
                 </AppText>
               </Pressable>
-              <Pressable onPress={() => onMarkComplete('skipped')}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Log as skipped"
+                accessibilityState={{ disabled: pending }}
+                disabled={pending}
+                hitSlop={8}
+                style={styles.linkButton}
+                onPress={() => onMarkComplete('skipped')}>
                 <AppText variant="caption" color="textSecondary">
                   Skipped
                 </AppText>
@@ -70,7 +94,7 @@ export function MealDetailSheet({
         ) : null}
 
         {!completed && onReplace ? (
-          <PrimaryButton label="Replace meal" variant="secondary" onPress={onReplace} />
+          <PrimaryButton label="Replace meal" variant="secondary" disabled={pending} onPress={onReplace} />
         ) : null}
 
         <PrimaryButton label="Close" variant="secondary" onPress={onClose} />
@@ -95,5 +119,10 @@ const styles = StyleSheet.create({
   secondaryRow: {
     flexDirection: 'row',
     gap: Spacing.lg,
+  },
+  linkButton: {
+    minHeight: TouchTarget.min,
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.xs,
   },
 });

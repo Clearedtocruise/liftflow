@@ -6,9 +6,11 @@ import { LiftFlowColors, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 
 export default function Index() {
-  const { user, isAuthenticated, isLoading, isProfileReady } = useAuth();
+  const { user, isAuthenticated, isLoading, isProfileHydrated } = useAuth();
 
-  if (isLoading) {
+  // Routing on the optimistic stub sent brand-new users to the dashboard for a frame before
+  // bouncing them into onboarding, so hold the splash until the stored profile has loaded.
+  if (isLoading || (isAuthenticated && !isProfileHydrated)) {
     return (
       <View style={styles.loading}>
         <LogoMark size={80} glow={false} animate={false} />
@@ -18,7 +20,7 @@ export default function Index() {
   }
 
   if (isAuthenticated) {
-    if (isProfileReady && user && !user.onboardingCompleted) {
+    if (user && !user.onboardingCompleted) {
       return <Redirect href="/(onboarding)/legal" />;
     }
     return <Redirect href="/(tabs)/dashboard" />;

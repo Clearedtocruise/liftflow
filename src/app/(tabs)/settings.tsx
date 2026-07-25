@@ -368,6 +368,12 @@ export default function SettingsScreen() {
             }
           }}
         />
+      </Card>
+
+      <View style={styles.sectionGap}>
+        <SectionHeader title="Training & Preferences" subtitle="How ONE MORE plans your training" />
+      </View>
+      <Card style={styles.group}>
         <SettingsRow
           label="Workouts per week"
           value={user ? summarizeTrainingSchedule(resolveDaysPerWeek(user)) : 'Not set'}
@@ -530,6 +536,22 @@ export default function SettingsScreen() {
             <AppSymbol name="heart.text.square.fill" fallback={SYMBOL_FALLBACKS['heart.text.square.fill']} size={20} tintColor={LiftFlowColors.textSecondary} />
           }
           onPress={() => router.push('/(features)/healthkit')}
+        />
+      </Card>
+
+      <View style={styles.sectionGap}>
+        <SectionHeader title="Explore" subtitle="Everything ONE MORE can do" />
+      </View>
+      <Card style={styles.group}>
+        {/* Only entry point into the Explore hub: its tab is hidden via `href: null`, so without
+            this row the screen was unreachable in the shipped app. */}
+        <SettingsRow
+          label="Explore features"
+          value="Live and coming soon"
+          icon={
+            <AppSymbol name="sparkles" fallback="✦" size={20} tintColor={LiftFlowColors.textSecondary} />
+          }
+          onPress={() => router.push('/(tabs)/explore')}
         />
       </Card>
 

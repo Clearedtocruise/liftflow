@@ -19,6 +19,10 @@ export function TextField({ label, error, style, ...rest }: TextFieldProps) {
         placeholderTextColor={LiftFlowColors.textMuted}
         autoCapitalize="none"
         autoCorrect={false}
+        // The visible label is a sibling Text, which screen readers do not associate with the
+        // input, and the error below it is announced nowhere unless attached to the field itself.
+        accessibilityLabel={label}
+        accessibilityHint={error}
         {...rest}
       />
       {error ? (

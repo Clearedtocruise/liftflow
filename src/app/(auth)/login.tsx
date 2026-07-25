@@ -6,13 +6,13 @@ import { AuthFormContainer } from '@/components/auth/AuthFormContainer';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { TextField } from '@/components/layout/TextField';
 import { AppText, textStyles } from '@/components/ui/AppText';
-import { Brand, LiftFlowColors, Spacing } from '@/constants/theme';
+import { Brand, LiftFlowColors, Spacing, TouchTarget } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 import { mapAuthError } from '@/lib/authErrors';
 import { navigateAfterAuth } from '@/lib/navigateAfterAuth';
 
 export default function LoginScreen() {
-  const { signIn, isAuthenticated, user, isProfileReady } = useAuth();
+  const { signIn, isAuthenticated, user, isProfileHydrated } = useAuth();
   const params = useLocalSearchParams<{ verified?: string; authError?: string }>();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -29,10 +29,12 @@ export default function LoginScreen() {
     }
   }, [params.authError, params.verified]);
 
+  // Deliberately waits for the hydrated profile rather than the optimistic stub, which always
+  // reports onboarding as complete and would skip a new account straight past onboarding.
   useEffect(() => {
-    if (loading || !isAuthenticated || !isProfileReady || !user) return;
+    if (!isAuthenticated || !isProfileHydrated || !user) return;
     navigateAfterAuth(user);
-  }, [loading, isAuthenticated, isProfileReady, user]);
+  }, [isAuthenticated, isProfileHydrated, user]);
 
   async function handleLogin() {
     if (loading) return;
@@ -46,8 +48,9 @@ export default function LoginScreen() {
     setBanner(null);
     setLoading(true);
     try {
-      const profile = await signIn({ email, password });
-      navigateAfterAuth(profile);
+      await signIn({ email, password });
+      // Navigation is handled by the effect above once the stored profile arrives; the spinner
+      // stays up until then.
     } catch (err) {
       setError(mapAuthError(err, 'login'));
       setLoading(false);
@@ -95,12 +98,22 @@ export default function LoginScreen() {
       />
 
       {error ? (
-        <AppText variant="footnote" color="error" style={styles.error}>
+        <AppText
+          variant="footnote"
+          color="error"
+          style={styles.error}
+          accessibilityLiveRegion="assertive">
           {error}
         </AppText>
       ) : null}
 
-      <Pressable onPress={() => router.push('/(auth)/forgot-password')} style={styles.forgot} disabled={loading}>
+      <Pressable
+        onPress={() => router.push('/(auth)/forgot-password')}
+        style={styles.forgot}
+        disabled={loading}
+        hitSlop={8}
+        accessibilityRole="button"
+        accessibilityLabel="Forgot password">
         <AppText variant="footnote" style={textStyles.link}>
           Forgot password?
         </AppText>
@@ -112,7 +125,12 @@ export default function LoginScreen() {
         <AppText variant="footnote" color="textSecondary">
           New to {Brand.name}?{' '}
         </AppText>
-        <Pressable onPress={() => router.push('/(auth)/signup')} disabled={loading}>
+        <Pressable
+          onPress={() => router.push('/(auth)/signup')}
+          disabled={loading}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Create account">
           <AppText variant="footnote" style={textStyles.link}>
             Create account
           </AppText>
@@ -138,7 +156,8 @@ const styles = StyleSheet.create({
   },
   forgot: {
     alignSelf: 'flex-end',
-    marginTop: -Spacing.sm,
+    justifyContent: 'center',
+    minHeight: TouchTarget.min,
   },
   footer: {
     flexDirection: 'row',

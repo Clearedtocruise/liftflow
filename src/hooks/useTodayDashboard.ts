@@ -18,6 +18,10 @@ import type { PlannedWorkout } from '@/types';
 type TodayDashboardState = {
   todaysWorkout: PlannedWorkout | null;
   loading: boolean;
+  /** True when the plan fetch failed — distinct from a genuine rest day. */
+  error: boolean;
+  /** True when the week returned zero planned workouts, i.e. no program exists yet. */
+  hasProgram: boolean;
   starting: boolean;
   generating: boolean;
   refresh: () => Promise<void>;
@@ -36,6 +40,8 @@ export function useTodayDashboard(): TodayDashboardState {
 
   const [todaysWorkout, setTodaysWorkout] = useState<PlannedWorkout | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [hasProgram, setHasProgram] = useState(true);
   const [starting, setStarting] = useState(false);
   const [generating, setGenerating] = useState(false);
 
@@ -51,9 +57,14 @@ export function useTodayDashboard(): TodayDashboardState {
       const { from, to } = getWeekRange(new Date(), user.timezone);
       const result = await trainingService.getPlannedWorkouts(user.id, from, to);
       if (!result.success) {
+        // A failed fetch used to render identically to a rest day, telling the user they had
+        // nothing scheduled when the request simply never came back.
+        setError(true);
         setTodaysWorkout(null);
         return;
       }
+      setError(false);
+      setHasProgram(result.data.length > 0);
       const active = resolveActiveTrainingDay(result.data, {
         date: today,
         timeZone: user.timezone,
@@ -128,6 +139,8 @@ export function useTodayDashboard(): TodayDashboardState {
   return {
     todaysWorkout,
     loading,
+    error,
+    hasProgram,
     starting,
     generating,
     refresh,

@@ -168,3 +168,14 @@ export function isConditioningWorkout(workout: PlannedWorkout): boolean {
   const label = `${workout.name} ${workout.metadata?.slotLabel ?? ''}`.toLowerCase();
   return label.includes('condition') || label.includes('cardio') || label.includes('hiit');
 }
+
+/** Best-guess CARDIO_ACTIVITIES id for a planned conditioning day, from its label. */
+export function conditioningActivityId(workout: PlannedWorkout): string {
+  const label = `${workout.name} ${workout.metadata?.slotLabel ?? ''}`.toLowerCase();
+  if (label.includes('tabata')) return 'tabata';
+  if (label.includes('hiit') || label.includes('interval')) return 'hiit-40-20';
+  if (label.includes('row')) return 'row-intervals';
+  if (label.includes('bike') || label.includes('cycl')) return 'steady-bike';
+  if (label.includes('walk')) return 'walk';
+  return 'steady-run';
+}

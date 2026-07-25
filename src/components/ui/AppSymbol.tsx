@@ -20,8 +20,13 @@ export function AppSymbol({ name, size = 24, tintColor, fallback = '●' }: AppS
     return <SymbolView name={name} size={size} tintColor={tintColor} />;
   }
 
+  // Symbols sit next to a real text label, so unhidden they make a screen reader announce the
+  // emoji fallback as its own element and repeat what the surrounding control already says.
   return (
-    <Text style={{ fontSize: size * 0.85, color: tintColor, lineHeight: size }}>
+    <Text
+      accessibilityElementsHidden
+      importantForAccessibility="no"
+      style={{ fontSize: size * 0.85, color: tintColor, lineHeight: size }}>
       {fallback}
     </Text>
   );

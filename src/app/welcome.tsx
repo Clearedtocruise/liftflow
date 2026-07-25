@@ -8,7 +8,7 @@ import { LiftFlowWordmark } from '@/components/brand/LiftFlowWordmark';
 import { LogoMark } from '@/components/brand/LogoMark';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { AppText } from '@/components/ui/AppText';
-import { LiftFlowColors, Spacing } from '@/constants/theme';
+import { LiftFlowColors, Spacing, TouchTarget } from '@/constants/theme';
 
 const LOGO_SIZE = 130;
 
@@ -62,7 +62,11 @@ export default function WelcomeScreen() {
 
         <Animated.View entering={FadeInDown.delay(460).duration(520)} style={styles.actions}>
           <PrimaryButton label="GET STARTED" size="large" onPress={() => router.push('/(auth)/signup')} />
-          <Pressable onPress={() => router.push('/(auth)/login')} style={styles.signIn}>
+          <Pressable
+            onPress={() => router.push('/(auth)/login')}
+            style={styles.signIn}
+            accessibilityRole="button"
+            accessibilityLabel="Sign in to an existing account">
             <AppText variant="body" color="textSecondary" align="center">
               Already have an account?{' '}
               <AppText variant="bodyBold" color="accent">
@@ -117,6 +121,7 @@ const styles = StyleSheet.create({
     gap: Spacing.lg,
   },
   signIn: {
-    paddingVertical: Spacing.sm,
+    minHeight: TouchTarget.min,
+    justifyContent: 'center',
   },
 });
