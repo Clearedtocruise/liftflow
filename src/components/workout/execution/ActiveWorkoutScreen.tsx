@@ -17,6 +17,7 @@ import { WorkoutChallengeModal } from '@/components/workout/execution/WorkoutCha
 import { WorkoutTimerOverlay } from '@/components/workout/execution/WorkoutTimerOverlay';
 import { WorkoutUpNextCard } from '@/components/workout/execution/WorkoutUpNextCard';
 import { ExerciseCoachCard } from '@/components/workout/ExerciseCoachCard';
+import { VoiceSetLogger, type VoiceSetLogPayload } from '@/components/workout/VoiceSetLogger';
 import { LiftFlowColors, Radius, Spacing, TouchTarget } from '@/constants/theme';
 import { useAppResume } from '@/hooks/useAppResume';
 import { useAuth } from '@/hooks/useAuth';
@@ -41,6 +42,7 @@ import { profileFigureGender } from '@/lib/exerciseMuscleMap';
 import {
     executionModeUsesSupersetRotation,
     formatExerciseStationLabel,
+    formatSupersetPartnerNames,
     getSupersetGroupForIndex,
     isSupersetGroupComplete,
     nextExerciseIndexAfterGroup,
@@ -63,7 +65,7 @@ import { alignPlanExercisesToSession, parseTargetReps } from '@/lib/workoutPlan'
 import { logWorkoutProgressionDecision } from '@/lib/workoutProgressionDebug';
 import { resolveBetweenExerciseUpNext, resolveTabataPrepUpNext, resolveWorkoutUpNext } from '@/lib/workoutUpNext';
 import { workoutService } from '@/services/workoutService';
-import { watchPhoneBridge } from '@/state/WatchPhoneBridge';
+import { watchPhoneBridge, type WatchDisplayContext } from '@/state/WatchPhoneBridge';
 import { useWorkoutSession } from '@/state/workout/WorkoutSessionContext';
 import type { Exercise, WorkoutSession } from '@/types';
 import type { ExerciseCoachPrescription } from '@/types/exerciseCoach';
@@ -89,6 +91,8 @@ type ActiveWorkoutScreenProps = {
   onCancel: () => void;
   finishing?: boolean;
 };
+
+type LogSetResult = { ok: true } | { ok: false; error: string };
 
 export function ActiveWorkoutScreen({
   session,
@@ -203,6 +207,7 @@ export function ActiveWorkoutScreen({
   const pendingAdvanceAfterChallengeRef = useRef<(() => void) | null>(null);
   const pendingExerciseAdvanceAfterRestRef = useRef(false);
   const autoAdvanceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const loggingInFlightRef = useRef(false);
   const advanceExerciseRef = useRef<() => void>(() => {});
   const pendingRoundIncrementRef = useRef(false);
   const offeredExerciseCompleteRef = useRef<number | null>(null);
@@ -238,6 +243,7 @@ export function ActiveWorkoutScreen({
     executionModeUsesTraditionalRest(executionMode) &&
     restSecondsRemaining !== null &&
     restSecondsRemaining > 0;
+  const transitionActive = circuitTimer != null && circuitTimer.phase !== 'done';
   const allSetsDone = completedSets.length >= effectiveTargetSets;
   const coachSetNotice =
     coachExtraSets > 0
@@ -265,6 +271,13 @@ export function ActiveWorkoutScreen({
     usesSupersetRotation && !showComplete
       ? shouldShowSupersetPrep(currentIndex, planExercises, sortedExercises)
       : null;
+  const supersetPartners = useMemo(
+    () =>
+      usesSupersetRotation && inSuperset && supersetGroup
+        ? formatSupersetPartnerNames(supersetGroup, planExercises, sortedExercises)
+        : null,
+    [usesSupersetRotation, inSuperset, supersetGroup, planExercises, sortedExercises],
+  );
   const showSupersetPrepBanner =
     supersetBannerTick >= 0 &&
     supersetPrepGroup != null &&
@@ -724,13 +737,29 @@ export function ActiveWorkoutScreen({
   }
 
   const offerBetweenSetsChallenge = useCallback(() => {
-    if (activeChallenge || groupComplete) return;
+    if (
+      activeChallenge ||
+      groupComplete ||
+      restActive ||
+      usesSupersetRotation ||
+      executionModeUsesIntervalTimer(executionMode)
+    ) {
+      return;
+    }
     const template = pickWorkoutChallenge(challengeRecords, 'between_sets');
     if (!template) return;
     setChallengeTargetExerciseName(currentExercise?.exercise?.name ?? null);
     setChallengeTrigger('between_sets');
     setActiveChallenge(template);
-  }, [activeChallenge, challengeRecords, groupComplete, currentExercise?.exercise?.name]);
+  }, [
+    activeChallenge,
+    challengeRecords,
+    currentExercise?.exercise?.name,
+    executionMode,
+    groupComplete,
+    restActive,
+    usesSupersetRotation,
+  ]);
 
   const handleChallengeSkip = useCallback(() => {
     if (!activeChallenge) return;
@@ -791,9 +820,41 @@ export function ActiveWorkoutScreen({
     return total + set.weight * set.reps;
   }, 0);
 
-  async function handleLogSet() {
-    if (!currentExercise || isPaused || allSetsDone) return;
+  const clearWatchDrafts = useCallback(() => {
+    setWatchDraftReps(null);
+    watchPhoneBridge.clearPendingWatchReps();
+    setWatchDraftWeightKg(null);
+    watchPhoneBridge.clearPendingWatchWeightKg();
+  }, [setWatchDraftReps, setWatchDraftWeightKg]);
 
+  const commitSetLog = useCallback(async (overrides?: {
+    weightKg?: number;
+    reps?: number;
+    durationSeconds?: number;
+    distanceKm?: number;
+  }): Promise<LogSetResult> => {
+    if (!currentExercise) {
+      return { ok: false, error: 'No exercise selected.' };
+    }
+    if (isPaused) {
+      return { ok: false, error: 'Resume your workout before logging a set.' };
+    }
+    if (logging || loggingInFlightRef.current) {
+      return { ok: false, error: 'A set is already being logged.' };
+    }
+    if (allSetsDone) {
+      return { ok: false, error: 'All planned sets are already logged.' };
+    }
+    if (restActive || intervalTimer != null || transitionActive) {
+      return { ok: false, error: 'Finish the current rest or transition before logging the next set.' };
+    }
+
+    const resolvedWeightKg = overrides?.weightKg ?? weightKg;
+    const resolvedReps = overrides?.reps ?? reps;
+    const resolvedDurationSeconds = overrides?.durationSeconds ?? durationSeconds;
+    const resolvedDistanceKm = overrides?.distanceKm ?? distanceKm;
+
+    loggingInFlightRef.current = true;
     setLogging(true);
     try {
       const base = {
@@ -834,28 +895,31 @@ export function ActiveWorkoutScreen({
         loggingMode === 'cardio'
           ? await logSet({
               ...base,
-              durationSeconds,
-              distanceMeters: Math.round(distanceKm * 1000),
+              durationSeconds: resolvedDurationSeconds,
+              distanceMeters: Math.round(resolvedDistanceKm * 1000),
               reps: 1,
               skipRest: true,
             })
           : loggingMode === 'timed'
-          ? await logSet({ ...base, durationSeconds, reps: 1, skipRest })
+          ? await logSet({ ...base, durationSeconds: resolvedDurationSeconds, reps: 1, skipRest })
           : loggingMode === 'bodyweight'
-            ? await logSet({ ...base, reps, skipRest })
-            : await logSet({ ...base, weight: weightKg, reps, skipRest });
+            ? await logSet({ ...base, reps: resolvedReps, skipRest })
+            : await logSet({ ...base, weight: resolvedWeightKg, reps: resolvedReps, skipRest });
 
-      if (logged?.isPr) {
+      if (!logged) {
+        AccessibilityInfo.announceForAccessibility('Could not log set. Try again.');
+        return { ok: false, error: 'Could not save that set.' };
+      }
+
+      if (logged.isPr) {
         setExerciseHadPr(true);
       }
 
       // The set list updates silently, so a screen-reader user gets no confirmation that the tap
       // registered — and the rest timer that follows is equally unannounced.
       AccessibilityInfo.announceForAccessibility(
-        `Set ${completedAfterLog} of ${effectiveTargetSets} logged${logged?.isPr ? '. New personal record' : ''}`,
+        `Set ${completedAfterLog} of ${effectiveTargetSets} logged${logged.isPr ? '. New personal record' : ''}`,
       );
-
-      await refreshSession();
 
       if (flowAction.circuitTimer && flowAction.circuitTimer.seconds > 0) {
         pendingAdvanceRef.current = flowAction.circuitTimer.advanceIndex;
@@ -880,25 +944,81 @@ export function ActiveWorkoutScreen({
         pendingExerciseAdvanceAfterRestRef.current = true;
       }
 
-      if (completedAfterLog < effectiveTargetSets) {
+      if (completedAfterLog < effectiveTargetSets && !skipRest) {
         offerBetweenSetsChallenge();
       }
 
-      setWatchDraftReps(null);
-      watchPhoneBridge.clearPendingWatchReps();
-      setWatchDraftWeightKg(null);
-      watchPhoneBridge.clearPendingWatchWeightKg();
+      clearWatchDrafts();
+      return { ok: true };
     } finally {
+      loggingInFlightRef.current = false;
       setLogging(false);
     }
-  }
+  }, [
+    allSetsDone,
+    circuitRound,
+    clearWatchDrafts,
+    currentExercise,
+    currentIndex,
+    distanceKm,
+    durationSeconds,
+    effectiveTargetSets,
+    executionMode,
+    intervalTimer,
+    isPaused,
+    logSet,
+    logging,
+    loggingMode,
+    offerBetweenSetsChallenge,
+    planExercises,
+    reps,
+    restActive,
+    restTargetSeconds,
+    sortedExercises,
+    startCircuitTransition,
+    targetSets,
+    transitionActive,
+    weightKg,
+  ]);
+
+  const handleLogSet = useCallback(() => commitSetLog(), [commitSetLog]);
+
+  const handleVoiceLogSet = useCallback(
+    async (payload: VoiceSetLogPayload): Promise<boolean> => {
+      const activeName = currentExercise?.exercise?.name;
+      if (!payload.exerciseName || !activeName) return false;
+      if (payload.exerciseName.trim().toLowerCase() !== activeName.trim().toLowerCase()) {
+        AccessibilityInfo.announceForAccessibility(
+          `Voice logging is limited to the current exercise: ${activeName}.`,
+        );
+        return false;
+      }
+
+      if (payload.weight != null) {
+        setWeightKg(payload.weight);
+      }
+      if (payload.reps != null) {
+        setReps(payload.reps);
+      }
+
+      const result = await commitSetLog({
+        weightKg: payload.weight,
+        reps: payload.reps,
+      });
+      return result.ok;
+    },
+    [
+      currentExercise?.exercise?.name,
+      commitSetLog,
+    ],
+  );
 
   const handleLogSetRef = useRef(handleLogSet);
   handleLogSetRef.current = handleLogSet;
 
   useEffect(() => {
     watchPhoneBridge.setLogSetHandler(async () => {
-      await handleLogSetRef.current();
+      return handleLogSetRef.current();
     });
     return () => {
       watchPhoneBridge.setLogSetHandler(null);
@@ -911,15 +1031,19 @@ export function ActiveWorkoutScreen({
   }, [effectiveTargetSets]);
 
   useEffect(() => {
-    watchPhoneBridge.setDisplayContext({
+    const context: WatchDisplayContext = {
       stationLabel: stationLabel ?? undefined,
       statusLine: workoutPosition.currentSetLabel,
-      supersetHint: usesSupersetRotation && inSuperset ? workoutPosition.upNextLabel : undefined,
       draftReps: watchDraftReps ?? undefined,
-    });
+    };
+    if (usesSupersetRotation && inSuperset) {
+      context.supersetHint = supersetPartners ?? workoutPosition.upNextLabel;
+    }
+    watchPhoneBridge.setDisplayContext(context);
     return () => watchPhoneBridge.setDisplayContext(null);
   }, [
     stationLabel,
+    supersetPartners,
     workoutPosition.currentSetLabel,
     workoutPosition.upNextLabel,
     usesSupersetRotation,
@@ -1099,6 +1223,18 @@ export function ActiveWorkoutScreen({
                 <AppText variant="footnote" color="accent">
                   Superset active · {workoutPosition.upNextLabel}
                 </AppText>
+              ) : null}
+
+              {usesSupersetRotation && inSuperset && supersetPartners ? (
+                <View style={styles.supersetCard}>
+                  <AppText variant="caption" color="accent">
+                    Superset members
+                  </AppText>
+                  <AppText variant="bodyBold">{supersetPartners}</AppText>
+                  <AppText variant="footnote" color="textSecondary">
+                    {workoutPosition.upNextLabel}
+                  </AppText>
+                </View>
               ) : null}
 
               {executionMode === 'circuit' ? (
@@ -1293,15 +1429,46 @@ export function ActiveWorkoutScreen({
                     onChangeReps={setReps}
                     onChangeDuration={setDurationSeconds}
                     onChangeDistance={setDistanceKm}
-                    disabled={isPaused || logging}
+                    disabled={
+                      isPaused ||
+                      logging ||
+                      restActive ||
+                      intervalTimer != null ||
+                      (circuitTimer != null && circuitTimer.phase !== 'done')
+                    }
                   />
                   <PrimaryButton
                     label={allSetsDone ? 'All sets logged' : `Log Set ${nextSetNumber}`}
                     size="large"
                     loading={logging}
-                    disabled={isPaused || allSetsDone}
-                    onPress={handleLogSet}
+                    disabled={
+                      isPaused ||
+                      logging ||
+                      allSetsDone ||
+                      restActive ||
+                      intervalTimer != null ||
+                      (circuitTimer != null && circuitTimer.phase !== 'done')
+                    }
+                    onPress={() => {
+                      void handleLogSet();
+                    }}
                   />
+                  {user && (loggingMode === 'weighted' || loggingMode === 'bodyweight') ? (
+                    <VoiceSetLogger
+                      userId={user.id}
+                      onLogSet={handleVoiceLogSet}
+                      activeExerciseName={currentExercise.exercise?.name}
+                      lastWeightKg={completedSets[completedSets.length - 1]?.weight ?? (weightKg > 0 ? weightKg : undefined)}
+                      lastReps={completedSets[completedSets.length - 1]?.reps ?? (reps > 0 ? reps : undefined)}
+                      disabled={
+                        isPaused ||
+                        logging ||
+                        restActive ||
+                        intervalTimer != null ||
+                        (circuitTimer != null && circuitTimer.phase !== 'done')
+                      }
+                    />
+                  ) : null}
                   <View style={styles.extraActions}>
                     <PrimaryButton label="+ Add Set" variant="secondary" onPress={handleAddSet} disabled={isPaused} />
                     <PrimaryButton
@@ -1557,6 +1724,14 @@ const styles = StyleSheet.create({
     backgroundColor: LiftFlowColors.backgroundSecondary,
     borderWidth: 1,
     borderColor: LiftFlowColors.border,
+  },
+  supersetCard: {
+    gap: Spacing.xs,
+    padding: Spacing.md,
+    borderRadius: Radius.md,
+    backgroundColor: LiftFlowColors.backgroundSecondary,
+    borderWidth: 1,
+    borderColor: LiftFlowColors.accent,
   },
   loadingMethodRow: {
     gap: Spacing.sm,

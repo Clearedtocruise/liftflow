@@ -12,6 +12,8 @@ import HealthKit
  * Requires the `workout-processing` background mode in Info.plist and the HealthKit entitlement.
  */
 final class WorkoutSessionManager: NSObject, ObservableObject {
+  private static let delayedEndGraceSeconds: TimeInterval = 10
+
   @Published var isRunning = false
   @Published var heartRateBpm: Int?
   @Published var lastError: String?
@@ -19,6 +21,7 @@ final class WorkoutSessionManager: NSObject, ObservableObject {
   private let store = HKHealthStore()
   private var session: HKWorkoutSession?
   private var builder: HKLiveWorkoutBuilder?
+  private var delayedEndWorkItem: DispatchWorkItem?
 
   private var shareTypes: Set<HKSampleType> {
     var types: Set<HKSampleType> = [HKObjectType.workoutType()]
@@ -47,6 +50,8 @@ final class WorkoutSessionManager: NSObject, ObservableObject {
   /// Idempotent: calling this while a session is already running is a no-op, so repeated phone
   /// pushes cannot restart — and thereby split — the workout.
   func start() {
+    delayedEndWorkItem?.cancel()
+    delayedEndWorkItem = nil
     guard HKHealthStore.isHealthDataAvailable(), session == nil else { return }
 
     let configuration = HKWorkoutConfiguration()
@@ -81,7 +86,18 @@ final class WorkoutSessionManager: NSObject, ObservableObject {
   /// Ends the workout and saves it to Health, so the user keeps credit for the time trained.
   /// Used for both completion and wrist-side cancellation.
   func end() {
-    session?.end()
+    guard session != nil else { return }
+    delayedEndWorkItem?.cancel()
+
+    let workItem = DispatchWorkItem { [weak self] in
+      guard let self else { return }
+      self.session?.end()
+    }
+    delayedEndWorkItem = workItem
+    DispatchQueue.main.asyncAfter(
+      deadline: .now() + Self.delayedEndGraceSeconds,
+      execute: workItem
+    )
   }
 
   private func finish() {
@@ -103,6 +119,8 @@ final class WorkoutSessionManager: NSObject, ObservableObject {
   }
 
   private func teardown() {
+    delayedEndWorkItem?.cancel()
+    delayedEndWorkItem = nil
     session?.delegate = nil
     builder?.delegate = nil
     session = nil

@@ -14,7 +14,7 @@ export type WatchDisplayContext = {
 
 const LB_PER_KG = 2.2046226218;
 
-let logSetHandler: (() => Promise<void>) | null = null;
+let logSetHandler: (() => Promise<LogSetResult>) | null = null;
 let skipRestHandler: (() => Promise<void>) | null = null;
 let cancelWorkoutHandler: (() => Promise<void>) | null = null;
 let setRepsHandler: ((reps: number) => void) | null = null;
@@ -27,7 +27,7 @@ let readTargetSets: (() => number) | null = null;
 let displayContext: WatchDisplayContext | null = null;
 
 export const watchPhoneBridge = {
-  setLogSetHandler(handler: (() => Promise<void>) | null) {
+  setLogSetHandler(handler: (() => Promise<LogSetResult>) | null) {
     logSetHandler = handler;
   },
 
@@ -124,8 +124,7 @@ export const watchPhoneBridge = {
       return { ok: false, error: 'Open your workout on iPhone to log sets.' };
     }
     try {
-      await logSetHandler();
-      return { ok: true };
+      return await logSetHandler();
     } catch (error) {
       return {
         ok: false,
