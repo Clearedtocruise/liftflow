@@ -1,8 +1,8 @@
 # Sprint 8.4 — Apple Watch Companion Validation Report
 
-**Date:** 2026-06-13  
+**Date:** 2026-07-25  
 **Result:** PASS  
-**Score:** 57/57  
+**Score:** 63/63  
 
 ## Summary
 
@@ -67,6 +67,12 @@ Sprint 8.4 delivers the Apple Watch companion architecture: workout logging, res
 | FeatureGate apple-watch-advanced | PASS | — |
 | Rest timer display | PASS | — |
 | Recovery score display | PASS | — |
+| MotionCapture.swift | PASS | — |
+| Watch motion_batch sender | PASS | — |
+| Watch voice commands removed | PASS | — |
+| Watch start workout button | PASS | — |
+| Phone start_workout bridge | PASS | — |
+| watchCompanionService.startTodaysWorkoutFromWatch | PASS | — |
 | Watch architecture doc | PASS | — |
 | HealthKit requirements doc | PASS | — |
 | App Store watch requirements | PASS | — |
