@@ -1,16 +1,14 @@
 import { Router } from 'express';
 
 import { generateWeeklyMealPlan } from '../lib/aiCoach.js';
-import { ageYearsFromDateOfBirth } from '../lib/ageAdjustments.js';
 import { loadCoachContext } from '../lib/coachContext.js';
+import { loadDailyMacroInputs, macroContextFrom } from '../lib/dailyMacroInputs.js';
 import { loadNutritionIntelligence } from '../lib/loadNutritionIntelligence.js';
 import { syncNutritionForDates } from '../lib/nutritionDaySync.js';
 import { requireAdmin } from '../lib/supabase.js';
-import { resolveRankedGoals, toNutritionGoal } from '../lib/trainingGoals.js';
 import {
     calculateMacroTargets,
     generateDailyMeals,
-    inferWorkoutType,
 } from '../lib/workoutAwareNutrition.js';
 import { inferDietaryStyle, type NutritionPreferenceInput } from '../lib/dietaryRestrictions.js';
 import { authedUserId } from '../middleware/authUser.js';
@@ -90,8 +88,10 @@ nutritionRouter.post('/meal-plan/generate', async (req, res) => {
       proteinG = goals.protein_g ?? proteinG;
       calories = goals.daily_calories ?? calories;
     }
+    let today: string | undefined;
     try {
       const ctx = await loadCoachContext(userId);
+      today = ctx.today;
       if (ctx.macroTargets) {
         proteinG = ctx.macroTargets.proteinG;
         calories = ctx.macroTargets.calories;
@@ -105,7 +105,7 @@ nutritionRouter.post('/meal-plan/generate', async (req, res) => {
       (dietaryStyle as 'balanced' | 'high_protein' | 'low_carb' | 'keto' | 'mediterranean' | 'vegetarian' | undefined)
       ?? inferDietaryStyle(prefs.dietaryRestrictions);
 
-    const plan = generateWeeklyMealPlan(proteinG, calories, resolvedStyle, prefs);
+    const plan = generateWeeklyMealPlan(proteinG, calories, resolvedStyle, prefs, today);
     if (plan.aiRationale && !plan.aiRationale.includes('Style:')) {
       plan.aiRationale = `${plan.aiRationale} Style: ${resolvedStyle}.`;
     }
@@ -123,34 +123,20 @@ nutritionRouter.post('/adaptive-targets', async (req, res) => {
       dietaryRestrictions?: string[];
     };
 
-    const ctx = await loadCoachContext(userId);
-    const muscleGroups = ctx.plannedWorkout?.muscleGroups ?? [];
-    const workoutType = muscleGroups.length ? inferWorkoutType(muscleGroups) : 'rest';
+    const [ctx, macroInputs] = await Promise.all([loadCoachContext(userId), loadDailyMacroInputs(userId)]);
 
-    const db = requireAdmin();
-    const { data: profile } = await db
-      .from('profiles')
-      .select('weight_kg, primary_training_goal, fitness_goals, date_of_birth')
-      .eq('id', userId)
-      .maybeSingle();
-
-    const ranked = resolveRankedGoals(profile?.fitness_goals, profile?.primary_training_goal);
     const adaptiveStyle = isDietaryStyle(dietaryStyle)
       ? dietaryStyle
       : inferDietaryStyle((await resolveNutritionPreferences(userId, dietaryRestrictions)).dietaryRestrictions);
 
-    const targets = calculateMacroTargets({
-      goal: toNutritionGoal(ranked[0]),
-      bodyWeightKg: profile?.weight_kg ?? undefined,
-      ageYears: ageYearsFromDateOfBirth(profile?.date_of_birth),
+    const macroContext = macroContextFrom(macroInputs, {
       recoveryScore: ctx.recovery.score,
       recoveryModeActive: ctx.recovery.recoveryModeActive,
-      workoutType,
-      isTrainingDay: !!ctx.plannedWorkout,
       dietaryStyle: adaptiveStyle,
     });
+    const targets = calculateMacroTargets(macroContext);
 
-    res.json({ ...targets, workoutType, recoveryScore: ctx.recovery.score });
+    res.json({ ...targets, workoutType: macroContext.workoutType, recoveryScore: ctx.recovery.score });
   } catch (error) {
     res.status(500).json({ message: error instanceof Error ? error.message : 'Adaptive targets failed' });
   }
@@ -180,8 +166,8 @@ nutritionRouter.post('/daily-plan', async (req, res) => {
       dietaryStyle?: 'high_protein' | 'low_carb' | 'keto' | 'mediterranean' | 'vegetarian' | 'balanced';
     };
 
-    const targetDate = date ?? new Date().toISOString().slice(0, 10);
     const ctx = await loadCoachContext(userId);
+    const targetDate = date ?? ctx.today;
     const macros =
       ctx.macroTargets ??
       calculateMacroTargets({

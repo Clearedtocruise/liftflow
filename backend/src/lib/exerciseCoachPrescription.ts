@@ -1,4 +1,5 @@
 import { loadCoachContext } from './coachContext.js';
+import { loadUserToday } from './dailyMacroInputs.js';
 import { classifyExercise, type ExerciseType } from './exerciseClassification.js';
 import { loadRecoveryIntelligence } from './loadRecoveryIntelligence.js';
 import { loadSmartProgression } from './loadSmartProgression.js';
@@ -275,7 +276,8 @@ async function loadTimedExerciseCoachPrescription(
   plan?: Omit<ExercisePrescriptionPlanInput, 'exerciseId'>,
 ): Promise<ExerciseCoachPrescription> {
   const db = requireAdmin();
-  const today = new Date().toISOString().slice(0, 10);
+  // `check_in_date` is a local calendar day, so a UTC date misses the user's own check-in.
+  const { today } = await loadUserToday(userId);
 
   const [coachCtx, intelligence, profileRes, recoveryRow, priorSessions] = await Promise.all([
     loadCoachContext(userId),
@@ -383,7 +385,8 @@ export async function loadExerciseCoachPrescription(
   }
 
   const db = requireAdmin();
-  const today = new Date().toISOString().slice(0, 10);
+  // `check_in_date` is a local calendar day, so a UTC date misses the user's own check-in.
+  const { today } = await loadUserToday(userId);
 
   const [progression, coachCtx, intelligence, profileRes, recoveryRow] = await Promise.all([
     loadSmartProgression(userId, exerciseId, {

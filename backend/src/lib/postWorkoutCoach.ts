@@ -1,3 +1,4 @@
+import { localDateString } from './localDate.js';
 import { requireAdmin } from './supabase.js';
 import { recommendSupplements } from './supplementGuidance.js';
 import { resolveRankedGoals, toNutritionGoal } from './trainingGoals.js';
@@ -31,25 +32,31 @@ export async function generatePostWorkoutCoachSummary(
     .select('id, suggested_weight, suggested_reps, exercises(name, slug)')
     .eq('session_id', sessionId);
 
+  // Progression compares the *last* set against the target, so the rows must be ordered.
   const { data: sets } = await db
     .from('workout_sets')
-    .select('workout_exercise_id, weight, reps, is_pr')
+    .select('workout_exercise_id, weight, reps, is_pr, set_number, logged_at')
     .in(
       'workout_exercise_id',
       (exercises ?? []).map((e) => e.id),
-    );
+    )
+    .order('set_number', { ascending: true })
+    .order('logged_at', { ascending: true });
 
   const { data: profile } = await db
     .from('profiles')
-    .select('weight_kg, fitness_goals, primary_training_goal, metadata')
+    .select('weight_kg, fitness_goals, primary_training_goal, metadata, timezone, preferred_weight_unit')
     .eq('id', userId)
     .maybeSingle();
+
+  const today = localDateString(new Date(), profile?.timezone as string | null | undefined);
+  const weightUnit = profile?.preferred_weight_unit === 'kg' ? 'kg' : 'lbs';
 
   const { data: recovery } = await db
     .from('recovery_assessments')
     .select('recovery_score, recovery_mode_active')
     .eq('user_id', userId)
-    .eq('check_in_date', new Date().toISOString().slice(0, 10))
+    .eq('check_in_date', today)
     .maybeSingle();
 
   const { data: nutritionGoals } = await db
@@ -64,23 +71,28 @@ export async function generatePostWorkoutCoachSummary(
     .from('meals')
     .select('protein_g')
     .eq('user_id', userId)
-    .eq('scheduled_date', new Date().toISOString().slice(0, 10));
+    .eq('scheduled_date', today);
 
   const proteinLogged = (todayMeals ?? []).reduce((sum, m) => sum + (m.protein_g ?? 0), 0);
   const proteinTarget = nutritionGoals?.protein_g ?? 180;
-  const recoveryScore = recovery?.recovery_score ?? 72;
+  const recoveryScore: number | undefined = recovery?.recovery_score ?? undefined;
 
   const durationMin = Math.round((session.duration_seconds ?? 0) / 60);
   const prCount = (sets ?? []).filter((s) => s.is_pr).length;
 
   const workoutSummary = `Completed ${session.name}: ${session.total_sets ?? 0} sets, ${Math.round(session.total_volume ?? 0)} total volume in ${durationMin} min${prCount ? ` — ${prCount} PR${prCount > 1 ? 's' : ''}!` : '.'}`;
 
+  // No check-in means no recovery reading; saying "moderate" would present a default as a measurement.
   const recoveryRecommendation =
-    recoveryScore < 50 || recovery?.recovery_mode_active
-      ? 'Recovery is low. Prioritize 7–9 hours of sleep tonight and keep tomorrow lighter if soreness persists.'
-      : recoveryScore >= 80
-        ? 'Recovery is high. You can push intensity on your next session if warm-ups feel strong.'
-        : 'Recovery is moderate. Stay consistent and monitor sleep quality over the next 48 hours.';
+    recoveryScore == null
+      ? recovery?.recovery_mode_active
+        ? 'Recovery Mode is active. Prioritize sleep and keep tomorrow lighter if soreness persists.'
+        : 'No recovery check-in logged today, so this is general guidance: aim for 7–9 hours of sleep and log a check-in to get a recovery-aware recommendation.'
+      : recoveryScore < 50 || recovery?.recovery_mode_active
+        ? 'Recovery is low. Prioritize 7–9 hours of sleep tonight and keep tomorrow lighter if soreness persists.'
+        : recoveryScore >= 80
+          ? 'Recovery is high. You can push intensity on your next session if warm-ups feel strong.'
+          : 'Recovery is moderate. Stay consistent and monitor sleep quality over the next 48 hours.';
 
   const nutritionRecommendation =
     proteinLogged < proteinTarget * 0.7
@@ -102,7 +114,7 @@ export async function generatePostWorkoutCoachSummary(
     if (hitTarget && ex.suggested_weight) {
       const increase = Math.max(2.5, Math.round(ex.suggested_weight * 0.025 * 2) / 2);
       progressionRecommendations.push(
-        `${exName}: increase by ${increase} ${ex.suggested_weight > 50 ? 'lbs' : 'kg'} next session if you hit ${targetReps} reps again.`,
+        `${exName}: increase by ${increase} ${weightUnit} next session if you hit ${targetReps} reps again.`,
       );
     } else if ((lastSet.reps ?? 0) < targetReps - 2) {
       progressionRecommendations.push(

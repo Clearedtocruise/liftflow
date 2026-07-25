@@ -1,12 +1,12 @@
-import { addDays } from './programTypes.js';
 import {
   aggregateDailyMeals,
   countNutritionLogDays,
   type MealRow,
 } from './mealAggregation.js';
+import { loadDailyMacroInputs } from './dailyMacroInputs.js';
 import { loadRecoveryIntelligence } from './loadRecoveryIntelligence.js';
+import { addCalendarDays, localDayRangeUtc } from './localDate.js';
 import { requireAdmin } from './supabase.js';
-import { resolveRankedGoals, toNutritionGoal } from './trainingGoals.js';
 import {
   computeNutritionAdherence,
   computeNutritionIntelligence,
@@ -15,81 +15,54 @@ import {
   type NutritionIntelligenceReport,
 } from './nutritionIntelligenceEngine.js';
 
+const MEAL_COLUMNS =
+  'id, scheduled_date, meal_type, name, meal_plan_id, calories, protein_g, carbs_g, fat_g, instructions, created_at';
+
 export async function loadNutritionIntelligence(userId: string): Promise<NutritionIntelligenceReport> {
   const db = requireAdmin();
-  const today = new Date().toISOString().slice(0, 10);
-  const sevenDaysAgo = new Date();
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-  const fourteenDaysAgo = new Date();
-  fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
-  const weekEnd = addDays(today, 6);
+  const macroInputs = await loadDailyMacroInputs(userId);
+  const { today, timeZone } = macroInputs;
+  const sevenDaysAgo = addCalendarDays(today, -6);
+  const fourteenDaysAgo = addCalendarDays(today, -14);
+  const todayRange = localDayRangeUtc(today, timeZone);
 
-  const [intelligence, profileRes, sessionsRes, plannedRes, meals7dRes, todayMealsRes, hydrationRes, bodyCompRes, healthWeightRes] =
+  const [intelligence, meals7dRes, todayMealsRes, hydrationRes, bodyCompRes, healthWeightRes] =
     await Promise.all([
       loadRecoveryIntelligence(userId),
       db
-        .from('profiles')
-        .select('weight_kg, primary_training_goal, fitness_goals, metadata')
-        .eq('id', userId)
-        .maybeSingle(),
-      db
-        .from('workout_sessions')
-        .select('total_volume')
-        .eq('user_id', userId)
-        .eq('status', 'completed')
-        .gte('started_at', sevenDaysAgo.toISOString()),
-      db
-        .from('planned_workouts')
-        .select('id, name, scheduled_date, status, suggested_muscle_groups, metadata')
-        .eq('user_id', userId)
-        .gte('scheduled_date', today)
-        .lte('scheduled_date', weekEnd)
-        .eq('status', 'planned')
-        .order('scheduled_date', { ascending: true }),
-      db
         .from('meals')
-        .select('id, scheduled_date, meal_type, name, meal_plan_id, calories, protein_g, carbs_g, fat_g, instructions, created_at')
+        .select(MEAL_COLUMNS)
         .eq('user_id', userId)
-        .gte('scheduled_date', sevenDaysAgo.toISOString().slice(0, 10)),
-      db
-        .from('meals')
-        .select('id, scheduled_date, meal_type, name, meal_plan_id, calories, protein_g, carbs_g, fat_g, instructions, created_at')
-        .eq('user_id', userId)
-        .eq('scheduled_date', today),
+        .gte('scheduled_date', sevenDaysAgo),
+      db.from('meals').select(MEAL_COLUMNS).eq('user_id', userId).eq('scheduled_date', today),
       db
         .from('hydration_logs')
         .select('amount_ml')
         .eq('user_id', userId)
-        .gte('logged_at', today + 'T00:00:00')
-        .lte('logged_at', today + 'T23:59:59'),
+        .gte('logged_at', todayRange.startIso)
+        .lt('logged_at', todayRange.endIso),
       db
         .from('body_composition_records')
         .select('weight_kg, recorded_at')
         .eq('user_id', userId)
-        .gte('recorded_at', fourteenDaysAgo.toISOString())
+        .gte('recorded_at', `${fourteenDaysAgo}T00:00:00.000Z`)
         .order('recorded_at', { ascending: true }),
       db
         .from('healthkit_sync_records')
         .select('value, recorded_at')
         .eq('user_id', userId)
         .eq('data_type', 'weight')
-        .gte('recorded_at', fourteenDaysAgo.toISOString())
+        .gte('recorded_at', `${fourteenDaysAgo}T00:00:00.000Z`)
         .order('recorded_at', { ascending: true }),
     ]);
 
-  const ranked = resolveRankedGoals(profileRes.data?.fitness_goals, profileRes.data?.primary_training_goal);
-  const goal = toNutritionGoal(ranked[0]);
-  const metadata = (profileRes.data?.metadata ?? {}) as Record<string, unknown>;
-  const dietaryStyle = (metadata.dietaryStyle as NutritionEngineInput['dietaryStyle']) ?? 'balanced';
+  const goal = macroInputs.goal;
+  const dietaryStyle = macroInputs.dietaryStyle;
+  const trainingVolume7d = macroInputs.trainingVolume7d;
 
-  const trainingVolume7d = (sessionsRes.data ?? []).reduce((sum, s) => sum + Number(s.total_volume ?? 0), 0);
-
-  const plannedToday = (plannedRes.data ?? []).find((p) => p.scheduled_date === today);
-  const nextPlanned = plannedToday ?? (plannedRes.data ?? [])[0];
-  const muscleGroups = (nextPlanned?.suggested_muscle_groups as string[] | null) ?? [];
-  const sessionKind = (nextPlanned?.metadata as { sessionKind?: 'strength' | 'cardio' | 'mobility' } | null)
-    ?.sessionKind;
-  const isTrainingDay = !!plannedToday;
+  const todaysWorkout = macroInputs.todaysWorkout;
+  const displayWorkout = todaysWorkout ?? macroInputs.nextWorkout;
+  const isTrainingDay = !!todaysWorkout;
 
   const weightSamples: Array<{ weightKg: number; recordedAt: string }> = [];
   for (const row of bodyCompRes.data ?? []) {
@@ -102,16 +75,15 @@ export async function loadNutritionIntelligence(userId: string): Promise<Nutriti
     const kg = typeof val === 'number' ? val : Number(val?.kg ?? val?.value ?? 0);
     if (kg > 0) weightSamples.push({ weightKg: kg, recordedAt: row.recorded_at });
   }
-  if (profileRes.data?.weight_kg != null && weightSamples.length === 0) {
-    weightSamples.push({ weightKg: Number(profileRes.data.weight_kg), recordedAt: today });
+  // Two independently sorted sources concatenated are not sorted; the trend and the
+  // "current weight" that drives every calorie figure both depend on true recency.
+  weightSamples.sort((a, b) => a.recordedAt.localeCompare(b.recordedAt));
+  if (macroInputs.profileWeightKg != null && weightSamples.length === 0) {
+    weightSamples.push({ weightKg: macroInputs.profileWeightKg, recordedAt: today });
   }
 
-  const { trend: weightTrend, deltaKg: weightDeltaKg } = inferWeightTrend(weightSamples);
-  const bodyWeightKg = weightSamples.length
-    ? weightSamples[weightSamples.length - 1]!.weightKg
-    : profileRes.data?.weight_kg != null
-      ? Number(profileRes.data.weight_kg)
-      : undefined;
+  const { trend: weightTrend, deltaKg: weightDeltaKg, currentKg } = inferWeightTrend(weightSamples);
+  const bodyWeightKg = currentKg ?? macroInputs.profileWeightKg;
 
   const meals7d = (meals7dRes.data ?? []) as MealRow[];
   const todayMeals = (todayMealsRes.data ?? []) as MealRow[];
@@ -122,7 +94,13 @@ export async function loadNutritionIntelligence(userId: string): Promise<Nutriti
 
   const waterMlToday = (hydrationRes.data ?? []).reduce((sum, h) => sum + Number(h.amount_ml ?? 0), 0);
 
-  const trainingDaysThisWeek = (plannedRes.data ?? []).map((p) => p.scheduled_date);
+  const trainingDaysThisWeek = macroInputs.weekWorkouts.map((w) => w.date);
+  const plannedWeek = macroInputs.weekWorkouts.map((w) => ({
+    date: w.date,
+    name: w.name,
+    muscleGroups: w.muscleGroups,
+    sessionKind: w.sessionKind,
+  }));
 
   const todayPlanMeals =
     todayMeals.length > 0
@@ -147,13 +125,15 @@ export async function loadNutritionIntelligence(userId: string): Promise<Nutriti
     recoveryStatus: intelligence.recoveryStatus,
     recoveryModeActive: intelligence.recoveryScore < 40,
     trainingVolume7d,
-    upcomingWorkout: nextPlanned
+    trainingVolumeBaseline7d: macroInputs.trainingVolumeBaseline7d,
+    ageYears: macroInputs.ageYears,
+    upcomingWorkout: displayWorkout
       ? {
-          date: nextPlanned.scheduled_date,
-          name: nextPlanned.name,
-          muscleGroups,
+          date: displayWorkout.date,
+          name: displayWorkout.name,
+          muscleGroups: displayWorkout.muscleGroups,
           isTrainingDay,
-          sessionKind,
+          sessionKind: displayWorkout.sessionKind,
         }
       : undefined,
     todayPlanMeals,
@@ -170,6 +150,10 @@ export async function loadNutritionIntelligence(userId: string): Promise<Nutriti
     },
     dietaryStyle,
     trainingDaysThisWeek,
+    plannedWeek,
+    localHour: Number(
+      new Intl.DateTimeFormat('en-GB', { timeZone, hour: '2-digit', hour12: false }).format(new Date()),
+    ),
   };
 
   return computeNutritionIntelligence(engineInput);

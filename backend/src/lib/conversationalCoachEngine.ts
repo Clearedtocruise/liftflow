@@ -5,7 +5,7 @@ import {
     loadConversationalCoachContext,
     type ConversationalCoachContext,
 } from './loadConversationalCoachContext.js';
-import { getOpenAI, hasOpenAI } from './openai.js';
+import { asPromptData, chatCompletionJson, hasOpenAI } from './openai.js';
 
 export type CoachReferenceSource =
   | 'workout_history'
@@ -40,13 +40,38 @@ const FOLLOW_UPS: Record<CoachTopic, string[]> = {
   general: ['What should I train today?', 'What should I eat?', 'Why am I stalled?'],
 };
 
-function refs(...sources: CoachReferenceSource[]): CoachReferenceSource[] {
-  return [...new Set(sources)];
+/**
+ * `referencesUsed` is shown to the user as provenance, so a source may only be listed when the
+ * underlying data actually exists. Previously every answer returned a fixed list regardless of
+ * whether the user had, say, a single progress photo or success score on file.
+ */
+function availableSources(ctx: ConversationalCoachContext): Set<CoachReferenceSource> {
+  const available = new Set<CoachReferenceSource>();
+  if (
+    ctx.coachContext.recentWorkouts.length > 0 ||
+    ctx.coachContext.lastPerformance.length > 0 ||
+    ctx.nutrition.context.trainingVolume7d > 0
+  ) {
+    available.add('workout_history');
+  }
+  if (ctx.recovery.recoveryScore != null) available.add('recovery');
+  if (ctx.nutrition.context.nutritionLogDays7d > 0 || ctx.nutrition.intakeToday.calories > 0) {
+    available.add('nutrition');
+  }
+  if (ctx.goals.ranked.length > 0) available.add('goals');
+  if (ctx.progressPhotos.totalCount > 0) available.add('progress_photos');
+  if (ctx.outcome.successScore?.overall_score != null) available.add('success_scores');
+  return available;
+}
+
+function refs(ctx: ConversationalCoachContext, ...sources: CoachReferenceSource[]): CoachReferenceSource[] {
+  const available = availableSources(ctx);
+  return [...new Set(sources)].filter((source) => available.has(source));
 }
 
 function answerTrainToday(ctx: ConversationalCoachContext): { short: string; detailed: string; voice: string; used: CoachReferenceSource[] } {
   const { today, context: recCtx } = ctx.workoutRecommendation;
-  const used = refs('workout_history', 'recovery', 'goals');
+  const used = refs(ctx, 'workout_history', 'recovery', 'goals');
 
   if (today.isRestDay) {
     const short = `Rest day — recovery score ${ctx.recovery.recoveryScore}. ${ctx.recovery.trainingRecommendationLabel}.`;
@@ -62,7 +87,7 @@ function answerTrainToday(ctx: ConversationalCoachContext): { short: string; det
 }
 
 function answerStalled(ctx: ConversationalCoachContext): { short: string; detailed: string; voice: string; used: CoachReferenceSource[] } {
-  const used = refs('workout_history', 'recovery', 'nutrition', 'success_scores', 'progress_photos', 'goals');
+  const used = refs(ctx, 'workout_history', 'recovery', 'nutrition', 'success_scores', 'progress_photos', 'goals');
   const score = ctx.outcome.successScore?.overall_score;
   const adherence = ctx.nutrition.context.adherencePct;
   const risks = ctx.outcome.activeRiskFlags ?? [];
@@ -90,7 +115,7 @@ function answerStalled(ctx: ConversationalCoachContext): { short: string; detail
 }
 
 function answerLiftWeight(ctx: ConversationalCoachContext): { short: string; detailed: string; voice: string; used: CoachReferenceSource[] } {
-  const used = refs('workout_history', 'recovery', 'goals');
+  const used = refs(ctx, 'workout_history', 'recovery', 'goals');
   const last = ctx.coachContext.lastPerformance[0];
 
   if (!last) {
@@ -98,14 +123,15 @@ function answerLiftWeight(ctx: ConversationalCoachContext): { short: string; det
     return { short, detailed: `${short} Your ${ctx.goals.primary.replace(/_/g, ' ')} goal favors controlled progression.`, voice: short, used };
   }
 
-  const suggested = last.weight + 5;
-  const short = `${last.exercise}: last ${last.weight} lb × ${last.reps}. Try ${suggested} lb if recovery is good.`;
+  const unit = ctx.coachContext.weightUnit;
+  const suggested = last.weight + (unit === 'kg' ? 2.5 : 5);
+  const short = `${last.exercise}: last ${last.weight} ${unit} × ${last.reps}. Try ${suggested} ${unit} if recovery is good.`;
   const detailed = `${short} Recovery score ${ctx.recovery.recoveryScore}. ${ctx.recovery.trainingRecommendation === 'rest_day' ? 'Consider keeping weight today due to fatigue.' : 'Progressive overload when you hit the top of your rep range.'}`;
   return { short, detailed, voice: short, used };
 }
 
 function answerEat(ctx: ConversationalCoachContext): { short: string; detailed: string; voice: string; used: CoachReferenceSource[] } {
-  const used = refs('nutrition', 'recovery', 'goals', 'workout_history');
+  const used = refs(ctx, 'nutrition', 'recovery', 'goals', 'workout_history');
   const { macroTargets, mealSuggestions, coachingTips } = ctx.nutrition;
   const meals = mealSuggestions.slice(0, 2).map((m) => `${m.mealType}: ${m.name}`).join('. ');
   const tip = coachingTips[0]?.message ?? '';
@@ -116,7 +142,7 @@ function answerEat(ctx: ConversationalCoachContext): { short: string; detailed: 
 }
 
 function answerFatigued(ctx: ConversationalCoachContext): { short: string; detailed: string; voice: string; used: CoachReferenceSource[] } {
-  const used = refs('recovery', 'workout_history', 'nutrition', 'success_scores');
+  const used = refs(ctx, 'recovery', 'workout_history', 'nutrition', 'success_scores');
   const f = ctx.recovery.factors;
   const drivers: string[] = [];
 
@@ -136,7 +162,7 @@ function answerFatigued(ctx: ConversationalCoachContext): { short: string; detai
 }
 
 function answerProtein(ctx: ConversationalCoachContext): { short: string; detailed: string; voice: string; used: CoachReferenceSource[] } {
-  const used = refs('nutrition', 'goals', 'recovery', 'workout_history');
+  const used = refs(ctx, 'nutrition', 'goals', 'recovery', 'workout_history');
   const target = ctx.nutrition.macroTargets.proteinG;
   const today = ctx.nutrition.intakeToday.proteinG;
   const remaining = Math.max(0, target - today);
@@ -148,7 +174,7 @@ function answerProtein(ctx: ConversationalCoachContext): { short: string; detail
 
 function answerGeneral(ctx: ConversationalCoachContext, message: string): { short: string; detailed: string; voice: string; used: CoachReferenceSource[] } {
   const heuristic = answerSmartCoachQuestion(message, ctx.coachContext);
-  const used = refs('workout_history', 'recovery', 'nutrition', 'goals');
+  const used = refs(ctx, 'workout_history', 'recovery', 'nutrition', 'goals');
 
   if (heuristic) {
     return { short: heuristic, detailed: `${heuristic} Recovery ${ctx.recovery.recoveryScore}. Not medical advice.`, voice: heuristic, used };
@@ -178,6 +204,27 @@ function buildAnswer(topic: CoachTopic, ctx: ConversationalCoachContext, message
   }
 }
 
+/** Questions the templates were written for: short, single-clause, one of the known topics. */
+const COMPLEXITY_MARKERS =
+  /\bcompare\b|\bversus\b|\bvs\b|\binstead of\b|\btrade[- ]?off\b|\bexplain\b|\bwhat if\b|\bbut\b|\bbecause\b|\bhow do i\b|\bwhat about\b/;
+
+/**
+ * The classifier keeps doing the work it is good at — deciding which slice of context is
+ * relevant — but it no longer decides *whether* the model is allowed to answer. A canned
+ * template cannot address a multi-clause or comparative question, so those escalate even when
+ * they match a topic; short, clearly templatable questions keep the fast, free, deterministic
+ * path. Trade-off: some classified questions now cost an LLM call and ~1s of latency, and the
+ * templated answer is still computed first so a provider failure degrades to the old behaviour.
+ */
+function shouldEscalateToLlm(topic: CoachTopic, message: string): boolean {
+  if (topic === 'general') return true;
+  const trimmed = message.trim();
+  if (trimmed.length > 140) return true;
+  if (trimmed.split(/\s+/).length > 18) return true;
+  if ((trimmed.match(/\?/g)?.length ?? 0) > 1) return true;
+  return COMPLEXITY_MARKERS.test(trimmed.toLowerCase());
+}
+
 function pickAnswer(
   detailLevel: 'short' | 'detailed' | 'voice',
   short: string,
@@ -202,41 +249,31 @@ export async function converseWithCoach(
   const topic = classifyCoachTopic(message);
   let { short, detailed, voice, used } = buildAnswer(topic, ctx, message);
 
-  if (topic === 'general' && hasOpenAI()) {
-    try {
-      const snapshot = buildContextSnapshot(ctx);
-      const openai = getOpenAI()!;
-      const completion = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages: [
-          {
-            role: 'system',
-            content:
-              'You are LiftFlow Coach. Give evidence-based fitness coaching using the user context. Respond in JSON with shortAnswer (1-2 sentences) and detailedAnswer (3-5 sentences). Never diagnose medical conditions.',
-          },
-          {
-            role: 'user',
-            content: JSON.stringify({
-              question: message,
-              context: snapshot,
-              memory: options.includeHistory !== false ? ctx.memory.summary : undefined,
-              heuristicHint: short,
-            }),
-          },
-        ],
-        response_format: { type: 'json_object' },
-      });
+  const escalated = shouldEscalateToLlm(topic, message) && hasOpenAI();
+  let answeredByModel = false;
 
-      const parsed = JSON.parse(completion.choices[0]?.message?.content ?? '{}') as {
-        shortAnswer?: string;
-        detailedAnswer?: string;
-      };
-      if (parsed.shortAnswer) short = parsed.shortAnswer;
-      if (parsed.detailedAnswer) detailed = parsed.detailedAnswer;
-      voice = short;
-    } catch {
-      // Fall back to heuristic answers when GPT is unavailable or misconfigured.
+  if (escalated) {
+    const parsed = await chatCompletionJson<{ shortAnswer?: unknown; detailedAnswer?: unknown }>({
+      system:
+        'You are LiftFlow Coach. Give evidence-based fitness coaching using the user context. Respond in JSON with shortAnswer (1-2 sentences) and detailedAnswer (3-5 sentences). Never diagnose medical conditions.',
+      user: asPromptData('COACH_REQUEST', {
+        question: message,
+        topic,
+        context: buildContextSnapshot(ctx),
+        memory: options.includeHistory !== false ? ctx.memory.summary : undefined,
+        heuristicHint: short,
+      }),
+    });
+
+    if (typeof parsed?.shortAnswer === 'string' && parsed.shortAnswer) {
+      short = parsed.shortAnswer;
+      answeredByModel = true;
     }
+    if (typeof parsed?.detailedAnswer === 'string' && parsed.detailedAnswer) {
+      detailed = parsed.detailedAnswer;
+      answeredByModel = true;
+    }
+    if (answeredByModel) voice = short;
   }
 
   const detailLevel = options.detailLevel ?? 'detailed';
@@ -253,7 +290,7 @@ export async function converseWithCoach(
       voiceLine: voice,
       referencesUsed: used,
       context: options.context ?? 'general',
-      modelVersion: topic === 'general' && hasOpenAI() ? 'gpt-4o-mini-conversational' : 'conversational-coach-v1',
+      modelVersion: answeredByModel ? 'gpt-4o-mini-conversational' : 'conversational-coach-v1',
     });
   } catch {
     // Validation and orphaned user IDs should not block coaching responses.

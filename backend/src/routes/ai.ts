@@ -23,6 +23,7 @@ import {
     converseWithCoach,
     loadConversationalCoachHistory,
 } from '../lib/conversationalCoachEngine.js';
+import { loadUserToday } from '../lib/dailyMacroInputs.js';
 import { generateExerciseAlternatives } from '../lib/exerciseReplacementEngine.js';
 import { searchExercisesOnline } from '../lib/exerciseOnlineSearch.js';
 import { estimateFoodMacros } from '../lib/foodMacroEstimator.js';
@@ -101,19 +102,25 @@ aiRouter.post('/refresh', requireProSubscription, async (req, res) => {
     const recommendations = await generateRecommendations(userId);
     const db = requireAdmin();
 
-    for (const rec of recommendations) {
-      await db.from('ai_recommendations').insert({
-        user_id: userId,
-        recommendation_type: rec.recommendationType,
-        title: rec.title,
-        description: rec.description,
-        rationale: rec.rationale,
-        payload: rec.payload,
-        confidence: rec.confidence,
-      });
-    }
+    const { data: inserted, error } = await db
+      .from('ai_recommendations')
+      .insert(
+        recommendations.map((rec) => ({
+          user_id: userId,
+          recommendation_type: rec.recommendationType,
+          title: rec.title,
+          description: rec.description,
+          rationale: rec.rationale,
+          payload: rec.payload,
+          confidence: rec.confidence,
+        })),
+      )
+      .select('id');
 
-    res.json({ count: recommendations.length, recommendations });
+    // Reporting a count while the writes silently failed made "refresh" look successful.
+    if (error) throw error;
+
+    res.json({ count: inserted?.length ?? 0, recommendations });
   } catch (error) {
     res.status(500).json({ message: error instanceof Error ? error.message : 'Refresh failed' });
   }
@@ -159,7 +166,7 @@ aiRouter.get('/progression/:exerciseId', async (req, res) => {
 aiRouter.post('/workout/generate', requireProSubscription, async (req, res) => {
   try {
     const userId = authedUserId(req);
-    const plan = await generateWorkoutPlan(userId);
+    const [plan, { today }] = await Promise.all([generateWorkoutPlan(userId), loadUserToday(userId)]);
     const db = requireAdmin();
 
     const { data, error } = await db
@@ -167,7 +174,7 @@ aiRouter.post('/workout/generate', requireProSubscription, async (req, res) => {
       .insert({
         user_id: userId,
         name: plan.name,
-        scheduled_date: new Date().toISOString().slice(0, 10),
+        scheduled_date: today,
         status: 'planned',
         suggested_muscle_groups: plan.muscleGroups,
         ai_rationale: plan.rationale,

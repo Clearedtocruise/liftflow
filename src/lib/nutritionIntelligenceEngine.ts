@@ -11,6 +11,8 @@ export function coachingActionLabel(action: NutritionCoachingAction): string {
       return 'Increase protein';
     case 'hydration_reminder':
       return 'Hydration';
+    case 'log_meals':
+      return 'Log meals';
     default:
       return action;
   }

@@ -1,4 +1,4 @@
-import { getOpenAI, hasOpenAI } from './openai.js';
+import { asPromptData, chatCompletionJson } from './openai.js';
 
 export type AdvisoryNutritionKind =
   | 'improve_meal_plan'
@@ -34,13 +34,50 @@ export type ExplainWorkoutAdvisoryResponse = {
   focusPoints: string[];
 };
 
+/**
+ * Advisory context is client-supplied, so the fallbacks must survive any shape. A malformed
+ * payload previously reached the fallback and crashed it, turning bad input into a 500.
+ */
+function toStringList(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+}
+
+function parseMealPlan(value: unknown): Array<{ label: string; items: string[] }> {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    if (!entry || typeof entry !== 'object') return [];
+    const label = (entry as { label?: unknown }).label;
+    if (typeof label !== 'string' || label.length === 0) return [];
+    return [{ label, items: toStringList((entry as { items?: unknown }).items) }];
+  });
+}
+
+function sanitizeAdvisoryExercises(value: unknown): WorkoutAdvisoryResponse['exercises'] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    if (!entry || typeof entry !== 'object') return [];
+    const { exerciseName, sets, reps, weightLb } = entry as Record<string, unknown>;
+    if (typeof exerciseName !== 'string' || exerciseName.trim().length === 0) return [];
+    const clamp = (n: unknown, min: number, max: number, fallback: number) => {
+      const num = Number(n);
+      return Number.isFinite(num) ? Math.min(max, Math.max(min, Math.round(num))) : fallback;
+    };
+    return [
+      {
+        exerciseName: exerciseName.trim().slice(0, 120),
+        sets: clamp(sets, 1, 8, 3),
+        reps: clamp(reps, 1, 20, 10),
+        weightLb: clamp(weightLb, 0, 500, 0),
+      },
+    ];
+  });
+}
+
 function fallbackNutritionAdvisory(
   kind: AdvisoryNutritionKind,
   context: NutritionContext,
 ): NutritionAdvisoryResponse {
-  const currentMealPlan = Array.isArray(context.currentMealPlan)
-    ? (context.currentMealPlan as Array<{ label: string; items: string[] }>)
-    : [];
+  const currentMealPlan = parseMealPlan(context.currentMealPlan);
   const workoutName =
     context.todaysWorkout && typeof context.todaysWorkout === 'object'
       ? String((context.todaysWorkout as { workoutName?: string }).workoutName ?? 'Training')
@@ -75,22 +112,24 @@ function fallbackWorkoutAdvisory(
   kind: AdvisoryWorkoutKind,
   context: WorkoutContext,
 ): WorkoutAdvisoryResponse {
-  const todays =
-    context.todaysWorkout && typeof context.todaysWorkout === 'object'
-      ? (context.todaysWorkout as WorkoutAdvisoryResponse)
-      : null;
-  const generated =
-    context.generatedPlan && typeof context.generatedPlan === 'object'
-      ? (context.generatedPlan as WorkoutAdvisoryResponse)
-      : null;
-  const base = todays ?? generated ?? {
-    workoutName: 'Full Body',
-    exercises: [
-      { exerciseName: 'Goblet Squat', sets: 3, reps: 10, weightLb: 50 },
-      { exerciseName: 'Dumbbell Bench Press', sets: 3, reps: 10, weightLb: 50 },
-      { exerciseName: 'Dumbbell Row', sets: 3, reps: 10, weightLb: 50 },
-    ],
+  // A source is only usable if it actually yields at least one well-formed exercise.
+  const fromContext = (value: unknown) => {
+    if (!value || typeof value !== 'object') return null;
+    const exercises = sanitizeAdvisoryExercises((value as { exercises?: unknown }).exercises);
+    if (exercises.length === 0) return null;
+    const name = (value as { workoutName?: unknown }).workoutName;
+    return { workoutName: typeof name === 'string' && name ? name : 'Training', exercises };
   };
+
+  const base = fromContext(context.todaysWorkout) ??
+    fromContext(context.generatedPlan) ?? {
+      workoutName: 'Full Body',
+      exercises: [
+        { exerciseName: 'Goblet Squat', sets: 3, reps: 10, weightLb: 50 },
+        { exerciseName: 'Dumbbell Bench Press', sets: 3, reps: 10, weightLb: 50 },
+        { exerciseName: 'Dumbbell Row', sets: 3, reps: 10, weightLb: 50 },
+      ],
+    };
 
   const substitutions =
     kind === 'suggest_substitutions'
@@ -134,36 +173,25 @@ function fallbackExplainWorkout(context: WorkoutContext): ExplainWorkoutAdvisory
   };
 }
 
-async function callOpenAiJson<T>(system: string, user: string): Promise<T | null> {
-  const openai = getOpenAI();
-  if (!openai || !hasOpenAI()) return null;
-
-  const completion = await openai.chat.completions.create({
-    model: 'gpt-4o-mini',
+/** Every advisory payload originates in the client, so it is always fenced as untrusted data. */
+async function callOpenAiJson<T>(system: string, payload: unknown): Promise<T | null> {
+  return chatCompletionJson<T>({
+    system,
+    user: asPromptData('ADVISORY_REQUEST', payload),
     temperature: 0.4,
-    response_format: { type: 'json_object' },
-    messages: [
-      { role: 'system', content: system },
-      { role: 'user', content: user },
-    ],
   });
-
-  const content = completion.choices[0]?.message?.content;
-  if (!content) return null;
-  return JSON.parse(content) as T;
 }
 
 export async function generateNutritionAdvisory(
   kind: AdvisoryNutritionKind,
   context: NutritionContext,
 ): Promise<NutritionAdvisoryResponse> {
-  const prompt = JSON.stringify({ kind, context });
   const ai = await callOpenAiJson<NutritionAdvisoryResponse>(
     `You are an advisory fitness nutrition coach. Return JSON only with keys:
 reasoning, mealPlan[{label,items[]}], groceryImprovements[], preWorkoutMealTiming, postWorkoutMealTiming.
 Respect allergies and diet preference. Do not exceed user's macro targets dramatically.
 This is advisory only — no medical claims.`,
-    prompt,
+    { kind, context },
   );
 
   if (
@@ -182,17 +210,19 @@ export async function generateWorkoutAdvisory(
   kind: AdvisoryWorkoutKind,
   context: WorkoutContext,
 ): Promise<WorkoutAdvisoryResponse> {
-  const prompt = JSON.stringify({ kind, context });
   const ai = await callOpenAiJson<WorkoutAdvisoryResponse>(
     `You are an advisory strength coach. Return JSON only with keys:
 reasoning, workoutName, exercises[{exerciseName,sets,reps,weightLb}], substitutions[{from,to,reason}] (optional).
 Only suggest exercises compatible with listed equipment. Sets 1-8, reps 1-20, weightLb 0-500.
 This is advisory only.`,
-    prompt,
+    { kind, context },
   );
 
-  if (ai?.reasoning && ai.workoutName && Array.isArray(ai.exercises) && ai.exercises.length > 0) {
-    return ai;
+  if (ai?.reasoning && ai.workoutName && Array.isArray(ai.exercises)) {
+    const exercises = sanitizeAdvisoryExercises(ai.exercises);
+    if (exercises.length > 0) {
+      return { ...ai, exercises };
+    }
   }
 
   return fallbackWorkoutAdvisory(kind, context);
@@ -201,12 +231,11 @@ This is advisory only.`,
 export async function generateExplainWorkoutAdvisory(
   context: WorkoutContext,
 ): Promise<ExplainWorkoutAdvisoryResponse> {
-  const prompt = JSON.stringify({ context });
   const ai = await callOpenAiJson<ExplainWorkoutAdvisoryResponse>(
     `You are an advisory strength coach. Return JSON only with keys:
 reasoning, summary, focusPoints[].
 Explain today's workout clearly for a lifter. No auto-prescription of unsafe loads.`,
-    prompt,
+    { context },
   );
 
   if (ai?.reasoning && ai.summary && Array.isArray(ai.focusPoints) && ai.focusPoints.length > 0) {
@@ -287,13 +316,12 @@ export async function generateMealAlternatives(context: {
   ingredients?: Array<{ name: string; serving: string }>;
   dietaryRestrictions?: string[];
 }): Promise<MealAlternativesResponse> {
-  const prompt = JSON.stringify(context);
   const ai = await callOpenAiJson<MealAlternativesResponse>(
     `You are an advisory nutrition coach. Return JSON only with keys:
 reasoning, alternatives[{name,calories,proteinG,carbsG,fatG,ingredients[{name,serving}]}], ingredientAlternatives[{from,to,reason}].
 Suggest 3 meal swaps for the requested reason. Respect dietaryRestrictions. Keep calories within ~25% of a typical meal slot.
 This is advisory only — no medical claims.`,
-    prompt,
+    context,
   );
 
   if (ai?.reasoning && Array.isArray(ai.alternatives) && ai.alternatives.length > 0) {

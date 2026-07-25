@@ -6,7 +6,8 @@ export type NutritionCoachingAction =
   | 'increase_carbs'
   | 'reduce_calories'
   | 'increase_protein'
-  | 'hydration_reminder';
+  | 'hydration_reminder'
+  | 'log_meals';
 
 export type NutritionIntelligenceContext = {
   userId: string;
@@ -15,6 +16,8 @@ export type NutritionIntelligenceContext = {
   recoveryScore: number;
   recoveryStatus: string;
   trainingVolume7d: number;
+  /** The user's own weekly volume over the preceding 4 weeks, when enough history exists. */
+  trainingVolumeBaseline7d?: number;
   upcomingWorkout?: {
     date: string;
     name: string;
