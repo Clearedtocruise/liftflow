@@ -1,17 +1,15 @@
 import { router } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Alert, RefreshControl, StyleSheet, View } from 'react-native';
 
 import { HistoryCard } from '@/components/history/HistoryCard';
+import { Card } from '@/components/layout/Card';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { SectionHeader } from '@/components/layout/SectionHeader';
 import { SkeletonBlock } from '@/components/layout/SkeletonBlock';
-import { StatCard } from '@/components/layout/StatCard';
 import { EmptyStateCard } from '@/components/layout/StateCard';
-import { TabScreenHeader } from '@/components/layout/TabScreenHeader';
 import { AppText } from '@/components/ui/AppText';
-import { HeroImages } from '@/constants/imagery';
-import { LiftFlowColors, Spacing } from '@/constants/theme';
+import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 import { screenDataCache } from '@/lib/screenDataCache';
 import { getCombinedActivityHistory } from '@/services/activityHistoryService';
@@ -29,44 +27,47 @@ export default function HistoryScreen() {
   const loadGenerationRef = useRef(0);
   const hydratedFromCacheRef = useRef(false);
 
-  const load = useCallback(async (options?: { silent?: boolean }) => {
-    if (!user) return;
+  const load = useCallback(
+    async (options?: { silent?: boolean }) => {
+      if (!user) return;
 
-    const generation = ++loadGenerationRef.current;
-    const silent = options?.silent ?? hydratedFromCacheRef.current;
+      const generation = ++loadGenerationRef.current;
+      const silent = options?.silent ?? hydratedFromCacheRef.current;
 
-    if (!silent) setLoading(true);
+      if (!silent) setLoading(true);
 
-    // Load history immediately; pull Apple Fitness in the background so History never freezes.
-    const historyResult = await getCombinedActivityHistory(user.id);
-    if (generation !== loadGenerationRef.current) return;
-
-    const items = historyResult.success ? historyResult.data.data : [];
-    if (historyResult.success) setHistory(items);
-    setLoading(false);
-    setRefreshing(false);
-
-    void (async () => {
-      try {
-        await healthService.sync(user.id, 14);
-      } catch {
-        // Non-blocking
-      }
+      // Load history immediately; pull Apple Fitness in the background so History never freezes.
+      const historyResult = await getCombinedActivityHistory(user.id);
       if (generation !== loadGenerationRef.current) return;
 
-      const [refreshed, streakResult] = await Promise.all([
-        getCombinedActivityHistory(user.id),
-        analyticsService.getWorkoutStreak(user.id),
-      ]);
-      if (generation !== loadGenerationRef.current) return;
+      const items = historyResult.success ? historyResult.data.data : [];
+      if (historyResult.success) setHistory(items);
+      setLoading(false);
+      setRefreshing(false);
 
-      const nextItems = refreshed.success ? refreshed.data.data : items;
-      const streakValue = streakResult.success ? streakResult.data : 0;
-      if (refreshed.success) setHistory(nextItems);
-      if (streakResult.success) setStreak(streakValue);
-      screenDataCache.writeHistory(user.id, { items: nextItems, streak: streakValue });
-    })();
-  }, [user]);
+      void (async () => {
+        try {
+          await healthService.sync(user.id, 14);
+        } catch {
+          // Non-blocking
+        }
+        if (generation !== loadGenerationRef.current) return;
+
+        const [refreshed, streakResult] = await Promise.all([
+          getCombinedActivityHistory(user.id),
+          analyticsService.getWorkoutStreak(user.id),
+        ]);
+        if (generation !== loadGenerationRef.current) return;
+
+        const nextItems = refreshed.success ? refreshed.data.data : items;
+        const streakValue = streakResult.success ? streakResult.data : 0;
+        if (refreshed.success) setHistory(nextItems);
+        if (streakResult.success) setStreak(streakValue);
+        screenDataCache.writeHistory(user.id, { items: nextItems, streak: streakValue });
+      })();
+    },
+    [user],
+  );
 
   useEffect(() => {
     if (!user?.id) {
@@ -116,16 +117,15 @@ export default function HistoryScreen() {
 
   if (loading && history.length === 0) {
     return (
-      <ScreenContainer
-        header={<TabScreenHeader title="History" subtitle="Track progression over time" bannerUri={HeroImages.tabs.history} />}
-        scroll={false}>
+      <ScreenContainer scroll={false}>
+        <SectionHeader title="History" subtitle="Track progression over time" />
         <View style={styles.statsRow}>
-          <StatCard label="Day Streak">
+          <MetricTile label="Day Streak">
             <SkeletonBlock height={40} width="50%" />
-          </StatCard>
-          <StatCard label="Sessions">
+          </MetricTile>
+          <MetricTile label="Sessions">
             <SkeletonBlock height={40} width="50%" />
-          </StatCard>
+          </MetricTile>
         </View>
         <SkeletonBlock height={20} width="40%" />
         <SkeletonBlock height={88} />
@@ -136,7 +136,6 @@ export default function HistoryScreen() {
 
   return (
     <ScreenContainer
-      header={<TabScreenHeader title="History" subtitle="Track progression over time" bannerUri={HeroImages.tabs.history} />}
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
@@ -147,21 +146,22 @@ export default function HistoryScreen() {
           tintColor={LiftFlowColors.primary}
         />
       }>
+      <SectionHeader title="History" subtitle="Track progression over time" />
+
       <View style={styles.statsRow}>
-        <StatCard label="Day Streak">
-          <AppText variant="metric" color="accent">
+        <MetricTile label="Day Streak">
+          <AppText variant="title" color="accent">
             {streak}
           </AppText>
-        </StatCard>
-        <StatCard label="Sessions">
-          <AppText variant="metric">{history.length}</AppText>
-        </StatCard>
+        </MetricTile>
+        <MetricTile label="Sessions">
+          <AppText variant="title">{history.length}</AppText>
+        </MetricTile>
       </View>
 
       <SectionHeader
         title="Recent Sessions"
         subtitle="Includes Apple Fitness workouts · Pull to refresh · Long press to delete"
-        variant="secondary"
       />
 
       {history.length === 0 ? (
@@ -177,9 +177,7 @@ export default function HistoryScreen() {
             key={item.id}
             item={item}
             onPress={
-              item.sessionKind === 'cardio'
-                ? undefined
-                : () => router.push(`/session/${item.id}`)
+              item.sessionKind === 'cardio' ? undefined : () => router.push(`/session/${item.id}`)
             }
             onLongPress={() => handleDelete(item.id, item.sessionKind)}
           />
@@ -189,9 +187,29 @@ export default function HistoryScreen() {
   );
 }
 
+/** Local metric tile — same pattern as session detail; no missing layout module. */
+function MetricTile({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <Card style={styles.metricCard}>
+      <AppText variant="caption" color="textSecondary">
+        {label}
+      </AppText>
+      {children}
+    </Card>
+  );
+}
+
 const styles = StyleSheet.create({
   statsRow: {
     flexDirection: 'row',
     gap: Spacing.md,
+    marginBottom: Spacing.lg,
+  },
+  metricCard: {
+    flex: 1,
+    gap: Spacing.xs,
+    padding: Spacing.md,
+    borderRadius: Radius.md,
+    alignItems: 'flex-start',
   },
 });

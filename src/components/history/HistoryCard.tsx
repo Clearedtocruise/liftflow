@@ -3,6 +3,7 @@ import { StyleSheet, View } from 'react-native';
 import { Card } from '@/components/layout/Card';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Spacing } from '@/constants/theme';
+import { useUnits } from '@/hooks/useUnits';
 import type { WorkoutHistoryItem } from '@/types/workout';
 
 type HistoryCardProps = {
@@ -17,13 +18,17 @@ function formatDate(dateStr: string): string {
 }
 
 export function HistoryCard({ item, onPress, onLongPress }: HistoryCardProps) {
+  const units = useUnits();
+  const isCardio = item.sessionKind === 'cardio';
+
   return (
     <Card onPress={onPress} onLongPress={onLongPress} style={styles.card}>
       <View style={styles.header}>
-        <View>
+        <View style={styles.titleBlock}>
           <AppText variant="bodyBold">{item.name}</AppText>
           <AppText variant="footnote" color="textSecondary">
             {formatDate(item.date)} · {item.durationMinutes} min
+            {isCardio ? ' · Cardio' : ''}
           </AppText>
         </View>
         {item.prCount ? (
@@ -35,11 +40,26 @@ export function HistoryCard({ item, onPress, onLongPress }: HistoryCardProps) {
         ) : null}
       </View>
 
-      <View style={styles.statsRow}>
-        <Stat label="Exercises" value={String(item.exerciseCount)} />
-        <Stat label="Sets" value={String(item.totalSets)} />
-        <Stat label="Volume" value={`${(item.totalVolume / 1000).toFixed(1)}k`} />
-      </View>
+      {isCardio ? (
+        <View style={styles.statsRow}>
+          <Stat label="Active cal" value={item.caloriesBurned ? `~${item.caloriesBurned}` : '—'} />
+          <Stat
+            label="Distance"
+            value={
+              item.distanceMeters && item.distanceMeters > 0
+                ? units.formatDistance(item.distanceMeters / 1000)
+                : '—'
+            }
+          />
+          <Stat label="Heart rate" value={item.avgHeartRate ? `${item.avgHeartRate} bpm` : '—'} />
+        </View>
+      ) : (
+        <View style={styles.statsRow}>
+          <Stat label="Exercises" value={String(item.exerciseCount)} />
+          <Stat label="Sets" value={String(item.totalSets)} />
+          <Stat label="Volume" value={`${(item.totalVolume / 1000).toFixed(1)}k`} />
+        </View>
+      )}
     </Card>
   );
 }
@@ -64,6 +84,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginBottom: Spacing.lg,
+  },
+  titleBlock: {
+    flex: 1,
+    gap: Spacing.xs,
   },
   prBadge: {
     paddingHorizontal: Spacing.sm,
