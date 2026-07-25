@@ -93,6 +93,8 @@ function answerStalled(ctx: ConversationalCoachContext): { short: string; detail
   const risks = ctx.outcome.activeRiskFlags ?? [];
 
   const factors: string[] = [];
+  const stalled = ctx.coachContext.strengthTrend.stalledExercises;
+  if (stalled.length > 0) factors.push(`no strength gain on ${stalled.slice(0, 2).join(' and ')}`);
   if (ctx.recovery.recoveryScore < 55) factors.push(`low recovery (${ctx.recovery.recoveryScore})`);
   if (adherence < 60) factors.push(`nutrition logging at ${adherence}%`);
   if ((ctx.recovery.factors.consecutiveTrainingDays ?? 0) >= 4) factors.push('high consecutive training days');
@@ -110,7 +112,15 @@ function answerStalled(ctx: ConversationalCoachContext): { short: string; detail
       ? ` Latest progress photo: ${ctx.progressPhotos.latestDate} (${ctx.progressPhotos.latestAngle ?? 'photo'}).`
       : ' Log progress photos to compare visual changes.';
 
-  const detailed = `${short}${riskNote} Goal: ${ctx.goals.primary.replace(/_/g, ' ')}. ${photoNote} Weekly volume: ${ctx.nutrition.context.trainingVolume7d}.`;
+  const trendNote = ctx.coachContext.strengthTrend.entries
+    .slice(0, 2)
+    .map(
+      (entry) =>
+        `${entry.exercise} ${entry.direction} (${entry.firstTopSet.weight}×${entry.firstTopSet.reps} → ${entry.lastTopSet.weight}×${entry.lastTopSet.reps} over ${entry.daysCovered}d)`,
+    )
+    .join('; ');
+
+  const detailed = `${short}${riskNote} Goal: ${ctx.goals.primary.replace(/_/g, ' ')}. ${trendNote ? `${trendNote}. ` : ''}${photoNote} Weekly volume: ${ctx.nutrition.context.trainingVolume7d}.`;
   return { short, detailed, voice: short, used };
 }
 
@@ -204,6 +214,29 @@ function buildAnswer(topic: CoachTopic, ctx: ConversationalCoachContext, message
   }
 }
 
+const EMPTY_MEMORY: ReturnType<typeof buildContextSnapshot>['memory'] = {
+  summary: 'History excluded by request.',
+  lastTopic: undefined,
+  recentTurns: [],
+};
+
+/**
+ * Naming the fields the model is expected to cite is what stops it from answering with generic
+ * fitness advice that would read identically for any user: the context block is large, and without
+ * this the model tends to acknowledge it and then ignore it.
+ */
+const COACH_SYSTEM_PROMPT = [
+  'You are ONE MORE Coach. Answer using the specific numbers in the provided user context.',
+  'Ground every claim in their data: cite actual exercises, loads, reps, dates, recovery scores,',
+  'macro figures, or trend directions rather than generalities. Weights are in the unit given by',
+  'context.weightUnit. When strengthTrend shows a stalled or declining exercise, treat that as more',
+  'informative than the single most recent set. Respect context.limitations — never program around',
+  'an affected movement as if it were healthy. If the context lacks what the question needs, say so',
+  'briefly and name what to log instead of inventing a figure.',
+  'Respond in JSON with shortAnswer (1-2 sentences) and detailedAnswer (3-5 sentences).',
+  'Never diagnose medical conditions; refer pain or injury to a clinician.',
+].join(' ');
+
 /** Questions the templates were written for: short, single-clause, one of the known topics. */
 const COMPLEXITY_MARKERS =
   /\bcompare\b|\bversus\b|\bvs\b|\binstead of\b|\btrade[- ]?off\b|\bexplain\b|\bwhat if\b|\bbut\b|\bbecause\b|\bhow do i\b|\bwhat about\b/;
@@ -253,14 +286,15 @@ export async function converseWithCoach(
   let answeredByModel = false;
 
   if (escalated) {
+    const snapshot = buildContextSnapshot(ctx);
+    if (options.includeHistory === false) snapshot.memory = EMPTY_MEMORY;
+
     const parsed = await chatCompletionJson<{ shortAnswer?: unknown; detailedAnswer?: unknown }>({
-      system:
-        'You are ONE MORE Coach. Give evidence-based fitness coaching using the user context. Respond in JSON with shortAnswer (1-2 sentences) and detailedAnswer (3-5 sentences). Never diagnose medical conditions.',
+      system: COACH_SYSTEM_PROMPT,
       user: asPromptData('COACH_REQUEST', {
         question: message,
         topic,
-        context: buildContextSnapshot(ctx),
-        memory: options.includeHistory !== false ? ctx.memory.summary : undefined,
+        context: snapshot,
         heuristicHint: short,
       }),
     });

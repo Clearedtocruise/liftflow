@@ -29,6 +29,10 @@ export function useWatchCompanionSync(userId: string | undefined) {
   const watchSyncTracked = useRef(false);
   const exerciseIndexRef = useRef(activeExerciseIndex);
   const restSecondsRef = useRef(restSecondsRemaining);
+  const pushedRestRef = useRef<{ sessionId: string | null; seconds: number | null }>({
+    sessionId: null,
+    seconds: null,
+  });
 
   exerciseIndexRef.current = activeExerciseIndex;
   restSecondsRef.current = restSecondsRemaining;
@@ -96,9 +100,25 @@ export function useWatchCompanionSync(userId: string | undefined) {
     }
   }, [userId, sessionStructureKey, activeSession]);
 
+  /**
+   * The watch runs its own countdown once armed, so it only needs the deadline — not every tick.
+   * Transmitting each second flooded the WatchConnectivity queue and kept re-arming that countdown.
+   */
   useEffect(() => {
     if (!userId || !activeSession) return;
-    void watchCompanionService.pushRestTimerOnly(userId, restSecondsRemaining);
+
+    const previous =
+      pushedRestRef.current.sessionId === activeSession.id ? pushedRestRef.current.seconds : null;
+    pushedRestRef.current = { sessionId: activeSession.id, seconds: restSecondsRemaining };
+
+    const previousRest = previous != null && previous > 0 ? previous : 0;
+    const currentRest = restSecondsRemaining != null && restSecondsRemaining > 0 ? restSecondsRemaining : 0;
+
+    // A tick moves the value down by exactly one second; anything else is a new or cleared deadline.
+    const isTick = previousRest > 0 && currentRest > 0 && previousRest - currentRest === 1;
+    const transmit = previousRest !== currentRest && !isTick;
+
+    void watchCompanionService.pushRestTimerOnly(userId, restSecondsRemaining, { transmit });
   }, [userId, activeSession?.id, restSecondsRemaining]);
 
   useEffect(() => {

@@ -7,16 +7,16 @@ import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { SectionHeader } from '@/components/layout/SectionHeader';
 import { FeatureGate } from '@/components/subscription/PremiumGate';
 import { AppText } from '@/components/ui/AppText';
+import { ComingSoonBanner } from '@/components/ui/ComingSoonBanner';
 import { LiftFlowColors, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 import { useWatchWorkout } from '@/hooks/useWatchWorkout';
-import { isMotionTrackingSupported } from '@/integrations/watch';
 import { integrationService } from '@/services/integrationService';
 
 export default function AppleWatchScreen() {
   const { user } = useAuth();
   const watchAvailability = integrationService.getWatchAvailability();
-  const { state, loading, error, supportedExercises, refresh, simulateRep, correctReps, confirmReps, handleVoice, completeSet } =
+  const { state, loading, error, refresh, correctReps, confirmReps, handleVoice, completeSet } =
     useWatchWorkout(user?.id);
 
   const [voiceInput, setVoiceInput] = useState('');
@@ -45,7 +45,7 @@ export default function AppleWatchScreen() {
       <View style={styles.header}>
         <AppText variant="title">Apple Watch</AppText>
         <AppText variant="body" color="textSecondary">
-          Hands-free rep counting, rest tracking, and workout Q&amp;A
+          Live workout state, rest tracking, and workout Q&amp;A on your wrist
         </AppText>
       </View>
 
@@ -54,10 +54,17 @@ export default function AppleWatchScreen() {
           <AppText variant="bodyBold">Watch connectivity</AppText>
           <AppText variant="footnote" color="textSecondary">
             {watchAvailability.available
-              ? 'Paired Watch can receive live workout state. Native watchOS app streams accelerometer + gyroscope batches.'
+              ? 'Paired Watch receives live workout state, rest timers, and heart rate.'
               : watchAvailability.reason}
           </AppText>
         </Card>
+
+        <View style={styles.banner}>
+          <ComingSoonBanner
+            title="Automatic Rep Counting Coming Soon"
+            description="Reps are entered by hand for now. Motion-based rep detection is not part of this release."
+          />
+        </View>
 
         {loading ? (
           <ActivityIndicator color={LiftFlowColors.accent} style={styles.loader} />
@@ -81,11 +88,7 @@ export default function AppleWatchScreen() {
               </AppText>
             ) : null}
             <View style={styles.metrics}>
-              <Metric label="Reps" value={String(active.currentRepCount)} />
-              <Metric
-                label="Confidence"
-                value={`${Math.round((active.motionConfidence ?? 0) * 100)}%`}
-              />
+              <Metric label="Reps entered" value={String(active.currentRepCount)} />
               <Metric label="Phase" value={active.phase} />
             </View>
             {state?.recoveryScore != null ? (
@@ -105,12 +108,7 @@ export default function AppleWatchScreen() {
             ) : null}
             {active.needsConfirmation ? (
               <AppText variant="footnote" color="accent" style={styles.warn}>
-                Low motion confidence — confirm count or correct manually.
-              </AppText>
-            ) : null}
-            {active.motionConfidence > 0 && !active.needsConfirmation && isMotionTrackingSupported(active.exerciseName) ? (
-              <AppText variant="footnote" color="textSecondary">
-                Motion tracking active for this exercise.
+                Confirm the rep count or correct it below before logging.
               </AppText>
             ) : null}
             {state?.lastSpokenResponse ? (
@@ -120,7 +118,6 @@ export default function AppleWatchScreen() {
             ) : null}
 
             <View style={styles.row}>
-              <PrimaryButton label="Simulate rep (dev)" onPress={simulateRep} variant="secondary" />
               <PrimaryButton label="Confirm reps" onPress={confirmReps} variant="secondary" />
             </View>
             <PrimaryButton label="Complete set & log" onPress={completeSet} />
@@ -145,7 +142,7 @@ export default function AppleWatchScreen() {
         />
         <PrimaryButton label="Ask assistant" onPress={onVoiceSubmit} variant="secondary" />
 
-        <SectionHeader title="Manual rep correction" />
+        <SectionHeader title="Rep count" subtitle="Enter the reps you completed" />
         <TextInput
           style={styles.input}
           placeholder="Rep count"
@@ -154,12 +151,7 @@ export default function AppleWatchScreen() {
           value={repCorrection}
           onChangeText={setRepCorrection}
         />
-        <PrimaryButton label="Apply correction" onPress={onCorrectRep} variant="secondary" />
-
-        <SectionHeader title="Motion-tracked exercises" />
-        <AppText variant="footnote" color="textSecondary">
-          {supportedExercises.join(' · ')}
-        </AppText>
+        <PrimaryButton label="Save rep count" onPress={onCorrectRep} variant="secondary" />
       </FeatureGate>
     </ScreenContainer>
   );
@@ -184,6 +176,9 @@ const styles = StyleSheet.create({
   card: {
     marginBottom: Spacing.lg,
     gap: Spacing.sm,
+  },
+  banner: {
+    marginBottom: Spacing.lg,
   },
   loader: {
     marginVertical: Spacing.lg,

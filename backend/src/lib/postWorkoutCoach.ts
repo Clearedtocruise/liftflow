@@ -1,7 +1,9 @@
+import { loadDailyMacroInputs, macroContextFrom } from './dailyMacroInputs.js';
 import { localDateString } from './localDate.js';
 import { requireAdmin } from './supabase.js';
 import { recommendSupplements } from './supplementGuidance.js';
 import { resolveRankedGoals, toNutritionGoal } from './trainingGoals.js';
+import { calculateMacroTargets } from './workoutAwareNutrition.js';
 
 export type PostWorkoutCoachSummary = {
   workoutSummary: string;
@@ -69,12 +71,17 @@ export async function generatePostWorkoutCoachSummary(
 
   const { data: todayMeals } = await db
     .from('meals')
-    .select('protein_g')
+    .select('protein_g, calories')
     .eq('user_id', userId)
     .eq('scheduled_date', today);
 
   const proteinLogged = (todayMeals ?? []).reduce((sum, m) => sum + (m.protein_g ?? 0), 0);
-  const proteinTarget = nutritionGoals?.protein_g ?? 180;
+  const caloriesLogged = (todayMeals ?? []).reduce((sum, m) => sum + Number(m.calories ?? 0), 0);
+  // A flat constant would report the same "target" to a 55kg cutting user and a 110kg bulking one,
+  // so an absent goal row falls back to the same computed targets the nutrition screens show.
+  const computedTargets = calculateMacroTargets(macroContextFrom(await loadDailyMacroInputs(userId)));
+  const proteinTarget = nutritionGoals?.protein_g ?? computedTargets.proteinG;
+  const calorieTarget = nutritionGoals?.daily_calories ?? computedTargets.calories;
   const recoveryScore: number | undefined = recovery?.recovery_score ?? undefined;
 
   const durationMin = Math.round((session.duration_seconds ?? 0) / 60);
@@ -94,10 +101,11 @@ export async function generatePostWorkoutCoachSummary(
           ? 'Recovery is high. You can push intensity on your next session if warm-ups feel strong.'
           : 'Recovery is moderate. Stay consistent and monitor sleep quality over the next 48 hours.';
 
+  const calorieNote = ` Calories ${Math.round(caloriesLogged)} / ${calorieTarget} logged today.`;
   const nutritionRecommendation =
-    proteinLogged < proteinTarget * 0.7
+    (proteinLogged < proteinTarget * 0.7
       ? `Protein intake is below target (${Math.round(proteinLogged)}g / ${proteinTarget}g). Add a post-workout protein meal within 2 hours.`
-      : `Protein on track (${Math.round(proteinLogged)}g / ${proteinTarget}g). Maintain hydration and balanced carbs tonight.`;
+      : `Protein on track (${Math.round(proteinLogged)}g / ${proteinTarget}g). Maintain hydration and balanced carbs tonight.`) + calorieNote;
 
   const progressionRecommendations: string[] = [];
 

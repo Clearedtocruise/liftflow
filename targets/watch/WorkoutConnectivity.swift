@@ -161,7 +161,7 @@ final class WorkoutConnectivity: NSObject, ObservableObject, WCSessionDelegate {
       phase = activeSet["phase"] as? String ?? "active_set"
 
       if let rest = activeSet["restSecondsRemaining"] as? Int, rest > 0 {
-        startRestCountdown(seconds: rest)
+        armRestCountdown(seconds: rest)
       } else if phase != "rest" {
         clearRestCountdown()
       }
@@ -208,6 +208,23 @@ final class WorkoutConnectivity: NSObject, ObservableObject, WCSessionDelegate {
         sessionCalories = session
       }
     }
+  }
+
+  /// Tolerance between the local countdown and an incoming value before the timer is re-armed.
+  /// One second of drift is just the phone and watch rounding the same deadline differently.
+  private static let restDriftToleranceSeconds = 1
+
+  /**
+   * Arms the countdown only when the phone reports a rest deadline the local timer is not already
+   * tracking. Restarting the timer on every push would reset it to the pushed value each time,
+   * so the display froze instead of counting down.
+   */
+  private func armRestCountdown(seconds: Int) {
+    if restTimer != nil, let end = restEndDate {
+      let localRemaining = Int(end.timeIntervalSinceNow.rounded())
+      if abs(localRemaining - seconds) <= Self.restDriftToleranceSeconds { return }
+    }
+    startRestCountdown(seconds: seconds)
   }
 
   private func startRestCountdown(seconds: Int) {
@@ -297,41 +314,20 @@ final class WorkoutConnectivity: NSObject, ObservableObject, WCSessionDelegate {
     sendToPhone(type: "cancel_workout")
   }
 
-  func voiceReps() {
-    guard let controller = WKExtension.shared().visibleInterfaceController else {
-      lastSpokenResponse = "Open ONE MORE on iPhone"
-      return
-    }
-    controller.presentTextInputController(
-      withSuggestions: ["6", "8", "10", "12"],
-      allowedInputMode: .plain
-    ) { [weak self] results in
-      DispatchQueue.main.async {
-        guard let self, let text = results?.first as? String, !text.isEmpty else { return }
-        self.sendVoiceCommand(text)
-      }
-    }
+  /// Presentation lives in the view (`TextFieldLink`); these only handle the resulting text.
+  func submitSpokenReps(_ text: String) {
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return }
+    sendVoiceCommand(trimmed)
   }
 
-  func voiceWeight() {
-    guard let controller = WKExtension.shared().visibleInterfaceController else {
-      lastSpokenResponse = "Open ONE MORE on iPhone"
+  func submitSpokenWeight(_ text: String) {
+    let digits = text.filter { $0.isNumber }
+    guard let lbs = Int(digits), lbs > 0 else {
+      lastSpokenResponse = "Enter weight in pounds"
       return
     }
-    controller.presentTextInputController(
-      withSuggestions: ["135", "185", "225"],
-      allowedInputMode: .plain
-    ) { [weak self] results in
-      DispatchQueue.main.async {
-        guard let self, let text = results?.first as? String, !text.isEmpty else { return }
-        let digits = text.filter { $0.isNumber }
-        guard let lbs = Int(digits), lbs > 0 else {
-          self.lastSpokenResponse = "Enter weight in pounds"
-          return
-        }
-        self.sendToPhone(type: "set_weight", extra: ["weightLbs": lbs])
-      }
-    }
+    sendToPhone(type: "set_weight", extra: ["weightLbs": lbs])
   }
 
   func requestPhoneSync() {

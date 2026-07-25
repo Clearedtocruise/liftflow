@@ -50,10 +50,21 @@ See `EXERCISE_MOTION_PROFILES` in `src/integrations/watch/exerciseMotionProfiles
 
 Shipped in native target `targets/watch/`:
 
-1. **Motion rep counting** — `MotionCapture.swift` streams 25 Hz accelerometer/gyro batches as `motion_batch` during active sets (motion-tracked exercises only).
-2. **Voice on wrist** — Dictation via `presentTextInput` plus quick chips (“Log set”, “How recovered am I?”).
-3. **Richer UI** — Recovery score, progression line, rep count, confidence bar, confirm reps when low confidence.
+1. **Motion rep counting — NOT SHIPPED.** `MotionCapture.swift` exists but is never instantiated, so no
+   accelerometer/gyro batches are sent and no reps are ever detected. The phone-side pipeline
+   (`motion_batch` handling, `EXERCISE_MOTION_PROFILES`, `/api/watch/motion`) is scaffolding awaiting a
+   real sensor/ML implementation. User-facing surfaces must present this as coming soon.
+2. **Voice on wrist** — Dictation via SwiftUI `TextFieldLink`. (`presentTextInputController` cannot be
+   used: it needs a WatchKit interface controller, which does not exist under the SwiftUI lifecycle.)
+3. **Richer UI** — Recovery score, progression line, rep count, confirm reps.
 4. **Start from Watch** — “Start Today's Workout” sends `start_workout` to iPhone (starts today's planned session).
+5. **Live workout session** — `WorkoutSessionManager.swift` runs an `HKWorkoutSession` +
+   `HKLiveWorkoutBuilder` for the duration of the workout so watchOS does not suspend the app on
+   wrist-down. Requires `WKBackgroundModes: workout-processing` (Info.plist) and the HealthKit
+   entitlement. The session stays running through rest periods, and is ended and saved to Health when
+   the workout finishes or is cancelled.
+6. **Rest timer** — The phone transmits a rest deadline only on meaningful transitions (start, change,
+   clear); the watch counts down locally from there. Re-arming on every tick froze the display.
 
 Phone-side handlers were already in `watchWorkoutService` / `watchCompanionService`; Phase 2 wires the native Watch app to use them.
 
@@ -65,7 +76,17 @@ Watch face complications for rest timer / active workout are not yet implemented
 
 - Open `/(features)/apple-watch`
 - Start a phone workout → **Sync active workout**
-- **Simulate rep (dev)** feeds synthetic motion through the same pipeline
+- Enter a rep count manually to drive the same logging pipeline
+
+## Known follow-ups
+
+- **Wrist logging requires the phone's workout screen to be open.** `WatchPhoneBridge` holds its
+  session handlers in a module-level singleton populated by `useWatchCompanionSync`, which only
+  mounts on the workout screen. Commands sent from the wrist while the phone is elsewhere are
+  therefore dropped. Fixing this means hoisting the bridge to an app-level provider (or moving the
+  handlers into a background-capable service) — a larger architectural change, deliberately out of
+  scope for the current pass.
+- Watch-side motion rep counting (see item 1 above) remains unimplemented.
 
 ## Backend API (optional direct Watch → API)
 

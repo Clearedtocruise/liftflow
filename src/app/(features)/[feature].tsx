@@ -28,7 +28,9 @@ export default function FeatureScreen() {
   if (feature === 'subscription') return <SubscriptionScreen />;
   if (feature === 'healthkit') return <HealthKitScreen />;
   if (feature === 'training-profile') return <TrainingProfileScreen />;
-  if (feature === 'apple-watch' || feature === 'rep-counting' || feature === 'motion-detection') {
+  // 'rep-counting' and 'motion-detection' intentionally fall through to the planned-feature
+  // placeholder: no rep detection ships today, so they must not resolve to a working screen.
+  if (feature === 'apple-watch') {
     return <AppleWatchScreen />;
   }
   if (feature === 'cardio-tracking') {

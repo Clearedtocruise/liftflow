@@ -128,8 +128,18 @@ export const watchCompanionService = {
     await pushWorkoutStateToWatch(enriched);
   },
 
-  /** Rest tick only — avoids re-syncing exercise/set state every second. */
-  async pushRestTimerOnly(userId: string, restSecondsRemaining: number | null): Promise<void> {
+  /**
+   * Rest tick only — avoids re-syncing exercise/set state every second.
+   *
+   * Pass `transmit: false` to keep the phone-side mirror current without sending to the watch.
+   * The watch runs its own countdown once armed, so it only needs the deadline on transitions;
+   * transmitting every tick both flooded the connectivity queue and re-armed that countdown.
+   */
+  async pushRestTimerOnly(
+    userId: string,
+    restSecondsRemaining: number | null,
+    options: { transmit?: boolean } = {},
+  ): Promise<void> {
     const assistantState = watchWorkoutService.getState(userId);
     if (!assistantState.activeSet) return;
 
@@ -138,6 +148,7 @@ export const watchCompanionService = {
     const display = watchPhoneBridge.getDisplayContext();
     const patched = this.applyDisplayContext(state, display);
     watchWorkoutService.loadState(userId, patched);
+    if (options.transmit === false) return;
     await pushWorkoutStateToWatch(patched);
   },
 
