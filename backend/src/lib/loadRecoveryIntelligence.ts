@@ -51,7 +51,10 @@ function mapSessionToLoad(row: SessionRow): SessionMuscleLoad {
   };
 }
 
-export async function loadRecoveryIntelligence(userId: string): Promise<RecoveryIntelligenceReport> {
+export async function loadRecoveryIntelligence(
+  userId: string,
+  options?: { profileTimeZone?: string | null },
+): Promise<RecoveryIntelligenceReport> {
   const db = requireAdmin();
   const now = new Date();
   const sevenDaysAgo = new Date(now);
@@ -98,7 +101,7 @@ export async function loadRecoveryIntelligence(userId: string): Promise<Recovery
       .eq('user_id', userId)
       .gte('started_at', sevenDaysAgo.toISOString())
       .order('started_at', { ascending: false }),
-    loadHealthContext(userId),
+    loadHealthContext(userId, options?.profileTimeZone),
   ]);
 
   const sessions7d = ((sessionsRes.data ?? []) as SessionRow[]).map(mapSessionToLoad);

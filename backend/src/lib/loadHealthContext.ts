@@ -16,15 +16,23 @@ const CONTEXT_DATA_TYPES = [
   'workout_session',
 ] as const;
 
-export async function loadHealthContext(userId: string): Promise<HealthContextSnapshot> {
+export async function loadHealthContext(
+  userId: string,
+  profileTimeZone?: string | null,
+): Promise<HealthContextSnapshot> {
   const cached = cache.get(userId);
   if (cached && cached.expiresAt > Date.now()) {
     return cached.value;
   }
 
   const db = requireAdmin();
-  const { data: profile } = await db.from('profiles').select('timezone').eq('id', userId).maybeSingle();
-  const today = localDateString(new Date(), profile?.timezone as string | null | undefined);
+  const timeZone = profileTimeZone === undefined
+    ? (await db.from('profiles').select('timezone').eq('id', userId).maybeSingle()).data?.timezone as
+        | string
+        | null
+        | undefined
+    : profileTimeZone;
+  const today = localDateString(new Date(), timeZone);
   const since = new Date();
   since.setDate(since.getDate() - 14);
 
