@@ -29,6 +29,7 @@ type WorkoutTimerOverlayProps = {
     nextExerciseName?: string | null;
     nextExerciseDetail?: string | null;
   };
+  onTraditionalDismiss?: () => void;
   interval?: IntervalTimerState | null;
   onIntervalToggle?: () => void;
   onIntervalSkip?: () => void;
@@ -81,6 +82,7 @@ export function WorkoutTimerOverlay({
   visible,
   position,
   traditional,
+  onTraditionalDismiss,
   interval,
   onIntervalToggle,
   onIntervalSkip,
@@ -110,7 +112,7 @@ export function WorkoutTimerOverlay({
     Math.min(intervalMax, Math.max(intervalMin, value));
 
   function handleRequestClose() {
-    if (activeMode === 'traditional') traditional?.onSkip();
+    if (activeMode === 'traditional') onTraditionalDismiss?.();
     else if (activeMode === 'interval') onIntervalDismiss?.();
     else onCircuitDismiss?.();
   }
@@ -172,7 +174,10 @@ export function WorkoutTimerOverlay({
                   ) : null}
                 </View>
               ) : null}
-              <PrimaryButton label="Continue" onPress={traditional.onSkip} variant="secondary" />
+              <PrimaryButton label="Skip rest" onPress={traditional.onSkip} variant="secondary" />
+              {onTraditionalDismiss ? (
+                <PrimaryButton label="Minimize timer" onPress={onTraditionalDismiss} variant="ghost" />
+              ) : null}
             </>
           ) : null}
 
@@ -304,7 +309,7 @@ export function WorkoutTimerOverlay({
               )}
               <View style={styles.controls}>
                 <PrimaryButton label="Skip" onPress={onCircuitSkip} variant="secondary" />
-                <PrimaryButton label="Continue" onPress={onCircuitDismiss} />
+                <PrimaryButton label="Minimize timer" onPress={onCircuitDismiss} />
               </View>
             </>
           ) : null}

@@ -59,6 +59,12 @@ const TIMED_NAME_PATTERN =
 const BODYWEIGHT_NAME_PATTERN =
   /\b(pull[\s-]?up|chin[\s-]?up|push[\s-]?up|dip|burpee|air\s*squat|bodyweight|inverted\s*row|muscle[\s-]?up|pistol\s*squat|walking\s*lunge)\b/i;
 
+const CORE_BODYWEIGHT_NAME_PATTERN =
+  /\b(windshield\s*wiper|windshield\s*wipers|hanging\s+leg\s+raise|leg\s+raise|v[\s-]?up|toes?\s+to\s+bar|mountain\s+climber|russian\s+twist|dead\s+bug|hollow\s+rock|flutter\s+kick|scissor\s+kick)\b/i;
+
+const CORE_STRENGTH_NAME_PATTERN =
+  /\b(weighted\s+sit[\s-]?up|sit[\s-]?up|crunch|cable\s+crunch|ab\s+rollout|rollout|wood\s+chop|pallof\s+press)\b/i;
+
 // Prefer rowing/erg terms — bare "row" matches strength moves (Hammer Low Row, Cable Row).
 const CARDIO_NAME_PATTERN =
   /\b(run|running|jog|sprint|swim|swimming|cycle|cycling|bike|biking|rowing|rower|row\s*erg|erg\s*row|concept\s*2|walk(?:ing)?|treadmill|elliptical|hiit|cardio|jump\s*rope)\b/i;
@@ -68,7 +74,7 @@ function normalize(value: string | undefined | null): string {
 }
 
 export function classifyExercise(input: ExerciseClassificationInput): ExerciseType {
-  if (input.exerciseType) return input.exerciseType;
+  if (input.exerciseType && input.exerciseType !== 'strength') return input.exerciseType;
 
   const slug = normalize(input.slug);
   if (slug && CATALOG[slug]) return CATALOG[slug];
@@ -79,10 +85,12 @@ export function classifyExercise(input: ExerciseClassificationInput): ExerciseTy
 
   if (movementCategory === 'cardio' || CARDIO_NAME_PATTERN.test(name)) return 'cardio';
   if (TIMED_NAME_PATTERN.test(name)) return 'timed';
+  if (CORE_BODYWEIGHT_NAME_PATTERN.test(name)) return 'bodyweight';
+  if (CORE_STRENGTH_NAME_PATTERN.test(name)) return 'strength';
   if (BODYWEIGHT_NAME_PATTERN.test(name)) return 'bodyweight';
   if (equipment === 'bodyweight' || equipment === 'none' || equipment === 'pull_up_bar') return 'bodyweight';
 
-  return 'strength';
+  return input.exerciseType ?? 'strength';
 }
 
 export function catalogCountsByType(): Record<ExerciseType, number> {

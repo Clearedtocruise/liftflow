@@ -164,7 +164,19 @@ const CORE_FOCUSED_SLUGS = new Set([
   'hollow-hold',
   'russian-twist',
   'wood-chop',
+  'weighted-sit-up',
+  'windshield-wiper',
+  'windshield-wipers',
+  'toes-to-bar',
+  'v-up',
 ]);
+
+function exerciseNameLooksLikeBodyweightCore(name: string): boolean {
+  const key = name.toLowerCase();
+  return /\b(windshield\s*wiper|windshield\s*wipers|hanging\s+leg\s+raise|leg\s+raise|toes?\s+to\s+bar|v[\s-]?up|hollow\s+rock|dead\s+bug|flutter\s+kick|scissor\s+kick|mountain\s+climber)\b/.test(
+    key,
+  );
+}
 
 function primaryMuscleGroup(exercise: ExerciseRecord): string {
   return (exercise.muscle_groups ?? [])[0]?.toLowerCase() ?? '';
@@ -612,7 +624,11 @@ export function suggestWeightLbs(
   history: SetHistory | undefined,
   bodyWeightKg?: number | null,
 ): number | undefined {
-  if (exercise.equipment === 'bodyweight' || exercise.metadata?.requires?.includes('bodyweight')) {
+  if (
+    exercise.equipment === 'bodyweight' ||
+    exercise.metadata?.requires?.includes('bodyweight') ||
+    exerciseNameLooksLikeBodyweightCore(exercise.name)
+  ) {
     return undefined;
   }
 

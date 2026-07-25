@@ -10,6 +10,7 @@ import type { FoodMacroEstimate, MealReplacementScope } from '@/types/nutrition'
 
 type SmartMealReplaceFormProps = {
   replacingLabel: string;
+  submitting?: boolean;
   onConfirm: (payload: {
     foodName: string;
     servingSize: string;
@@ -24,7 +25,11 @@ const SCOPE_OPTIONS: Array<{ id: MealReplacementScope; label: string }> = [
   { id: 'week', label: 'Entire week' },
 ];
 
-export function SmartMealReplaceForm({ replacingLabel, onConfirm }: SmartMealReplaceFormProps) {
+export function SmartMealReplaceForm({
+  replacingLabel,
+  submitting = false,
+  onConfirm,
+}: SmartMealReplaceFormProps) {
   const [foodName, setFoodName] = useState('');
   const [servingSize, setServingSize] = useState('');
   const [scope, setScope] = useState<MealReplacementScope>('meal');
@@ -125,7 +130,8 @@ export function SmartMealReplaceForm({ replacingLabel, onConfirm }: SmartMealRep
 
       <PrimaryButton
         label="Confirm Replacement"
-        disabled={!macros || !foodName.trim() || !servingSize.trim()}
+        loading={submitting}
+        disabled={submitting || !macros || !foodName.trim() || !servingSize.trim()}
         onPress={() => {
           if (!macros) return;
           onConfirm({

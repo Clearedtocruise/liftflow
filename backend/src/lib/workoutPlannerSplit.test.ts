@@ -9,6 +9,7 @@ import {
     isCoreFocusedExercise,
     resolveDayFocusPlan,
     selectFocusedSplitExercises,
+    suggestWeightLbs,
     type ExerciseRecord,
 } from './workoutPlanner.js';
 
@@ -201,6 +202,30 @@ test('dumbbell-only profile excludes kettlebell and cable catalog rows', () => {
   assert.equal(exerciseMeetsEquipment(kbCurl, dumbbellsOnly), false);
   assert.equal(exerciseMeetsEquipment(cableCurl, dumbbellsOnly), false);
   assert.equal(exerciseMeetsEquipment(dbCurl, dumbbellsOnly), true);
+});
+
+test('bodyweight core names do not receive external load targets when metadata is wrong', () => {
+  const windshieldWiper: ExerciseRecord = {
+    id: 'windshield-wiper',
+    name: 'Windshield Wiper',
+    slug: 'windshield-wiper',
+    category: 'pull',
+    equipment: 'dumbbell',
+    muscle_groups: ['full_body'],
+    metadata: { movement_family: 'horizontal_press', requires: ['dumbbells'] },
+  };
+  const weightedSitUp: ExerciseRecord = {
+    id: 'weighted-sit-up',
+    name: 'Weighted Sit-Up',
+    slug: 'weighted-sit-up',
+    category: 'core',
+    equipment: 'dumbbell',
+    muscle_groups: ['core'],
+    metadata: { movement_family: 'core_flexion', requires: ['dumbbells'] },
+  };
+
+  assert.equal(suggestWeightLbs(windshieldWiper, 'muscle_gain', undefined, 80), undefined);
+  assert.notEqual(suggestWeightLbs(weightedSitUp, 'muscle_gain', undefined, 80), undefined);
 });
 
 console.log('workoutPlannerSplit.test.ts — all assertions passed');

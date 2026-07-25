@@ -12,6 +12,16 @@ const cases: Array<{ label: string; input: Parameters<typeof classifyExercise>[0
   { label: 'Cycling', input: { slug: 'cycling', name: 'Cycling', equipment: 'bike' }, expected: 'cardio' },
   { label: 'Inferred custom plank', input: { name: 'Front Plank Hold', equipment: 'bodyweight' }, expected: 'timed' },
   { label: 'Inferred custom run', input: { name: 'Easy Run', equipment: 'none' }, expected: 'cardio' },
+  {
+    label: 'Windshield Wiper overrides bad generic strength metadata',
+    input: { name: 'Windshield Wiper', equipment: 'dumbbell', exerciseType: 'strength' },
+    expected: 'bodyweight',
+  },
+  {
+    label: 'Weighted Sit-Up stays strength even when classified from name',
+    input: { name: 'Weighted Sit-Up', equipment: 'dumbbell', exerciseType: 'strength' },
+    expected: 'strength',
+  },
 ];
 
 for (const testCase of cases) {

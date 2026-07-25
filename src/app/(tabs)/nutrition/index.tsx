@@ -94,6 +94,7 @@ export default function NutritionScreen() {
   const [newItemName, setNewItemName] = useState('');
   const [addingItem, setAddingItem] = useState(false);
   const [markingMealId, setMarkingMealId] = useState<string | null>(null);
+  const [replacingMealId, setReplacingMealId] = useState<string | null>(null);
   const [hasWorkoutToday, setHasWorkoutToday] = useState(false);
   const [recoverySleepHours, setRecoverySleepHours] = useState<number | undefined>();
   const [generating, setGenerating] = useState(false);
@@ -540,79 +541,106 @@ export default function NutritionScreen() {
   }
 
   async function handleReplaceMeal(meal: Meal, option: MealAlternativeOption) {
+    if (replacingMealId) return;
+    setReplacingMealId(meal.id);
     setReplaceMeal(null);
-    const meta = enrichMealMeta(meal.name, meal.instructions);
-    meta.status = 'modified';
-    meta.ingredients = option.ingredients;
-    const result = await nutritionService.updateMeal(meal.id, {
-      name: option.name,
-      calories: option.calories,
-      proteinG: option.proteinG,
-      carbsG: option.carbsG,
-      fatG: option.fatG,
-      instructions: serializeMealMeta(meta),
-    });
-    if (!result.success) {
-      Alert.alert('Could not update meal', friendlyMealError(result.error));
-      return;
+    try {
+      const meta = enrichMealMeta(meal.name, meal.instructions);
+      meta.status = 'modified';
+      meta.ingredients = option.ingredients;
+      const result = await nutritionService.updateMeal(meal.id, {
+        name: option.name,
+        calories: option.calories,
+        proteinG: option.proteinG,
+        carbsG: option.carbsG,
+        fatG: option.fatG,
+        instructions: serializeMealMeta(meta),
+      });
+      if (!result.success) {
+        Alert.alert('Could not update meal', friendlyMealError(result.error));
+        return;
+      }
+      void syncGroceriesAfterReplace();
+      await applySavedMeals([result.data]);
+    } finally {
+      setReplacingMealId(null);
     }
-    void syncGroceriesAfterReplace();
-    await applySavedMeals([result.data]);
   }
 
   async function handleReplaceIngredient(ingredientName: string, replacement: string) {
-    if (!replaceMeal) return;
+    if (!replaceMeal || replacingMealId) return;
     const meal = replaceMeal;
+    setReplacingMealId(meal.id);
     setReplaceMeal(null);
-    const meta = enrichMealMeta(meal.name, meal.instructions);
-    meta.ingredients = (meta.ingredients ?? []).map((item) =>
-      item.name === ingredientName ? { name: replacement, serving: item.serving } : item,
-    );
-    meta.status = 'modified';
-    const result = await nutritionService.updateMeal(meal.id, { instructions: serializeMealMeta(meta) });
-    if (!result.success) {
-      Alert.alert('Could not update meal', friendlyMealError(result.error));
-      return;
+    try {
+      const meta = enrichMealMeta(meal.name, meal.instructions);
+      meta.ingredients = (meta.ingredients ?? []).map((item) =>
+        item.name === ingredientName ? { name: replacement, serving: item.serving } : item,
+      );
+      meta.status = 'modified';
+      const result = await nutritionService.updateMeal(meal.id, { instructions: serializeMealMeta(meta) });
+      if (!result.success) {
+        Alert.alert('Could not update meal', friendlyMealError(result.error));
+        return;
+      }
+      void syncGroceriesAfterReplace();
+      await applySavedMeals([result.data]);
+    } finally {
+      setReplacingMealId(null);
     }
-    void syncGroceriesAfterReplace();
-    await applySavedMeals([result.data]);
   }
 
   async function handleSmartReplace(anchorMeal: Meal, payload: SmartReplacementPayload) {
-    if (!user) return;
+    if (!user || replacingMealId) return;
     const ingredientName = replaceIngredientName;
     const mode = replaceMode;
-    setReplaceMeal(null);
-    setReplaceIngredientName(null);
+    setReplacingMealId(anchorMeal.id);
     const targets = selectMealsForScope(
       anchorMeal,
       weekMeals,
       payload.scope,
       mode === 'ingredient' ? ingredientName ?? undefined : undefined,
     );
-    const savedMeals: Meal[] = [];
-
-    for (const target of targets) {
-      const updates = buildSmartReplacementUpdate(
-        target,
-        mode,
-        ingredientName ?? undefined,
-        {
-          foodName: payload.foodName,
-          servingSize: payload.servingSize,
-          macros: payload.macros,
-        },
-      );
-      const result = await nutritionService.updateMeal(target.id, updates);
-      if (!result.success) {
-        Alert.alert('Could not update meal', friendlyMealError(result.error));
-        return;
-      }
-      savedMeals.push(result.data);
+    if (targets.length === 0) {
+      setReplacingMealId(null);
+      Alert.alert('Could not update meal', 'No matching meal slots were found to replace.');
+      return;
     }
 
-    void syncGroceriesAfterReplace();
-    await applySavedMeals(savedMeals);
+    try {
+      const results = await Promise.all(
+        targets.map(async (target) => {
+          const updates = buildSmartReplacementUpdate(
+            target,
+            mode,
+            ingredientName ?? undefined,
+            {
+              foodName: payload.foodName,
+              servingSize: payload.servingSize,
+              macros: payload.macros,
+            },
+          );
+          return nutritionService.updateMeal(target.id, updates);
+        }),
+      );
+
+      const failure = results.find((result) => !result.success);
+      if (failure && !failure.success) {
+        Alert.alert('Could not update meal', friendlyMealError(failure.error));
+        return;
+      }
+
+      const savedMeals = results
+        .filter((result): result is typeof result & { success: true } => result.success)
+        .map((result) => result.data);
+
+      setReplaceMeal(null);
+      setReplaceIngredientName(null);
+      void syncGroceriesAfterReplace();
+      await applySavedMeals(savedMeals);
+    } finally {
+      setReplacingMealId(null);
+    }
   }
 
   if (loading && !refreshing && weekMeals.length === 0 && goals == null) {
@@ -916,7 +944,9 @@ export default function NutritionScreen() {
         mode={replaceMode}
         ingredientName={replaceIngredientName ?? undefined}
         dietaryRestrictions={dietaryRestrictions}
+        pending={replacingMealId != null}
         onClose={() => {
+          if (replacingMealId) return;
           setReplaceMeal(null);
           setReplaceIngredientName(null);
         }}

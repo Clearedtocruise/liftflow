@@ -9,6 +9,7 @@ import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 import { useTodayDashboard } from '@/hooks/useTodayDashboard';
+import { exercisesFromPlannedWorkout } from '@/lib/workoutPlan';
 
 export default function DashboardScreen() {
   const { user, isProfileHydrated } = useAuth();
@@ -41,6 +42,8 @@ export default function DashboardScreen() {
     await generateWorkout();
   }
 
+  const previewExercises = exercisesFromPlannedWorkout(todaysWorkout);
+
   return (
     <ScreenContainer>
       <View style={styles.header}>
@@ -65,6 +68,26 @@ export default function DashboardScreen() {
         ) : todaysWorkout ? (
           <>
             <AppText variant="title">{todaysWorkout.name}</AppText>
+            {previewExercises.length > 0 ? (
+              <View style={styles.previewBlock}>
+                <AppText variant="caption" color="textSecondary">
+                  Exercise preview
+                </AppText>
+                {previewExercises.slice(0, 4).map((exercise, index) => (
+                  <AppText
+                    key={`${exercise.exerciseId ?? exercise.name ?? 'exercise'}-${index}`}
+                    variant="footnote"
+                    color="textSecondary">
+                    {index + 1}. {exercise.name}
+                  </AppText>
+                ))}
+                {previewExercises.length > 4 ? (
+                  <AppText variant="caption" color="textTertiary">
+                    +{previewExercises.length - 4} more
+                  </AppText>
+                ) : null}
+              </View>
+            ) : null}
             <PrimaryButton
               label="Start"
               onPress={handleStart}
@@ -148,6 +171,9 @@ const styles = StyleSheet.create({
   },
   loader: {
     marginVertical: Spacing.lg,
+  },
+  previewBlock: {
+    gap: Spacing.xs,
   },
   actions: {
     marginTop: Spacing.xl,
