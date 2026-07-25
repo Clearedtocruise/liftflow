@@ -25,6 +25,7 @@ import { useUnits } from '@/hooks/useUnits';
 import { formatWorkoutClockTime, useWorkoutElapsedSeconds } from '@/hooks/useWorkoutElapsedSeconds';
 import { useWorkoutTimerEngine } from '@/hooks/useWorkoutTimerEngine';
 import {
+    computeWorkoutExerciseProgress,
     computeWorkoutSetProgress,
     formatCoachTargetLine,
 } from '@/lib/activeWorkoutMetrics';
@@ -361,9 +362,13 @@ export function ActiveWorkoutScreen({
     inSuperset,
   ]);
 
-  const workoutProgress = useMemo(
+  const workoutSetProgress = useMemo(
     () => computeWorkoutSetProgress(session.exercises, planExercises),
     [session.exercises, planExercises],
+  );
+  const workoutProgress = useMemo(
+    () => computeWorkoutExerciseProgress(currentIndex, sortedExercises.length),
+    [currentIndex, sortedExercises.length],
   );
   const coachTargetLine = useMemo(() => {
     if (!coachPrescription) return null;
@@ -474,6 +479,19 @@ export function ActiveWorkoutScreen({
   }, [currentExercise?.id, planMeta?.restSeconds, executionMode]);
 
   useEffect(() => {
+    // Clear exercise-specific UI state immediately so the next card never renders stale history or
+    // carry-over defaults from the previous exercise while async history loads.
+    setHistorySets([]);
+    setCoachPrescription(null);
+    setExerciseHadPr(false);
+    setShowComplete(false);
+    setDistanceKm(0);
+    setWeightKg(0);
+    setReps(parseTargetReps(planExercises[currentIndex]?.repRange ?? currentExercise?.suggestedReps));
+    setDurationSeconds(defaultTimedDurationSeconds(planExercises[currentIndex]?.repRange ?? currentExercise?.suggestedReps));
+  }, [currentExercise?.id]);
+
+  useEffect(() => {
     if (circuitTimer?.phase !== 'done') return;
     if (tabataExercisePrepPendingRef.current || tabataBetweenExercisePendingRef.current) return;
     dismissCircuitTimer();
@@ -524,7 +542,6 @@ export function ActiveWorkoutScreen({
         ? ('any' as const)
         : mode;
     setDurationSeconds(defaultTimedDurationSeconds(repRange));
-    setCoachPrescription(null);
 
     let cancelled = false;
     void workoutService
@@ -580,9 +597,6 @@ export function ActiveWorkoutScreen({
         setWeightKg(watchDraftWeightKgRef.current);
       }
     });
-
-    setShowComplete(false);
-    setExerciseHadPr(false);
 
     return () => {
       cancelled = true;
@@ -1057,6 +1071,18 @@ export function ActiveWorkoutScreen({
       autoAdvanceTimeoutRef.current = null;
     }
     if (usesSupersetRotation && supersetGroup && supersetGroup.memberIndices.length >= 2) {
+      const incompletePartner = [...supersetGroup.memberIndices]
+        .sort((a, b) => a - b)
+        .find((index) => {
+          if (index === currentIndex) return false;
+          const target = planExercises[index]?.sets ?? 3;
+          return (sortedExercises[index]?.sets?.length ?? 0) < target;
+        });
+      if (incompletePartner != null) {
+        setCurrentIndex(incompletePartner);
+        setShowComplete(false);
+        return;
+      }
       const next = nextExerciseIndexAfterGroup(supersetGroup, sortedExercises.length);
       if (next != null) {
         if (executionMode === 'tabata') {
@@ -1179,6 +1205,11 @@ export function ActiveWorkoutScreen({
             </View>
             <AppText variant="title">{session.name}</AppText>
             <WorkoutProgressBar percent={workoutProgress.percent} />
+            <AppText variant="caption" color="textSecondary">
+              Exercise {workoutProgress.currentExerciseNumber} of {workoutProgress.totalExercises}
+              {' · '}
+              {workoutSetProgress.completedSets} of {workoutSetProgress.totalSets} sets logged
+            </AppText>
           </View>
           <View style={styles.headerActions}>
             {isPaused ? (

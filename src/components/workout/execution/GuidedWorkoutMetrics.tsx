@@ -5,6 +5,7 @@ import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import { formatPlanTargetPerformance, formatPreviousPerformanceLine } from '@/lib/activeWorkoutMetrics';
 import type { ExerciseLoggingMode } from '@/lib/exerciseModality';
 import type { DistanceUnit } from '@/types/common';
+import type { ExerciseHistorySet } from '@/types/workoutExecution';
 
 type GuidedWorkoutMetricsProps = {
   currentSet: number;

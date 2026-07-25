@@ -12,6 +12,12 @@ export type WorkoutSetProgress = {
   percent: number;
 };
 
+export type WorkoutExerciseProgress = {
+  currentExerciseNumber: number;
+  totalExercises: number;
+  percent: number;
+};
+
 export function resolvePlanMetaForSessionExercise(
   sessionExercise: WorkoutSession['exercises'][number] | undefined,
   index: number,
@@ -43,6 +49,24 @@ export function computeWorkoutSetProgress(
 
   const percent = totalSets > 0 ? Math.round((completedSets / totalSets) * 100) : 0;
   return { completedSets, totalSets, percent: Math.min(100, percent) };
+}
+
+export function computeWorkoutExerciseProgress(
+  currentIndex: number,
+  totalExercises: number,
+): WorkoutExerciseProgress {
+  const safeTotal = Math.max(totalExercises, 0);
+  if (safeTotal === 0) {
+    return { currentExerciseNumber: 0, totalExercises: 0, percent: 0 };
+  }
+
+  const currentExerciseNumber = Math.min(Math.max(currentIndex + 1, 0), safeTotal);
+  const percent = Math.round((currentExerciseNumber / safeTotal) * 100);
+  return {
+    currentExerciseNumber,
+    totalExercises: safeTotal,
+    percent: Math.min(100, Math.max(0, percent)),
+  };
 }
 
 export function formatPreviousPerformanceLine(

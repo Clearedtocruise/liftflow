@@ -2,7 +2,6 @@ import { applyEquipmentSubstitutionsToExercises } from './equipmentSubstitutionE
 import { applySubstitutionsToExercises, type LimitationContext } from './exerciseSubstitution.js';
 import {
     buildReferenceStyleWorkoutPlan,
-    enrichWithSmartSupersetGroups,
     shouldUseReferenceLiftingProgram,
 } from './liftingReference/index.js';
 import { applyWeeklyProgression, totalPlannedVolume } from './programProgression.js';
@@ -33,13 +32,6 @@ import {
     WORKOUT_TARGET_EXERCISES,
     type GeneratedWorkoutExercise
 } from './workoutPlanner.js';
-
-function enrichExercisesWithSupersetGroups<T extends Record<string, unknown>>(
-  exercises: T[],
-): Array<T & { supersetGroupId?: string }> {
-  if (exercises.length < 2) return exercises;
-  return enrichWithSmartSupersetGroups(exercises) as Array<T & { supersetGroupId?: string }>;
-}
 
 export type CreateProgramInput = {
   userId: string;
@@ -407,9 +399,6 @@ export async function generateTrainingProgram(input: CreateProgramInput) {
           recoveryMods.volumeMultiplier,
         );
         exercises = applySubstitutionsToExercises(exercises, limitations as LimitationContext[]);
-        exercises = referencePlan
-          ? exercises
-          : enrichExercisesWithSupersetGroups(exercises);
 
         const { data: template, error: templateError } = await db
           .from('workout_templates')
@@ -443,13 +432,11 @@ export async function generateTrainingProgram(input: CreateProgramInput) {
       const isMonth1Reference = exercises.some((exercise) => exercise.notes?.includes('Block '));
       const progressed = isMonth1Reference
         ? exercises
-        : enrichExercisesWithSupersetGroups(
-            applyWeeklyProgression(
-              exercises,
-              performance,
-              phaseSpec.intensityMultiplier,
-              recoveryMods.volumeMultiplier,
-            ),
+        : applyWeeklyProgression(
+            exercises,
+            performance,
+            phaseSpec.intensityMultiplier,
+            recoveryMods.volumeMultiplier,
           );
 
       const { data: plannedRow } = await db
@@ -868,4 +855,3 @@ export async function getPlannedWorkoutsInRangeWithRefresh(userId: string, from:
 }
 
 export type { DaySlot, ProgramFrequency, ProgramType };
-

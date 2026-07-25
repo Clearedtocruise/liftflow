@@ -4,6 +4,7 @@ import {
     applySubstitutionsToExercises,
     type LimitationContext,
 } from './exerciseSubstitution.js';
+import { enrichWithSmartSupersetGroups } from './liftingReference/applyReferenceSupersets.js';
 import { maxPatternUsesForDayFocus, patternExclusionGroupId } from './movementPatternExclusion.js';
 import { requireAdmin } from './supabase.js';
 import { blendWorkoutPreset, resolveRankedGoals, toPlannerGoal } from './trainingGoals.js';
@@ -15,6 +16,7 @@ export type GeneratedWorkoutExercise = {
   weightLbs?: number;
   restSeconds: number;
   notes?: string;
+  supersetGroupId?: string;
 };
 
 export type GeneratedWorkoutPlan = {
@@ -24,6 +26,12 @@ export type GeneratedWorkoutPlan = {
   exercises: GeneratedWorkoutExercise[];
   estimatedMinutes: number;
   aiGenerated: boolean;
+};
+
+type PlannerWorkoutExercise = GeneratedWorkoutExercise & {
+  metadata?: {
+    movement_family?: string;
+  };
 };
 
 export type TrainingGoal = 'fat_loss' | 'muscle_gain' | 'strength' | 'general_fitness';
@@ -1046,7 +1054,7 @@ export async function buildAdaptiveWorkoutPlan(
     picked = [...picked, ...fillers];
   }
 
-  let exercises: GeneratedWorkoutExercise[] = picked.map((exercise) => {
+  let exercises: PlannerWorkoutExercise[] = picked.map((exercise) => {
     const history = performance.get(exercise.slug);
     let weightLbs = suggestWeightLbs(exercise, profile.primaryTrainingGoal, history, profile.weightKg);
     if (weightLbs && recoveryMods.intensityMultiplier < 1) {
@@ -1066,6 +1074,8 @@ export async function buildAdaptiveWorkoutPlan(
       weightLbs,
       restSeconds: adjustedPreset.restSeconds,
       notes,
+      // Keep movement metadata attached until smart superset grouping runs.
+      metadata: exercise.metadata,
     };
   });
 
@@ -1078,8 +1088,11 @@ export async function buildAdaptiveWorkoutPlan(
       reps: '45-60 sec',
       restSeconds: 45,
       notes: 'Mobility / core finisher',
+      metadata: { movement_family: 'core' },
     });
   }
+
+  const groupedExercises = enrichWithSmartSupersetGroups(exercises).map(({ metadata, ...exercise }) => exercise);
 
   const goalLabel =
     preset.rationaleTags.length > 1
@@ -1108,14 +1121,14 @@ export async function buildAdaptiveWorkoutPlan(
       : `${normalizedMuscles.slice(0, 3).join(' & ')} — ${goalLabel}`,
     rationale: `${rationale}${rotationNote}${recoveryNote}${limitationNote}`,
     muscleGroups: normalizedMuscles,
-    exercises,
+    exercises: groupedExercises,
     estimatedMinutes: Math.max(
       45,
       Math.min(
         75,
         Math.round(
-          exercises.length * adjustedPreset.sets * 2 +
-            exercises.length * (adjustedPreset.restSeconds / 60) * 0.35,
+          groupedExercises.length * adjustedPreset.sets * 2 +
+            groupedExercises.length * (adjustedPreset.restSeconds / 60) * 0.35,
         ),
       ),
     ),

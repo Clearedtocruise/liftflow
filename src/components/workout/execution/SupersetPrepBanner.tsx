@@ -36,7 +36,7 @@ export function SupersetPrepBanner({
       </AppText>
       <AppText variant="bodyBold">{partners}</AppText>
       <AppText variant="footnote" color="textSecondary">
-        Alternate exercises with no rest between partners. After both sides, take your rest and repeat.
+        Alternate exercises with no rest between partners. After both exercises, take your rest and repeat.
         {stations ? ` Stations: ${stations}.` : ''}
       </AppText>
       <Pressable onPress={onDismiss} style={styles.button}>
