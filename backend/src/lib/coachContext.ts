@@ -1,10 +1,19 @@
 import { loadDailyMacroInputs, macroContextFrom } from './dailyMacroInputs.js';
 import type { LimitationContext } from './exerciseSubstitution.js';
 import { parseLimitationFromVoice } from './exerciseSubstitution.js';
+import { addCalendarDays } from './localDate.js';
 import { getProgramDashboard } from './programEngine.js';
 import { calculateRecoveryScore, mergeTrainingLoadScore } from './recoveryScore.js';
+import { summarizeStrengthTrend, type StrengthTrendSummary } from './strengthTrend.js';
 import { requireAdmin } from './supabase.js';
 import { calculateMacroTargets } from './workoutAwareNutrition.js';
+
+/**
+ * Four weeks is the shortest window in which a stall is distinguishable from a bad week, and it is
+ * the same series that yields `lastPerformance`, so widening it costs no extra round trip.
+ */
+const STRENGTH_TREND_DAYS = 28;
+const STRENGTH_TREND_SET_LIMIT = 400;
 
 export type CoachContext = {
   recovery: {
@@ -16,6 +25,8 @@ export type CoachContext = {
   limitations: LimitationContext[];
   recentWorkouts: Array<{ name: string; date: string; volume: number; sets: number }>;
   lastPerformance: Array<{ exercise: string; weight: number; reps: number; date: string }>;
+  /** Per-exercise direction over the trailing 4 weeks, so advice can reference a trend not a point. */
+  strengthTrend: StrengthTrendSummary;
   nutrition: { caloriesTarget?: number; proteinTarget?: number; caloriesToday?: number; proteinToday?: number };
   plannedWorkout?: { name: string; muscleGroups: string[]; rationale?: string };
   weeklyCheckIn?: Record<string, unknown>;
@@ -45,6 +56,7 @@ export async function loadCoachContext(userId: string): Promise<CoachContext> {
     limitations,
     recentSessions,
     lastSets,
+    trendSets,
     goals,
     todayMeals,
     weeklyCheckIn,
@@ -69,6 +81,15 @@ export async function loadCoachContext(userId: string): Promise<CoachContext> {
       .eq('workout_exercises.workout_sessions.user_id', userId)
       .order('logged_at', { ascending: false })
       .limit(10),
+    // Separate from `lastSets` on purpose: "last time I did X" must still resolve for a user
+    // returning after a long layoff, while the trend must not reach back past the current block.
+    db
+      .from('workout_sets')
+      .select('weight, reps, logged_at, workout_exercises!inner(exercises(name), workout_sessions!inner(user_id))')
+      .eq('workout_exercises.workout_sessions.user_id', userId)
+      .gte('logged_at', `${addCalendarDays(today, -STRENGTH_TREND_DAYS)}T00:00:00.000Z`)
+      .order('logged_at', { ascending: false })
+      .limit(STRENGTH_TREND_SET_LIMIT),
     db.from('nutrition_goals').select('*').eq('user_id', userId).eq('is_active', true).limit(1).maybeSingle(),
     db.from('meals').select('calories, protein_g').eq('user_id', userId).eq('scheduled_date', today),
     db
@@ -79,6 +100,15 @@ export async function loadCoachContext(userId: string): Promise<CoachContext> {
       .limit(1)
       .maybeSingle(),
   ]);
+
+  const toLoggedSet = (row: Record<string, unknown>) => ({
+    exercise:
+      (row as { workout_exercises?: { exercises?: { name?: string } } }).workout_exercises?.exercises?.name ??
+      'Exercise',
+    weight: Number(row.weight ?? 0),
+    reps: Number(row.reps ?? 0),
+    date: String(row.logged_at ?? ''),
+  });
 
   const limitationContexts: LimitationContext[] = (limitations.data ?? []).map((row) => ({
     bodyArea: row.body_area,
@@ -120,14 +150,8 @@ export async function loadCoachContext(userId: string): Promise<CoachContext> {
       volume: Number(s.total_volume ?? 0),
       sets: Number(s.total_sets ?? 0),
     })),
-    lastPerformance: (lastSets.data ?? []).slice(0, 5).map((row) => ({
-      exercise:
-        (row as { workout_exercises?: { exercises?: { name?: string } } }).workout_exercises?.exercises?.name ??
-        'Exercise',
-      weight: Number(row.weight ?? 0),
-      reps: Number(row.reps ?? 0),
-      date: row.logged_at,
-    })),
+    lastPerformance: (lastSets.data ?? []).slice(0, 5).map(toLoggedSet),
+    strengthTrend: summarizeStrengthTrend((trendSets.data ?? []).map(toLoggedSet)),
     nutrition: {
       caloriesTarget: goals.data?.daily_calories ?? macroTargets.calories,
       proteinTarget: goals.data?.protein_g ?? macroTargets.proteinG,
