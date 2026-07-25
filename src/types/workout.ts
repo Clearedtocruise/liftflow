@@ -112,7 +112,6 @@ export type ParsedVoiceCommand = {
   exercise?: string;
   weight?: number;
   reps?: number;
-  set?: number;
   type?: SetType;
   confidence?: number;
   rawText: string;

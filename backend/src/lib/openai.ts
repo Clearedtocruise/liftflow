@@ -5,9 +5,13 @@ let client: OpenAI | null = null;
 /** Provider latency must never become request latency; every caller has a heuristic fallback. */
 const REQUEST_TIMEOUT_MS = 20_000;
 
+/**
+ * Gated on `hasOpenAI` so a placeholder key cannot produce a client that 401s on every call:
+ * callers treat null as "no provider configured" and use their heuristic instead.
+ */
 export function getOpenAI(): OpenAI | null {
+  if (!hasOpenAI()) return null;
   const key = process.env.OPENAI_API_KEY;
-  if (!key) return null;
   if (!client) client = new OpenAI({ apiKey: key, timeout: REQUEST_TIMEOUT_MS, maxRetries: 1 });
   return client;
 }
