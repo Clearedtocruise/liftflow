@@ -228,6 +228,43 @@ export function enrichMealMeta(name: string, instructions?: string): MealMeta {
   };
 }
 
+function titleCaseToken(token: string): string {
+  if (!token) return token;
+  return token.charAt(0).toUpperCase() + token.slice(1);
+}
+
+function humanizeMealName(input: string): string {
+  return input
+    .trim()
+    .split(/\s+/)
+    .map((token) => {
+      if (/^(and|with|or|of|a|an|the)$/i.test(token)) return token.toLowerCase();
+      return token
+        .split('-')
+        .map((part) => titleCaseToken(part.toLowerCase()))
+        .join('-');
+    })
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export function mealNameFromIngredients(ingredients: MealIngredient[]): string | null {
+  const names = ingredients
+    .map((ingredient) => ingredient.name.trim())
+    .filter(Boolean);
+
+  if (names.length === 0) return null;
+  if (names.length === 1) return humanizeMealName(names[0]!);
+  if (names.length === 2) return `${humanizeMealName(names[0]!)} with ${humanizeMealName(names[1]!)}`;
+
+  const primary = humanizeMealName(names[0]!);
+  const extras = names
+    .slice(1, 3)
+    .map((name) => humanizeMealName(name));
+  return `${primary} with ${extras.join(' and ')}`;
+}
+
 type MealMacroFields = {
   name: string;
   instructions?: string;
@@ -311,6 +348,17 @@ export function resolveMealMacros(meal: MealMacroFields): MealMacros {
   if (measured) return distributeRemainingCalories(meal);
 
   return macrosFromIngredients(meal) ?? { calories: 0, proteinG: 0, carbsG: 0, fatG: 0 };
+}
+
+export function resolveMealMacrosFromIngredients(
+  name: string,
+  instructions?: string,
+): MealMacros {
+  return resolveMealMacros({
+    name,
+    instructions,
+    macrosProvided: false,
+  });
 }
 
 export function alternativesForIngredient(ingredientName: string): string[] {

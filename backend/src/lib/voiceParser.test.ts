@@ -12,6 +12,7 @@ import {
 import {
     AMBIGUOUS_CONFIDENCE,
     CONFIRM_CONFIDENCE,
+    FAST_PATH_CONFIDENCE,
     IMPLAUSIBLE_CONFIDENCE,
     LLM_MAX_CONFIDENCE,
     MAX_TRANSCRIPT_CHARS,
@@ -93,6 +94,24 @@ test('control intents tolerate trailing filler words', () => {
 test('exercise names do not swallow trailing prepositions', () => {
   assert.equal(parse('squat 315 for 5')?.exercise, 'squat');
   assert.equal(parse('overhead press at 135 for 10')?.exercise, 'overhead press');
+});
+
+test('context-aware weight-for-reps phrases populate the active exercise weight', () => {
+  const parsed = parse('135 for 10 reps');
+  assert.equal(parsed?.intent, 'log_set');
+  assert.equal(parsed?.exercise, 'Bench Press');
+  assert.equal(parsed?.weight, 135);
+  assert.equal(parsed?.reps, 10);
+  assert.ok((parsed?.confidence ?? 0) >= FAST_PATH_CONFIDENCE);
+});
+
+test('context-aware reps-at-weight phrases populate the active exercise weight', () => {
+  const parsed = parse('10 reps at 135');
+  assert.equal(parsed?.intent, 'log_set');
+  assert.equal(parsed?.exercise, 'Bench Press');
+  assert.equal(parsed?.weight, 135);
+  assert.equal(parsed?.reps, 10);
+  assert.ok((parsed?.confidence ?? 0) >= FAST_PATH_CONFIDENCE);
 });
 
 test('multi-set utterances are flagged instead of silently truncated', () => {

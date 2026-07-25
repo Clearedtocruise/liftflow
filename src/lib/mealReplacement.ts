@@ -1,5 +1,6 @@
 import {
   enrichMealMeta,
+  mealNameFromIngredients,
   serializeMealMeta,
   type MealIngredient,
   type MealMacros,
@@ -59,6 +60,10 @@ function estimateIngredientMacros(ingredient: MealIngredient): MealMacros {
   return estimateFoodMacrosLocal(ingredient.name, ingredient.serving);
 }
 
+function roundMacros(value: number): number {
+  return Math.round(value * 10) / 10;
+}
+
 export function buildSmartIngredientReplacementUpdate(
   meal: Meal,
   ingredientName: string,
@@ -66,21 +71,35 @@ export function buildSmartIngredientReplacementUpdate(
 ): Partial<Meal> & { instructions: string } {
   const meta = enrichMealMeta(meal.name, meal.instructions);
   const ingredients = meta.ingredients ?? [];
-  const target = ingredients.find((item) => ingredientMatches(item.name, ingredientName));
-  const oldMacros = target ? estimateIngredientMacros(target) : { calories: 0, proteinG: 0, carbsG: 0, fatG: 0 };
-
   meta.ingredients = ingredients.map((item) =>
     ingredientMatches(item.name, ingredientName)
       ? { name: replacement.foodName, serving: replacement.servingSize }
       : item,
   );
   meta.status = 'modified';
+  const nextIngredients = meta.ingredients ?? [];
+  const nextName = mealNameFromIngredients(nextIngredients) ?? meal.name;
+  const nextMacros = nextIngredients.reduce<MealMacros>(
+    (acc, item) => {
+      const estimate = ingredientMatches(item.name, replacement.foodName) && item.serving === replacement.servingSize
+        ? replacement.macros
+        : estimateIngredientMacros(item);
+      return {
+        calories: acc.calories + estimate.calories,
+        proteinG: roundMacros(acc.proteinG + estimate.proteinG),
+        carbsG: roundMacros(acc.carbsG + estimate.carbsG),
+        fatG: roundMacros(acc.fatG + estimate.fatG),
+      };
+    },
+    { calories: 0, proteinG: 0, carbsG: 0, fatG: 0 },
+  );
 
   return {
-    calories: Math.max(0, Math.round((meal.calories ?? 0) - oldMacros.calories + replacement.macros.calories)),
-    proteinG: Math.max(0, Math.round(((meal.proteinG ?? 0) - oldMacros.proteinG + replacement.macros.proteinG) * 10) / 10),
-    carbsG: Math.max(0, Math.round(((meal.carbsG ?? 0) - oldMacros.carbsG + replacement.macros.carbsG) * 10) / 10),
-    fatG: Math.max(0, Math.round(((meal.fatG ?? 0) - oldMacros.fatG + replacement.macros.fatG) * 10) / 10),
+    name: nextName,
+    calories: Math.max(0, Math.round(nextMacros.calories)),
+    proteinG: Math.max(0, nextMacros.proteinG),
+    carbsG: Math.max(0, nextMacros.carbsG),
+    fatG: Math.max(0, nextMacros.fatG),
     instructions: serializeMealMeta(meta),
   };
 }

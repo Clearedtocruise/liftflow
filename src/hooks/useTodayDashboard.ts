@@ -69,7 +69,7 @@ export function useTodayDashboard(): TodayDashboardState {
         date: today,
         timeZone: user.timezone,
       });
-      setTodaysWorkout(active.workout);
+      setTodaysWorkout(active.isStartableWorkoutDay ? active.workout : null);
     } finally {
       setLoading(false);
     }

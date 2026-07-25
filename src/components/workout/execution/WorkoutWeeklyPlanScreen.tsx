@@ -76,8 +76,11 @@ export function WorkoutWeeklyPlanScreen({
 
       {!loading
         ? days.map((day) => {
-            const hasWorkout = Boolean(day.workout);
-            const isConditioning = hasWorkout && isConditioningWorkout(day.workout!);
+            const scheduledWorkout = day.scheduledWorkout;
+            const hasWorkout = day.hasScheduledWorkout && scheduledWorkout != null;
+            const startableWorkout = day.workout;
+            const isConditioning = hasWorkout && isConditioningWorkout(scheduledWorkout);
+            const title = hasWorkout ? scheduledWorkout.name : restDayLabel(day.dayLabel);
 
             return (
               <Card
@@ -88,22 +91,20 @@ export function WorkoutWeeklyPlanScreen({
                   style={styles.dayPressable}
                   accessibilityRole="button"
                   accessibilityLabel={`${day.dayLabel}${isToday(day.date, timeZone) ? ', today' : ''}: ${
-                    hasWorkout ? day.workout!.name : restDayLabel(day.dayLabel)
+                    title
                   }`}
-                  accessibilityHint={hasWorkout ? 'Opens this session' : undefined}>
+                  accessibilityHint={startableWorkout ? 'Opens this session' : undefined}>
                   <View style={styles.dayHeader}>
                     <View style={styles.dayHeaderText}>
                       <AppText variant="label" color={isToday(day.date, timeZone) ? 'accent' : 'textSecondary'}>
                         {day.dayLabel}
                         {isToday(day.date, timeZone) ? ' · Today' : ''}
                       </AppText>
-                      <AppText variant="bodyBold">
-                        {hasWorkout ? day.workout!.name : restDayLabel(day.dayLabel)}
-                      </AppText>
+                      <AppText variant="bodyBold">{title}</AppText>
                     </View>
                     {hasWorkout ? (
                       <AppText variant="footnote" color={isConditioning ? 'accent' : 'textSecondary'}>
-                        {isConditioning ? 'Cardio / HIIT' : `${workoutDurationMinutes(day.workout!)} min`}
+                        {isConditioning ? 'Cardio / HIIT' : `${workoutDurationMinutes(scheduledWorkout)} min`}
                       </AppText>
                     ) : null}
                   </View>
@@ -111,15 +112,24 @@ export function WorkoutWeeklyPlanScreen({
                   {hasWorkout && !isConditioning ? (
                     <>
                       <AppText variant="footnote" color="textSecondary">
-                        {workoutMuscleGroups(day.workout!)}
+                        {workoutMuscleGroups(scheduledWorkout)}
                       </AppText>
                       <AppText variant="footnote" color="textSecondary">
-                        {workoutExerciseCount(day.workout!)} exercises · {workoutTotalSets(day.workout!)} sets
+                        {workoutExerciseCount(scheduledWorkout)} exercises · {workoutTotalSets(scheduledWorkout)} sets
                       </AppText>
+                      {!startableWorkout ? (
+                        <AppText variant="caption" color="textTertiary">
+                          {scheduledWorkout.status === 'completed'
+                            ? 'Completed'
+                            : scheduledWorkout.status === 'active' || scheduledWorkout.status === 'paused'
+                              ? 'In progress'
+                              : 'Scheduled'}
+                        </AppText>
+                      ) : null}
                     </>
                   ) : hasWorkout && isConditioning ? (
                     <AppText variant="footnote" color="textSecondary">
-                      Cardio session · tap to log
+                      {startableWorkout ? 'Cardio session · tap to log' : 'Cardio session'}
                     </AppText>
                   ) : (
                     <AppText variant="footnote" color="textSecondary">
