@@ -721,11 +721,23 @@ export function ActiveWorkoutScreen({
     setShowComplete(false);
   }
 
+  function clearPendingExerciseAdvance() {
+    if (autoAdvanceTimeoutRef.current) {
+      clearTimeout(autoAdvanceTimeoutRef.current);
+      autoAdvanceTimeoutRef.current = null;
+    }
+    pendingAdvanceRef.current = null;
+    pendingExerciseAdvanceAfterRestRef.current = false;
+    pendingAdvanceAfterChallengeRef.current = null;
+  }
+
   async function handleDeleteSet(setId: string) {
-    Alert.alert('Delete set', 'Remove this logged set?', [
+    const setIndex = completedSets.findIndex((set) => set.id === setId) + 1;
+    const exerciseName = currentExercise?.exercise?.name ?? 'this exercise';
+    Alert.alert('Undo last logged set', `Remove set ${setIndex} from ${exerciseName}?`, [
       { text: 'Cancel', style: 'cancel' },
       {
-        text: 'Delete',
+        text: 'Undo set',
         style: 'destructive',
         onPress: async () => {
           await deleteSet(setId);
@@ -734,6 +746,13 @@ export function ActiveWorkoutScreen({
         },
       },
     ]);
+  }
+
+  function handlePreviousExercise() {
+    if (currentIndex <= 0 || logging || restActive || intervalTimer != null || transitionActive) return;
+    clearPendingExerciseAdvance();
+    setShowComplete(false);
+    setCurrentIndex((index) => Math.max(0, index - 1));
   }
 
   async function handleAddExercise(exercise: Exercise) {
@@ -1174,6 +1193,13 @@ export function ActiveWorkoutScreen({
     setRestPaused(false);
   }
 
+  const canGoToPreviousExercise =
+    currentIndex > 0 &&
+    !logging &&
+    !restActive &&
+    intervalTimer == null &&
+    !transitionActive;
+
   if (!currentExercise) {
     return (
       <ScreenContainer>
@@ -1212,6 +1238,14 @@ export function ActiveWorkoutScreen({
             </AppText>
           </View>
           <View style={styles.headerActions}>
+            {currentIndex > 0 ? (
+              <PrimaryButton
+                label="Previous"
+                variant="ghost"
+                onPress={handlePreviousExercise}
+                disabled={!canGoToPreviousExercise}
+              />
+            ) : null}
             {isPaused ? (
               <PrimaryButton label="Resume" onPress={resumeSession} />
             ) : (
@@ -1510,7 +1544,7 @@ export function ActiveWorkoutScreen({
                     />
                     {completedSets.length > 0 ? (
                       <PrimaryButton
-                        label="Delete Last Set"
+                        label="Undo Last Logged Set"
                         variant="ghost"
                         onPress={() => handleDeleteSet(completedSets[completedSets.length - 1]!.id)}
                         disabled={isPaused}
@@ -1613,6 +1647,7 @@ export function ActiveWorkoutScreen({
                       : null,
               }
             : undefined}
+        onTraditionalDismiss={() => setRestOverlayOpen(false)}
         interval={intervalTimer && !circuitTimer ? intervalTimer : null}
         intervalExerciseName={currentExercise.exercise?.name ?? 'Exercise'}
         intervalNextExerciseName={nextExercise?.exercise?.name}
@@ -1655,7 +1690,7 @@ export function ActiveWorkoutScreen({
         }
         circuit={circuitTimer && circuitTimer.phase !== 'done' ? circuitTimer : null}
         onCircuitSkip={handleFinishCircuitTimer}
-        onCircuitDismiss={handleFinishCircuitTimer}
+        onCircuitDismiss={() => setCircuitOverlayOpen(false)}
       />
 
       <WorkoutChallengeModal
@@ -1715,6 +1750,7 @@ const styles = StyleSheet.create({
   },
   headerActions: {
     minWidth: 96,
+    gap: Spacing.sm,
   },
   heroOuter: {
     borderRadius: Radius.lg,

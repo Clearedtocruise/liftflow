@@ -7,6 +7,12 @@ const TIMED_NAME_PATTERN =
 const BODYWEIGHT_NAME_PATTERN =
   /\b(pull[\s-]?up|chin[\s-]?up|push[\s-]?up|dip|burpee|air\s*squat|bodyweight|inverted\s*row|muscle[\s-]?up|pistol\s*squat|walking\s*lunge)\b/i;
 
+const CORE_BODYWEIGHT_NAME_PATTERN =
+  /\b(windshield\s*wiper|windshield\s*wipers|hanging\s+leg\s+raise|leg\s+raise|v[\s-]?up|toes?\s+to\s+bar|mountain\s+climber|russian\s+twist|dead\s+bug|hollow\s+rock|flutter\s+kick|scissor\s+kick)\b/i;
+
+const CORE_STRENGTH_NAME_PATTERN =
+  /\b(weighted\s+sit[\s-]?up|sit[\s-]?up|crunch|cable\s+crunch|ab\s+rollout|rollout|wood\s+chop|pallof\s+press)\b/i;
+
 const CARDIO_NAME_PATTERN =
   /\b(run|running|jog|sprint|swim|swimming|cycle|cycling|bike|biking|row(?:ing)?|walk(?:ing)?|treadmill|elliptical|hiit|cardio|jump\s*rope)\b/i;
 
@@ -32,10 +38,11 @@ function isBodyweightEquipment(equipment: string): boolean {
 
 /**
  * Classify an exercise into exactly one Sprint 1 category.
- * Priority: stored type → catalog slug → cardio → timed → bodyweight → strength.
+ * Specific stored types win immediately; generic `strength` still falls through to heuristics so
+ * bad catalog rows can be recovered at runtime.
  */
 export function classifyExercise(input: ExerciseClassificationInput): ExerciseType {
-  if (input.exerciseType) return input.exerciseType;
+  if (input.exerciseType && input.exerciseType !== 'strength') return input.exerciseType;
 
   const slug = normalize(input.slug);
   if (slug) {
@@ -55,6 +62,14 @@ export function classifyExercise(input: ExerciseClassificationInput): ExerciseTy
     return 'timed';
   }
 
+  if (CORE_BODYWEIGHT_NAME_PATTERN.test(name)) {
+    return 'bodyweight';
+  }
+
+  if (CORE_STRENGTH_NAME_PATTERN.test(name)) {
+    return 'strength';
+  }
+
   if (BODYWEIGHT_NAME_PATTERN.test(name)) {
     return 'bodyweight';
   }
@@ -63,7 +78,7 @@ export function classifyExercise(input: ExerciseClassificationInput): ExerciseTy
     return 'bodyweight';
   }
 
-  return 'strength';
+  return input.exerciseType ?? 'strength';
 }
 
 export function resolveExerciseType(input: ExerciseClassificationInput): ExerciseType {

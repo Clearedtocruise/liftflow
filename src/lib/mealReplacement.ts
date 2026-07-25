@@ -5,6 +5,7 @@ import {
   type MealMacros,
 } from '@/lib/mealIngredients';
 import { estimateFoodMacrosLocal } from '@/lib/foodMacroLookup';
+import { dedupeMealsByType } from '@/lib/mealAggregation';
 import type { MealReplacementScope } from '@/types/nutrition';
 import type { Meal } from '@/types';
 
@@ -30,9 +31,13 @@ export function selectMealsForScope(
 ): Meal[] {
   if (scope === 'meal') return [anchor];
 
+  const candidateMeals =
+    scope === 'day'
+      ? dedupeMealsByType(allMeals.filter((meal) => meal.scheduledDate === anchor.scheduledDate))
+      : dedupeMealsByType(allMeals);
+
   if (scope === 'day') {
-    return allMeals.filter((meal) => {
-      if (meal.scheduledDate !== anchor.scheduledDate) return false;
+    return candidateMeals.filter((meal) => {
       if (targetIngredient) {
         const meta = enrichMealMeta(meal.name, meal.instructions);
         return (meta.ingredients ?? []).some((item) => ingredientMatches(item.name, targetIngredient));
@@ -41,7 +46,7 @@ export function selectMealsForScope(
     });
   }
 
-  return allMeals.filter((meal) => {
+  return candidateMeals.filter((meal) => {
     if (targetIngredient) {
       const meta = enrichMealMeta(meal.name, meal.instructions);
       return (meta.ingredients ?? []).some((item) => ingredientMatches(item.name, targetIngredient));

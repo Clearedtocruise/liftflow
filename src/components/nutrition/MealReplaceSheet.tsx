@@ -30,6 +30,7 @@ type MealReplaceSheetProps = {
   mode: 'meal' | 'ingredient';
   ingredientName?: string;
   dietaryRestrictions?: string[];
+  pending?: boolean;
   onClose: () => void;
   onReplaceMeal: (option: MealAlternativeOption, reason: MealReplacementReason) => void;
   onReplaceIngredient: (ingredientName: string, replacement: string) => void;
@@ -51,6 +52,7 @@ export function MealReplaceSheet({
   mode,
   ingredientName,
   dietaryRestrictions = [],
+  pending = false,
   onClose,
   onReplaceMeal,
   onReplaceIngredient,
@@ -137,9 +139,9 @@ export function MealReplaceSheet({
         {replacementMethod === 'smart' ? (
           <SmartMealReplaceForm
             replacingLabel={replacingLabel}
+            submitting={pending}
             onConfirm={(payload) => {
               onSmartReplace(payload);
-              onClose();
             }}
           />
         ) : (
@@ -197,6 +199,7 @@ export function MealReplaceSheet({
                       <Pressable
                         key={option.name}
                         style={styles.option}
+                        disabled={pending}
                         onPress={() => {
                           onReplaceMeal(option, reason);
                           onClose();
@@ -225,6 +228,7 @@ export function MealReplaceSheet({
                   <Pressable
                     key={item.from}
                     style={styles.option}
+                    disabled={pending}
                     onPress={() => {
                       if (item.to && item.to !== item.from) {
                         onReplaceIngredient(item.from, item.to);
@@ -241,7 +245,7 @@ export function MealReplaceSheet({
           </>
         )}
 
-        <PrimaryButton label="Close" variant="secondary" onPress={onClose} />
+        <PrimaryButton label="Close" variant="secondary" onPress={onClose} disabled={pending} />
       </ScrollView>
     </Modal>
   );

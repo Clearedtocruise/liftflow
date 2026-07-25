@@ -145,6 +145,9 @@ function deriveFromNamePattern(name: string): ExerciseMuscleProfile {
   if (/\b(plank|core|crunch)\b/.test(lower)) {
     return { primary: ['core'], secondary: ['abs'] };
   }
+  if (/\b(weighted\s+sit[\s-]?up|sit[\s-]?up|windshield\s*wiper|russian\s+twist|dead\s+bug|hanging\s+leg\s+raise|leg\s+raise|toes?\s+to\s+bar|v[\s-]?up|hollow\s+rock)\b/.test(lower)) {
+    return { primary: ['core'], secondary: ['obliques', 'abs'] };
+  }
   if (/\b(calf)\b/.test(lower)) {
     return { primary: ['calves'], secondary: [] };
   }
