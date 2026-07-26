@@ -36,7 +36,8 @@ export function useTodayDashboard(): TodayDashboardState {
   const { tabataModeEnabled } = useTabataModePreference();
   const { locations, selectedId } = useWorkoutLocations(user?.id);
   const { startSessionFromPlanned, refreshSession } = useWorkoutSession();
-  const { setPlannedWorkout, setExercises } = useWorkoutPlanDraft();
+  const { plannedWorkout, exercises, isDirty, setPlannedWorkout, setSessionPlan, markSaved } =
+    useWorkoutPlanDraft();
 
   const [todaysWorkout, setTodaysWorkout] = useState<PlannedWorkout | null>(null);
   const [loading, setLoading] = useState(true);
@@ -85,9 +86,27 @@ export function useTodayDashboard(): TodayDashboardState {
     if (!user || !todaysWorkout || starting) return false;
     setStarting(true);
     try {
+      // The session is built from the planned workout in the database, so edits still sitting in
+      // the draft have to be written before they can reach the session.
+      let planned = todaysWorkout;
+      if (isDirty && plannedWorkout?.id === todaysWorkout.id) {
+        const saved = await trainingService.updatePlannedWorkoutExercises(
+          todaysWorkout.id,
+          exercises,
+          todaysWorkout.metadata,
+        );
+        if (!saved.success) {
+          Alert.alert('Could not save your changes', saved.error || 'Please try again.');
+          return false;
+        }
+        planned = saved.data;
+        setTodaysWorkout(planned);
+        markSaved(planned);
+      }
+
       const result = await startPlannedWorkout({
         user,
-        planned: todaysWorkout,
+        planned,
         tabataModeEnabled,
         locations,
         selectedLocationId: selectedId,
@@ -95,8 +114,8 @@ export function useTodayDashboard(): TodayDashboardState {
         refreshSession,
       });
       if (!result) return false;
-      setPlannedWorkout(todaysWorkout);
-      setExercises(result.sessionExercises);
+      setPlannedWorkout(planned);
+      setSessionPlan(result.sessionExercises);
       return true;
     } finally {
       setStarting(false);
@@ -105,13 +124,17 @@ export function useTodayDashboard(): TodayDashboardState {
     user,
     todaysWorkout,
     starting,
+    exercises,
+    isDirty,
+    plannedWorkout?.id,
     tabataModeEnabled,
     locations,
     selectedId,
     startSessionFromPlanned,
     refreshSession,
+    markSaved,
     setPlannedWorkout,
-    setExercises,
+    setSessionPlan,
   ]);
 
   const generateWorkout = useCallback(async () => {

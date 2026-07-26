@@ -157,6 +157,12 @@ export interface ITrainingService {
     userId: string,
     change: import('@/types/planAdaptation').ScheduleChange,
   ): Promise<ServiceResult<import('@/types/planAdaptation').PlanAdaptationResult>>;
+  /** Persists edits to a single day's exercises into `planned_workouts.metadata`. */
+  updatePlannedWorkoutExercises(
+    plannedWorkoutId: string,
+    exercises: import('@/types/workoutExecution').EditableWorkoutExercise[],
+    existingMetadata?: PlannedWorkout['metadata'],
+  ): Promise<ServiceResult<PlannedWorkout>>;
 }
 
 // =============================================================================
