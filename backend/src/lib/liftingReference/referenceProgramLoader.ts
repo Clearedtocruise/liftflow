@@ -314,17 +314,29 @@ export function resolveMonth1Workout(
   return null;
 }
 
-function dedupeExercisesByName<T extends { name: string }>(exercises: T[]): T[] {
-  const seen = new Set<string>();
+export function dedupeReferenceDraftExercises<T extends { name: string; slug?: string }>(
+  exercises: T[],
+): T[] {
+  const seenNames = new Set<string>();
+  const seenSlugs = new Set<string>();
   const result: T[] = [];
   for (const exercise of exercises) {
-    const key = normalizeName(exercise.name);
-    if (seen.has(key)) continue;
-    seen.add(key);
+    const normalizedName = normalizeName(exercise.name);
+    const normalizedSlug = exercise.slug?.trim().toLowerCase();
+    if (normalizedSlug && seenSlugs.has(normalizedSlug)) continue;
+    if (seenNames.has(normalizedName)) continue;
+    seenNames.add(normalizedName);
+    if (normalizedSlug) seenSlugs.add(normalizedSlug);
     result.push(exercise);
   }
   return result;
 }
+
+type ReferenceDraftExercise = GeneratedWorkoutExercise & {
+  block?: string;
+  slug?: string;
+  metadata?: ExerciseRecord['metadata'];
+};
 
 type BuildReferenceOptions = {
   equipmentOverride?: string[];
@@ -372,9 +384,7 @@ export async function buildReferenceStyleWorkoutPlan(
   const usedMovementFamilies = new Map<string, number>();
   const patternGroupUses = new Map<string, number>();
 
-  const draft: Array<
-    GeneratedWorkoutExercise & { block?: string; slug?: string; metadata?: ExerciseRecord['metadata'] }
-  > = [];
+  const draft: ReferenceDraftExercise[] = [];
 
   for (let blockIndex = 0; blockIndex < reference.exercises.length; blockIndex++) {
     const block = reference.exercises[blockIndex];
@@ -441,24 +451,31 @@ export async function buildReferenceStyleWorkoutPlan(
     });
   }
 
-  let exercises = applySubstitutionsToExercises(
+  const substitutedExercises = applySubstitutionsToExercises(
     draft.map(({ slug: _slug, block: _block, metadata: _meta, ...exercise }) => exercise),
     limitations as LimitationContext[],
   );
 
-  exercises = dedupeExercisesByName(exercises);
+  const substitutedWithMetadata: ReferenceDraftExercise[] = substitutedExercises.map((exercise, index) => ({
+    ...exercise,
+    block: draft[index]?.block,
+    slug: draft[index]?.slug,
+    metadata: draft[index]?.metadata,
+  }));
 
-  exercises = applyWeeklyProgression(
-    exercises,
+  const dedupedExercises = dedupeReferenceDraftExercises(substitutedWithMetadata);
+
+  const progressedExercises = applyWeeklyProgression(
+    dedupedExercises.map(({ slug: _slug, block: _block, metadata: _meta, ...exercise }) => exercise),
     performance,
     useExactPrescription ? 1 : 1.02,
     recoveryMods.volumeMultiplier,
   );
 
-  const withBlocks = draft.map((item, index) => ({
-    ...exercises[index],
-    block: item.block,
-    metadata: item.metadata,
+  const withBlocks = progressedExercises.map((exercise, index) => ({
+    ...exercise,
+    block: dedupedExercises[index]?.block,
+    metadata: dedupedExercises[index]?.metadata,
   }));
 
   const supersetted = applyBlockSupersets(withBlocks).map(

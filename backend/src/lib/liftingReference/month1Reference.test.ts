@@ -5,6 +5,7 @@ import { applyBlockSupersets, enrichWithSmartSupersetGroups } from './applyRefer
 import { SPLIT_VOLUME_TARGETS } from './liftingProgrammingRules.js';
 import { MONTH1_WORKOUTS, MONTH1_WORKOUT_COUNT } from './month1Workouts.js';
 import {
+  dedupeReferenceDraftExercises,
   getMonth1Workout,
   resolveMonth1Workout,
   shouldUseReferenceLiftingProgram,
@@ -106,4 +107,21 @@ test('split volume targets match Month 1 spec', () => {
   assert.equal(SPLIT_VOLUME_TARGETS.chest_shoulders_triceps.chest, 12);
   assert.equal(SPLIT_VOLUME_TARGETS.back_biceps_core.core, 12);
   assert.equal(SPLIT_VOLUME_TARGETS.legs_core.calves, 8);
+});
+
+test('dedupeReferenceDraftExercises removes duplicates by name and slug', () => {
+  const deduped = dedupeReferenceDraftExercises([
+    { name: 'Bench Press', slug: 'bench-press', block: 'A' },
+    { name: 'Bench-Press', slug: 'bench-press-alt', block: 'B1' },
+    { name: 'Incline Bench Press', slug: 'incline-bench-press', block: 'B2' },
+    { name: 'Cable Row', slug: 'cable-row', block: 'C' },
+    { name: 'Cable Row', slug: 'cable-row', block: 'D' },
+  ]);
+
+  assert.deepEqual(
+    deduped.map((exercise) => exercise.slug),
+    ['bench-press', 'incline-bench-press', 'cable-row'],
+  );
+  assert.equal(deduped[0]?.block, 'A');
+  assert.equal(deduped[2]?.block, 'C');
 });
