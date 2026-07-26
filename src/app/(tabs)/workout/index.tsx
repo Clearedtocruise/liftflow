@@ -57,10 +57,12 @@ export default function WorkoutScreen() {
   const [challengeRecords, setChallengeRecords] = useState<WorkoutChallengeRecord[]>([]);
   const [planError, setPlanError] = useState(false);
   const [finishing, setFinishing] = useState(false);
+  const [cleaningInvalidSession, setCleaningInvalidSession] = useState(false);
   const finishingRef = useRef(false);
   const loadGenerationRef = useRef(0);
   const hydratedFromCacheRef = useRef(false);
   const skipFocusLoadRef = useRef(true);
+  const cleanedInvalidSessionRef = useRef<string | null>(null);
 
   const loadWeekPlan = useCallback(
     async (options?: { silent?: boolean }) => {
@@ -167,6 +169,24 @@ export default function WorkoutScreen() {
     if (user?.id) void loadWeekPlan({ silent: true });
     if (session) void refreshSession();
   });
+
+  const invalidPlannedSession = Boolean(session?.plannedWorkoutId) && (session?.exercises.length ?? 0) === 0;
+
+  useEffect(() => {
+    if (!session || !invalidPlannedSession) {
+      setCleaningInvalidSession(false);
+      return;
+    }
+    if (cleanedInvalidSessionRef.current === session.id) return;
+    cleanedInvalidSessionRef.current = session.id;
+    setCleaningInvalidSession(true);
+    void (async () => {
+      await cancelSession();
+      await refreshSession();
+      await loadWeekPlan({ silent: true });
+      setCleaningInvalidSession(false);
+    })();
+  }, [session, invalidPlannedSession, cancelSession, refreshSession, loadWeekPlan]);
 
   useEffect(() => {
     if (revision > 0 && user?.id) void loadWeekPlan({ silent: true });
@@ -281,6 +301,14 @@ export default function WorkoutScreen() {
   }, []);
 
   if (loading && !session && weekDays.length === 0) {
+    return (
+      <View style={styles.loading}>
+        <ActivityIndicator size="large" color={LiftFlowColors.accent} />
+      </View>
+    );
+  }
+
+  if (cleaningInvalidSession || invalidPlannedSession) {
     return (
       <View style={styles.loading}>
         <ActivityIndicator size="large" color={LiftFlowColors.accent} />

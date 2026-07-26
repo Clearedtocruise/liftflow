@@ -31,6 +31,7 @@ type TodayHeroCardProps = {
   onGenerate: () => void;
   onRetry: () => void;
   onOpenRecovery: () => void;
+  onManageWorkout?: () => void;
 };
 
 export function TodayHeroCard({
@@ -43,6 +44,7 @@ export function TodayHeroCard({
   onGenerate,
   onRetry,
   onOpenRecovery,
+  onManageWorkout,
 }: TodayHeroCardProps) {
   const resting = state.kind === 'rest';
 
@@ -148,6 +150,14 @@ export function TodayHeroCard({
             disabled={busy}
             size="large"
           />
+          {onManageWorkout ? (
+            <PrimaryButton
+              label="Replace Exercises"
+              variant="secondary"
+              onPress={onManageWorkout}
+              disabled={busy}
+            />
+          ) : null}
         </>
       )}
     </LinearGradient>

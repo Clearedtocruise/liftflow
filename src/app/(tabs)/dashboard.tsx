@@ -4,7 +4,6 @@ import { StyleSheet, View } from 'react-native';
 
 import { CoachInsightCard } from '@/components/dashboard/CoachInsightCard';
 import { HomeHeader } from '@/components/dashboard/HomeHeader';
-import { QuickActionGrid, type QuickAction } from '@/components/dashboard/QuickActionGrid';
 import { StatTile } from '@/components/dashboard/StatTile';
 import { TodayHeroCard, type HeroState } from '@/components/dashboard/TodayHeroCard';
 import { UpNextCard } from '@/components/dashboard/UpNextCard';
@@ -16,13 +15,6 @@ import { useHomeMetrics } from '@/hooks/useHomeMetrics';
 import { useTodayDashboard } from '@/hooks/useTodayDashboard';
 import { profileFigureGender, resolveExerciseMuscles } from '@/lib/exerciseMuscleMap';
 import { exercisesFromPlannedWorkout } from '@/lib/workoutPlan';
-
-const QUICK_ACTIONS: Omit<QuickAction, 'onPress'>[] = [
-  { label: 'Log Workout', icon: '🏋', accent: 'streak' },
-  { label: 'Log Meal', icon: '🍽', accent: 'nutrition' },
-  { label: 'Progress Photo', icon: '📷', accent: 'coach' },
-  { label: 'Body Check-In', icon: '⚖', accent: 'body' },
-];
 
 function formatSleep(hours?: number): string | undefined {
   if (hours == null) return undefined;
@@ -76,16 +68,6 @@ export default function DashboardScreen() {
     [upcomingWorkout],
   );
 
-  const actions: QuickAction[] = QUICK_ACTIONS.map((action) => ({
-    ...action,
-    onPress: () => {
-      if (action.label === 'Log Workout') router.push('/(tabs)/workout/manual-log');
-      else if (action.label === 'Log Meal') router.push('/(tabs)/nutrition?log=1');
-      else if (action.label === 'Progress Photo') router.push('/(tabs)/progress');
-      else router.push('/(features)/recovery-check-in');
-    },
-  }));
-
   return (
     <ScreenContainer contentContainerStyle={styles.content}>
       <HomeHeader
@@ -106,6 +88,13 @@ export default function DashboardScreen() {
         onGenerate={() => void generateWorkout()}
         onRetry={() => void refresh()}
         onOpenRecovery={() => router.push('/(features)/recovery-check-in')}
+        onManageWorkout={() => {
+          if (!todaysWorkout) return;
+          router.push({
+            pathname: '/(tabs)/workout/day',
+            params: { id: todaysWorkout.id },
+          });
+        }}
       />
 
       <View style={styles.tiles}>
@@ -156,13 +145,6 @@ export default function DashboardScreen() {
           onPress={() => router.push('/(tabs)/coaching')}
         />
       ) : null}
-
-      <View style={styles.section}>
-        <AppText variant="label" color="textTertiary">
-          QUICK ACTIONS
-        </AppText>
-        <QuickActionGrid actions={actions} />
-      </View>
 
       {upcomingWorkout && upNextMuscles ? (
         <View style={styles.section}>
