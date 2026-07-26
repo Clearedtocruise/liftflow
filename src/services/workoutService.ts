@@ -137,14 +137,19 @@ async function loadPlannedExercises(plannedWorkoutId: string): Promise<PlannedEx
 }
 
 async function findOrCreateExerciseByNameInternal(name: string, userId: string): Promise<string | null> {
-  const normalized = name.trim();
-  const { data: found } = await supabase
+  const normalized = name.trim().replace(/\s+/g, ' ');
+  // Ordered the same way the `seed_session_exercises_from_plan` trigger orders it, so the client and
+  // the database resolve a name to the same row. Preferring the system entry also stops a custom row
+  // that shadows a catalog exercise — "Reverse Fly" existed twice — from being picked up and spread.
+  const { data: matches } = await supabase
     .from('exercises')
-    .select('id')
+    .select('id, is_system, created_at')
     .ilike('name', normalized)
-    .limit(1)
-    .maybeSingle();
+    .order('is_system', { ascending: false })
+    .order('created_at', { ascending: true })
+    .limit(1);
 
+  const found = matches?.[0];
   if (found?.id) return found.id;
 
   const slug = normalized.toLowerCase().replace(/[^a-z0-9]+/g, '-');
@@ -171,35 +176,23 @@ async function preloadSessionExercises(
   userId: string,
   exercises: PlannedExerciseTemplate[],
 ): Promise<void> {
+  // A session started from a planned workout is seeded twice: the `trg_seed_session_exercises_from_plan`
+  // trigger fires inside the session INSERT, and then this runs. The trigger skips when the client
+  // got there first, but this had no matching check, so it inserted a second copy of every exercise
+  // — the duplicated lists and split set counts users saw. Read what is already there and add only
+  // what is missing.
+  const { data: existingRows } = await supabase
+    .from('workout_exercises')
+    .select('exercise_id')
+    .eq('session_id', sessionId);
+  const alreadySeeded = new Set((existingRows ?? []).map((row) => row.exercise_id as string));
+
   for (let i = 0; i < exercises.length; i++) {
     const template = exercises[i];
-    const normalized = template.name.trim();
-    const { data: found } = await supabase
-      .from('exercises')
-      .select('id')
-      .ilike('name', normalized)
-      .limit(1)
-      .maybeSingle();
-
-    let exerciseId = found?.id;
-    if (!exerciseId) {
-      const slug = normalized.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-      const { data: created } = await supabase
-        .from('exercises')
-        .insert({
-          name: normalized,
-          slug,
-          category: 'custom',
-          equipment: 'other',
-          muscle_groups: [],
-          is_system: false,
-          created_by: userId,
-        })
-        .select('id')
-        .single();
-      exerciseId = created?.id;
-    }
+    const exerciseId = await findOrCreateExerciseByNameInternal(template.name, userId);
     if (!exerciseId) continue;
+    if (alreadySeeded.has(exerciseId)) continue;
+    alreadySeeded.add(exerciseId);
 
     await supabase.from('workout_exercises').insert({
       session_id: sessionId,
