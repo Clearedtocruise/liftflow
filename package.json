@@ -110,6 +110,7 @@
     "migrate:026": "node scripts/apply-migration-026.mjs",
     "audit:exercise-database": "node scripts/audit-exercise-database.mjs",
     "audit:duplicate-session-exercises": "node scripts/audit-duplicate-session-exercises.mjs",
+    "audit:rls-coverage": "node scripts/audit-rls-coverage.mjs",
     "validate:sprint2-workout-execution-modes": "node scripts/validate-sprint2-workout-execution-modes.mjs",
     "validate:sprint3-weekly-lifting": "node scripts/validate-sprint3-weekly-lifting.mjs",
     "validate:sprint4-weekly-workout-view": "node scripts/validate-sprint4-weekly-workout-view.mjs",
