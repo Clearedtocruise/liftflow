@@ -122,6 +122,7 @@
     "validate:voice-logging": "npx tsx scripts/validate-voice-logging.ts",
     "validate:sprint8-superset-circuit": "node scripts/validate-sprint8-superset-circuit.mjs",
     "validate:workout-plan-edit-save": "npx tsx scripts/validate-workout-plan-edit-save.ts",
+    "validate:home-dashboard": "npx tsx scripts/validate-home-dashboard.ts",
     "validate:sprint10-exercise-replacement": "node scripts/validate-sprint10-exercise-replacement.mjs",
     "migrate:019": "node scripts/apply-migration-019.mjs",
     "migrate:023-024": "node scripts/apply-migration-023-024.mjs",

@@ -150,6 +150,8 @@ export interface ITrainingService {
     to: string,
     timeZone?: string | null,
   ): Promise<ServiceResult<PlannedWorkout[]>>;
+  /** The next scheduled session strictly after `afterDate`, unconstrained by week boundaries. */
+  getNextPlannedWorkout(userId: string, afterDate: string): Promise<ServiceResult<PlannedWorkout | null>>;
   suggestMuscleGroups(userId: string): Promise<ServiceResult<SuggestedMuscleGroups>>;
   assessRecovery(userId: string): Promise<ServiceResult<RecoveryAssessment>>;
   createPlannedWorkout(userId: string, workout: Omit<PlannedWorkout, 'id' | 'createdAt'>): Promise<ServiceResult<PlannedWorkout>>;

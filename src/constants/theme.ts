@@ -52,6 +52,34 @@ export const LiftFlowColors = {
 
 export type LiftFlowColor = keyof typeof LiftFlowColors;
 
+/**
+ * One colour per thing being measured, so a number is recognisable before it is read. Recovery is
+ * the existing success green and streak the existing primary blue rather than new hues, because a
+ * metric tile and the rest of the app should not disagree about what "good" looks like.
+ */
+export const MetricAccents = {
+  recovery: { tint: LiftFlowColors.success, glow: 'rgba(0, 229, 168, 0.16)' },
+  sleep: { tint: '#9B7BFF', glow: 'rgba(155, 123, 255, 0.16)' },
+  energy: { tint: '#FF8A4C', glow: 'rgba(255, 138, 76, 0.16)' },
+  streak: { tint: LiftFlowColors.primary, glow: 'rgba(14, 144, 255, 0.16)' },
+  nutrition: { tint: LiftFlowColors.success, glow: 'rgba(0, 229, 168, 0.16)' },
+  body: { tint: LiftFlowColors.restTimer, glow: 'rgba(0, 229, 255, 0.16)' },
+  coach: { tint: '#9B7BFF', glow: 'rgba(155, 123, 255, 0.16)' },
+} as const;
+
+export type MetricAccent = keyof typeof MetricAccents;
+
+/** Gradient stops, as `expo-linear-gradient` colour tuples. */
+export const Gradients = {
+  /** The primary call to action. */
+  action: ['#0E90FF', '#7B5BFF'] as const,
+  /** Behind the hero card: a night sky reading, dark enough to keep white text legible. */
+  hero: ['#101C33', '#0C1424', '#080B10'] as const,
+  /** Rest and recovery days, which should not look like a training day. */
+  recovery: ['#0F2A2A', '#0C1A24', '#080B10'] as const,
+  ring: ['#00E5A8', '#00E5FF'] as const,
+} as const;
+
 export const FontFamily = {
   hero: 'Sora_800ExtraBold',
   heroBold: 'Sora_700Bold',

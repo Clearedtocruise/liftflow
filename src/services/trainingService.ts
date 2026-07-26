@@ -195,6 +195,36 @@ export const trainingService: ITrainingService = {
     }
   },
 
+  /**
+   * The next scheduled session strictly after `afterDate`.
+   *
+   * Deliberately does not go through `getPlannedWorkouts`, which runs its results through
+   * `dedupePlannedWorkoutsByDate` and drops every date outside the current week. That is correct for
+   * the weekly planner, but it means the next session is invisible on the last day of a week — so
+   * "Up Next" would vanish every Sunday.
+   */
+  async getNextPlannedWorkout(
+    userId: string,
+    afterDate: string,
+  ): Promise<import('@/types/common').ServiceResult<PlannedWorkout | null>> {
+    try {
+      const { data, error } = await supabase
+        .from('planned_workouts')
+        .select('*')
+        .eq('user_id', userId)
+        .gt('scheduled_date', afterDate)
+        .neq('status', 'cancelled')
+        .order('scheduled_date', { ascending: true })
+        .limit(1);
+
+      if (error) return fail(error.message);
+      const row = (data ?? [])[0];
+      return ok(row ? mapPlanned(row as PlannedRow) : null);
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
   async getPlannedWorkouts(userId, from, to, timeZone?: string | null): Promise<
     import('@/types/common').ServiceResult<PlannedWorkout[]>
   > {
