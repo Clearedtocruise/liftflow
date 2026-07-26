@@ -3,6 +3,7 @@ import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleShee
 
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { AppText } from '@/components/ui/AppText';
+import { ExerciseGuideSheet } from '@/components/workout/execution/ExerciseGuideSheet';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 import { workoutService } from '@/services/workoutService';
@@ -20,6 +21,7 @@ export function ExercisePickerModal({ visible, onClose, onSelect, title = 'Selec
   const [query, setQuery] = useState('');
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [loading, setLoading] = useState(false);
+  const [preview, setPreview] = useState<Exercise | null>(null);
 
   useEffect(() => {
     if (!visible || !user) return;
@@ -79,16 +81,43 @@ export function ExercisePickerModal({ visible, onClose, onSelect, title = 'Selec
                   onSelect(exercise);
                   onClose();
                 }}>
-                <AppText variant="bodyBold">{exercise.name}</AppText>
-                <AppText variant="caption" color="textSecondary">
-                  {exercise.equipment} · {exercise.category}
-                </AppText>
+                <View style={styles.rowMain}>
+                  <View style={styles.rowText}>
+                    <AppText variant="bodyBold">{exercise.name}</AppText>
+                    <AppText variant="caption" color="textSecondary">
+                      {exercise.equipment} · {exercise.category}
+                    </AppText>
+                  </View>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`How to do ${exercise.name}`}
+                    hitSlop={12}
+                    onPress={() => setPreview(exercise)}
+                    style={styles.detailsButton}>
+                    <AppText variant="caption" color="accent">
+                      Details
+                    </AppText>
+                  </Pressable>
+                </View>
               </Pressable>
             ))
           )}
         </ScrollView>
 
         <PrimaryButton label="Cancel" variant="secondary" onPress={onClose} />
+
+        <ExerciseGuideSheet
+          visible={preview != null}
+          exercise={preview}
+          onClose={() => setPreview(null)}
+          onAddToWorkout={() => {
+            if (!preview) return;
+            const selected = preview;
+            setPreview(null);
+            onSelect(selected);
+            onClose();
+          }}
+        />
       </KeyboardAvoidingView>
     </Modal>
   );
@@ -126,6 +155,22 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: LiftFlowColors.border,
     gap: Spacing.xs,
+  },
+  rowMain: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+  },
+  rowText: {
+    flex: 1,
+    gap: Spacing.xs,
+  },
+  detailsButton: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+    borderRadius: Radius.full,
+    borderWidth: 1,
+    borderColor: LiftFlowColors.border,
   },
   rowPressed: {
     backgroundColor: LiftFlowColors.surfaceHighlight,
