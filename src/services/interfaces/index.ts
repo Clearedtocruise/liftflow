@@ -143,7 +143,13 @@ export interface ITrainingService {
   getPrograms(userId: string): Promise<ServiceResult<TrainingProgram[]>>;
   getActivePhase(userId: string): Promise<ServiceResult<TrainingPhase | null>>;
   getTemplates(userId: string): Promise<ServiceResult<WorkoutTemplate[]>>;
-  getPlannedWorkouts(userId: string, from: string, to: string): Promise<ServiceResult<PlannedWorkout[]>>;
+  /** `timeZone` decides which local day each workout falls on; omitting it uses the device zone. */
+  getPlannedWorkouts(
+    userId: string,
+    from: string,
+    to: string,
+    timeZone?: string | null,
+  ): Promise<ServiceResult<PlannedWorkout[]>>;
   suggestMuscleGroups(userId: string): Promise<ServiceResult<SuggestedMuscleGroups>>;
   assessRecovery(userId: string): Promise<ServiceResult<RecoveryAssessment>>;
   createPlannedWorkout(userId: string, workout: Omit<PlannedWorkout, 'id' | 'createdAt'>): Promise<ServiceResult<PlannedWorkout>>;
