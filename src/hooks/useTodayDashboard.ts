@@ -7,6 +7,7 @@ import { useLocalCalendarDay } from '@/hooks/useLocalCalendarDay';
 import { useTabataModePreference } from '@/hooks/useTabataModePreference';
 import { useWorkoutLocations } from '@/hooks/useWorkoutLocations';
 import { resolveActiveTrainingDay } from '@/lib/activeTrainingDay';
+import { localDateString } from '@/lib/localDate';
 import { startPlannedWorkout } from '@/lib/startPlannedWorkout';
 import { getWeekRange } from '@/lib/weekPlan';
 import { aiService } from '@/services/aiService';
@@ -15,8 +16,17 @@ import { useWorkoutPlanDraft } from '@/state/workout/WorkoutPlanDraftContext';
 import { useWorkoutSession } from '@/state/workout/WorkoutSessionContext';
 import type { PlannedWorkout } from '@/types';
 
+/** The next scheduled session after today, for the Up Next card. */
+export type UpcomingWorkout = {
+  when: string;
+  name: string;
+  focus?: string;
+  workout: PlannedWorkout;
+};
+
 type TodayDashboardState = {
   todaysWorkout: PlannedWorkout | null;
+  upcomingWorkout: UpcomingWorkout | null;
   loading: boolean;
   /** True when the plan fetch failed — distinct from a genuine rest day. */
   error: boolean;
@@ -29,6 +39,31 @@ type TodayDashboardState = {
   generateWorkout: () => Promise<boolean>;
 };
 
+/**
+ * Labels the next session "Tomorrow" for the next day and by weekday beyond that, because
+ * "in 3 days" is harder to act on than "Thursday".
+ */
+function describeUpcoming(
+  next: PlannedWorkout,
+  todayKey: string,
+  timeZone?: string | null,
+): UpcomingWorkout {
+  const tomorrow = new Date(`${todayKey}T12:00:00`);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const when =
+    next.scheduledDate === localDateString(tomorrow, timeZone)
+      ? 'Tomorrow'
+      : new Date(`${next.scheduledDate}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long' });
+
+  const groups = next.suggestedMuscleGroups ?? [];
+  return {
+    when,
+    name: next.name,
+    focus: groups.length > 0 ? `Focus: ${groups.slice(0, 3).join(' · ')}` : undefined,
+    workout: next,
+  };
+}
+
 /** Loads today's planned workout and provides start / generate actions for the home screen. */
 export function useTodayDashboard(): TodayDashboardState {
   const { user } = useAuth();
@@ -39,6 +74,7 @@ export function useTodayDashboard(): TodayDashboardState {
   const { setPlannedWorkout, setExercises } = useWorkoutPlanDraft();
 
   const [todaysWorkout, setTodaysWorkout] = useState<PlannedWorkout | null>(null);
+  const [upcomingWorkout, setUpcomingWorkout] = useState<UpcomingWorkout | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [hasProgram, setHasProgram] = useState(true);
@@ -48,6 +84,7 @@ export function useTodayDashboard(): TodayDashboardState {
   const refresh = useCallback(async () => {
     if (!user) {
       setTodaysWorkout(null);
+      setUpcomingWorkout(null);
       setLoading(false);
       return;
     }
@@ -55,12 +92,16 @@ export function useTodayDashboard(): TodayDashboardState {
     setLoading(true);
     try {
       const { from, to } = getWeekRange(new Date(), user.timezone);
-      const result = await trainingService.getPlannedWorkouts(user.id, from, to);
+      const [result, nextResult] = await Promise.all([
+        trainingService.getPlannedWorkouts(user.id, from, to),
+        trainingService.getNextPlannedWorkout(user.id, today),
+      ]);
       if (!result.success) {
         // A failed fetch used to render identically to a rest day, telling the user they had
         // nothing scheduled when the request simply never came back.
         setError(true);
         setTodaysWorkout(null);
+        setUpcomingWorkout(null);
         return;
       }
       setError(false);
@@ -70,6 +111,11 @@ export function useTodayDashboard(): TodayDashboardState {
         timeZone: user.timezone,
       });
       setTodaysWorkout(active.isStartableWorkoutDay ? active.workout : null);
+      setUpcomingWorkout(
+        nextResult.success && nextResult.data
+          ? describeUpcoming(nextResult.data, today, user.timezone)
+          : null,
+      );
     } finally {
       setLoading(false);
     }
@@ -138,6 +184,7 @@ export function useTodayDashboard(): TodayDashboardState {
 
   return {
     todaysWorkout,
+    upcomingWorkout,
     loading,
     error,
     hasProgram,
