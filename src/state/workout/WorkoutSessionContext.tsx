@@ -44,7 +44,12 @@ type WorkoutSessionActions = {
   logSet: (payload: CreateSetPayload) => Promise<WorkoutSet | null>;
   updateSet: (setId: string, payload: UpdateSetPayload) => Promise<WorkoutSet | null>;
   deleteSet: (setId: string) => Promise<boolean>;
-  addExerciseByName: (name: string) => Promise<string | null>;
+  addExerciseByName: (
+    name: string,
+    options?: { afterWorkoutExerciseId?: string },
+  ) => Promise<string | null>;
+  /** Swap an exercise mid-session. Resolves to the workout exercise the user should move to. */
+  replaceExerciseByName: (workoutExerciseId: string, name: string) => Promise<string | null>;
   setListening: (listening: boolean) => void;
   startRestTimer: (setId: string, seconds?: number) => Promise<void>;
   adjustRestTimer: (deltaSeconds: number) => void;
@@ -365,7 +370,7 @@ export function WorkoutSessionProvider({
   );
 
   const addExerciseByName = useCallback(
-    async (name: string) => {
+    async (name: string, options?: { afterWorkoutExerciseId?: string }) => {
       if (!userId || !activeSession) return null;
 
       const exerciseIdResult = await workoutService.findOrCreateExerciseByName(name, userId);
@@ -374,11 +379,34 @@ export function WorkoutSessionProvider({
       const existing = activeSession.exercises.find((e) => e.exerciseId === exerciseIdResult.data);
       if (existing) return existing.id;
 
-      const addResult = await workoutService.addExercise(activeSession.id, exerciseIdResult.data);
+      const after = options?.afterWorkoutExerciseId
+        ? activeSession.exercises.find((e) => e.id === options.afterWorkoutExerciseId)
+        : undefined;
+      const addResult = await workoutService.addExercise(
+        activeSession.id,
+        exerciseIdResult.data,
+        after ? after.sortOrder + 1 : undefined,
+      );
       if (!addResult.success) return null;
 
       await refreshSession();
       return addResult.data.id;
+    },
+    [userId, activeSession, refreshSession],
+  );
+
+  const replaceExerciseByName = useCallback(
+    async (workoutExerciseId: string, name: string) => {
+      if (!userId || !activeSession) return null;
+
+      const exerciseIdResult = await workoutService.findOrCreateExerciseByName(name, userId);
+      if (!exerciseIdResult.success) return null;
+
+      const result = await workoutService.replaceExercise(workoutExerciseId, exerciseIdResult.data);
+      if (!result.success) return null;
+
+      await refreshSession();
+      return result.data.id;
     },
     [userId, activeSession, refreshSession],
   );
@@ -481,6 +509,7 @@ export function WorkoutSessionProvider({
       updateSet,
       deleteSet,
       addExerciseByName,
+      replaceExerciseByName,
       setListening: setIsListening,
       startRestTimer,
       adjustRestTimer,
@@ -515,6 +544,7 @@ export function WorkoutSessionProvider({
       updateSet,
       deleteSet,
       addExerciseByName,
+      replaceExerciseByName,
       startRestTimer,
       adjustRestTimer,
       setRestTimer,

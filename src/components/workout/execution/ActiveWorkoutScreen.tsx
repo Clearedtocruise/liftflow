@@ -151,6 +151,7 @@ export function ActiveWorkoutScreen({
     refreshSession,
     deleteSet,
     addExerciseByName,
+    replaceExerciseByName,
     setActiveExerciseIndex,
     watchDraftReps,
     setWatchDraftReps,
@@ -215,6 +216,7 @@ export function ActiveWorkoutScreen({
   const [circuitRound, setCircuitRound] = useState(1);
   const [bonusSets, setBonusSets] = useState(0);
   const [exercisePickerVisible, setExercisePickerVisible] = useState(false);
+  const [exercisePickerMode, setExercisePickerMode] = useState<'add' | 'swap'>('add');
   const [exerciseGuideOpen, setExerciseGuideOpen] = useState(false);
   const [intervalOverlayOpen, setIntervalOverlayOpen] = useState(false);
   const [restOverlayOpen, setRestOverlayOpen] = useState(false);
@@ -239,6 +241,8 @@ export function ActiveWorkoutScreen({
   const effectiveTargetSets = Math.max(targetSets + bonusSets, coachRecommendedSets);
   const repRange = planMeta?.repRange ?? currentExercise?.suggestedReps ?? '8-10';
   const completedSets = currentExercise?.sets ?? [];
+  const completedSetsCountRef = useRef(0);
+  completedSetsCountRef.current = completedSets.length;
   const isPaused = session.status === 'paused';
   const restActive =
     executionModeUsesTraditionalRest(executionMode) &&
@@ -695,6 +699,9 @@ export function ActiveWorkoutScreen({
 
   useEffect(() => {
     if (coachExtraSets <= 0) return;
+    // A coach prescription that arrives after the planned sets are logged must not reopen the
+    // exercise, which left the screen asking for a set the user had already finished.
+    if (completedSetsCountRef.current >= targetSets) return;
     setBonusSets((current) => (current >= coachExtraSets ? current : coachExtraSets));
     setShowComplete(false);
     pendingExerciseAdvanceAfterRestRef.current = false;
@@ -703,7 +710,7 @@ export function ActiveWorkoutScreen({
       clearTimeout(autoAdvanceTimeoutRef.current);
       autoAdvanceTimeoutRef.current = null;
     }
-  }, [coachExtraSets, currentExercise?.id]);
+  }, [coachExtraSets, currentExercise?.id, targetSets]);
 
   useEffect(() => {
     // Interval modes own their own completion signal; a set count must not override it.
@@ -749,24 +756,44 @@ export function ActiveWorkoutScreen({
   }
 
   function handlePreviousExercise() {
-    if (currentIndex <= 0 || logging || restActive || intervalTimer != null || transitionActive) return;
+    if (currentIndex <= 0 || logging || intervalTimer != null || transitionActive) return;
     clearPendingExerciseAdvance();
     setShowComplete(false);
     setCurrentIndex((index) => Math.max(0, index - 1));
   }
 
-  async function handleAddExercise(exercise: Exercise) {
-    const workoutExerciseId = await addExerciseByName(exercise.name);
-    if (!workoutExerciseId) return;
-    await refreshSession();
+  /** Jumps to a workout exercise by id, using session order so the index matches what is rendered. */
+  async function focusWorkoutExercise(workoutExerciseId: string) {
     const refreshed = await workoutService.getSession(session.id);
-    if (refreshed.success) {
-      const nextIndex = refreshed.data.exercises.findIndex((item) => item.id === workoutExerciseId);
-      if (nextIndex >= 0) {
-        setCurrentIndex(nextIndex);
-        setShowComplete(false);
-      }
+    if (!refreshed.success) return;
+    const nextIndex = [...refreshed.data.exercises]
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .findIndex((item) => item.id === workoutExerciseId);
+    if (nextIndex < 0) return;
+    clearPendingExerciseAdvance();
+    setCurrentIndex(nextIndex);
+    setShowComplete(false);
+  }
+
+  async function handleAddExercise(exercise: Exercise) {
+    // The new exercise slots in directly after the current one rather than at the end of the
+    // workout, and the user is only moved there once the exercise they are on is finished.
+    const wasMidExercise = !allSetsDone;
+    const workoutExerciseId = await addExerciseByName(exercise.name, {
+      afterWorkoutExerciseId: currentExercise?.id,
+    });
+    if (!workoutExerciseId || wasMidExercise) return;
+    await focusWorkoutExercise(workoutExerciseId);
+  }
+
+  async function handleSwapExercise(exercise: Exercise) {
+    if (!currentExercise) return;
+    const workoutExerciseId = await replaceExerciseByName(currentExercise.id, exercise.name);
+    if (!workoutExerciseId) {
+      Alert.alert('Could not swap exercise', 'Please try again.');
+      return;
     }
+    await focusWorkoutExercise(workoutExerciseId);
   }
 
   const offerBetweenSetsChallenge = useCallback(() => {
@@ -1193,12 +1220,10 @@ export function ActiveWorkoutScreen({
     setRestPaused(false);
   }
 
+  // Rest deliberately does not block this. Being unable to step back to the exercise you are on is
+  // worse than a rest timer that keeps counting while you navigate.
   const canGoToPreviousExercise =
-    currentIndex > 0 &&
-    !logging &&
-    !restActive &&
-    intervalTimer == null &&
-    !transitionActive;
+    currentIndex > 0 && !logging && intervalTimer == null && !transitionActive;
 
   if (!currentExercise) {
     return (
@@ -1502,22 +1527,33 @@ export function ActiveWorkoutScreen({
                       (circuitTimer != null && circuitTimer.phase !== 'done')
                     }
                   />
-                  <PrimaryButton
-                    label={allSetsDone ? 'All sets logged' : `Log Set ${nextSetNumber}`}
-                    size="large"
-                    loading={logging}
-                    disabled={
-                      isPaused ||
-                      logging ||
-                      allSetsDone ||
-                      restActive ||
-                      intervalTimer != null ||
-                      (circuitTimer != null && circuitTimer.phase !== 'done')
-                    }
-                    onPress={() => {
-                      void handleLogSet();
-                    }}
-                  />
+                  {allSetsDone ? (
+                    // Every set is in but the exercise-complete card is not up, so this is the way
+                    // forward instead of a disabled button the user cannot get past.
+                    <PrimaryButton
+                      label={isFinalExercise ? 'Finish Workout' : 'Next Exercise'}
+                      size="large"
+                      loading={finishing}
+                      disabled={isPaused || logging}
+                      onPress={isFinalExercise ? onFinish : handleNextExercise}
+                    />
+                  ) : (
+                    <PrimaryButton
+                      label={`Log Set ${nextSetNumber}`}
+                      size="large"
+                      loading={logging}
+                      disabled={
+                        isPaused ||
+                        logging ||
+                        restActive ||
+                        intervalTimer != null ||
+                        (circuitTimer != null && circuitTimer.phase !== 'done')
+                      }
+                      onPress={() => {
+                        void handleLogSet();
+                      }}
+                    />
+                  )}
                   {user && (loggingMode === 'weighted' || loggingMode === 'bodyweight') ? (
                     <VoiceSetLogger
                       userId={user.id}
@@ -1539,7 +1575,19 @@ export function ActiveWorkoutScreen({
                     <PrimaryButton
                       label="+ Add Exercise"
                       variant="secondary"
-                      onPress={() => setExercisePickerVisible(true)}
+                      onPress={() => {
+                        setExercisePickerMode('add');
+                        setExercisePickerVisible(true);
+                      }}
+                      disabled={isPaused}
+                    />
+                    <PrimaryButton
+                      label="Swap Exercise"
+                      variant="secondary"
+                      onPress={() => {
+                        setExercisePickerMode('swap');
+                        setExercisePickerVisible(true);
+                      }}
                       disabled={isPaused}
                     />
                     {completedSets.length > 0 ? (
@@ -1705,8 +1753,12 @@ export function ActiveWorkoutScreen({
       <ExercisePickerModal
         visible={exercisePickerVisible}
         onClose={() => setExercisePickerVisible(false)}
-        onSelect={handleAddExercise}
-        title="Add Exercise"
+        onSelect={exercisePickerMode === 'swap' ? handleSwapExercise : handleAddExercise}
+        title={
+          exercisePickerMode === 'swap'
+            ? `Swap ${currentExercise.exercise?.name ?? 'Exercise'}`
+            : 'Add Exercise'
+        }
       />
 
       <ExerciseGuideSheet
