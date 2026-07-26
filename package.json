@@ -112,6 +112,7 @@
     "validate:sprint3-weekly-lifting": "node scripts/validate-sprint3-weekly-lifting.mjs",
     "validate:sprint4-weekly-workout-view": "node scripts/validate-sprint4-weekly-workout-view.mjs",
     "validate:sprint5-active-workout": "node scripts/validate-sprint5-active-workout.mjs",
+    "validate:voice-logging": "npx tsx scripts/validate-voice-logging.ts",
     "validate:sprint6-smart-logging": "node scripts/validate-sprint6-smart-logging.mjs",
     "validate:sprint7-timer-engine": "node scripts/validate-sprint7-timer-engine.mjs",
     "validate:sprint8-superset-circuit": "node scripts/validate-sprint8-superset-circuit.mjs",

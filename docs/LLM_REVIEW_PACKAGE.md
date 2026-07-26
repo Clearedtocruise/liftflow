@@ -36,7 +36,7 @@ LiftFlow / ONE MORE is a **voice-first AI strength coaching mobile app**:
 | Watch | TS assistant + WatchConnectivity packages; native watchOS incomplete |
 | Observability | Sentry (mobile + backend) |
 | Location | `expo-location` (gym geofencing) |
-| Voice | `expo-speech-recognition`, `expo-speech`, backend `/api/voice` |
+| Voice | `expo-av` recording → backend `/api/voice/transcribe` (OpenAI), `expo-speech` for spoken confirmations. There is no on-device recognition: `expo-speech-recognition` is not installed, so voice needs network and a valid session. |
 
 **Note:** Some docs say Expo SDK 56; **`package.json` is SDK 54** — trust package.json.
 

@@ -17,7 +17,11 @@ import { WorkoutChallengeModal } from '@/components/workout/execution/WorkoutCha
 import { WorkoutTimerOverlay } from '@/components/workout/execution/WorkoutTimerOverlay';
 import { WorkoutUpNextCard } from '@/components/workout/execution/WorkoutUpNextCard';
 import { ExerciseCoachCard } from '@/components/workout/ExerciseCoachCard';
-import { VoiceSetLogger, type VoiceSetLogPayload } from '@/components/workout/VoiceSetLogger';
+import {
+    VoiceSetLogger,
+    type VoiceSetLogPayload,
+    type VoiceSetLogResult,
+} from '@/components/workout/VoiceSetLogger';
 import { LiftFlowColors, Radius, Spacing, TouchTarget } from '@/constants/theme';
 import { useAppResume } from '@/hooks/useAppResume';
 import { useAuth } from '@/hooks/useAuth';
@@ -60,6 +64,7 @@ import {
 } from '@/lib/timerEngine';
 import { TABATA_BETWEEN_EXERCISE_REST_BOUNDS, TABATA_BETWEEN_EXERCISE_REST_DEFAULT, TABATA_INTERVAL_BOUNDS, TABATA_PREP_SECONDS_DEFAULT, clampTabataBetweenExerciseRest, clampTabataIntervalSeconds, tabataModeSummary } from '@/lib/trainingPreferences';
 import { formatWorkoutWeightForInput } from '@/lib/unitConversion';
+import { matchSpokenExercise } from '@/lib/voice/matchSpokenExercise';
 import { pickWorkoutChallenge } from '@/lib/workoutChallengeFlow';
 import { normalizeExecutionMode } from '@/lib/workoutExecutionMode';
 import { alignPlanExercisesToSession, parseTargetReps } from '@/lib/workoutPlan';
@@ -1017,14 +1022,21 @@ export function ActiveWorkoutScreen({
   const handleLogSet = useCallback(() => commitSetLog(), [commitSetLog]);
 
   const handleVoiceLogSet = useCallback(
-    async (payload: VoiceSetLogPayload): Promise<boolean> => {
+    async (payload: VoiceSetLogPayload): Promise<VoiceSetLogResult> => {
       const activeName = currentExercise?.exercise?.name;
-      if (!payload.exerciseName || !activeName) return false;
-      if (payload.exerciseName.trim().toLowerCase() !== activeName.trim().toLowerCase()) {
-        AccessibilityInfo.announceForAccessibility(
-          `Voice logging is limited to the current exercise: ${activeName}.`,
-        );
-        return false;
+      if (!activeName) {
+        return { ok: false, reason: 'No exercise is selected.' };
+      }
+      if (!payload.exerciseName) {
+        return { ok: false, reason: `Say the exercise name, for example "${activeName}".` };
+      }
+
+      const match = matchSpokenExercise(payload.exerciseName, activeName);
+      if (match.kind === 'different') {
+        // Previously a silent `false`, which surfaced as "Could not save that set" with no hint
+        // that the name was the problem — sighted users got no reason at all.
+        AccessibilityInfo.announceForAccessibility(match.reason);
+        return { ok: false, reason: match.reason };
       }
 
       if (payload.weight != null) {
@@ -1038,7 +1050,10 @@ export function ActiveWorkoutScreen({
         weightKg: payload.weight,
         reps: payload.reps,
       });
-      return result.ok;
+      // `commitSetLog` already explains rest timers, paused sessions and completed set targets.
+      // Dropping that to a boolean is what made every voice failure read the same.
+      if (!result.ok) return { ok: false, reason: result.error };
+      return { ok: true, loggedAs: activeName };
     },
     [
       currentExercise?.exercise?.name,
