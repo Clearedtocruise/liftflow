@@ -65,9 +65,27 @@ const CORE_BODYWEIGHT_NAME_PATTERN =
 const CORE_STRENGTH_NAME_PATTERN =
   /\b(weighted\s+sit[\s-]?up|sit[\s-]?up|crunch|cable\s+crunch|ab\s+rollout|rollout|wood\s+chop|pallof\s+press)\b/i;
 
-// Prefer rowing/erg terms — bare "row" matches strength moves (Hammer Low Row, Cable Row).
 const CARDIO_NAME_PATTERN =
-  /\b(run|running|jog|sprint|swim|swimming|cycle|cycling|bike|biking|rowing|rower|row\s*erg|erg\s*row|concept\s*2|walk(?:ing)?|treadmill|elliptical|hiit|cardio|jump\s*rope)\b/i;
+  /\b(run|running|jog|jogging|sprint|swim|swimming|cycle|cycling|bike|biking|walk(?:ing)?|treadmill|elliptical|stair\s*climber|hiit|cardio|jump\s*rope)\b/i;
+
+/**
+ * A bare "row" is a pulling lift, so only machine/erg rowing counts as cardio. Matching "row" on
+ * its own put every barbell, cable and hammer row on the distance-and-duration logger.
+ */
+const CARDIO_ROW_NAME_PATTERN =
+  /\b(rowing|rower|row\s*(?:machine|erg|ergometer)|erg\s*row|concept\s*2)\b/i;
+
+/**
+ * Loaded carries and walking lunges read as cardio but are weight-and-reps work, so they are
+ * excluded before the cardio patterns run.
+ */
+const CARDIO_LOOKALIKE_NAME_PATTERN =
+  /\b(walking\s*lunge|lunge\s*walk|farmer'?s?\s*(?:walk|carry)|suitcase\s*(?:walk|carry)|waiter\s*walk|overhead\s*(?:walk|carry)|sled\s*(?:push|pull|drag))\b/i;
+
+function isCardioName(name: string): boolean {
+  if (CARDIO_LOOKALIKE_NAME_PATTERN.test(name)) return false;
+  return CARDIO_NAME_PATTERN.test(name) || CARDIO_ROW_NAME_PATTERN.test(name);
+}
 
 function normalize(value: string | undefined | null): string {
   return (value ?? '').trim().toLowerCase();
@@ -83,7 +101,7 @@ export function classifyExercise(input: ExerciseClassificationInput): ExerciseTy
   const equipment = normalize(input.equipment);
   const movementCategory = normalize(input.movementCategory);
 
-  if (movementCategory === 'cardio' || CARDIO_NAME_PATTERN.test(name)) return 'cardio';
+  if (movementCategory === 'cardio' || isCardioName(name)) return 'cardio';
   if (TIMED_NAME_PATTERN.test(name)) return 'timed';
   if (CORE_BODYWEIGHT_NAME_PATTERN.test(name)) return 'bodyweight';
   if (CORE_STRENGTH_NAME_PATTERN.test(name)) return 'strength';
