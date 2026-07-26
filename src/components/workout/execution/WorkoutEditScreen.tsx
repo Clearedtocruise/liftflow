@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, View } from 'react-native';
 
 import { Card } from '@/components/layout/Card';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
@@ -20,8 +20,13 @@ type WorkoutEditScreenProps = {
   goal?: string;
   programType?: string;
   availableEquipment?: string[];
+  /** Drives the Save affordance: without it, nothing on screen says edits are unsaved. */
+  unsavedChanges?: boolean;
+  saving?: boolean;
+  saveError?: string | null;
   onChange: (exercises: EditableWorkoutExercise[]) => void;
-  onDone: () => void;
+  onDone: () => void | Promise<void>;
+  onDiscard?: () => void;
 };
 
 function createExerciseId(name: string): string {
@@ -35,11 +40,28 @@ export function WorkoutEditScreen({
   goal,
   programType,
   availableEquipment,
+  unsavedChanges = false,
+  saving = false,
+  saveError = null,
   onChange,
   onDone,
+  onDiscard,
 }: WorkoutEditScreenProps) {
   const [pickerVisible, setPickerVisible] = useState(false);
   const [replaceIndex, setReplaceIndex] = useState<number | null>(null);
+
+  function handleBack() {
+    if (!unsavedChanges) {
+      router.back();
+      return;
+    }
+    // Leaving used to drop the edits without saying so, which is the whole complaint.
+    Alert.alert('Unsaved changes', 'Save your changes to this workout before leaving?', [
+      { text: 'Keep editing', style: 'cancel' },
+      { text: 'Discard', style: 'destructive', onPress: () => (onDiscard ? onDiscard() : router.back()) },
+      { text: 'Save', onPress: () => void onDone() },
+    ]);
+  }
 
   function updateAt(index: number, next: EditableWorkoutExercise) {
     const copy = [...exercises];
@@ -89,7 +111,7 @@ export function WorkoutEditScreen({
 
   return (
     <ScreenContainer contentContainerStyle={styles.content}>
-      <Pressable onPress={() => router.back()} style={styles.back}>
+      <Pressable accessibilityRole="button" onPress={handleBack} style={styles.back}>
         <AppText variant="bodyBold" color="accent">
           Back
         </AppText>
@@ -140,7 +162,32 @@ export function WorkoutEditScreen({
         Changes apply to this workout only
       </AppText>
 
-      <PrimaryButton label="Done" onPress={onDone} size="large" />
+      {saveError ? (
+        <AppText variant="footnote" color="error" align="center">
+          {saveError}
+        </AppText>
+      ) : unsavedChanges ? (
+        <AppText variant="footnote" color="textSecondary" align="center">
+          Unsaved changes
+        </AppText>
+      ) : null}
+
+      <PrimaryButton
+        label={unsavedChanges ? 'Save Changes' : 'Done'}
+        onPress={() => void onDone()}
+        loading={saving}
+        disabled={saving}
+        size="large"
+      />
+
+      {unsavedChanges && onDiscard ? (
+        <PrimaryButton
+          label="Discard Changes"
+          variant="secondary"
+          onPress={onDiscard}
+          disabled={saving}
+        />
+      ) : null}
 
       <ExerciseReplaceSheet
         visible={replaceIndex != null}
