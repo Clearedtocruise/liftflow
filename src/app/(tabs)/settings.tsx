@@ -24,6 +24,11 @@ import { useAuth } from '@/hooks/useAuth';
 import { useSubscription } from '@/hooks/useSubscription';
 import { useUnits } from '@/hooks/useUnits';
 import { loadRolloverValidationState, type RolloverValidationState } from '@/lib/rolloverDebug';
+import {
+    isTabataModeEnabled,
+    TABATA_MODE_PREF_KEY,
+    tabataModeSummary,
+} from '@/lib/trainingPreferences';
 import { resolveDaysPerWeek, summarizeTrainingSchedule } from '@/lib/trainingSchedule';
 import { resolveUnitPreferences } from '@/lib/unitConversion';
 import { coachingPrefsPatch } from '@/lib/voice/voicePreferences';

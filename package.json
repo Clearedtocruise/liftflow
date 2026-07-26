@@ -91,6 +91,7 @@
     "validate:sprint84": "node scripts/validate-sprint84-watch.mjs",
     "validate:sprint85": "node scripts/validate-sprint85-beta-readiness.mjs",
     "validate:sprint86": "node scripts/validate-sprint86-testflight-rc.mjs",
+    "validate:no-undefined-names": "node scripts/validate-no-undefined-names.mjs",
     "validate:critical-paths": "node scripts/validate-critical-paths.mjs",
     "validate:month1-reference": "node scripts/validate-month1-reference.mjs",
     "validate:meal-plan": "node scripts/validate-meal-plan-generate.mjs",
