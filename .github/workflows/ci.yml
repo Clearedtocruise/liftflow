@@ -63,9 +63,11 @@ jobs:
       # would be red on every run and tell us nothing. Instead we ratchet: the build fails only
       # when the error count grows. Lower the baseline as errors are paid down; the goal is 0,
       # at which point this step becomes a plain `npm run typecheck`.
+      # Tightened from 84, which was 26 errors looser than reality and left that much room for a
+      # regression to land green. Drop it again to 46 once #18 merges.
       - name: Typecheck (no new errors vs. baseline)
         env:
-          BASELINE: '84'
+          BASELINE: '58'
         run: |
           set +e
           npm run typecheck > typecheck.log 2>&1
@@ -88,3 +90,61 @@ jobs:
           name: client-typecheck-log
           path: typecheck.log
           if-no-files-found: ignore
+
+  guards:
+    name: Regression guards
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Each `validate:*` script below was written to lock a specific bug shut, but nothing ran them
+      # after the PR that added them, so they only protected the branch they arrived on.
+      #
+      # This list is an allowlist rather than every `validate:*` script, because several of the older
+      # ones assert against aspirational state and currently exit non-zero (`critical-paths`,
+      # `sprint5-active-workout`, `sprint1-exercise-classification`, `exercise-education`). Adding
+      # those here would make this job permanently red and worth ignoring, which is how the client
+      # typecheck ended up with a baseline instead of a gate. They belong here once they pass.
+      #
+      # A script that is not defined on this ref is skipped, so the job does not depend on the order
+      # the open PRs land in.
+      - name: Run guards
+        run: |
+          set -uo pipefail
+          guards="
+            validate:no-undefined-names
+            validate:exercise-guide
+            validate:voice-logging
+            validate:workout-plan-edit-save
+            validate:active-workout-progression
+            validate:sprint6-smart-logging
+            validate:sprint7-timer-engine
+            validate:sprint8-superset-circuit
+            validate:sprint10-exercise-replacement
+            validate:branding
+          "
+          failed=0
+          for guard in $guards; do
+            if ! node -e "process.exit(require('./package.json').scripts['$guard'] ? 0 : 1)"; then
+              echo "::notice::skipping $guard — not defined on this ref"
+              continue
+            fi
+            echo "::group::$guard"
+            if npm run "$guard"; then
+              echo "PASS $guard"
+            else
+              echo "::error::$guard failed"
+              failed=1
+            fi
+            echo "::endgroup::"
+          done
+          exit $failed
