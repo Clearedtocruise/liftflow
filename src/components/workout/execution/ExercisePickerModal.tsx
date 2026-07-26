@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { AppText } from '@/components/ui/AppText';
@@ -41,7 +41,9 @@ export function ExercisePickerModal({ visible, onClose, onSelect, title = 'Selec
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <View style={styles.container}>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={styles.header}>
           <AppText variant="title">{title}</AppText>
           <Pressable onPress={onClose} hitSlop={12}>
@@ -116,7 +118,7 @@ export function ExercisePickerModal({ visible, onClose, onSelect, title = 'Selec
             onClose();
           }}
         />
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

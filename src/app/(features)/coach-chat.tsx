@@ -17,7 +17,7 @@ export default function CoachChatScreen() {
   if (!user) return null;
 
   return (
-    <ScreenContainer>
+    <ScreenContainer keyboardAvoiding>
       <AppText variant="body" color="textSecondary" style={styles.subtitle}>
         Ask about training, nutrition, fatigue, plateaus, and progression
       </AppText>

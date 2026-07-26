@@ -16,7 +16,7 @@ export default function CardioTrackingScreen() {
   );
 
   return (
-    <ScreenContainer contentContainerStyle={styles.content}>
+    <ScreenContainer keyboardAvoiding contentContainerStyle={styles.content}>
       {/* Named after the planned session when opened from a conditioning day, so the header
           matches the card the user just tapped. */}
       <Stack.Screen options={{ title: params.title ?? 'Cardio & HIIT' }} />

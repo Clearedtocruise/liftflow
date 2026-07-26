@@ -230,7 +230,7 @@ export default function SettingsScreen() {
   }
 
   return (
-    <ScreenContainer>
+    <ScreenContainer keyboardAvoiding>
       <View style={styles.header}>
         <AppText variant="headline">Settings</AppText>
         {user ? (

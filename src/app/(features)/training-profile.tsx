@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, View } from 'react-native';
 
 import { EquipmentPicker } from '@/components/equipment/EquipmentPicker';
 import { Card } from '@/components/layout/Card';
@@ -165,13 +165,13 @@ export default function TrainingProfileScreen() {
   }
 
   return (
-    <ScreenContainer>
+    <ScreenContainer keyboardAvoiding>
       <SectionHeader
         title="Workout locations"
         subtitle="Add every gym or home setup you use. Pick one when you start a workout."
       />
 
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <View style={styles.scroll}>
         {loading ? (
           <AppText variant="body" color="textSecondary">
             Loading…
@@ -274,7 +274,7 @@ export default function TrainingProfileScreen() {
         )}
 
         <PrimaryButton label="Done" onPress={() => router.back()} />
-      </ScrollView>
+      </View>
     </ScreenContainer>
   );
 }

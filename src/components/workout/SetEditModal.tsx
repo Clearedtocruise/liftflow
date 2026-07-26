@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Modal, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { AppText } from '@/components/ui/AppText';
@@ -54,8 +54,11 @@ export function SetEditModal({ visible, set, exerciseName, onSave, onDelete, onC
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose}>
-        <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
+      <KeyboardAvoidingView
+        style={styles.modalRoot}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <Pressable style={styles.backdrop} onPress={onClose}>
+          <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
           <AppText variant="title">Edit Set {set?.setNumber}</AppText>
           {exerciseName ? (
             <AppText variant="footnote" color="textSecondary">
@@ -90,18 +93,22 @@ export function SetEditModal({ visible, set, exerciseName, onSave, onDelete, onC
             </View>
           </View>
 
-          <View style={styles.actions}>
-            <PrimaryButton label="Save" onPress={handleSave} loading={saving} />
-            <PrimaryButton label="Delete Set" onPress={handleDelete} variant="secondary" loading={saving} />
-            <PrimaryButton label="Cancel" onPress={onClose} variant="secondary" />
-          </View>
+            <View style={styles.actions}>
+              <PrimaryButton label="Save" onPress={handleSave} loading={saving} />
+              <PrimaryButton label="Delete Set" onPress={handleDelete} variant="secondary" loading={saving} />
+              <PrimaryButton label="Cancel" onPress={onClose} variant="secondary" />
+            </View>
+          </Pressable>
         </Pressable>
-      </Pressable>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  modalRoot: {
+    flex: 1,
+  },
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.6)',
