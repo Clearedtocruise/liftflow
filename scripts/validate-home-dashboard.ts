@@ -11,6 +11,9 @@ import { join } from 'node:path';
 
 import { describeCalorieBudget, describeProteinBudget } from '@/lib/calorieBudget';
 import { describeStrengthGain, findStrengthGain, weeklyBest, type CoachSetSample } from '@/lib/coachInsight';
+import { withTodayFallback } from '@/lib/homeMetricFallback';
+
+const EMPTY_METRIC = { value: undefined, history: [] as (number | undefined)[] };
 
 let failures = 0;
 
@@ -209,6 +212,42 @@ check('the nutrition header still reports protein', nutritionHeader.includes('pr
 check(
   'the protein target reaches the daily summary',
   source('src/services/nutritionService.ts').includes('proteinTargetG: goalsResult.data?.protein_g'),
+  true,
+);
+
+console.log('\nA hand-entered figure still reaches the tile when the wearable has nothing');
+// Sleep typed into the recovery check-in drives the recovery score but was invisible on home,
+// because the tile read Apple Health alone.
+check(
+  'the check-in value fills an empty metric',
+  withTodayFallback({ value: undefined, history: [undefined, undefined] }, 7.5).value,
+  7.5,
+);
+check(
+  'it lands on today rather than an earlier day',
+  withTodayFallback({ value: undefined, history: [undefined, undefined] }, 7.5).history,
+  [undefined, 7.5],
+);
+check(
+  'measured data is never overwritten by an estimate',
+  withTodayFallback({ value: 6.2, history: [6.0, 6.2] }, 9).value,
+  6.2,
+);
+check('no fallback value leaves the metric alone', withTodayFallback(EMPTY_METRIC, undefined).value, undefined);
+check('a non-finite fallback is ignored', withTodayFallback(EMPTY_METRIC, Number.NaN).value, undefined);
+check('an empty history stays empty rather than gaining a phantom day', withTodayFallback(EMPTY_METRIC, 7).history, []);
+
+console.log('\nHome reads nutrition for the same day the user logged it against');
+// getDailySummary defaults to the device clock; the meal was written against the profile time zone,
+// so without passing the date an evening meal can count toward a day home is not showing.
+check(
+  'the hook passes an explicit timezone-aware date',
+  source('src/hooks/useHomeMetrics.ts').includes('nutritionService.getDailySummary(user.id, dates[dates.length - 1])'),
+  true,
+);
+check(
+  'sleep falls back to the recovery check-in',
+  source('src/hooks/useHomeMetrics.ts').includes('withTodayFallback('),
   true,
 );
 

@@ -6,6 +6,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useUnits } from '@/hooks/useUnits';
 import { describeStrengthGain } from '@/lib/coachInsight';
 import type { HealthDailySummary } from '@/lib/healthSyncEngine';
+import { withTodayFallback } from '@/lib/homeMetricFallback';
 import { localDateString } from '@/lib/localDate';
 import { analyticsService } from '@/services/analyticsService';
 import { coachInsightService } from '@/services/coachInsightService';
@@ -125,7 +126,10 @@ export function useHomeMetrics(): HomeMetrics {
         coachInsightService.getStrengthGain(user.id),
         recoveryService.getToday(user.id),
         recoveryService.getTrend(user.id),
-        nutritionService.getDailySummary(user.id),
+        // Without the user's zone this falls back to the device clock, which disagrees with the
+        // date meals are logged against whenever the two differ — so a meal logged today counts
+        // toward a day the home screen is not looking at.
+        nutritionService.getDailySummary(user.id, dates[dates.length - 1]),
       ]);
 
       if (streakResult.success) {
@@ -133,12 +137,23 @@ export function useHomeMetrics(): HomeMetrics {
         setStreak({ value: days, history: [] });
       }
 
+      // Sleep can arrive from Apple Health or from the recovery check-in, and the check-in is the
+      // only source for anyone without a wearable. Reading Health alone left a hand-entered figure
+      // invisible on the home screen even though the same number drives the recovery score.
+      const checkInSleepHours =
+        recoveryResult.success && recoveryResult.data?.sleepHours != null
+          ? recoveryResult.data.sleepHours
+          : undefined;
+
       if (healthResult.success) {
         const summaries = healthResult.data;
-        setSleepHours(seriesFor(summaries, dates, (day) => day.sleepHours));
+        setSleepHours(withTodayFallback(seriesFor(summaries, dates, (day) => day.sleepHours), checkInSleepHours));
         setActiveCalories(seriesFor(summaries, dates, (day) => day.activeCalories));
         setHrvMs(seriesFor(summaries, dates, (day) => day.hrvMs));
         setHealthEmpty(summaries.length === 0);
+      } else if (checkInSleepHours != null) {
+        setSleepHours(withTodayFallback(EMPTY, checkInSleepHours));
+        setHealthEmpty(false);
       } else {
         // A failed query is not an empty one: prompting "connect Apple Health" to somebody who
         // already has would be wrong, so leave the tiles blank instead.
