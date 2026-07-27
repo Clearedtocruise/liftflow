@@ -12,6 +12,7 @@ import { join } from 'node:path';
 import { describeCalorieBudget, describeProteinBudget } from '@/lib/calorieBudget';
 import { describeStrengthGain, findStrengthGain, weeklyBest, type CoachSetSample } from '@/lib/coachInsight';
 import { greetingForHour, greetingName } from '@/lib/homeGreeting';
+import { resolveDisplayName } from '@/lib/resolveDisplayName';
 import { withTodayFallback } from '@/lib/homeMetricFallback';
 import { upNextGlyph } from '@/lib/upNextGlyph';
 
@@ -285,12 +286,32 @@ check('a single-token name stays intact', greetingName('Timothy'), 'Timothy');
 check('blank names are omitted rather than inventing one', greetingName('   '), undefined);
 check('morning greeting', greetingForHour(8), 'Good Morning');
 check('evening greeting', greetingForHour(20), 'Good Evening');
+check(
+  'auth metadata name reaches the greeting when profile is empty',
+  resolveDisplayName({ profileName: null, metadata: { display_name: 'Timothy Barrett' } }),
+  'Timothy Barrett',
+);
+check(
+  'email local-part is a last-resort name so we never greet nobody',
+  resolveDisplayName({ email: 'timothy.barrett@example.com' }),
+  'Timothy',
+);
+check(
+  'profile name wins over metadata',
+  resolveDisplayName({ profileName: 'Timothy', metadata: { display_name: 'Other' } }),
+  'Timothy',
+);
 check('streak sits under the greeting on the left', homeHeader.includes("alignSelf: 'flex-start'"), true);
 check('header uses the real ONE MORE logo mark', homeHeader.includes('LiftFlowLogo'), true);
 check('text wordmark is no longer the top-right brand', homeHeader.includes('BrandWordmark'), false);
 check(
-  'auth falls back to metadata when profile name is empty',
-  source('src/services/authService.ts').includes('if (!profile.displayName && metadataName)'),
+  'auth backfills an empty profile display name',
+  source('src/services/authService.ts').includes("update({ display_name: resolved })"),
+  true,
+);
+check(
+  'signup trigger migration copies auth metadata name',
+  source('supabase/migrations/033_profile_display_name_from_auth.sql').includes('raw_user_meta_data'),
   true,
 );
 

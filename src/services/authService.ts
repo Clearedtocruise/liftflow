@@ -2,6 +2,7 @@ import { DEFAULT_UNIT_PREFERENCES } from '@/constants/units';
 import { mapAuthError } from '@/lib/authErrors';
 import { getEmailConfirmRedirectUrl, getPasswordResetRedirectUrl } from '@/lib/authRedirects';
 import { mapProfile } from '@/lib/db-mappers';
+import { resolveDisplayName } from '@/lib/resolveDisplayName';
 import { withTimeout } from '@/lib/withTimeout';
 import { isSupabaseConfigured, supabase } from '@/supabase/client';
 import type { PasswordResetPayload, SignInPayload, SignUpPayload, UserProfile } from '@/types/user';
@@ -14,7 +15,10 @@ function stubProfileFromAuth(user: { id: string; email?: string | null; user_met
   return {
     id: user.id,
     email: user.email ?? '',
-    displayName: (user.user_metadata?.display_name as string) ?? undefined,
+    displayName: resolveDisplayName({
+      metadata: user.user_metadata,
+      email: user.email,
+    }),
     preferredUnits: 'imperial',
     ...DEFAULT_UNIT_PREFERENCES,
     confirmationMode: 'smart',
@@ -27,16 +31,12 @@ function stubProfileFromAuth(user: { id: string; email?: string | null; user_met
 
 async function fetchProfile(userId: string, email: string, metadata?: Record<string, unknown>): Promise<UserProfile> {
   const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
-  const metadataName =
-    typeof metadata?.display_name === 'string' && metadata.display_name.trim().length > 0
-      ? metadata.display_name.trim()
-      : undefined;
 
   if (error || !data) {
     return {
       id: userId,
       email,
-      displayName: metadataName,
+      displayName: resolveDisplayName({ metadata, email }),
       preferredUnits: 'imperial',
       ...DEFAULT_UNIT_PREFERENCES,
       confirmationMode: 'smart',
@@ -46,11 +46,19 @@ async function fetchProfile(userId: string, email: string, metadata?: Record<str
   }
 
   const profile = mapProfile(data);
-  // Profile row is canonical, but older accounts sometimes only have the name on auth metadata.
-  if (!profile.displayName && metadataName) {
-    return { ...profile, displayName: metadataName };
+  const resolved = resolveDisplayName({
+    profileName: profile.displayName,
+    metadata,
+    email: profile.email || email,
+  });
+
+  // Signup used to leave profiles.display_name null while the name sat in auth metadata.
+  // Write it back once so Home, Settings, and the next cold start all greet the same person.
+  if (resolved && !profile.displayName) {
+    void supabase.from('profiles').update({ display_name: resolved }).eq('id', userId);
   }
-  return profile;
+
+  return { ...profile, displayName: resolved };
 }
 
 export const authService = {
