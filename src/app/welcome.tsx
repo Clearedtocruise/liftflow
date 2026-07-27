@@ -8,16 +8,9 @@ import { LiftFlowWordmark } from '@/components/brand/LiftFlowWordmark';
 import { LogoMark } from '@/components/brand/LogoMark';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { AppText } from '@/components/ui/AppText';
-import { LiftFlowColors, Spacing, TouchTarget } from '@/constants/theme';
+import { Brand, LiftFlowColors, Spacing, TouchTarget } from '@/constants/theme';
 
-const LOGO_SIZE = 130;
-
-const FEATURES = [
-  'Personalized Workouts',
-  'Adaptive Nutrition',
-  'Recovery Optimization',
-  'Real Results',
-] as const;
+const LOGO_SIZE = 140;
 
 export default function WelcomeScreen() {
   const insets = useSafeAreaInsets();
@@ -25,14 +18,14 @@ export default function WelcomeScreen() {
   return (
     <View style={styles.root}>
       <LinearGradient
-        colors={['rgba(31, 107, 255, 0.14)', 'rgba(8, 11, 16, 0.4)', LiftFlowColors.background]}
-        locations={[0, 0.35, 1]}
+        colors={['rgba(31, 107, 255, 0.18)', 'rgba(8, 11, 16, 0.35)', LiftFlowColors.background]}
+        locations={[0, 0.4, 1]}
         style={StyleSheet.absoluteFill}
       />
       <LinearGradient
-        colors={['transparent', 'rgba(0, 229, 255, 0.04)', 'transparent']}
-        start={{ x: 0, y: 0.5 }}
-        end={{ x: 1, y: 0.5 }}
+        colors={['transparent', 'rgba(0, 229, 255, 0.05)', 'transparent']}
+        start={{ x: 0, y: 0.45 }}
+        end={{ x: 1, y: 0.55 }}
         style={styles.horizonGlow}
       />
 
@@ -41,26 +34,24 @@ export default function WelcomeScreen() {
           styles.content,
           { paddingTop: insets.top + Spacing.xxxl, paddingBottom: insets.bottom + Spacing.xl },
         ]}>
-        <Animated.View entering={FadeIn.duration(600)} style={styles.hero}>
+        <Animated.View entering={FadeIn.duration(700)} style={styles.hero}>
           <LogoMark size={LOGO_SIZE} glow animate />
 
-          <Animated.View entering={FadeInDown.delay(180).duration(520)} style={styles.brandBlock}>
+          <Animated.View entering={FadeInDown.delay(200).duration(560)} style={styles.brandBlock}>
             <LiftFlowWordmark size="lg" showTagline />
           </Animated.View>
         </Animated.View>
 
-        <Animated.View entering={FadeInDown.delay(320).duration(520)} style={styles.features}>
-          {FEATURES.map((label) => (
-            <View key={label} style={styles.featureRow}>
-              <View style={styles.featureDot} />
-              <AppText variant="footnote" color="textSecondary">
-                {label}
-              </AppText>
-            </View>
-          ))}
+        <Animated.View entering={FadeInDown.delay(360).duration(560)} style={styles.copy}>
+          <AppText variant="headline" align="center" style={styles.headline}>
+            {Brand.heroHeadline}
+          </AppText>
+          <AppText variant="body" color="textSecondary" align="center">
+            Training, nutrition, and recovery that adapt to you — every session.
+          </AppText>
         </Animated.View>
 
-        <Animated.View entering={FadeInDown.delay(460).duration(520)} style={styles.actions}>
+        <Animated.View entering={FadeInDown.delay(500).duration(560)} style={styles.actions}>
           <PrimaryButton label="GET STARTED" size="large" onPress={() => router.push('/(auth)/signup')} />
           <Pressable
             onPress={() => router.push('/(auth)/login')}
@@ -87,7 +78,7 @@ const styles = StyleSheet.create({
   },
   horizonGlow: {
     ...StyleSheet.absoluteFillObject,
-    opacity: 0.9,
+    opacity: 0.95,
   },
   content: {
     flex: 1,
@@ -96,26 +87,19 @@ const styles = StyleSheet.create({
   },
   hero: {
     alignItems: 'center',
+    paddingTop: Spacing.xl,
   },
   brandBlock: {
     alignItems: 'center',
-    marginTop: Spacing.xxxl + Spacing.lg,
+    marginTop: Spacing.xxxl + Spacing.md,
     gap: Spacing.md,
   },
-  features: {
+  copy: {
     gap: Spacing.md,
-    paddingHorizontal: Spacing.lg,
+    paddingHorizontal: Spacing.sm,
   },
-  featureRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-  },
-  featureDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: LiftFlowColors.primary,
+  headline: {
+    letterSpacing: 0.6,
   },
   actions: {
     gap: Spacing.lg,

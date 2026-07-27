@@ -2,8 +2,13 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
-import { LayoutChangeEvent, ScrollView, StyleSheet, View } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import { LayoutChangeEvent, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import Animated, {
+  FadeInDown,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { LogoMark } from '@/components/brand/LogoMark';
@@ -11,7 +16,7 @@ import { InsightCard } from '@/components/insights/InsightCard';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { AppText } from '@/components/ui/AppText';
 import type { LiftFlowInsight } from '@/constants/insights/types';
-import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
+import { LiftFlowColors, Radius, Spacing, TouchTarget } from '@/constants/theme';
 
 type OnboardingShellProps = {
   step: number;
@@ -27,6 +32,7 @@ type OnboardingShellProps = {
   continueDisabled?: boolean;
   loading?: boolean;
   onBack?: () => void;
+  hideProgress?: boolean;
 };
 
 export function OnboardingShell({
@@ -43,9 +49,9 @@ export function OnboardingShell({
   continueDisabled,
   loading,
   onBack,
+  hideProgress = false,
 }: OnboardingShellProps) {
   const insets = useSafeAreaInsets();
-  const pct = Math.round((step / totalSteps) * 100);
   const [trackWidth, setTrackWidth] = useState(0);
   const progress = useSharedValue(0);
 
@@ -64,44 +70,39 @@ export function OnboardingShell({
   return (
     <View style={styles.root}>
       <LinearGradient
-        colors={['rgba(31, 107, 255, 0.08)', 'transparent']}
+        colors={['rgba(31, 107, 255, 0.1)', 'transparent']}
         style={styles.topGlow}
       />
       <View style={[styles.inner, { paddingTop: insets.top + Spacing.md, paddingBottom: insets.bottom + Spacing.lg }]}>
-        <View style={styles.progressHeader}>
-          <View style={styles.logoRow}>
-            <LogoMark size={32} glow={false} />
-            <AppText variant="caption" color="textTertiary">
-              Build My Plan
-            </AppText>
+        {!hideProgress ? (
+          <View style={styles.progressHeader}>
+            <View style={styles.logoRow}>
+              <LogoMark size={28} glow={false} />
+              <AppText variant="caption" color="textTertiary" style={styles.stepLabel}>
+                STEP {step} OF {totalSteps}
+              </AppText>
+            </View>
+            <View style={styles.track} onLayout={onTrackLayout}>
+              <Animated.View style={[styles.fillWrap, barStyle]}>
+                <LinearGradient
+                  colors={[LiftFlowColors.primary, LiftFlowColors.gradientEnd]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.fill}
+                />
+              </Animated.View>
+            </View>
+            {helperText ? (
+              <AppText variant="callout" color="textPrimary" style={styles.helper}>
+                {helperText}
+              </AppText>
+            ) : null}
           </View>
-          <View style={styles.progressRow}>
-            <AppText variant="caption" color="textSecondary">
-              Step {step} of {totalSteps}
-            </AppText>
-            <AppText variant="caption" color="accent">
-              {pct}% Complete
-            </AppText>
+        ) : (
+          <View style={styles.logoOnly}>
+            <LogoMark size={28} glow={false} />
           </View>
-          <View style={styles.track} onLayout={onTrackLayout}>
-            <Animated.View style={[styles.fillWrap, barStyle]}>
-              <LinearGradient
-                colors={[LiftFlowColors.primary, LiftFlowColors.accent]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.fill}
-              />
-            </Animated.View>
-          </View>
-          <AppText variant="footnote" color="textSecondary">
-            Building Your Personalized Fitness System
-          </AppText>
-          {helperText ? (
-            <AppText variant="callout" color="textPrimary" style={styles.helper}>
-              {helperText}
-            </AppText>
-          ) : null}
-        </View>
+        )}
 
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
           {heroImage ? (
@@ -111,14 +112,14 @@ export function OnboardingShell({
             </View>
           ) : null}
 
-          <View style={styles.copy}>
+          <Animated.View key={`copy-${step}`} entering={FadeInDown.duration(320)} style={styles.copy}>
             <AppText variant="title">{title}</AppText>
             {subtitle ? (
               <AppText variant="body" color="textSecondary">
                 {subtitle}
               </AppText>
             ) : null}
-          </View>
+          </Animated.View>
 
           {children}
 
@@ -127,15 +128,36 @@ export function OnboardingShell({
 
         <View style={styles.actions}>
           {onBack ? (
-            <PrimaryButton label="Back" variant="secondary" onPress={onBack} disabled={loading} />
-          ) : null}
-          <PrimaryButton
-            label={continueLabel}
-            onPress={onContinue}
-            disabled={continueDisabled}
-            loading={loading}
-            size="large"
-          />
+            <View style={styles.actionRow}>
+              <Pressable
+                onPress={onBack}
+                disabled={loading}
+                style={styles.backHit}
+                accessibilityRole="button"
+                accessibilityLabel="Go back">
+                <AppText variant="bodyBold" color="textSecondary">
+                  Back
+                </AppText>
+              </Pressable>
+              <View style={styles.primaryWrap}>
+                <PrimaryButton
+                  label={continueLabel}
+                  onPress={onContinue}
+                  disabled={continueDisabled}
+                  loading={loading}
+                  size="large"
+                />
+              </View>
+            </View>
+          ) : (
+            <PrimaryButton
+              label={continueLabel}
+              onPress={onContinue}
+              disabled={continueDisabled}
+              loading={loading}
+              size="large"
+            />
+          )}
         </View>
       </View>
     </View>
@@ -162,18 +184,19 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
     marginBottom: Spacing.lg,
   },
+  logoOnly: {
+    marginBottom: Spacing.lg,
+  },
   logoRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.md,
-    marginBottom: Spacing.xs,
   },
-  progressRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  stepLabel: {
+    letterSpacing: 1.2,
   },
   track: {
-    height: 8,
+    height: 4,
     borderRadius: Radius.full,
     backgroundColor: LiftFlowColors.surfaceElevated,
     overflow: 'hidden',
@@ -195,11 +218,9 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing.xxxl,
   },
   heroWrap: {
-    height: 180,
-    borderRadius: Radius.xl,
+    height: 140,
+    borderRadius: Radius.lg,
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: LiftFlowColors.border,
   },
   hero: {
     width: '100%',
@@ -212,7 +233,19 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   actions: {
-    gap: Spacing.md,
     paddingTop: Spacing.md,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+  },
+  backHit: {
+    minHeight: TouchTarget.min,
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.sm,
+  },
+  primaryWrap: {
+    flex: 1,
   },
 });

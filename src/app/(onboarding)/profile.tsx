@@ -1,12 +1,13 @@
 import { router } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, StyleSheet, View } from 'react-native';
+import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 
-import { LiftFlowLogo } from '@/components/brand/LiftFlowLogo';
+import { LogoMark } from '@/components/brand/LogoMark';
 import { EquipmentPicker } from '@/components/equipment/EquipmentPicker';
 import {
-    PremiumGoalPicker,
-    premiumRankedToTrainingGoals,
+  PremiumGoalPicker,
+  premiumRankedToTrainingGoals,
 } from '@/components/goals/PremiumGoalPicker';
 import { TextField } from '@/components/layout/TextField';
 import { OnboardingShell } from '@/components/onboarding/OnboardingShell';
@@ -15,27 +16,27 @@ import { UnitPreferencesPicker } from '@/components/settings/UnitPreferencesPick
 import { AppText } from '@/components/ui/AppText';
 import { HeroImages } from '@/constants/imagery';
 import {
-    DAYS_PER_WEEK_OPTIONS,
-    DIETARY_RESTRICTION_OPTIONS,
-    FOOD_PREFERENCE_OPTIONS,
-    GYM_PROFILES,
-    LIMITATION_BODY_AREAS,
-    MEALS_PER_DAY_OPTIONS,
-    SEX_OPTIONS,
-    SUPPLEMENT_OPTIONS,
-    TIMELINE_OPTIONS,
-    WEEKDAY_OPTIONS,
-    WORKOUT_DURATION_OPTIONS,
-    WORKOUT_TIME_OPTIONS,
-    type GymProfileId,
-    type TimelineId,
+  DAYS_PER_WEEK_OPTIONS,
+  DIETARY_RESTRICTION_OPTIONS,
+  FOOD_PREFERENCE_OPTIONS,
+  GYM_PROFILES,
+  LIMITATION_BODY_AREAS,
+  MEALS_PER_DAY_OPTIONS,
+  SEX_OPTIONS,
+  SUPPLEMENT_OPTIONS,
+  TIMELINE_OPTIONS,
+  WEEKDAY_OPTIONS,
+  WORKOUT_DURATION_OPTIONS,
+  WORKOUT_TIME_OPTIONS,
+  type GymProfileId,
+  type TimelineId,
 } from '@/constants/onboardingCoach';
 import type { PremiumGoalId } from '@/constants/premiumGoals';
-import { Brand, LiftFlowColors, Spacing } from '@/constants/theme';
+import { Brand, LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import {
-    EQUIPMENT_PRESETS,
-    type EquipmentId,
-    type TrainingLocationId,
+  EQUIPMENT_PRESETS,
+  type EquipmentId,
+  type TrainingLocationId,
 } from '@/constants/trainingProfile';
 import { DEFAULT_UNIT_PREFERENCES, type UnitPreferences } from '@/constants/units';
 import { useAuth } from '@/hooks/useAuth';
@@ -49,12 +50,16 @@ import { productAnalyticsService } from '@/services/productAnalyticsService';
 import { userService } from '@/services/userService';
 import { workoutLocationService } from '@/services/workoutLocationService';
 
-const TOTAL_STEPS = 16;
+/** Streamlined funnel: 10 inputs → review → build → ready */
+const TOTAL_STEPS = 13;
+const REVIEW_STEP = 11;
+const BUILD_STEP = 12;
+const READY_STEP = 13;
 
 const EXPERIENCE_LEVELS = [
-  { id: 'beginner', label: 'Beginner — under a year of consistent training' },
-  { id: 'intermediate', label: 'Intermediate — a year or more' },
-  { id: 'advanced', label: 'Advanced — several years, structured programs' },
+  { id: 'beginner', label: 'Beginner', description: 'Under a year of consistent training' },
+  { id: 'intermediate', label: 'Intermediate', description: 'A year or more with structure' },
+  { id: 'advanced', label: 'Advanced', description: 'Several years, structured programs' },
 ] as const;
 
 type UserProfileSex = 'male' | 'female' | 'other' | 'prefer_not_to_say';
@@ -69,76 +74,89 @@ const STEP_META: Record<
     insightCategory?: 'training' | 'nutrition' | 'recovery' | 'coaching' | 'motivation' | 'performance';
   }
 > = {
-  1: { title: 'Your units', subtitle: 'Stored precisely in metric. Displayed your way.', hero: HeroImages.onboarding.units },
+  1: {
+    title: 'Your units',
+    subtitle: 'Stored in metric. Shown your way.',
+    hero: HeroImages.onboarding.units,
+  },
   2: {
     title: 'About you',
-    subtitle: 'Personal details power smarter coaching and nutrition targets.',
+    subtitle: 'These details power coaching and nutrition targets.',
     hero: HeroImages.onboarding.metrics,
     insightCategory: 'nutrition',
   },
   3: {
     title: 'Your goals',
-    subtitle: 'Primary goal drives nutrition. All goals shape your workouts.',
+    subtitle: 'Primary goal drives nutrition. All goals shape training.',
     hero: HeroImages.onboarding.goals,
     insightCategory: 'coaching',
   },
   4: {
-    title: 'Your timeline',
-    subtitle: 'How quickly do you want results?',
+    title: 'Your pace',
+    subtitle: 'How hard should we push for results?',
     insightCategory: 'coaching',
   },
   5: {
-    title: 'Your lifting schedule',
-    subtitle: 'How many days you lift sets your weekly program. Cardio and sports are optional add-ons — they never replace lifting.',
+    title: 'Your lifting week',
+    subtitle: 'Lifting days set the program. Cardio stays optional.',
     insightCategory: 'training',
   },
   6: {
-    title: 'Where do you train?',
-    subtitle: 'Your gym profile determines exercise selection.',
+    title: 'Where you train',
+    subtitle: 'Gym type picks the right exercise library.',
     hero: HeroImages.onboarding.location,
     insightCategory: 'training',
   },
-  7: { title: 'Name your gym', subtitle: 'Optional — helpful at multiple locations.', hero: HeroImages.onboarding.location },
-  8: {
+  7: {
     title: 'Your equipment',
-    subtitle: 'Confirm what you can use — we pre-filled from your gym type.',
+    subtitle: 'We pre-filled from your gym — adjust if needed.',
     hero: HeroImages.onboarding.equipment,
     insightCategory: 'training',
   },
-  9: {
+  8: {
     title: 'Limitations',
-    subtitle: 'Injuries and restrictions keep your program safe.',
+    subtitle: 'Injuries and restrictions keep the plan safe.',
     insightCategory: 'recovery',
   },
-  10: {
-    title: 'Nutrition profile',
-    subtitle: 'Food preferences shape your meal plan and grocery list.',
+  9: {
+    title: 'How you eat',
+    subtitle: 'Preferences shape meals and your grocery list.',
     insightCategory: 'nutrition',
   },
-  11: {
+  10: {
     title: 'Training experience',
     subtitle: 'We calibrate volume and intensity to your level.',
     insightCategory: 'training',
   },
+  11: {
+    title: 'Looks right?',
+    subtitle: "ONE MORE will build training, nutrition, and today's workout from this.",
+    insightCategory: 'motivation',
+  },
   12: {
-    title: 'Recovery drives results',
-    subtitle: 'ONE MORE adapts training based on sleep, energy, and soreness.',
-    insightCategory: 'recovery',
+    title: 'Building your plan',
+    subtitle: 'Training program, nutrition targets, and grocery list…',
+    insightCategory: 'coaching',
   },
   13: {
-    title: 'Nutrition that adapts',
-    subtitle: 'Macros update with training load and recovery — no manual recalculation.',
-    insightCategory: 'nutrition',
+    title: 'You are ready',
+    subtitle: Brand.taglinePrimary,
+    insightCategory: 'motivation',
   },
-  14: { title: 'Review your system', subtitle: 'Your AI coach is about to build your complete plan.', insightCategory: 'motivation' },
-  15: { title: 'Building your plan', subtitle: 'Creating your training program, nutrition plan, and grocery list…', insightCategory: 'coaching' },
-  16: { title: "You're ready", subtitle: Brand.taglinePrimary, insightCategory: 'motivation' },
 };
 
 function ageToDateOfBirth(age: number): string {
   const d = new Date();
   d.setFullYear(d.getFullYear() - age);
   return d.toISOString().slice(0, 10);
+}
+
+function SectionLabel({ children }: { children: string }) {
+  return (
+    <AppText variant="caption" color="textTertiary" style={styles.sectionLabel}>
+      {children}
+    </AppText>
+  );
 }
 
 export default function ProfileOnboardingScreen() {
@@ -309,7 +327,7 @@ export default function ProfileOnboardingScreen() {
     const saved = await saveProfile();
     if (!saved) {
       setSaving(false);
-      setStep(14);
+      setStep(REVIEW_STEP);
       activationStarted.current = false;
       return;
     }
@@ -323,7 +341,7 @@ export default function ProfileOnboardingScreen() {
         'Coach activation incomplete',
         activateResult.error + '\n\nYour profile was saved. You can generate a program from Settings.',
       );
-      setStep(16);
+      setStep(READY_STEP);
       return;
     }
 
@@ -331,11 +349,11 @@ export default function ProfileOnboardingScreen() {
     await refreshProfile();
     void productAnalyticsService.trackOnboardingCompleted(user.id);
     setSaving(false);
-    setStep(16);
+    setStep(READY_STEP);
   }, [user, saveProfile, refreshProfile]);
 
   useEffect(() => {
-    if (step !== 15 || saving || activationStarted.current) return;
+    if (step !== BUILD_STEP || saving || activationStarted.current) return;
     activationStarted.current = true;
     void runActivation();
   }, [step, saving, runActivation]);
@@ -346,18 +364,18 @@ export default function ProfileOnboardingScreen() {
     if (step === 4) return timeline != null;
     if (step === 5) return daysPerWeek != null && preferredDays.length > 0;
     if (step === 6) return trainingLocation != null;
-    if (step === 8) return equipment.length > 0;
-    if (step === 10) return mealsPerDay != null;
+    if (step === 7) return equipment.length > 0;
+    if (step === 9) return mealsPerDay != null;
     return true;
   }
 
   function handleContinue() {
     nextInsight();
-    if (step === 14) {
-      setStep(15);
+    if (step === REVIEW_STEP) {
+      setStep(BUILD_STEP);
       return;
     }
-    if (step === 16) {
+    if (step === READY_STEP) {
       router.replace('/(tabs)/dashboard');
       return;
     }
@@ -365,11 +383,12 @@ export default function ProfileOnboardingScreen() {
   }
 
   function handleBack() {
-    if (step > 1 && step < 15) setStep((s) => s - 1);
+    if (step > 1 && step < BUILD_STEP) setStep((s) => s - 1);
   }
 
   const gymLabel = GYM_PROFILES.find((opt) => opt.id === trainingLocation)?.label ?? 'Not set';
   const timelineLabel = TIMELINE_OPTIONS.find((opt) => opt.id === timeline)?.label ?? 'Not set';
+  const experienceLabel = EXPERIENCE_LEVELS.find((opt) => opt.id === experience)?.label ?? 'Intermediate';
 
   function renderStepContent() {
     switch (step) {
@@ -378,59 +397,115 @@ export default function ProfileOnboardingScreen() {
       case 2:
         return (
           <View style={styles.stack}>
+            <SectionLabel>SEX</SectionLabel>
             <ChipGrid>
               {SEX_OPTIONS.map((opt) => (
-                <SelectableChip key={opt.id} label={opt.label} selected={sex === opt.id} onPress={() => setSex(opt.id as UserProfileSex)} />
+                <SelectableChip
+                  key={opt.id}
+                  label={opt.label}
+                  selected={sex === opt.id}
+                  onPress={() => setSex(opt.id as UserProfileSex)}
+                />
               ))}
             </ChipGrid>
             <TextField label="Age" placeholder="28" keyboardType="numeric" value={ageInput} onChangeText={setAgeInput} />
             {unitPrefs.preferredHeightUnit === 'cm' ? (
-              <TextField label="Height (cm)" placeholder="175" keyboardType="numeric" value={heightCmInput} onChangeText={setHeightCmInput} />
+              <TextField
+                label="Height (cm)"
+                placeholder="175"
+                keyboardType="numeric"
+                value={heightCmInput}
+                onChangeText={setHeightCmInput}
+              />
             ) : null}
             {unitPrefs.preferredHeightUnit === 'in' ? (
-              <TextField label="Height (in)" placeholder="69" keyboardType="numeric" value={heightInInput} onChangeText={setHeightInInput} />
+              <TextField
+                label="Height (in)"
+                placeholder="69"
+                keyboardType="numeric"
+                value={heightInInput}
+                onChangeText={setHeightInInput}
+              />
             ) : null}
             {unitPrefs.preferredHeightUnit === 'ft_in' ? (
               <View style={styles.heightRow}>
-                <TextField label="Feet" placeholder="5" keyboardType="numeric" value={heightFtInput} onChangeText={setHeightFtInput} style={styles.heightField} />
-                <TextField label="Inches" placeholder="10" keyboardType="numeric" value={heightInchesInput} onChangeText={setHeightInchesInput} style={styles.heightField} />
+                <TextField
+                  label="Feet"
+                  placeholder="5"
+                  keyboardType="numeric"
+                  value={heightFtInput}
+                  onChangeText={setHeightFtInput}
+                  style={styles.heightField}
+                />
+                <TextField
+                  label="Inches"
+                  placeholder="10"
+                  keyboardType="numeric"
+                  value={heightInchesInput}
+                  onChangeText={setHeightInchesInput}
+                  style={styles.heightField}
+                />
               </View>
             ) : null}
-            <TextField label={`Weight (${units.weightLabel})`} placeholder={unitPrefs.preferredWeightUnit === 'kg' ? '80' : '175'} keyboardType="numeric" value={weightInput} onChangeText={setWeightInput} />
-            <TextField label={`Goal weight (${units.weightLabel})`} placeholder="Optional" keyboardType="numeric" value={goalWeightInput} onChangeText={setGoalWeightInput} />
+            <TextField
+              label={`Weight (${units.weightLabel})`}
+              placeholder={unitPrefs.preferredWeightUnit === 'kg' ? '80' : '175'}
+              keyboardType="numeric"
+              value={weightInput}
+              onChangeText={setWeightInput}
+            />
+            <TextField
+              label={`Goal weight (${units.weightLabel})`}
+              placeholder="Optional"
+              keyboardType="numeric"
+              value={goalWeightInput}
+              onChangeText={setGoalWeightInput}
+            />
           </View>
         );
       case 3:
         return <PremiumGoalPicker rankedPremiumGoals={premiumGoals} onChange={setPremiumGoals} disabled={saving} />;
       case 4:
         return (
-          <ChipGrid>
+          <View style={styles.stack}>
             {TIMELINE_OPTIONS.map((opt) => (
-              <SelectableChip key={opt.id} label={opt.label} selected={timeline === opt.id} onPress={() => setTimeline(opt.id)} />
+              <SelectableChip
+                key={opt.id}
+                label={opt.label}
+                description={opt.description}
+                fullWidth
+                selected={timeline === opt.id}
+                onPress={() => setTimeline(opt.id)}
+              />
             ))}
-          </ChipGrid>
+          </View>
         );
       case 5:
         return (
           <View style={styles.stack}>
-            <AppText variant="footnote" color="textSecondary">How many days do you lift?</AppText>
+            <SectionLabel>LIFT DAYS PER WEEK</SectionLabel>
             <ChipGrid>
               {DAYS_PER_WEEK_OPTIONS.map((n) => (
                 <SelectableChip
                   key={n}
-                  label={n === 7 ? '7 days (every day)' : n === 6 ? `${n} lift days` : `${n} lift days`}
+                  label={n === 7 ? 'Every day' : `${n}`}
                   selected={daysPerWeek === n}
                   onPress={() => setDaysPerWeek(n)}
                 />
               ))}
             </ChipGrid>
-            <AppText variant="footnote" color="textSecondary">Minutes per workout</AppText>
+            <SectionLabel>MINUTES PER SESSION</SectionLabel>
             <ChipGrid>
               {WORKOUT_DURATION_OPTIONS.map((n) => (
-                <SelectableChip key={n} label={`${n} min`} selected={minutesPerWorkout === n} onPress={() => setMinutesPerWorkout(n)} />
+                <SelectableChip
+                  key={n}
+                  label={`${n}`}
+                  selected={minutesPerWorkout === n}
+                  onPress={() => setMinutesPerWorkout(n)}
+                />
               ))}
             </ChipGrid>
-            <AppText variant="footnote" color="textSecondary">Preferred days</AppText>
+            <SectionLabel>PREFERRED DAYS</SectionLabel>
             <ChipGrid>
               {WEEKDAY_OPTIONS.map((d) => (
                 <SelectableChip
@@ -441,7 +516,7 @@ export default function ProfileOnboardingScreen() {
                 />
               ))}
             </ChipGrid>
-            <AppText variant="footnote" color="textSecondary">Preferred times</AppText>
+            <SectionLabel>PREFERRED TIMES</SectionLabel>
             <ChipGrid>
               {WORKOUT_TIME_OPTIONS.map((t) => (
                 <SelectableChip
@@ -456,27 +531,35 @@ export default function ProfileOnboardingScreen() {
         );
       case 6:
         return (
-          <ChipGrid>
-            {GYM_PROFILES.map((opt) => (
-              <SelectableChip key={opt.id} label={opt.label} selected={trainingLocation === opt.id} onPress={() => selectLocation(opt.id)} />
-            ))}
-          </ChipGrid>
+          <View style={styles.stack}>
+            <ChipGrid>
+              {GYM_PROFILES.map((opt) => (
+                <SelectableChip
+                  key={opt.id}
+                  label={opt.label}
+                  selected={trainingLocation === opt.id}
+                  onPress={() => selectLocation(opt.id)}
+                />
+              ))}
+            </ChipGrid>
+            {trainingLocation ? (
+              <Animated.View entering={FadeInDown.duration(280)}>
+                <TextField
+                  label="Gym name (optional)"
+                  placeholder={trainingLocation === 'home_gym' ? 'Home gym' : "e.g. Gold's Gym"}
+                  value={primaryGymName}
+                  onChangeText={setPrimaryGymName}
+                />
+              </Animated.View>
+            ) : null}
+          </View>
         );
       case 7:
-        return (
-          <TextField
-            label="Gym name (optional)"
-            placeholder={trainingLocation === 'home_gym' ? 'Home gym' : 'e.g. Gold\'s Gym'}
-            value={primaryGymName}
-            onChangeText={setPrimaryGymName}
-          />
-        );
-      case 8:
         return <EquipmentPicker selected={equipment} onChange={(n) => setEquipment(n as EquipmentId[])} disabled={saving} />;
-      case 9:
+      case 8:
         return (
           <View style={styles.stack}>
-            <AppText variant="footnote" color="textSecondary">Any injuries or mobility issues?</AppText>
+            <SectionLabel>ANY AREAS TO PROTECT?</SectionLabel>
             <ChipGrid>
               {LIMITATION_BODY_AREAS.map((area) => (
                 <SelectableChip
@@ -487,20 +570,35 @@ export default function ProfileOnboardingScreen() {
                 />
               ))}
             </ChipGrid>
-            <TextField label="Notes (optional)" placeholder="e.g. rotator cuff strain" value={limitationNotes} onChangeText={setLimitationNotes} />
-            <TextField label="Exercises to avoid (comma-separated)" placeholder="e.g. overhead press, deep squats" value={exercisesToAvoid} onChangeText={setExercisesToAvoid} />
+            <TextField
+              label="Notes (optional)"
+              placeholder="e.g. rotator cuff strain"
+              value={limitationNotes}
+              onChangeText={setLimitationNotes}
+            />
+            <TextField
+              label="Exercises to avoid (comma-separated)"
+              placeholder="e.g. overhead press, deep squats"
+              value={exercisesToAvoid}
+              onChangeText={setExercisesToAvoid}
+            />
           </View>
         );
-      case 10:
+      case 9:
         return (
           <View style={styles.stack}>
-            <AppText variant="footnote" color="textSecondary">Meals per day</AppText>
+            <SectionLabel>MEALS PER DAY</SectionLabel>
             <ChipGrid>
               {MEALS_PER_DAY_OPTIONS.map((n) => (
-                <SelectableChip key={n} label={`${n}`} selected={mealsPerDay === n} onPress={() => setMealsPerDay(n)} />
+                <SelectableChip
+                  key={n}
+                  label={`${n}`}
+                  selected={mealsPerDay === n}
+                  onPress={() => setMealsPerDay(n)}
+                />
               ))}
             </ChipGrid>
-            <AppText variant="footnote" color="textSecondary">Food preferences</AppText>
+            <SectionLabel>FOOD PREFERENCES</SectionLabel>
             <ChipGrid>
               {FOOD_PREFERENCE_OPTIONS.map((food) => (
                 <SelectableChip
@@ -511,7 +609,7 @@ export default function ProfileOnboardingScreen() {
                 />
               ))}
             </ChipGrid>
-            <AppText variant="footnote" color="textSecondary">Dietary restrictions</AppText>
+            <SectionLabel>DIETARY RESTRICTIONS</SectionLabel>
             <ChipGrid>
               {DIETARY_RESTRICTION_OPTIONS.map((d) => (
                 <SelectableChip
@@ -522,7 +620,7 @@ export default function ProfileOnboardingScreen() {
                 />
               ))}
             </ChipGrid>
-            <AppText variant="footnote" color="textSecondary">Supplements you currently use</AppText>
+            <SectionLabel>SUPPLEMENTS YOU USE</SectionLabel>
             <ChipGrid>
               {SUPPLEMENT_OPTIONS.map((s) => (
                 <SelectableChip
@@ -535,58 +633,53 @@ export default function ProfileOnboardingScreen() {
             </ChipGrid>
           </View>
         );
-      case 11:
-        // Was a free-text field whose value was lowercased straight into a three-value enum, so
-        // anything other than the exact words was silently stored as an invalid level.
+      case 10:
         return (
-          <ChipGrid>
+          <View style={styles.stack}>
             {EXPERIENCE_LEVELS.map((opt) => (
               <SelectableChip
                 key={opt.id}
                 label={opt.label}
+                description={opt.description}
+                fullWidth
                 selected={experience === opt.id}
                 onPress={() => setExperience(opt.id)}
               />
             ))}
-          </ChipGrid>
+          </View>
         );
-      case 12:
-      case 13:
-        return (
-          <AppText variant="body" color="textSecondary">
-            {step === 12
-              ? 'Daily check-ins help ONE MORE know when to push and when to pull back — your program adapts automatically.'
-              : 'Your meal plan, macro targets, and grocery list are generated from your profile and updated as training changes.'}
-          </AppText>
-        );
-      case 14:
-        // The review step showed raw option ids such as "commercial_gym" and "aggressive_12w";
-        // reuse the same labels the user picked from.
+      case REVIEW_STEP:
         return (
           <View style={styles.review}>
-            <AppText variant="body">Goals: {premiumGoals.length} selected</AppText>
-            <AppText variant="body">Lifting: {daysPerWeek} days/week · {minutesPerWorkout} min</AppText>
-            <AppText variant="body">Gym: {gymLabel}</AppText>
-            <AppText variant="body">Equipment: {equipment.length} items</AppText>
-            <AppText variant="body">Timeline: {timelineLabel}</AppText>
+            <ReviewRow label="Goals" value={`${premiumGoals.length} selected`} />
+            <ReviewRow label="Pace" value={timelineLabel} />
+            <ReviewRow label="Lifting" value={`${daysPerWeek} days · ${minutesPerWorkout} min`} />
+            <ReviewRow label="Gym" value={primaryGymName.trim() || gymLabel} />
+            <ReviewRow label="Equipment" value={`${equipment.length} items`} />
+            <ReviewRow label="Experience" value={experienceLabel} />
+            <ReviewRow label="Meals" value={`${mealsPerDay ?? 4} / day`} />
           </View>
         );
-      case 15:
+      case BUILD_STEP:
         return (
           <View style={styles.building}>
-            <LiftFlowLogo size={96} variant="primary" />
-            <AppText variant="body" color="textSecondary" align="center">
-              {activationStatus}
+            <LogoMark size={96} glow animate />
+            <Animated.View entering={FadeIn.delay(200)}>
+              <AppText variant="body" color="textSecondary" align="center">
+                {activationStatus}
+              </AppText>
+            </Animated.View>
+          </View>
+        );
+      case READY_STEP:
+        return (
+          <View style={styles.building}>
+            <LogoMark size={88} glow animate />
+            <AppText variant="headline" align="center">
+              Your coach is ready.
             </AppText>
-          </View>
-        );
-      case 16:
-        return (
-          <View style={styles.building}>
-            <AppText variant="display" align="center">🎉</AppText>
-            <AppText variant="headline" align="center">Your AI Fitness Coach is ready.</AppText>
-            <AppText variant="footnote" color="textSecondary" align="center">
-              Training program, nutrition plan, and today&apos;s workout are waiting on your dashboard.
+            <AppText variant="body" color="textSecondary" align="center">
+              Training, nutrition, and today&apos;s workout are waiting on your dashboard.
             </AppText>
           </View>
         );
@@ -595,14 +688,15 @@ export default function ProfileOnboardingScreen() {
     }
   }
 
-  if (step === 15) {
+  if (step === BUILD_STEP) {
     return (
       <OnboardingShell
-        step={15}
+        step={BUILD_STEP}
         totalSteps={TOTAL_STEPS}
         title={meta.title}
         subtitle={meta.subtitle}
-        insight={insight}
+        insight={null}
+        hideProgress
         onContinue={() => {}}
         continueLabel="Building…"
         continueDisabled
@@ -620,26 +714,54 @@ export default function ProfileOnboardingScreen() {
       subtitle={meta.subtitle}
       helperText={meta.helper}
       heroImage={meta.hero}
-      insight={step <= 14 ? insight : null}
+      insight={step <= REVIEW_STEP ? insight : null}
       onContinue={handleContinue}
-      continueLabel={step === 16 ? 'Go to Dashboard' : 'Continue'}
+      continueLabel={
+        step === READY_STEP ? 'Go to Dashboard' : step === REVIEW_STEP ? 'Build my plan' : 'Continue'
+      }
       continueDisabled={!canContinue() || saving}
       loading={saving}
-      onBack={step > 1 && step < 15 ? handleBack : undefined}>
+      hideProgress={step === READY_STEP}
+      onBack={step > 1 && step < BUILD_STEP ? handleBack : undefined}>
       {renderStepContent()}
     </OnboardingShell>
   );
 }
 
+function ReviewRow({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.reviewRow}>
+      <AppText variant="footnote" color="textTertiary">
+        {label}
+      </AppText>
+      <AppText variant="bodyBold">{value}</AppText>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   stack: { gap: Spacing.md },
+  sectionLabel: {
+    letterSpacing: 1.1,
+    marginTop: Spacing.xs,
+  },
   heightRow: { flexDirection: 'row', gap: Spacing.md },
   heightField: { flex: 1 },
   review: {
-    gap: Spacing.sm,
+    gap: Spacing.md,
     backgroundColor: LiftFlowColors.surface,
     padding: Spacing.lg,
-    borderRadius: 12,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: LiftFlowColors.border,
   },
-  building: { alignItems: 'center', gap: Spacing.xl, paddingVertical: Spacing.xxxl },
+  reviewRow: {
+    gap: 2,
+  },
+  building: {
+    alignItems: 'center',
+    gap: Spacing.xl,
+    paddingVertical: Spacing.xxxl,
+    paddingHorizontal: Spacing.md,
+  },
 });

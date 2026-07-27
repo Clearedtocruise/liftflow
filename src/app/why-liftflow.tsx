@@ -1,31 +1,56 @@
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import { useState } from 'react';
-import { Dimensions, Pressable, StyleSheet, View } from 'react-native';
-import Animated, { FadeIn, FadeInRight, FadeOut } from 'react-native-reanimated';
+import { useEffect, useState } from 'react';
+import { Dimensions, LayoutChangeEvent, Pressable, StyleSheet, View } from 'react-native';
+import Animated, {
+  FadeIn,
+  FadeInDown,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { LogoMark } from '@/components/brand/LogoMark';
-import { InsightCard } from '@/components/insights/InsightCard';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { AppText } from '@/components/ui/AppText';
-import { Brand, LiftFlowColors, Radius, Spacing } from '@/constants/theme';
+import { Brand, LiftFlowColors, Spacing, TouchTarget } from '@/constants/theme';
 import { WHY_LIFTFLOW_SLIDES } from '@/constants/whyLiftFlow';
-import { useInsightRotator } from '@/hooks/useInsightRotator';
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
+const HERO_HEIGHT = Math.min(height * 0.42, 360);
 
 export default function WhyLiftFlowScreen() {
   const insets = useSafeAreaInsets();
   const [index, setIndex] = useState(0);
-  const { insight } = useInsightRotator('coaching');
+  const [trackWidth, setTrackWidth] = useState(0);
   const slide = WHY_LIFTFLOW_SLIDES[index];
   const isLast = index === WHY_LIFTFLOW_SLIDES.length - 1;
+  const progress = useSharedValue(0);
+
+  useEffect(() => {
+    progress.value = withSpring((index + 1) / WHY_LIFTFLOW_SLIDES.length, {
+      damping: 18,
+      stiffness: 140,
+    });
+  }, [index, progress]);
+
+  const progressStyle = useAnimatedStyle(() => ({
+    width: trackWidth * progress.value,
+  }));
+
+  function onTrackLayout(e: LayoutChangeEvent) {
+    setTrackWidth(e.nativeEvent.layout.width);
+  }
+
+  function goToLegal() {
+    router.replace('/(onboarding)/legal');
+  }
 
   function advance() {
     if (isLast) {
-      router.replace('/(onboarding)/legal');
+      goToLegal();
       return;
     }
     setIndex((i) => i + 1);
@@ -35,57 +60,60 @@ export default function WhyLiftFlowScreen() {
 
   return (
     <View style={styles.root}>
-      <LinearGradient colors={['rgba(31, 107, 255, 0.1)', 'transparent']} style={styles.topGlow} />
-      <View style={[styles.inner, { paddingTop: insets.top + Spacing.md, paddingBottom: insets.bottom + Spacing.lg }]}>
-        <View style={styles.topRow}>
-          <LogoMark size={40} glow={false} />
-          <View style={styles.dots}>
-            {WHY_LIFTFLOW_SLIDES.map((s, i) => (
-              <View key={s.id} style={[styles.dot, i === index && styles.dotActive, i < index && styles.dotDone]} />
-            ))}
+      <View style={[styles.heroPlane, { height: HERO_HEIGHT + insets.top }]}>
+        <Animated.View key={`img-${slide.id}`} entering={FadeIn.duration(420)} style={StyleSheet.absoluteFill}>
+          <Image source={{ uri: slide.image }} style={styles.heroImage} contentFit="cover" />
+        </Animated.View>
+        <LinearGradient
+          colors={['rgba(8,11,16,0.35)', 'rgba(8,11,16,0.55)', LiftFlowColors.background]}
+          locations={[0, 0.45, 1]}
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={[styles.heroChrome, { paddingTop: insets.top + Spacing.md }]}>
+          <LogoMark size={36} glow={false} />
+          <View style={styles.progressTrack} onLayout={onTrackLayout}>
+            <Animated.View style={[styles.progressFill, progressStyle]} />
           </View>
+          <AppText variant="caption" color="textSecondary">
+            {index + 1}/{WHY_LIFTFLOW_SLIDES.length}
+          </AppText>
         </View>
+      </View>
 
-        <Animated.View key={slide.id} entering={FadeInRight.duration(320)} exiting={FadeOut.duration(180)} style={styles.slide}>
-          <View style={styles.heroWrap}>
-            <Image source={{ uri: slide.image }} style={styles.hero} contentFit="cover" />
-            <LinearGradient colors={['transparent', 'rgba(8,11,16,0.98)']} style={styles.heroFade} />
-          </View>
-
+      <View style={[styles.bodyPane, { paddingBottom: insets.bottom + Spacing.lg }]}>
+        <Animated.View
+          key={slide.id}
+          entering={FadeInDown.duration(380)}
+          style={styles.copy}>
           <AppText variant="title" style={styles.title}>
             {slide.title}
           </AppText>
           {index === 0 ? (
-            <AppText variant="callout" color="accent">
+            <AppText variant="callout" color="accent" style={styles.tagline}>
               {Brand.taglinePrimary}
             </AppText>
           ) : null}
-          <View style={styles.body}>
-            {bodyLines.map((line, i) =>
-              line === '' ? (
-                <View key={`sp-${i}`} style={styles.spacer} />
-              ) : (
-                <AppText
-                  key={`${line}-${i}`}
-                  variant={line.startsWith('✓') ? 'bodyBold' : 'body'}
-                  color={line.startsWith('•') || line.startsWith('✓') ? 'textSecondary' : 'textPrimary'}>
-                  {line}
-                </AppText>
-              ),
-            )}
+          <View style={styles.bodyLines}>
+            {bodyLines.map((line, i) => (
+              <AppText
+                key={`${slide.id}-${i}`}
+                variant={Array.isArray(slide.body) ? 'body' : 'body'}
+                color="textSecondary"
+                style={styles.line}>
+                {Array.isArray(slide.body) ? `·  ${line}` : line}
+              </AppText>
+            ))}
           </View>
-
-          {insight && index % 2 === 1 ? (
-            <Animated.View entering={FadeIn.delay(200)}>
-              <InsightCard insight={insight} compact />
-            </Animated.View>
-          ) : null}
         </Animated.View>
 
         <View style={styles.footer}>
           <PrimaryButton label={slide.cta ?? 'Continue'} size="large" onPress={advance} />
           {!isLast ? (
-            <Pressable onPress={() => router.replace('/(onboarding)/legal')}>
+            <Pressable
+              onPress={goToLegal}
+              style={styles.skip}
+              accessibilityRole="button"
+              accessibilityLabel="Skip introduction and continue to legal">
               <AppText variant="footnote" color="textTertiary" align="center">
                 Skip intro
               </AppText>
@@ -102,70 +130,61 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: LiftFlowColors.background,
   },
-  topGlow: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 180,
-  },
-  inner: {
-    flex: 1,
-    paddingHorizontal: Spacing.xxl,
-  },
-  topRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: Spacing.lg,
-  },
-  dots: {
-    flexDirection: 'row',
-    gap: 6,
-    alignItems: 'center',
-  },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: LiftFlowColors.surfaceHighlight,
-  },
-  dotActive: {
-    width: 24,
-    backgroundColor: LiftFlowColors.primary,
-  },
-  dotDone: {
-    backgroundColor: LiftFlowColors.accent,
-  },
-  slide: {
-    flex: 1,
-    gap: Spacing.lg,
-  },
-  heroWrap: {
-    height: width * 0.44,
-    borderRadius: Radius.xl,
+  heroPlane: {
+    width,
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: LiftFlowColors.border,
   },
-  hero: {
+  heroImage: {
     width: '100%',
     height: '100%',
   },
-  heroFade: {
-    ...StyleSheet.absoluteFillObject,
+  heroChrome: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    paddingHorizontal: Spacing.xxl,
+  },
+  progressTrack: {
+    flex: 1,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: LiftFlowColors.primary,
+    borderRadius: 2,
+  },
+  bodyPane: {
+    flex: 1,
+    paddingHorizontal: Spacing.xxl,
+    justifyContent: 'space-between',
+    marginTop: -Spacing.xl,
+  },
+  copy: {
+    gap: Spacing.md,
+    paddingTop: Spacing.md,
   },
   title: {
     letterSpacing: 0.8,
   },
-  body: {
-    gap: Spacing.xs,
+  tagline: {
+    letterSpacing: 1.5,
   },
-  spacer: {
-    height: Spacing.sm,
+  bodyLines: {
+    gap: Spacing.sm,
+    marginTop: Spacing.xs,
+  },
+  line: {
+    maxWidth: width - Spacing.xxl * 2,
   },
   footer: {
     gap: Spacing.md,
-    paddingTop: Spacing.md,
+    paddingTop: Spacing.lg,
+  },
+  skip: {
+    minHeight: TouchTarget.min,
+    justifyContent: 'center',
   },
 });

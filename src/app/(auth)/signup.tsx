@@ -66,8 +66,8 @@ export default function SignUpScreen() {
 
   return (
     <AuthFormContainer
-      title="Create Account"
-      subtitle="Start tracking workouts with voice-first logging.">
+      title="Create your account"
+      subtitle="One account. Then we build your plan around you.">
       <TextField
         label="Display Name"
         value={displayName}
