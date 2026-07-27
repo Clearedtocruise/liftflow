@@ -3,39 +3,33 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, StyleSheet, View } from 'react-native';
 
 import { LiftFlowLogo } from '@/components/brand/LiftFlowLogo';
-import { EquipmentPicker } from '@/components/equipment/EquipmentPicker';
 import {
-    PremiumGoalPicker,
-    premiumRankedToTrainingGoals,
+  PremiumGoalPicker,
+  premiumRankedToTrainingGoals,
 } from '@/components/goals/PremiumGoalPicker';
 import { TextField } from '@/components/layout/TextField';
+import { OnboardingReveal } from '@/components/onboarding/OnboardingReveal';
 import { OnboardingShell } from '@/components/onboarding/OnboardingShell';
 import { ChipGrid, SelectableChip } from '@/components/onboarding/SelectableChip';
 import { UnitPreferencesPicker } from '@/components/settings/UnitPreferencesPicker';
 import { AppText } from '@/components/ui/AppText';
 import { HeroImages } from '@/constants/imagery';
 import {
-    DAYS_PER_WEEK_OPTIONS,
-    DIETARY_RESTRICTION_OPTIONS,
-    FOOD_PREFERENCE_OPTIONS,
-    GYM_PROFILES,
-    LIMITATION_BODY_AREAS,
-    MEALS_PER_DAY_OPTIONS,
-    SEX_OPTIONS,
-    SUPPLEMENT_OPTIONS,
-    TIMELINE_OPTIONS,
-    WEEKDAY_OPTIONS,
-    WORKOUT_DURATION_OPTIONS,
-    WORKOUT_TIME_OPTIONS,
-    type GymProfileId,
-    type TimelineId,
+  DAYS_PER_WEEK_OPTIONS,
+  DIETARY_RESTRICTION_OPTIONS,
+  FOOD_PREFERENCE_OPTIONS,
+  GYM_PROFILES,
+  MEALS_PER_DAY_OPTIONS,
+  SEX_OPTIONS,
+  WEEKDAY_OPTIONS,
+  type GymProfileId,
 } from '@/constants/onboardingCoach';
 import type { PremiumGoalId } from '@/constants/premiumGoals';
-import { Brand, LiftFlowColors, Spacing } from '@/constants/theme';
+import { Brand, Spacing } from '@/constants/theme';
 import {
-    EQUIPMENT_PRESETS,
-    type EquipmentId,
-    type TrainingLocationId,
+  EQUIPMENT_PRESETS,
+  type EquipmentId,
+  type TrainingLocationId,
 } from '@/constants/trainingProfile';
 import { DEFAULT_UNIT_PREFERENCES, type UnitPreferences } from '@/constants/units';
 import { useAuth } from '@/hooks/useAuth';
@@ -44,17 +38,18 @@ import { useUnits } from '@/hooks/useUnits';
 import { buildGoalsProfilePayload } from '@/lib/trainingGoalsProfile';
 import { preferredUnitsFromGranular } from '@/lib/unitConversion';
 import { coachActivationService } from '@/services/coachActivationService';
-import { limitationService } from '@/services/limitationService';
 import { productAnalyticsService } from '@/services/productAnalyticsService';
 import { userService } from '@/services/userService';
 import { workoutLocationService } from '@/services/workoutLocationService';
+import type { CoachActivationResult } from '@/types/coachActivation';
 
-const TOTAL_STEPS = 16;
+/** Promise → personalize → reveal. Defer equipment detail, limitations, supplements to Settings. */
+const TOTAL_STEPS = 7;
 
 const EXPERIENCE_LEVELS = [
-  { id: 'beginner', label: 'Beginner — under a year of consistent training' },
-  { id: 'intermediate', label: 'Intermediate — a year or more' },
-  { id: 'advanced', label: 'Advanced — several years, structured programs' },
+  { id: 'beginner', label: 'Beginner' },
+  { id: 'intermediate', label: 'Intermediate' },
+  { id: 'advanced', label: 'Advanced' },
 ] as const;
 
 type UserProfileSex = 'male' | 'female' | 'other' | 'prefer_not_to_say';
@@ -64,75 +59,49 @@ const STEP_META: Record<
   {
     title: string;
     subtitle?: string;
-    helper?: string;
     hero?: string;
+    fullBleed?: string;
     insightCategory?: 'training' | 'nutrition' | 'recovery' | 'coaching' | 'motivation' | 'performance';
   }
 > = {
-  1: { title: 'Your units', subtitle: 'Stored precisely in metric. Displayed your way.', hero: HeroImages.onboarding.units },
-  2: {
-    title: 'About you',
-    subtitle: 'Personal details power smarter coaching and nutrition targets.',
-    hero: HeroImages.onboarding.metrics,
+  1: {
+    title: 'Who are you training for?',
+    subtitle: 'A few details so your coach can size training and protein correctly.',
+    fullBleed: HeroImages.onboarding.metrics,
     insightCategory: 'nutrition',
+  },
+  2: {
+    title: 'What are we chasing?',
+    subtitle: 'Pick what matters most — primary goal drives nutrition.',
+    fullBleed: HeroImages.onboarding.goals,
+    insightCategory: 'coaching',
   },
   3: {
-    title: 'Your goals',
-    subtitle: 'Primary goal drives nutrition. All goals shape your workouts.',
-    hero: HeroImages.onboarding.goals,
-    insightCategory: 'coaching',
+    title: 'When do you lift?',
+    subtitle: 'Your week sets the program. Cardio stays optional later.',
+    insightCategory: 'training',
   },
   4: {
-    title: 'Your timeline',
-    subtitle: 'How quickly do you want results?',
-    insightCategory: 'coaching',
+    title: 'Where do you train?',
+    subtitle: 'We match exercises to your gym — equipment is pre-filled.',
+    fullBleed: HeroImages.onboarding.location,
+    insightCategory: 'training',
   },
   5: {
-    title: 'Your lifting schedule',
-    subtitle: 'How many days you lift sets your weekly program. Cardio and sports are optional add-ons — they never replace lifting.',
-    insightCategory: 'training',
+    title: 'How do you eat?',
+    subtitle: 'Preferences shape meals and the grocery list.',
+    insightCategory: 'nutrition',
   },
   6: {
-    title: 'Where do you train?',
-    subtitle: 'Your gym profile determines exercise selection.',
-    hero: HeroImages.onboarding.location,
-    insightCategory: 'training',
+    title: 'Building your system',
+    subtitle: 'Training week, protein target, and groceries — one pass.',
+    insightCategory: 'coaching',
   },
-  7: { title: 'Name your gym', subtitle: 'Optional — helpful at multiple locations.', hero: HeroImages.onboarding.location },
-  8: {
-    title: 'Your equipment',
-    subtitle: 'Confirm what you can use — we pre-filled from your gym type.',
-    hero: HeroImages.onboarding.equipment,
-    insightCategory: 'training',
+  7: {
+    title: 'Your first win',
+    subtitle: Brand.taglinePrimary,
+    insightCategory: 'motivation',
   },
-  9: {
-    title: 'Limitations',
-    subtitle: 'Injuries and restrictions keep your program safe.',
-    insightCategory: 'recovery',
-  },
-  10: {
-    title: 'Nutrition profile',
-    subtitle: 'Food preferences shape your meal plan and grocery list.',
-    insightCategory: 'nutrition',
-  },
-  11: {
-    title: 'Training experience',
-    subtitle: 'We calibrate volume and intensity to your level.',
-    insightCategory: 'training',
-  },
-  12: {
-    title: 'Recovery drives results',
-    subtitle: 'ONE MORE adapts training based on sleep, energy, and soreness.',
-    insightCategory: 'recovery',
-  },
-  13: {
-    title: 'Nutrition that adapts',
-    subtitle: 'Macros update with training load and recovery — no manual recalculation.',
-    insightCategory: 'nutrition',
-  },
-  14: { title: 'Review your system', subtitle: 'Your AI coach is about to build your complete plan.', insightCategory: 'motivation' },
-  15: { title: 'Building your plan', subtitle: 'Creating your training program, nutrition plan, and grocery list…', insightCategory: 'coaching' },
-  16: { title: "You're ready", subtitle: Brand.taglinePrimary, insightCategory: 'motivation' },
 };
 
 function ageToDateOfBirth(age: number): string {
@@ -146,6 +115,7 @@ export default function ProfileOnboardingScreen() {
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
   const [activationStatus, setActivationStatus] = useState('Initializing…');
+  const [activationResult, setActivationResult] = useState<CoachActivationResult | null>(null);
   const activationStarted = useRef(false);
 
   const [unitPrefs, setUnitPrefs] = useState<UnitPreferences>(DEFAULT_UNIT_PREFERENCES);
@@ -156,24 +126,15 @@ export default function ProfileOnboardingScreen() {
   const [heightFtInput, setHeightFtInput] = useState('');
   const [heightInchesInput, setHeightInchesInput] = useState('');
   const [weightInput, setWeightInput] = useState('');
-  const [goalWeightInput, setGoalWeightInput] = useState('');
   const [premiumGoals, setPremiumGoals] = useState<PremiumGoalId[]>([]);
-  const [timeline, setTimeline] = useState<TimelineId | null>(null);
   const [daysPerWeek, setDaysPerWeek] = useState<number | null>(4);
-  const [minutesPerWorkout, setMinutesPerWorkout] = useState<number | null>(60);
   const [preferredDays, setPreferredDays] = useState<string[]>([]);
-  const [preferredTimes, setPreferredTimes] = useState<string[]>([]);
   const [trainingLocation, setTrainingLocation] = useState<TrainingLocationId | null>(null);
-  const [primaryGymName, setPrimaryGymName] = useState('');
   const [equipment, setEquipment] = useState<EquipmentId[]>([]);
-  const [limitationAreas, setLimitationAreas] = useState<string[]>([]);
-  const [limitationNotes, setLimitationNotes] = useState('');
-  const [exercisesToAvoid, setExercisesToAvoid] = useState('');
   const [mealsPerDay, setMealsPerDay] = useState<number | null>(4);
   const [foodPreferences, setFoodPreferences] = useState<string[]>([]);
   const [dietaryRestrictions, setDietaryRestrictions] = useState<string[]>([]);
-  const [currentSupplements, setCurrentSupplements] = useState<string[]>([]);
-  const [experience, setExperience] = useState('');
+  const [experience, setExperience] = useState('intermediate');
 
   const meta = STEP_META[step] ?? STEP_META[1];
   const { insight, nextInsight } = useInsightRotator(meta.insightCategory);
@@ -191,8 +152,8 @@ export default function ProfileOnboardingScreen() {
   }, []);
 
   const saveProfile = useCallback(async () => {
-    if (!user || !trainingLocation || premiumGoals.length === 0 || equipment.length === 0 || !timeline || !daysPerWeek) {
-      Alert.alert('Almost there', 'Complete gym type, equipment, goals, timeline, and schedule.');
+    if (!user || !trainingLocation || premiumGoals.length === 0 || equipment.length === 0 || !daysPerWeek) {
+      Alert.alert('Almost there', 'Complete goals, schedule, and where you train.');
       return false;
     }
 
@@ -205,11 +166,9 @@ export default function ProfileOnboardingScreen() {
     else heightCm = units.parseHeightFtIn(heightFtInput, heightInchesInput);
 
     const weightKg = units.parseWeight(weightInput);
-    const goalWeightKg = goalWeightInput.trim() ? units.parseWeight(goalWeightInput) : undefined;
 
     const result = await userService.updateProfile(user.id, {
       trainingLocation,
-      primaryGymName: primaryGymName.trim() || undefined,
       availableEquipment: equipment,
       ...buildGoalsProfilePayload(rankedGoals),
       ...unitPrefs,
@@ -218,28 +177,20 @@ export default function ProfileOnboardingScreen() {
       dateOfBirth: age > 0 && age < 120 ? ageToDateOfBirth(age) : undefined,
       heightCm,
       weightKg,
-      trainingExperience: experience
-        ? (experience.toLowerCase() as 'beginner' | 'intermediate' | 'advanced')
-        : 'intermediate',
+      trainingExperience: (experience as 'beginner' | 'intermediate' | 'advanced') || 'intermediate',
       onboardingCompleted: true,
       metadata: {
         coachProfile: {
           age: age > 0 ? age : undefined,
-          goalWeightKg,
-          timeline,
+          timeline: 'moderate',
           daysPerWeek,
-          minutesPerWorkout: minutesPerWorkout ?? 60,
+          minutesPerWorkout: 60,
           preferredWorkoutDays: preferredDays,
-          preferredWorkoutTimes: preferredTimes,
+          preferredWorkoutTimes: [],
           mealsPerDay: mealsPerDay ?? 4,
           foodPreferences,
           dietaryRestrictions,
-          currentSupplements,
-          limitationNotes: limitationNotes.trim() || undefined,
-          exercisesToAvoid: exercisesToAvoid
-            .split(',')
-            .map((s) => s.trim())
-            .filter(Boolean),
+          currentSupplements: [],
         },
       },
     });
@@ -250,22 +201,9 @@ export default function ProfileOnboardingScreen() {
     }
 
     await workoutLocationService.ensureFromProfile(user.id, {
-      primaryGymName: primaryGymName.trim() || undefined,
       trainingLocation,
       availableEquipment: equipment,
     });
-
-    for (const area of limitationAreas) {
-      await limitationService.create(user.id, {
-        limitationType: 'injury',
-        bodyArea: area,
-        description: limitationNotes.trim() || undefined,
-        affectedMovements: exercisesToAvoid
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean),
-      });
-    }
 
     await refreshProfile();
     return true;
@@ -274,7 +212,6 @@ export default function ProfileOnboardingScreen() {
     trainingLocation,
     premiumGoals,
     equipment,
-    timeline,
     daysPerWeek,
     unitPrefs,
     ageInput,
@@ -284,20 +221,12 @@ export default function ProfileOnboardingScreen() {
     heightFtInput,
     heightInchesInput,
     weightInput,
-    goalWeightInput,
     experience,
     units,
-    primaryGymName,
-    minutesPerWorkout,
     preferredDays,
-    preferredTimes,
     mealsPerDay,
     foodPreferences,
     dietaryRestrictions,
-    currentSupplements,
-    limitationAreas,
-    limitationNotes,
-    exercisesToAvoid,
     refreshProfile,
   ]);
 
@@ -309,12 +238,12 @@ export default function ProfileOnboardingScreen() {
     const saved = await saveProfile();
     if (!saved) {
       setSaving(false);
-      setStep(14);
+      setStep(5);
       activationStarted.current = false;
       return;
     }
 
-    setActivationStatus('Building your training program…');
+    setActivationStatus('Building your training week…');
     const activateResult = await coachActivationService.activate(user.id);
 
     if (!activateResult.success) {
@@ -323,41 +252,41 @@ export default function ProfileOnboardingScreen() {
         'Coach activation incomplete',
         activateResult.error + '\n\nYour profile was saved. You can generate a program from Settings.',
       );
-      setStep(16);
+      setActivationResult(null);
+      setStep(7);
       return;
     }
 
-    setActivationStatus('Finalizing nutrition & grocery list…');
+    setActivationStatus('Locking protein targets & groceries…');
+    setActivationResult(activateResult.data);
     await refreshProfile();
     void productAnalyticsService.trackOnboardingCompleted(user.id);
     setSaving(false);
-    setStep(16);
+    setStep(7);
   }, [user, saveProfile, refreshProfile]);
 
   useEffect(() => {
-    if (step !== 15 || saving || activationStarted.current) return;
+    if (step !== 6 || saving || activationStarted.current) return;
     activationStarted.current = true;
     void runActivation();
   }, [step, saving, runActivation]);
 
   function canContinue(): boolean {
-    if (step === 2) return !!sex && !!weightInput.trim();
-    if (step === 3) return premiumGoals.length > 0;
-    if (step === 4) return timeline != null;
-    if (step === 5) return daysPerWeek != null && preferredDays.length > 0;
-    if (step === 6) return trainingLocation != null;
-    if (step === 8) return equipment.length > 0;
-    if (step === 10) return mealsPerDay != null;
+    if (step === 1) return !!sex && !!weightInput.trim();
+    if (step === 2) return premiumGoals.length > 0;
+    if (step === 3) return daysPerWeek != null && preferredDays.length > 0;
+    if (step === 4) return trainingLocation != null;
+    if (step === 5) return mealsPerDay != null;
     return true;
   }
 
   function handleContinue() {
     nextInsight();
-    if (step === 14) {
-      setStep(15);
+    if (step === 5) {
+      setStep(6);
       return;
     }
-    if (step === 16) {
+    if (step === 7) {
       router.replace('/(tabs)/dashboard');
       return;
     }
@@ -365,72 +294,113 @@ export default function ProfileOnboardingScreen() {
   }
 
   function handleBack() {
-    if (step > 1 && step < 15) setStep((s) => s - 1);
+    if (step > 1 && step < 6) setStep((s) => s - 1);
   }
-
-  const gymLabel = GYM_PROFILES.find((opt) => opt.id === trainingLocation)?.label ?? 'Not set';
-  const timelineLabel = TIMELINE_OPTIONS.find((opt) => opt.id === timeline)?.label ?? 'Not set';
 
   function renderStepContent() {
     switch (step) {
       case 1:
-        return <UnitPreferencesPicker value={unitPrefs} onChange={setUnitPrefs} disabled={saving} />;
-      case 2:
         return (
           <View style={styles.stack}>
+            <UnitPreferencesPicker value={unitPrefs} onChange={setUnitPrefs} disabled={saving} />
             <ChipGrid>
               {SEX_OPTIONS.map((opt) => (
-                <SelectableChip key={opt.id} label={opt.label} selected={sex === opt.id} onPress={() => setSex(opt.id as UserProfileSex)} />
+                <SelectableChip
+                  key={opt.id}
+                  label={opt.label}
+                  selected={sex === opt.id}
+                  onPress={() => setSex(opt.id as UserProfileSex)}
+                />
               ))}
             </ChipGrid>
-            <TextField label="Age" placeholder="28" keyboardType="numeric" value={ageInput} onChangeText={setAgeInput} />
+            <TextField
+              label={`Weight (${units.weightLabel})`}
+              placeholder={unitPrefs.preferredWeightUnit === 'kg' ? '80' : '175'}
+              keyboardType="numeric"
+              value={weightInput}
+              onChangeText={setWeightInput}
+            />
+            <TextField
+              label="Age (optional)"
+              placeholder="28"
+              keyboardType="numeric"
+              value={ageInput}
+              onChangeText={setAgeInput}
+            />
             {unitPrefs.preferredHeightUnit === 'cm' ? (
-              <TextField label="Height (cm)" placeholder="175" keyboardType="numeric" value={heightCmInput} onChangeText={setHeightCmInput} />
+              <TextField
+                label="Height cm (optional)"
+                placeholder="175"
+                keyboardType="numeric"
+                value={heightCmInput}
+                onChangeText={setHeightCmInput}
+              />
             ) : null}
             {unitPrefs.preferredHeightUnit === 'in' ? (
-              <TextField label="Height (in)" placeholder="69" keyboardType="numeric" value={heightInInput} onChangeText={setHeightInInput} />
+              <TextField
+                label="Height in (optional)"
+                placeholder="69"
+                keyboardType="numeric"
+                value={heightInInput}
+                onChangeText={setHeightInInput}
+              />
             ) : null}
             {unitPrefs.preferredHeightUnit === 'ft_in' ? (
               <View style={styles.heightRow}>
-                <TextField label="Feet" placeholder="5" keyboardType="numeric" value={heightFtInput} onChangeText={setHeightFtInput} style={styles.heightField} />
-                <TextField label="Inches" placeholder="10" keyboardType="numeric" value={heightInchesInput} onChangeText={setHeightInchesInput} style={styles.heightField} />
+                <TextField
+                  label="Feet"
+                  placeholder="5"
+                  keyboardType="numeric"
+                  value={heightFtInput}
+                  onChangeText={setHeightFtInput}
+                  style={styles.heightField}
+                />
+                <TextField
+                  label="Inches"
+                  placeholder="10"
+                  keyboardType="numeric"
+                  value={heightInchesInput}
+                  onChangeText={setHeightInchesInput}
+                  style={styles.heightField}
+                />
               </View>
             ) : null}
-            <TextField label={`Weight (${units.weightLabel})`} placeholder={unitPrefs.preferredWeightUnit === 'kg' ? '80' : '175'} keyboardType="numeric" value={weightInput} onChangeText={setWeightInput} />
-            <TextField label={`Goal weight (${units.weightLabel})`} placeholder="Optional" keyboardType="numeric" value={goalWeightInput} onChangeText={setGoalWeightInput} />
+            <AppText variant="footnote" color="textSecondary">
+              Experience
+            </AppText>
+            <ChipGrid>
+              {EXPERIENCE_LEVELS.map((opt) => (
+                <SelectableChip
+                  key={opt.id}
+                  label={opt.label}
+                  selected={experience === opt.id}
+                  onPress={() => setExperience(opt.id)}
+                />
+              ))}
+            </ChipGrid>
           </View>
         );
-      case 3:
+      case 2:
         return <PremiumGoalPicker rankedPremiumGoals={premiumGoals} onChange={setPremiumGoals} disabled={saving} />;
-      case 4:
-        return (
-          <ChipGrid>
-            {TIMELINE_OPTIONS.map((opt) => (
-              <SelectableChip key={opt.id} label={opt.label} selected={timeline === opt.id} onPress={() => setTimeline(opt.id)} />
-            ))}
-          </ChipGrid>
-        );
-      case 5:
+      case 3:
         return (
           <View style={styles.stack}>
-            <AppText variant="footnote" color="textSecondary">How many days do you lift?</AppText>
+            <AppText variant="footnote" color="textSecondary">
+              Lift days per week
+            </AppText>
             <ChipGrid>
               {DAYS_PER_WEEK_OPTIONS.map((n) => (
                 <SelectableChip
                   key={n}
-                  label={n === 7 ? '7 days (every day)' : n === 6 ? `${n} lift days` : `${n} lift days`}
+                  label={`${n}×`}
                   selected={daysPerWeek === n}
                   onPress={() => setDaysPerWeek(n)}
                 />
               ))}
             </ChipGrid>
-            <AppText variant="footnote" color="textSecondary">Minutes per workout</AppText>
-            <ChipGrid>
-              {WORKOUT_DURATION_OPTIONS.map((n) => (
-                <SelectableChip key={n} label={`${n} min`} selected={minutesPerWorkout === n} onPress={() => setMinutesPerWorkout(n)} />
-              ))}
-            </ChipGrid>
-            <AppText variant="footnote" color="textSecondary">Preferred days</AppText>
+            <AppText variant="footnote" color="textSecondary">
+              Preferred days
+            </AppText>
             <ChipGrid>
               {WEEKDAY_OPTIONS.map((d) => (
                 <SelectableChip
@@ -441,66 +411,40 @@ export default function ProfileOnboardingScreen() {
                 />
               ))}
             </ChipGrid>
-            <AppText variant="footnote" color="textSecondary">Preferred times</AppText>
-            <ChipGrid>
-              {WORKOUT_TIME_OPTIONS.map((t) => (
-                <SelectableChip
-                  key={t.id}
-                  label={t.label}
-                  selected={preferredTimes.includes(t.id)}
-                  onPress={() => toggleChip(t.id, preferredTimes, setPreferredTimes)}
-                />
-              ))}
-            </ChipGrid>
           </View>
         );
-      case 6:
+      case 4:
         return (
           <ChipGrid>
             {GYM_PROFILES.map((opt) => (
-              <SelectableChip key={opt.id} label={opt.label} selected={trainingLocation === opt.id} onPress={() => selectLocation(opt.id)} />
+              <SelectableChip
+                key={opt.id}
+                label={opt.label}
+                selected={trainingLocation === opt.id}
+                onPress={() => selectLocation(opt.id)}
+              />
             ))}
           </ChipGrid>
         );
-      case 7:
-        return (
-          <TextField
-            label="Gym name (optional)"
-            placeholder={trainingLocation === 'home_gym' ? 'Home gym' : 'e.g. Gold\'s Gym'}
-            value={primaryGymName}
-            onChangeText={setPrimaryGymName}
-          />
-        );
-      case 8:
-        return <EquipmentPicker selected={equipment} onChange={(n) => setEquipment(n as EquipmentId[])} disabled={saving} />;
-      case 9:
+      case 5:
         return (
           <View style={styles.stack}>
-            <AppText variant="footnote" color="textSecondary">Any injuries or mobility issues?</AppText>
+            <AppText variant="footnote" color="textSecondary">
+              Meals per day
+            </AppText>
             <ChipGrid>
-              {LIMITATION_BODY_AREAS.map((area) => (
+              {MEALS_PER_DAY_OPTIONS.map((n) => (
                 <SelectableChip
-                  key={area}
-                  label={area}
-                  selected={limitationAreas.includes(area)}
-                  onPress={() => toggleChip(area, limitationAreas, setLimitationAreas)}
+                  key={n}
+                  label={`${n}`}
+                  selected={mealsPerDay === n}
+                  onPress={() => setMealsPerDay(n)}
                 />
               ))}
             </ChipGrid>
-            <TextField label="Notes (optional)" placeholder="e.g. rotator cuff strain" value={limitationNotes} onChangeText={setLimitationNotes} />
-            <TextField label="Exercises to avoid (comma-separated)" placeholder="e.g. overhead press, deep squats" value={exercisesToAvoid} onChangeText={setExercisesToAvoid} />
-          </View>
-        );
-      case 10:
-        return (
-          <View style={styles.stack}>
-            <AppText variant="footnote" color="textSecondary">Meals per day</AppText>
-            <ChipGrid>
-              {MEALS_PER_DAY_OPTIONS.map((n) => (
-                <SelectableChip key={n} label={`${n}`} selected={mealsPerDay === n} onPress={() => setMealsPerDay(n)} />
-              ))}
-            </ChipGrid>
-            <AppText variant="footnote" color="textSecondary">Food preferences</AppText>
+            <AppText variant="footnote" color="textSecondary">
+              Food you like
+            </AppText>
             <ChipGrid>
               {FOOD_PREFERENCE_OPTIONS.map((food) => (
                 <SelectableChip
@@ -511,7 +455,9 @@ export default function ProfileOnboardingScreen() {
                 />
               ))}
             </ChipGrid>
-            <AppText variant="footnote" color="textSecondary">Dietary restrictions</AppText>
+            <AppText variant="footnote" color="textSecondary">
+              Restrictions
+            </AppText>
             <ChipGrid>
               {DIETARY_RESTRICTION_OPTIONS.map((d) => (
                 <SelectableChip
@@ -522,56 +468,9 @@ export default function ProfileOnboardingScreen() {
                 />
               ))}
             </ChipGrid>
-            <AppText variant="footnote" color="textSecondary">Supplements you currently use</AppText>
-            <ChipGrid>
-              {SUPPLEMENT_OPTIONS.map((s) => (
-                <SelectableChip
-                  key={s}
-                  label={s}
-                  selected={currentSupplements.includes(s)}
-                  onPress={() => toggleChip(s, currentSupplements, setCurrentSupplements)}
-                />
-              ))}
-            </ChipGrid>
           </View>
         );
-      case 11:
-        // Was a free-text field whose value was lowercased straight into a three-value enum, so
-        // anything other than the exact words was silently stored as an invalid level.
-        return (
-          <ChipGrid>
-            {EXPERIENCE_LEVELS.map((opt) => (
-              <SelectableChip
-                key={opt.id}
-                label={opt.label}
-                selected={experience === opt.id}
-                onPress={() => setExperience(opt.id)}
-              />
-            ))}
-          </ChipGrid>
-        );
-      case 12:
-      case 13:
-        return (
-          <AppText variant="body" color="textSecondary">
-            {step === 12
-              ? 'Daily check-ins help ONE MORE know when to push and when to pull back — your program adapts automatically.'
-              : 'Your meal plan, macro targets, and grocery list are generated from your profile and updated as training changes.'}
-          </AppText>
-        );
-      case 14:
-        // The review step showed raw option ids such as "commercial_gym" and "aggressive_12w";
-        // reuse the same labels the user picked from.
-        return (
-          <View style={styles.review}>
-            <AppText variant="body">Goals: {premiumGoals.length} selected</AppText>
-            <AppText variant="body">Lifting: {daysPerWeek} days/week · {minutesPerWorkout} min</AppText>
-            <AppText variant="body">Gym: {gymLabel}</AppText>
-            <AppText variant="body">Equipment: {equipment.length} items</AppText>
-            <AppText variant="body">Timeline: {timelineLabel}</AppText>
-          </View>
-        );
-      case 15:
+      case 6:
         return (
           <View style={styles.building}>
             <LiftFlowLogo size={96} variant="primary" />
@@ -580,52 +479,30 @@ export default function ProfileOnboardingScreen() {
             </AppText>
           </View>
         );
-      case 16:
-        return (
-          <View style={styles.building}>
-            <AppText variant="display" align="center">🎉</AppText>
-            <AppText variant="headline" align="center">Your AI Fitness Coach is ready.</AppText>
-            <AppText variant="footnote" color="textSecondary" align="center">
-              Training program, nutrition plan, and today&apos;s workout are waiting on your dashboard.
-            </AppText>
-          </View>
-        );
+      case 7:
+        return <OnboardingReveal result={activationResult} />;
       default:
         return null;
     }
   }
 
-  if (step === 15) {
-    return (
-      <OnboardingShell
-        step={15}
-        totalSteps={TOTAL_STEPS}
-        title={meta.title}
-        subtitle={meta.subtitle}
-        insight={insight}
-        onContinue={() => {}}
-        continueLabel="Building…"
-        continueDisabled
-        loading>
-        {renderStepContent()}
-      </OnboardingShell>
-    );
-  }
+  const isBuilding = step === 6;
+  const isReveal = step === 7;
 
   return (
     <OnboardingShell
       step={step}
       totalSteps={TOTAL_STEPS}
-      title={meta.title}
-      subtitle={meta.subtitle}
-      helperText={meta.helper}
-      heroImage={meta.hero}
-      insight={step <= 14 ? insight : null}
+      title={isReveal ? '' : meta.title}
+      subtitle={isReveal ? undefined : meta.subtitle}
+      fullBleedHero={meta.fullBleed}
+      insight={step <= 5 ? insight : null}
       onContinue={handleContinue}
-      continueLabel={step === 16 ? 'Go to Dashboard' : 'Continue'}
-      continueDisabled={!canContinue() || saving}
-      loading={saving}
-      onBack={step > 1 && step < 15 ? handleBack : undefined}>
+      continueLabel={isReveal ? 'Open Home' : isBuilding ? 'Building…' : 'Continue'}
+      continueDisabled={!canContinue() || saving || isBuilding}
+      loading={saving || isBuilding}
+      hideProgress={isBuilding || isReveal}
+      onBack={step > 1 && step < 6 ? handleBack : undefined}>
       {renderStepContent()}
     </OnboardingShell>
   );
@@ -635,11 +512,9 @@ const styles = StyleSheet.create({
   stack: { gap: Spacing.md },
   heightRow: { flexDirection: 'row', gap: Spacing.md },
   heightField: { flex: 1 },
-  review: {
-    gap: Spacing.sm,
-    backgroundColor: LiftFlowColors.surface,
-    padding: Spacing.lg,
-    borderRadius: 12,
+  building: {
+    alignItems: 'center',
+    gap: Spacing.xl,
+    paddingVertical: Spacing.xxxl,
   },
-  building: { alignItems: 'center', gap: Spacing.xl, paddingVertical: Spacing.xxxl },
 });

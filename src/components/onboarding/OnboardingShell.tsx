@@ -3,15 +3,15 @@ import { LinearGradient } from 'expo-linear-gradient';
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import { KeyboardAvoidingView, LayoutChangeEvent, Platform, ScrollView, StyleSheet, View } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import Animated, { FadeInDown, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { LogoMark } from '@/components/brand/LogoMark';
+import { LiftFlowLogo } from '@/components/brand/LiftFlowLogo';
 import { InsightCard } from '@/components/insights/InsightCard';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { AppText } from '@/components/ui/AppText';
 import type { LiftFlowInsight } from '@/constants/insights/types';
-import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
+import { Brand, LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 
 type OnboardingShellProps = {
   step: number;
@@ -20,6 +20,8 @@ type OnboardingShellProps = {
   subtitle?: string;
   helperText?: string;
   heroImage?: string;
+  /** Full-bleed hero behind the first viewport — use on the opening beat. */
+  fullBleedHero?: string;
   insight?: LiftFlowInsight | null;
   children: ReactNode;
   onContinue: () => void;
@@ -27,6 +29,8 @@ type OnboardingShellProps = {
   continueDisabled?: boolean;
   loading?: boolean;
   onBack?: () => void;
+  /** Hide the step counter (building / reveal). */
+  hideProgress?: boolean;
 };
 
 export function OnboardingShell({
@@ -36,6 +40,7 @@ export function OnboardingShell({
   subtitle,
   helperText,
   heroImage,
+  fullBleedHero,
   insight,
   children,
   onContinue,
@@ -43,6 +48,7 @@ export function OnboardingShell({
   continueDisabled,
   loading,
   onBack,
+  hideProgress,
 }: OnboardingShellProps) {
   const insets = useSafeAreaInsets();
   const pct = Math.round((step / totalSteps) * 100);
@@ -63,42 +69,63 @@ export function OnboardingShell({
 
   return (
     <View style={styles.root}>
-      <LinearGradient
-        colors={['rgba(31, 107, 255, 0.08)', 'transparent']}
-        style={styles.topGlow}
-      />
+      {fullBleedHero ? (
+        <View style={styles.bleedWrap} pointerEvents="none">
+          <Image source={{ uri: fullBleedHero }} style={styles.bleedImage} contentFit="cover" />
+          <LinearGradient
+            colors={['rgba(8,11,16,0.35)', 'rgba(8,11,16,0.88)', LiftFlowColors.background]}
+            locations={[0, 0.45, 1]}
+            style={StyleSheet.absoluteFill}
+          />
+        </View>
+      ) : (
+        <LinearGradient
+          colors={['rgba(14, 144, 255, 0.1)', 'transparent']}
+          style={styles.topGlow}
+        />
+      )}
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <View style={[styles.inner, { paddingTop: insets.top + Spacing.md, paddingBottom: insets.bottom + Spacing.lg }]}>
+        <View
+          style={[
+            styles.inner,
+            { paddingTop: insets.top + Spacing.md, paddingBottom: insets.bottom + Spacing.lg },
+          ]}>
           <View style={styles.progressHeader}>
             <View style={styles.logoRow}>
-              <LogoMark size={32} glow={false} />
-              <AppText variant="caption" color="textTertiary">
-                Build My Plan
-              </AppText>
+              <LiftFlowLogo size={28} variant="primary" />
+              <View>
+                <AppText variant="label" style={styles.brandPrimary}>
+                  {Brand.name}
+                </AppText>
+                <AppText variant="caption" color="textTertiary" style={styles.brandSecondary}>
+                  FITNESS
+                </AppText>
+              </View>
             </View>
-            <View style={styles.progressRow}>
-              <AppText variant="caption" color="textSecondary">
-                Step {step} of {totalSteps}
-              </AppText>
-              <AppText variant="caption" color="accent">
-                {pct}% Complete
-              </AppText>
-            </View>
-            <View style={styles.track} onLayout={onTrackLayout}>
-              <Animated.View style={[styles.fillWrap, barStyle]}>
-                <LinearGradient
-                  colors={[LiftFlowColors.primary, LiftFlowColors.accent]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={styles.fill}
-                />
-              </Animated.View>
-            </View>
-            <AppText variant="footnote" color="textSecondary">
-              Building Your Personalized Fitness System
-            </AppText>
+            {!hideProgress ? (
+              <>
+                <View style={styles.progressRow}>
+                  <AppText variant="caption" color="textSecondary">
+                    {step} of {totalSteps}
+                  </AppText>
+                  <AppText variant="caption" color="accent">
+                    {pct}%
+                  </AppText>
+                </View>
+                <View style={styles.track} onLayout={onTrackLayout}>
+                  <Animated.View style={[styles.fillWrap, barStyle]}>
+                    <LinearGradient
+                      colors={[LiftFlowColors.primary, LiftFlowColors.restTimer]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={styles.fill}
+                    />
+                  </Animated.View>
+                </View>
+              </>
+            ) : null}
             {helperText ? (
               <AppText variant="callout" color="textPrimary" style={styles.helper}>
                 {helperText}
@@ -110,21 +137,26 @@ export function OnboardingShell({
             contentContainerStyle={styles.scroll}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled">
-            {heroImage ? (
+            {heroImage && !fullBleedHero ? (
               <View style={styles.heroWrap}>
                 <Image source={{ uri: heroImage }} style={styles.hero} contentFit="cover" />
-                <LinearGradient colors={['transparent', 'rgba(8,11,16,0.95)']} style={styles.heroFade} />
+                <LinearGradient
+                  colors={['transparent', 'rgba(8,11,16,0.95)']}
+                  style={styles.heroFade}
+                />
               </View>
             ) : null}
 
-            <View style={styles.copy}>
-              <AppText variant="title">{title}</AppText>
-              {subtitle ? (
-                <AppText variant="body" color="textSecondary">
-                  {subtitle}
-                </AppText>
-              ) : null}
-            </View>
+            {(title || subtitle) ? (
+              <Animated.View entering={FadeInDown.duration(320)} style={styles.copy}>
+                {title ? <AppText variant="title">{title}</AppText> : null}
+                {subtitle ? (
+                  <AppText variant="body" color="textSecondary">
+                    {subtitle}
+                  </AppText>
+                ) : null}
+              </Animated.View>
+            ) : null}
 
             {children}
 
@@ -157,6 +189,13 @@ const styles = StyleSheet.create({
   flex: {
     flex: 1,
   },
+  bleedWrap: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  bleedImage: {
+    width: '100%',
+    height: '55%',
+  },
   topGlow: {
     position: 'absolute',
     top: 0,
@@ -178,12 +217,24 @@ const styles = StyleSheet.create({
     gap: Spacing.md,
     marginBottom: Spacing.xs,
   },
+  brandPrimary: {
+    color: LiftFlowColors.restTimer,
+    letterSpacing: 1.2,
+    fontWeight: '700',
+    fontSize: 13,
+    lineHeight: 16,
+  },
+  brandSecondary: {
+    letterSpacing: 2,
+    fontSize: 8,
+    lineHeight: 10,
+  },
   progressRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
   track: {
-    height: 8,
+    height: 6,
     borderRadius: Radius.full,
     backgroundColor: LiftFlowColors.surfaceElevated,
     overflow: 'hidden',
@@ -205,7 +256,7 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing.xxxl,
   },
   heroWrap: {
-    height: 180,
+    height: 160,
     borderRadius: Radius.xl,
     overflow: 'hidden',
     borderWidth: 1,
