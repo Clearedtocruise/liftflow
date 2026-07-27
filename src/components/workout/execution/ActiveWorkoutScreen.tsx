@@ -1056,8 +1056,8 @@ export function ActiveWorkoutScreen({
       }
 
       const spokenExercise = payload.exerciseName?.trim();
-      if (spokenExercise) {
-        const match = matchSpokenExercise(spokenExercise, activeName);
+      if (payload.exerciseName?.trim()) {
+        const match = matchSpokenExercise(payload.exerciseName, activeName);
         if (match.kind === 'different') {
           // Previously a silent `false`, which surfaced as "Could not save that set" with no hint
           // that the name was the problem — sighted users got no reason at all.
