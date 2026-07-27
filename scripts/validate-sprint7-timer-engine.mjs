@@ -52,6 +52,14 @@ record('Active workout uses timer engine', active.includes('useWorkoutTimerEngin
 record('Active workout passes execution mode', read('src/app/(tabs)/workout/index.tsx').includes('executionMode'));
 record('Cardio tabata 8 rounds', cardio.includes('rounds: 8'));
 record('Interval panel uses timer engine', read('src/components/cardio/IntervalTimerPanel.tsx').includes('timerEngine'));
+// The rest timer used to wait behind an "Open timer" tap, which is the one interaction a lifter
+// cannot make with a bar in their hands.
+record('Rest timer opens itself after a set', active.includes('setRestOverlayOpen(restActive);'));
+// Still suppressed behind the exercise-complete card and challenge modal, or it would cover them.
+record(
+  'Auto-open respects complete and challenge states',
+  active.includes('!showComplete &&\n          !activeChallenge &&'),
+);
 
 console.log('\nTimer architecture: timerEngine → useWorkoutTimerEngine → WorkoutTimerOverlay');
 console.log('Modes: traditional rest · HIIT/tabata intervals · circuit transitions');

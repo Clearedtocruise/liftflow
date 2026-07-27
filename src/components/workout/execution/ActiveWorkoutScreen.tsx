@@ -451,8 +451,11 @@ export function ActiveWorkoutScreen({
     }
   }, [restSecondsRemaining]);
 
+  // The rest timer is the only thing that matters between sets, so it presents itself rather than
+  // making the lifter find "Open timer" with a bar still in their hands. Keyed on the transition,
+  // so dismissing it mid-rest does not immediately reopen it.
   useEffect(() => {
-    if (!restActive) setRestOverlayOpen(false);
+    setRestOverlayOpen(restActive);
   }, [restActive]);
 
   useEffect(() => {
