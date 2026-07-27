@@ -7,7 +7,7 @@ import {
   type MealReplacementReason,
 } from '@/lib/mealIngredients';
 import { reconcileFoodMacroEstimate } from '@/lib/reconcileFoodMacroEstimate';
-import { fromError, ok } from '@/lib/serviceResult';
+import { ok } from '@/lib/serviceResult';
 import { getAccessToken } from '@/supabase/client';
 import type { FoodMacroEstimate } from '@/types/nutrition';
 import type { Meal } from '@/types';
