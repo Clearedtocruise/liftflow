@@ -56,7 +56,9 @@ export function expandEquipmentRequirements(selected: string[]): Set<string> {
     return new Set<string>(ALL_REQUIREMENTS);
   }
 
-  const out = new Set<string>();
+  // Bodyweight needs no equipment, so it is available at every training location. Gym presets that
+  // omit it were silently filtering push-ups, planks and sit-ups out of the exercise pool.
+  const out = new Set<string>(['bodyweight']);
   for (const id of selected) {
     const keys = SATISFIES[id];
     if (keys) {
