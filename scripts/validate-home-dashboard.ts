@@ -251,5 +251,13 @@ check(
   true,
 );
 
+console.log('\nThe Up Next thumbnail shows a whole figure rather than a cropped slice');
+// The anatomy SVG is 200×400. A square slot with overflow:hidden centre-cropped it, so the card
+// showed an unreadable piece of a torso instead of a body with the trained muscles highlighted.
+const upNext = source('src/components/dashboard/UpNextCard.tsx');
+check('the slot keeps the figure 1:2 ratio', upNext.includes('400 * THUMB_SCALE'), true);
+check('the figure is scaled to fit rather than cropped', upNext.includes('scale={THUMB_SCALE}'), true);
+check('the old square preset is gone', upNext.includes('size="active"'), false);
+
 console.log(`\nHome dashboard: ${failures === 0 ? 'PASS' : `FAIL (${failures})`}`);
 process.exit(failures === 0 ? 0 : 1);

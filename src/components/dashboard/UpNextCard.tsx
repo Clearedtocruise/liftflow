@@ -5,6 +5,11 @@ import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import { buildBodyHighlightData, resolveBodySide, type ExerciseMuscleProfile } from '@/lib/exerciseMuscleMap';
 
+/** The anatomy SVG is 200×400, so the slot keeps that 1:2 ratio and the scale fits it inside. */
+const THUMB_SCALE = 0.2;
+const THUMB_WIDTH = 200 * THUMB_SCALE + 8;
+const THUMB_HEIGHT = 400 * THUMB_SCALE + 8;
+
 type UpNextCardProps = {
   /** e.g. "Tomorrow", or a weekday for anything further out. */
   when: string;
@@ -24,7 +29,9 @@ export function UpNextCard({ when, name, focus, muscles, gender, onPress }: UpNe
     <View style={styles.card}>
       <View style={styles.thumb}>
         {data.length > 0 ? (
-          <MuscleMapFigure data={data} side={side} gender={gender} size="active" />
+          // The figure is 200×400, so it needs a portrait slot and an explicit scale. Dropping it
+          // into a square box only ever showed a cropped slice of the torso.
+          <MuscleMapFigure data={data} side={side} gender={gender} scale={THUMB_SCALE} />
         ) : null}
       </View>
 
@@ -67,13 +74,15 @@ const styles = StyleSheet.create({
     backgroundColor: LiftFlowColors.surface,
   },
   thumb: {
-    width: 48,
-    height: 48,
+    width: THUMB_WIDTH,
+    height: THUMB_HEIGHT,
     borderRadius: Radius.md,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
-    backgroundColor: LiftFlowColors.surfaceElevated,
+    borderWidth: 1,
+    borderColor: LiftFlowColors.borderSubtle,
+    backgroundColor: LiftFlowColors.backgroundSecondary,
   },
   body: {
     flex: 1,
