@@ -1,6 +1,7 @@
-import { Tabs } from 'expo-router';
+import { router, Tabs } from 'expo-router';
 import { Platform } from 'react-native';
 
+import { TabQuickAddButton } from '@/components/navigation/TabQuickAddButton';
 import { AppSymbol, SYMBOL_FALLBACKS } from '@/components/ui/AppSymbol';
 import { LiftFlowColors, TabBarHeight, Typography } from '@/constants/theme';
 
@@ -58,6 +59,31 @@ export default function TabsLayout() {
           ),
         }}
       />
+      {/* Centre slot. `explore` is an unused route, borrowed so the button occupies a real tab
+          position instead of being absolutely positioned over the bar. */}
+      <Tabs.Screen
+        name="explore"
+        options={{
+          title: '',
+          tabBarButton: () => (
+            <TabQuickAddButton onPress={() => router.push('/(features)/quick-add')} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="progress"
+        options={{
+          title: 'Progress',
+          tabBarIcon: ({ color, focused }) => (
+            <AppSymbol
+              name="chart.line.uptrend.xyaxis"
+              fallback={SYMBOL_FALLBACKS['chart.line.uptrend.xyaxis']}
+              size={focused ? 24 : 22}
+              tintColor={color}
+            />
+          ),
+        }}
+      />
       <Tabs.Screen
         name="nutrition"
         options={{
@@ -72,56 +98,21 @@ export default function TabsLayout() {
           ),
         }}
       />
-      <Tabs.Screen
-        name="progress"
-        options={{
-          title: 'Progress',
-          tabBarIcon: ({ color, focused }) => (
-            <AppSymbol
-              name="camera.fill"
-              fallback={SYMBOL_FALLBACKS['camera.fill']}
-              size={focused ? 24 : 22}
-              tintColor={color}
-            />
-          ),
-        }}
-      />
+      {/* Reachable from the dashboard: History via the streak pill, Settings via the header gear. */}
       <Tabs.Screen
         name="history"
-        options={{
-          title: 'History',
-          tabBarIcon: ({ color, focused }) => (
-            <AppSymbol
-              name="clock.arrow.circlepath"
-              fallback={SYMBOL_FALLBACKS['clock.arrow.circlepath']}
-              size={focused ? 24 : 22}
-              tintColor={color}
-            />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="settings"
-        options={{
-          title: 'Settings',
-          tabBarIcon: ({ color, focused }) => (
-            <AppSymbol
-              name="gearshape.fill"
-              fallback={SYMBOL_FALLBACKS['gearshape.fill']}
-              size={focused ? 24 : 22}
-              tintColor={color}
-            />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="coaching"
         options={{
           href: null,
         }}
       />
       <Tabs.Screen
-        name="explore"
+        name="settings"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="coaching"
         options={{
           href: null,
         }}

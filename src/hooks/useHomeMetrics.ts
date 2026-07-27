@@ -28,6 +28,8 @@ export type HomeMetrics = {
   sleepHours: HomeMetric;
   activeCalories: HomeMetric;
   hrvMs: HomeMetric;
+  /** Today's score plus the trailing week, so the tile can show direction as well as a number. */
+  recovery: HomeMetric;
   recoveryScorePercent?: number;
   recoveryScoreLabel?: string;
   /** Absent when no genuine strength gain can be evidenced — the card is then not rendered. */
@@ -85,6 +87,7 @@ export function useHomeMetrics(): HomeMetrics {
   const [sleepHours, setSleepHours] = useState<HomeMetric>(EMPTY);
   const [activeCalories, setActiveCalories] = useState<HomeMetric>(EMPTY);
   const [hrvMs, setHrvMs] = useState<HomeMetric>(EMPTY);
+  const [recovery, setRecovery] = useState<HomeMetric>(EMPTY);
   const [recoveryScorePercent, setRecoveryScorePercent] = useState<number | undefined>(undefined);
   const [recoveryScoreLabel, setRecoveryScoreLabel] = useState<string | undefined>(undefined);
   const [coachInsight, setCoachInsight] = useState<CoachInsight | undefined>(undefined);
@@ -100,12 +103,14 @@ export function useHomeMetrics(): HomeMetrics {
     setLoading(true);
     try {
       const dates = recentDates(user.timezone);
-      const [streakResult, healthResult, gainResult, recoveryResult] = await Promise.all([
-        analyticsService.getWorkoutStreak(user.id),
-        healthService.getDailySummaries(user.id, DAYS, user.timezone),
-        coachInsightService.getStrengthGain(user.id),
-        recoveryService.getToday(user.id),
-      ]);
+      const [streakResult, healthResult, gainResult, recoveryResult, recoveryTrendResult] =
+        await Promise.all([
+          analyticsService.getWorkoutStreak(user.id),
+          healthService.getDailySummaries(user.id, DAYS, user.timezone),
+          coachInsightService.getStrengthGain(user.id),
+          recoveryService.getToday(user.id),
+          recoveryService.getTrend(user.id),
+        ]);
 
       if (streakResult.success) {
         const days = streakResult.data;
@@ -125,14 +130,31 @@ export function useHomeMetrics(): HomeMetrics {
       }
       setHealthResolved(true);
 
-      if (recoveryResult.success && recoveryResult.data) {
-        setRecoveryScorePercent(
-          Math.min(100, Math.max(0, Math.round(recoveryResult.data.recoveryScore))),
-        );
+      const todayScore =
+        recoveryResult.success && recoveryResult.data
+          ? Math.min(100, Math.max(0, Math.round(recoveryResult.data.recoveryScore)))
+          : undefined;
+
+      if (todayScore != null && recoveryResult.success && recoveryResult.data) {
+        setRecoveryScorePercent(todayScore);
         setRecoveryScoreLabel(formatRecoveryLabel(recoveryResult.data.status));
       } else {
         setRecoveryScorePercent(undefined);
         setRecoveryScoreLabel(undefined);
+      }
+
+      if (recoveryTrendResult.success) {
+        // Check-ins are sparse by nature, so days without one stay as gaps rather than zeros.
+        const byDate = new Map(
+          recoveryTrendResult.data.map((point) => [point.checkInDate, point.recoveryScore]),
+        );
+        const history = dates.map((date) => {
+          const score = byDate.get(date);
+          return score != null && Number.isFinite(score) && score > 0 ? Math.round(score) : undefined;
+        });
+        setRecovery({ value: todayScore ?? [...history].reverse().find((v) => v != null), history });
+      } else {
+        setRecovery({ value: todayScore, history: [] });
       }
 
       if (gainResult.success && gainResult.data) {
@@ -162,6 +184,7 @@ export function useHomeMetrics(): HomeMetrics {
     sleepHours,
     activeCalories,
     hrvMs,
+    recovery,
     recoveryScorePercent,
     recoveryScoreLabel,
     coachInsight,

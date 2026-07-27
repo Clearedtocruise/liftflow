@@ -1,3 +1,4 @@
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
@@ -11,6 +12,7 @@ import {
     Radius,
     Spacing,
 } from '@/constants/theme';
+import { isDaytimeHour, resolveHeroBackdrop } from '@/lib/heroBackdrop';
 
 export type HeroState =
   | { kind: 'loading' }
@@ -47,6 +49,13 @@ export function TodayHeroCard({
   onManageWorkout,
 }: TodayHeroCardProps) {
   const resting = state.kind === 'rest';
+  const hour = new Date().getHours();
+  const backdrop = resolveHeroBackdrop(resting ? 'recovery' : 'workout', hour);
+  // A day photo needs less dimming than a night one to stay recognisable, but the text still has to
+  // clear contrast, so the scrim lightens at the top only.
+  const scrim: readonly [string, string, string] = isDaytimeHour(hour)
+    ? ['rgba(8,11,16,0.20)', 'rgba(8,11,16,0.72)', 'rgba(8,11,16,0.94)']
+    : ['rgba(8,11,16,0.35)', 'rgba(8,11,16,0.82)', 'rgba(8,11,16,0.96)'];
 
   return (
     <LinearGradient
@@ -54,6 +63,9 @@ export function TodayHeroCard({
       start={{ x: 0.1, y: 0 }}
       end={{ x: 0.9, y: 1 }}
       style={styles.card}>
+      <Image source={backdrop} style={styles.backdrop} contentFit="cover" transition={220} />
+      <LinearGradient colors={[...scrim]} style={styles.backdropScrim} />
+
       <View style={styles.topRow}>
         <AppText variant="label" color="accent">
           TODAY
@@ -104,7 +116,7 @@ export function TodayHeroCard({
         <>
           <AppText variant="title">Recovery Day</AppText>
           <AppText variant="footnote" color="textSecondary">
-            Nothing scheduled today. Your body needs recovery to grow stronger.
+            Your body needs recovery to grow stronger.
           </AppText>
           <RecoveryBlock
             percent={recoveryPercent}
@@ -209,9 +221,20 @@ function RecoveryBlock({
             {label}
           </AppText>
         ) : null}
+        <AppText variant="caption" color="textTertiary">
+          {readinessLine(percent)}
+        </AppText>
       </View>
     </View>
   );
+}
+
+/** Turns the score into the one thing the lifter wants from it: whether to train today. */
+function readinessLine(percent: number): string {
+  if (percent >= 85) return "You're ready when you are.";
+  if (percent >= 60) return 'Good to train — keep the effort honest.';
+  if (percent >= 40) return 'Train lighter than usual today.';
+  return 'Prioritise rest over volume today.';
 }
 
 const styles = StyleSheet.create({
@@ -222,6 +245,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(14, 144, 255, 0.28)',
     overflow: 'hidden',
+  },
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  backdropScrim: {
+    ...StyleSheet.absoluteFillObject,
   },
   topRow: {
     flexDirection: 'row',

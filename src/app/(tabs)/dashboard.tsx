@@ -4,6 +4,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { CoachInsightCard } from '@/components/dashboard/CoachInsightCard';
 import { HomeHeader } from '@/components/dashboard/HomeHeader';
+import { QuickActionGrid, type QuickAction } from '@/components/dashboard/QuickActionGrid';
 import { StatTile } from '@/components/dashboard/StatTile';
 import { TodayHeroCard, type HeroState } from '@/components/dashboard/TodayHeroCard';
 import { UpNextCard } from '@/components/dashboard/UpNextCard';
@@ -68,12 +69,47 @@ export default function DashboardScreen() {
     [upcomingWorkout],
   );
 
+  /**
+   * Shortcuts to tasks, not copies of the tab bar: logging a past session and recording a check-in
+   * both live several taps deep, which is why they earn a place here.
+   */
+  const quickActions: QuickAction[] = useMemo(
+    () => [
+      {
+        label: 'Log Workout',
+        icon: '🏋',
+        accent: 'streak',
+        onPress: () => router.push('/(tabs)/workout/manual-log'),
+      },
+      {
+        label: 'Log Meal',
+        icon: '🍽',
+        accent: 'nutrition',
+        onPress: () => router.push('/(tabs)/nutrition'),
+      },
+      {
+        label: 'Progress Photo',
+        icon: '📷',
+        accent: 'coach',
+        onPress: () => router.push('/(tabs)/progress'),
+      },
+      {
+        label: 'Body Check-In',
+        icon: '❤',
+        accent: 'body',
+        onPress: () => router.push('/(features)/recovery-check-in'),
+      },
+    ],
+    [],
+  );
+
   return (
     <ScreenContainer contentContainerStyle={styles.content}>
       <HomeHeader
         displayName={user?.displayName}
         streakDays={metrics.loading ? undefined : metrics.streak.value}
         onPressStreak={() => router.push('/(tabs)/history')}
+        onPressSettings={() => router.push('/(tabs)/settings')}
       />
 
       <TodayHeroCard
@@ -101,6 +137,15 @@ export default function DashboardScreen() {
 
       <View style={styles.tiles}>
         <StatTile
+          label="Recovery"
+          value={metrics.recovery.value != null ? `${metrics.recovery.value}%` : undefined}
+          caption={metrics.recoveryScoreLabel ?? 'Check in'}
+          accent="recovery"
+          history={metrics.recovery.history}
+          emptyHint="Check in to score"
+          onPress={() => router.push('/(features)/recovery-check-in')}
+        />
+        <StatTile
           label="Sleep"
           value={formatSleep(metrics.sleepHours.value)}
           caption={metrics.sleepHours.value != null && metrics.sleepHours.value >= 7 ? 'Good' : 'Short'}
@@ -109,6 +154,9 @@ export default function DashboardScreen() {
           emptyHint={metrics.healthEmpty ? 'Connect Apple Health' : 'No data yet'}
           onPress={() => router.push('/(features)/healthkit')}
         />
+      </View>
+
+      <View style={styles.tiles}>
         <StatTile
           label="Calories"
           value={metrics.activeCalories.value != null ? String(Math.round(metrics.activeCalories.value)) : undefined}
@@ -116,18 +164,6 @@ export default function DashboardScreen() {
           accent="energy"
           history={metrics.activeCalories.history}
           emptyHint={metrics.healthEmpty ? 'Connect Apple Health' : 'No data yet'}
-          onPress={() => router.push('/(features)/healthkit')}
-        />
-      </View>
-
-      <View style={styles.tiles}>
-        <StatTile
-          label="HRV"
-          value={metrics.hrvMs.value != null ? `${Math.round(metrics.hrvMs.value)} ms` : undefined}
-          caption="Heart rate variability"
-          accent="recovery"
-          history={metrics.hrvMs.history}
-          emptyHint={metrics.healthEmpty ? 'Needs Apple Watch' : 'No data yet'}
           onPress={() => router.push('/(features)/healthkit')}
         />
         <StatTile
@@ -147,6 +183,13 @@ export default function DashboardScreen() {
           onPress={() => router.push('/(tabs)/coaching')}
         />
       ) : null}
+
+      <View style={styles.section}>
+        <AppText variant="label" color="textTertiary">
+          QUICK ACTIONS
+        </AppText>
+        <QuickActionGrid actions={quickActions} />
+      </View>
 
       {upcomingWorkout && upNextMuscles ? (
         <View style={styles.section}>

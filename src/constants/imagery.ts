@@ -33,5 +33,19 @@ export const HeroImages = {
   },
   dashboard: {
     workout: 'https://images.unsplash.com/photo-1583454110551-21f2fa2afe61?w=800&q=80&auto=format&fit=crop',
+    /**
+     * Hero backdrops, split by time of day. A night sky behind the greeting at 8am reads as broken,
+     * so the scene follows the clock rather than the session type alone.
+     */
+    hero: {
+      workoutDay:
+        'https://images.unsplash.com/photo-1583454110551-21f2fa2afe61?w=1000&q=80&auto=format&fit=crop',
+      workoutNight:
+        'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=1000&q=80&auto=format&fit=crop',
+      recoveryDay:
+        'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1000&q=80&auto=format&fit=crop',
+      recoveryNight:
+        'https://images.unsplash.com/photo-1439853949127-fa647821eba0?w=1000&q=80&auto=format&fit=crop',
+    },
   },
 } as const;
