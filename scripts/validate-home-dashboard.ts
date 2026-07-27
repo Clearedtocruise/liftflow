@@ -11,6 +11,7 @@ import { join } from 'node:path';
 
 import { describeCalorieBudget, describeProteinBudget } from '@/lib/calorieBudget';
 import { describeStrengthGain, findStrengthGain, weeklyBest, type CoachSetSample } from '@/lib/coachInsight';
+import { greetingForHour, greetingName } from '@/lib/homeGreeting';
 import { withTodayFallback } from '@/lib/homeMetricFallback';
 import { upNextGlyph } from '@/lib/upNextGlyph';
 
@@ -275,6 +276,23 @@ check('Recovery Day is reserved for genuine rest', heroCard.includes('Recovery D
 check('the hook tracks completed today separately', todayHook.includes('completedTodaysWorkout'), true);
 check('the screen prefers completed over rest', dash.includes('completedTodaysWorkout'), true);
 check('fireworks component exists', source('src/components/dashboard/CelebrationBurst.tsx').includes('CelebrationBurst'), true);
+
+console.log('\nHome header: greeting name, streak placement, real logo');
+const homeHeader = source('src/components/dashboard/HomeHeader.tsx');
+check('greeting uses the profile display name', homeHeader.includes('greetingName(displayName)'), true);
+check('first name is taken from the full display name', greetingName('Timothy Barrett'), 'Timothy');
+check('a single-token name stays intact', greetingName('Timothy'), 'Timothy');
+check('blank names are omitted rather than inventing one', greetingName('   '), undefined);
+check('morning greeting', greetingForHour(8), 'Good Morning');
+check('evening greeting', greetingForHour(20), 'Good Evening');
+check('streak sits under the greeting on the left', homeHeader.includes("alignSelf: 'flex-start'"), true);
+check('header uses the real ONE MORE logo mark', homeHeader.includes('LiftFlowLogo'), true);
+check('text wordmark is no longer the top-right brand', homeHeader.includes('BrandWordmark'), false);
+check(
+  'auth falls back to metadata when profile name is empty',
+  source('src/services/authService.ts').includes('if (!profile.displayName && metadataName)'),
+  true,
+);
 
 console.log('\nThe Up Next tile uses an icon, not a squeezed anatomy figure');
 // The anatomy SVG is 200×400 and nothing legible survives a thumbnail, so the tile carries a glyph.

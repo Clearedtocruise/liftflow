@@ -27,12 +27,16 @@ function stubProfileFromAuth(user: { id: string; email?: string | null; user_met
 
 async function fetchProfile(userId: string, email: string, metadata?: Record<string, unknown>): Promise<UserProfile> {
   const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
+  const metadataName =
+    typeof metadata?.display_name === 'string' && metadata.display_name.trim().length > 0
+      ? metadata.display_name.trim()
+      : undefined;
 
   if (error || !data) {
     return {
       id: userId,
       email,
-      displayName: (metadata?.display_name as string) ?? undefined,
+      displayName: metadataName,
       preferredUnits: 'imperial',
       ...DEFAULT_UNIT_PREFERENCES,
       confirmationMode: 'smart',
@@ -41,7 +45,12 @@ async function fetchProfile(userId: string, email: string, metadata?: Record<str
     };
   }
 
-  return mapProfile(data);
+  const profile = mapProfile(data);
+  // Profile row is canonical, but older accounts sometimes only have the name on auth metadata.
+  if (!profile.displayName && metadataName) {
+    return { ...profile, displayName: metadataName };
+  }
+  return profile;
 }
 
 export const authService = {
