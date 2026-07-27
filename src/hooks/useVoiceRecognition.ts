@@ -82,8 +82,20 @@ export function useVoiceRecognition(options: VoiceRecognitionOptions = {}) {
       onFinalTranscript?.(transcript);
     } catch (e) {
       if (!mountedRef.current) return;
-      // The backend already returns user-facing messages; anything else gets a generic one.
-      setError(e instanceof Error ? e.message : 'Could not transcribe that. Try again.');
+      const raw = e instanceof Error ? e.message : '';
+      const lower = raw.toLowerCase();
+      // Backend rate-limit copy is written for operators; surface a gym-friendly retry instead.
+      if (
+        lower.includes('too many requests') ||
+        lower.includes('rate limit') ||
+        lower.includes('voice is busy') ||
+        lower.includes('ai request limit')
+      ) {
+        setError('Voice is busy — wait a few seconds and try again.');
+      } else {
+        // The backend already returns user-facing messages; anything else gets a generic one.
+        setError(raw || 'Could not transcribe that. Try again.');
+      }
       setState('error');
     }
   }, [clearAutoStop, onFinalTranscript]);

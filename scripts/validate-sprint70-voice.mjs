@@ -102,12 +102,19 @@ else fail('Plausibility ranges missing', 'backend');
 if (read('src/lib/voice/voicePlausibility.ts').includes('WEIGHT_MAX_LB')) pass('Plausibility ranges', 'client mirror');
 else fail('Plausibility ranges missing', 'client mirror');
 
-// Both parse routes must sit behind auth and the shared AI rate limiter.
+// Voice logging gets its own budget so a workout session cannot burn the coach/LLM ceiling.
 const serverIndex = read('backend/src/index.ts');
 for (const route of ['/api/parse', '/api/voice']) {
   const line = serverIndex.split('\n').find((l) => l.includes(`'${route}'`));
   if (line && line.includes('requireUser') && line.includes('Limiter')) pass('Route protected', route);
   else fail('Route unprotected', route);
+}
+if (serverIndex.includes('voiceLimiter')) pass('Voice rate limiter isolated');
+else fail('Voice rate limiter missing');
+if (read('backend/src/middleware/security.ts').includes('untrustedJwtSubject')) {
+  pass('Authenticated API rate-limit keys');
+} else {
+  fail('Authenticated API rate-limit keys missing');
 }
 
 const parseRoute = read('backend/src/routes/parse.ts');

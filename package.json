@@ -126,6 +126,7 @@
     "validate:home-dashboard": "npx tsx scripts/validate-home-dashboard.ts",
     "validate:hero-backdrop": "npx tsx scripts/validate-hero-backdrop.ts",
     "validate:sprint10-exercise-replacement": "node scripts/validate-sprint10-exercise-replacement.mjs",
+    "validate:voice-rate-limit": "node scripts/validate-voice-rate-limit.mjs",
     "migrate:019": "node scripts/apply-migration-019.mjs",
     "migrate:023-024": "node scripts/apply-migration-023-024.mjs",
     "migrate:015": "node scripts/apply-migration-015.mjs",
