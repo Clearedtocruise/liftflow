@@ -36,6 +36,7 @@ const detail = read('src/components/workout/execution/WorkoutExerciseDetailList.
 const program = read('backend/src/lib/programEngine.ts');
 
 record('No blanket auto-pairing fallback', !flow.includes('for (let i = 0; i + 1 < result.length; i += 2)'));
+record('Scrubs over-paired saved plans', flow.includes('sanitizeOverpairedSupersets'));
 record('A1/A2 station labels', flow.includes('formatSupersetStationLabel') && flow.includes('formatExerciseStationLabel'));
 record('Circuit station builder', flow.includes('buildCircuitStations'));
 record('Post-set flow resolver', flow.includes('resolvePostSetFlowAction'));

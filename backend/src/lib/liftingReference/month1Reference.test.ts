@@ -61,6 +61,17 @@ test('applyBlockSupersets groups B1/B2 blocks', () => {
   assert.equal(grouped[2].supersetGroupId, 'ss-b');
 });
 
+test('applyBlockSupersets never pairs bare letter compounds', () => {
+  const grouped = applyBlockSupersets([
+    { block: 'A', name: 'Bench' },
+    { block: 'A', name: 'Also Bench' },
+    { block: 'D', name: 'OHP' },
+  ]);
+  assert.equal(grouped[0].supersetGroupId, undefined);
+  assert.equal(grouped[1].supersetGroupId, undefined);
+  assert.equal(grouped[2].supersetGroupId, undefined);
+});
+
 test('smart supersets skip heavy compound pairs', () => {
   const grouped = enrichWithSmartSupersetGroups([
     { name: 'Squat', metadata: { movement_family: 'squat_pattern' } },
@@ -73,6 +84,21 @@ test('smart supersets skip heavy compound pairs', () => {
   assert.equal(grouped[1].supersetGroupId, undefined);
   assert.equal(grouped[2].supersetGroupId, 'ss-1');
   assert.equal(grouped[3].supersetGroupId, 'ss-1');
+});
+
+test('smart supersets do not invent pairs when movement family is missing', () => {
+  const grouped = enrichWithSmartSupersetGroups([
+    { name: 'Bench' },
+    { name: 'Incline DB' },
+    { name: 'Lateral Raise' },
+    { name: 'Cable Fly' },
+    { name: 'Pushdown' },
+    { name: 'OHP' },
+  ]);
+  assert.deepEqual(
+    grouped.map((exercise) => exercise.supersetGroupId),
+    [undefined, undefined, undefined, undefined, undefined, undefined],
+  );
 });
 
 test('slotLabelKey matches schedule labels to Month 1 slot labels', () => {

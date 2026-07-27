@@ -40,7 +40,38 @@ export function enrichWithSupersetGroups(
   // Group ids must come from the generated plan or explicit draft edits. Blindly pairing every
   // adjacent exercise when a workout is in superset mode turns partially-grouped plans into
   // "everything is a superset", which is exactly the production bug we want to avoid.
-  return exercises;
+  // Plans already saved with that bug still need scrubbing on load.
+  return sanitizeOverpairedSupersets(exercises);
+}
+
+/**
+ * Signature of the empty-metadata auto-pair bug: nearly every exercise sits in an adjacent
+ * 2-person group (ss-1, ss-2, …). Real Month 1 / smart plans leave compounds alone, so only a
+ * minority of the session is paired. Strip the groups so the session runs traditionally.
+ */
+export function sanitizeOverpairedSupersets(
+  exercises: EditableWorkoutExercise[],
+): EditableWorkoutExercise[] {
+  if (exercises.length < 4) return exercises;
+
+  const groups = buildSupersetGroups(exercises);
+  if (groups.length < 3) return exercises;
+
+  const memberCount = new Set(groups.flatMap((group) => group.memberIndices)).size;
+  if (memberCount / exercises.length < 0.75) return exercises;
+
+  const allAdjacentPairs = groups.every(
+    (group) =>
+      group.memberIndices.length === 2 &&
+      Math.abs(group.memberIndices[0]! - group.memberIndices[1]!) === 1,
+  );
+  if (!allAdjacentPairs) return exercises;
+
+  return exercises.map((exercise) => {
+    if (!exercise.supersetGroupId) return exercise;
+    const { supersetGroupId: _removed, ...rest } = exercise;
+    return rest;
+  });
 }
 
 export function buildSupersetGroups(planExercises: EditableWorkoutExercise[]): SupersetGroup[] {
@@ -348,7 +379,9 @@ export function inferExecutionModeFromPlan(
   preferred: WorkoutExecutionMode,
 ): WorkoutExecutionMode {
   if (preferred !== 'traditional') return preferred;
-  if (buildSupersetGroups(planExercises).length > 0) {
+  // Scrub over-paired plans before deciding — otherwise a bad saved plan forces supersets mode
+  // even after enrichWithSupersetGroups would have stripped the groups for execution.
+  if (buildSupersetGroups(sanitizeOverpairedSupersets(planExercises)).length > 0) {
     return 'superset';
   }
   return preferred;
