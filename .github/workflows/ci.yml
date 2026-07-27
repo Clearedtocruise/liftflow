@@ -126,6 +126,7 @@ jobs:
             validate:voice-logging
             validate:workout-plan-edit-save
             validate:active-workout-progression
+            validate:superset-logging
             validate:sprint6-smart-logging
             validate:sprint7-timer-engine
             validate:sprint8-superset-circuit

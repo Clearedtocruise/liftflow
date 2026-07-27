@@ -77,15 +77,28 @@ export function getSupersetLabel(group: SupersetGroup | null, index: number): st
   return `${String.fromCharCode(65 + position)}`;
 }
 
-/** A1, A2, B1, … based on superset group id and position within group. */
+/**
+ * A1, A2, B1, … based on superset group id and position within group.
+ * Month 1 reference plans use letter ids (`ss-b`); adaptive plans use numeric (`ss-1`).
+ */
 export function formatSupersetStationLabel(
   supersetGroupId: string | undefined,
   positionInGroup: number,
 ): string | null {
   if (!supersetGroupId || positionInGroup < 0) return null;
-  const groupNum = Number(supersetGroupId.replace('ss-', ''));
-  if (!Number.isFinite(groupNum) || groupNum < 1) return null;
-  const letter = String.fromCharCode(64 + groupNum);
+  const raw = supersetGroupId.replace(/^ss-/i, '').trim();
+  if (!raw) return null;
+
+  let letter: string | null = null;
+  if (/^[a-z]$/i.test(raw)) {
+    letter = raw.toUpperCase();
+  } else {
+    const groupNum = Number(raw);
+    if (Number.isFinite(groupNum) && groupNum >= 1) {
+      letter = String.fromCharCode(64 + groupNum);
+    }
+  }
+  if (!letter) return null;
   return `${letter}${positionInGroup + 1}`;
 }
 

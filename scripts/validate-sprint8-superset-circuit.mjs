@@ -37,8 +37,10 @@ const program = read('backend/src/lib/programEngine.ts');
 
 record('No blanket auto-pairing fallback', !flow.includes('for (let i = 0; i + 1 < result.length; i += 2)'));
 record('A1/A2 station labels', flow.includes('formatSupersetStationLabel') && flow.includes('formatExerciseStationLabel'));
+record('Letter group ids label as B1/B2', flow.includes("raw.toUpperCase()") || flow.includes('/^[a-z]$/i'));
 record('Circuit station builder', flow.includes('buildCircuitStations'));
 record('Post-set flow resolver', flow.includes('resolvePostSetFlowAction'));
+record('Superset index ref advance', active.includes('currentIndexRef') && active.includes('currentIndexRef.current = flowAction.immediateAdvanceIndex'));
 record('Circuit round rest phase', flow.includes("'round_rest'") && flow.includes('circuitTimer'));
 record('Circuit round tracking in active workout', active.includes('circuitRound') && active.includes('setCircuitRound'));
 record('Uses resolvePostSetFlowAction', active.includes('resolvePostSetFlowAction'));

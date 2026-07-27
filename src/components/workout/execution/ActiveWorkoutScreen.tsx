@@ -190,6 +190,14 @@ export function ActiveWorkoutScreen({
   );
 
   const [currentIndex, setCurrentIndex] = useState(0);
+  /**
+   * Superset partners log back-to-back with no rest. `setCurrentIndex` only lands on the next
+   * render, so a second Log Set tap (or watch tap) that fires after `loggingInFlightRef` clears
+   * but before that render would still close over the first exercise and write both sets there.
+   * Keep the index in a ref and advance it synchronously when the post-set flow says to move.
+   */
+  const currentIndexRef = useRef(0);
+  currentIndexRef.current = currentIndex;
   useEffect(() => {
     setActiveExerciseIndex(currentIndex);
   }, [currentIndex, setActiveExerciseIndex]);
@@ -512,6 +520,7 @@ export function ActiveWorkoutScreen({
       pendingRoundIncrementRef.current = false;
     }
     if (pendingAdvanceRef.current != null) {
+      currentIndexRef.current = pendingAdvanceRef.current;
       setCurrentIndex(pendingAdvanceRef.current);
       pendingAdvanceRef.current = null;
       setPendingAdvanceIndex(null);
@@ -693,6 +702,7 @@ export function ActiveWorkoutScreen({
     if (pendingAdvanceRef.current != null) {
       // The between-exercise rest already served as the prep countdown for the next exercise.
       tabataPrepDoneForExerciseRef.current = sortedExercises[pendingAdvanceRef.current]?.id ?? null;
+      currentIndexRef.current = pendingAdvanceRef.current;
       setCurrentIndex(pendingAdvanceRef.current);
       pendingAdvanceRef.current = null;
     }
@@ -767,7 +777,11 @@ export function ActiveWorkoutScreen({
     if (currentIndex <= 0 || logging || intervalTimer != null || transitionActive) return;
     clearPendingExerciseAdvance();
     setShowComplete(false);
-    setCurrentIndex((index) => Math.max(0, index - 1));
+    setCurrentIndex((index) => {
+      const next = Math.max(0, index - 1);
+      currentIndexRef.current = next;
+      return next;
+    });
   }
 
   /** Jumps to a workout exercise by id, using session order so the index matches what is rendered. */
@@ -779,6 +793,7 @@ export function ActiveWorkoutScreen({
       .findIndex((item) => item.id === workoutExerciseId);
     if (nextIndex < 0) return;
     clearPendingExerciseAdvance();
+    currentIndexRef.current = nextIndex;
     setCurrentIndex(nextIndex);
     setShowComplete(false);
   }
@@ -871,6 +886,7 @@ export function ActiveWorkoutScreen({
 
   useEffect(() => {
     if (restSecondsRemaining !== 0 || pendingAdvanceRef.current === null) return;
+    currentIndexRef.current = pendingAdvanceRef.current;
     setCurrentIndex(pendingAdvanceRef.current);
     pendingAdvanceRef.current = null;
     setShowComplete(false);
@@ -901,7 +917,11 @@ export function ActiveWorkoutScreen({
     durationSeconds?: number;
     distanceKm?: number;
   }): Promise<LogSetResult> => {
-    if (!currentExercise) {
+    // Read the live index from the ref so a second tap during a no-rest superset advance
+    // cannot reuse the previous exercise's workout_exercise id from a stale render closure.
+    const logIndex = currentIndexRef.current;
+    const logExercise = sortedExercises[logIndex];
+    if (!logExercise) {
       return { ok: false, error: 'No exercise selected.' };
     }
     if (isPaused) {
@@ -910,7 +930,13 @@ export function ActiveWorkoutScreen({
     if (logging || loggingInFlightRef.current) {
       return { ok: false, error: 'A set is already being logged.' };
     }
-    if (allSetsDone) {
+    const logCompletedSets = logExercise.sets ?? [];
+    const logPlanMeta = planExercises[logIndex];
+    const logTargetSets = Math.max(
+      (logPlanMeta?.sets ?? 3) + bonusSets,
+      coachPrescription?.targets.sets ?? logPlanMeta?.sets ?? 3,
+    );
+    if (logCompletedSets.length >= logTargetSets) {
       return { ok: false, error: 'All planned sets are already logged.' };
     }
     if (restActive || intervalTimer != null || transitionActive) {
@@ -926,13 +952,13 @@ export function ActiveWorkoutScreen({
     setLogging(true);
     try {
       const base = {
-        workoutExerciseId: currentExercise.id,
+        workoutExerciseId: logExercise.id,
         restSeconds: restTargetSeconds,
       };
 
-      const completedAfterLog = completedSets.length + 1;
+      const completedAfterLog = logCompletedSets.length + 1;
       const flowAction = resolvePostSetFlowAction(
-        currentIndex,
+        logIndex,
         planExercises,
         sortedExercises,
         executionMode,
@@ -940,11 +966,11 @@ export function ActiveWorkoutScreen({
         completedAfterLog,
       );
 
-      const exerciseAdvance = completedAfterLog >= effectiveTargetSets;
+      const exerciseAdvance = completedAfterLog >= logTargetSets;
       logWorkoutProgressionDecision({
-        exerciseId: currentExercise.exerciseId ?? currentExercise.id,
-        exerciseName: currentExercise.exercise?.name ?? 'Exercise',
-        programmedSets: targetSets,
+        exerciseId: logExercise.exerciseId ?? logExercise.id,
+        exerciseName: logExercise.exercise?.name ?? 'Exercise',
+        programmedSets: logPlanMeta?.sets ?? 3,
         completedSets: completedAfterLog,
         advance: exerciseAdvance,
         advanceTrigger: flowAction.immediateAdvanceIndex != null
@@ -986,7 +1012,7 @@ export function ActiveWorkoutScreen({
       // The set list updates silently, so a screen-reader user gets no confirmation that the tap
       // registered — and the rest timer that follows is equally unannounced.
       AccessibilityInfo.announceForAccessibility(
-        `Set ${completedAfterLog} of ${effectiveTargetSets} logged${logged.isPr ? '. New personal record' : ''}`,
+        `Set ${completedAfterLog} of ${logTargetSets} logged${logged.isPr ? '. New personal record' : ''}`,
       );
 
       if (flowAction.circuitTimer && flowAction.circuitTimer.seconds > 0) {
@@ -1000,6 +1026,8 @@ export function ActiveWorkoutScreen({
         );
       } else if (flowAction.immediateAdvanceIndex != null) {
         pendingAdvanceRef.current = null;
+        // Advance the ref before unlocking so a second Log Set cannot hit the previous exercise.
+        currentIndexRef.current = flowAction.immediateAdvanceIndex;
         setCurrentIndex(flowAction.immediateAdvanceIndex);
         setShowComplete(false);
       } else if (flowAction.afterRestAdvanceIndex != null) {
@@ -1012,7 +1040,7 @@ export function ActiveWorkoutScreen({
         pendingExerciseAdvanceAfterRestRef.current = true;
       }
 
-      if (completedAfterLog < effectiveTargetSets && !skipRest) {
+      if (completedAfterLog < logTargetSets && !skipRest) {
         offerBetweenSetsChallenge();
       }
 
@@ -1023,14 +1051,12 @@ export function ActiveWorkoutScreen({
       setLogging(false);
     }
   }, [
-    allSetsDone,
+    bonusSets,
     circuitRound,
     clearWatchDrafts,
-    currentExercise,
-    currentIndex,
+    coachPrescription?.targets.sets,
     distanceKm,
     durationSeconds,
-    effectiveTargetSets,
     executionMode,
     intervalTimer,
     isPaused,
@@ -1044,7 +1070,6 @@ export function ActiveWorkoutScreen({
     restTargetSeconds,
     sortedExercises,
     startCircuitTransition,
-    targetSets,
     transitionActive,
     weightKg,
   ]);
@@ -1053,12 +1078,12 @@ export function ActiveWorkoutScreen({
 
   const handleVoiceLogSet = useCallback(
     async (payload: VoiceSetLogPayload): Promise<VoiceSetLogResult> => {
-      const activeName = currentExercise?.exercise?.name;
+      const activeExercise = sortedExercises[currentIndexRef.current];
+      const activeName = activeExercise?.exercise?.name;
       if (!activeName) {
         return { ok: false, reason: 'No exercise is selected.' };
       }
 
-      const spokenExercise = payload.exerciseName?.trim();
       if (payload.exerciseName?.trim()) {
         const match = matchSpokenExercise(payload.exerciseName, activeName);
         if (match.kind === 'different') {
@@ -1085,10 +1110,7 @@ export function ActiveWorkoutScreen({
       if (!result.ok) return { ok: false, reason: result.error };
       return { ok: true, loggedAs: activeName };
     },
-    [
-      currentExercise?.exercise?.name,
-      commitSetLog,
-    ],
+    [commitSetLog, sortedExercises],
   );
 
   const handleLogSetRef = useRef(handleLogSet);
@@ -1138,11 +1160,12 @@ export function ActiveWorkoutScreen({
       const incompletePartner = [...supersetGroup.memberIndices]
         .sort((a, b) => a - b)
         .find((index) => {
-          if (index === currentIndex) return false;
+          if (index === currentIndexRef.current) return false;
           const target = planExercises[index]?.sets ?? 3;
           return (sortedExercises[index]?.sets?.length ?? 0) < target;
         });
       if (incompletePartner != null) {
+        currentIndexRef.current = incompletePartner;
         setCurrentIndex(incompletePartner);
         setShowComplete(false);
         return;
@@ -1159,6 +1182,7 @@ export function ActiveWorkoutScreen({
           });
           return;
         }
+        currentIndexRef.current = next;
         setCurrentIndex(next);
         setShowComplete(false);
         return;
@@ -1171,8 +1195,8 @@ export function ActiveWorkoutScreen({
       return;
     }
     if (executionMode === 'tabata') {
-      pendingAdvanceRef.current = currentIndex + 1;
-      setPendingAdvanceIndex(currentIndex + 1);
+      pendingAdvanceRef.current = currentIndexRef.current + 1;
+      setPendingAdvanceIndex(currentIndexRef.current + 1);
       tabataBetweenExercisePendingRef.current = true;
       dismissIntervalTimer();
       startCircuitTransition('transition', 1, {
@@ -1180,7 +1204,9 @@ export function ActiveWorkoutScreen({
       });
       return;
     }
-    setCurrentIndex((index) => index + 1);
+    const nextIndex = currentIndexRef.current + 1;
+    currentIndexRef.current = nextIndex;
+    setCurrentIndex(nextIndex);
     setShowComplete(false);
   }
 

@@ -116,6 +116,7 @@
     "validate:sprint4-weekly-workout-view": "node scripts/validate-sprint4-weekly-workout-view.mjs",
     "validate:sprint5-active-workout": "node scripts/validate-sprint5-active-workout.mjs",
     "validate:active-workout-progression": "npx tsx scripts/validate-active-workout-progression.ts",
+    "validate:superset-logging": "npx tsx scripts/validate-superset-logging.ts",
     "validate:sprint6-smart-logging": "node scripts/validate-sprint6-smart-logging.mjs",
     "validate:exercise-guide": "npx tsx scripts/validate-exercise-guide.ts",
     "validate:sprint7-timer-engine": "node scripts/validate-sprint7-timer-engine.mjs",

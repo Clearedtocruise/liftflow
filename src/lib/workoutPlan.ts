@@ -202,6 +202,14 @@ export function alignPlanExercisesToSession(
       sets: inherited?.sets ?? UNPLANNED_TARGET_SETS,
       repRange: inherited?.repRange ?? sessionExercise.suggestedReps,
       restSeconds: inherited?.restSeconds,
+      // Keep the vacated slot's pairing so a mid-session swap does not dissolve the supersets.
+      executionMode: inherited?.executionMode,
+      supersetGroupId: inherited?.supersetGroupId,
+      intervalRounds: inherited?.intervalRounds,
+      intervalWorkSeconds: inherited?.intervalWorkSeconds,
+      intervalRestSeconds: inherited?.intervalRestSeconds,
+      restBetweenExercisesSeconds: inherited?.restBetweenExercisesSeconds,
+      weightLbs: inherited?.weightLbs,
     };
   });
 }
