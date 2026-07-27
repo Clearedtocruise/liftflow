@@ -4,6 +4,7 @@ import { Platform } from 'react-native';
 
 import { API_BASE_URL } from '@/constants/api';
 import { fail, fromError, ok } from '@/lib/serviceResult';
+import { enterVoicePlaybackMode, releaseAudioSession } from '@/lib/voice/audioSession';
 import { aiService } from '@/services/aiService';
 import { getAccessToken } from '@/supabase/client';
 import type { CoachingRequest } from '@/types/ai';
@@ -33,10 +34,14 @@ async function playOpenAiSpeech(text: string): Promise<boolean> {
       sound = null;
     }
 
-    await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
+    // Ducks the lifter's music for the length of the reply instead of taking the session from it.
+    await enterVoicePlaybackMode();
     const uri = `data:audio/mp3;base64,${data.audioBase64}`;
     const { sound: newSound } = await Audio.Sound.createAsync({ uri });
     sound = newSound;
+    newSound.setOnPlaybackStatusUpdate((status) => {
+      if (status.isLoaded && status.didJustFinish) void releaseAudioSession();
+    });
     await newSound.playAsync();
     return true;
   } catch {
