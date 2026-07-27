@@ -1,5 +1,5 @@
 import { useFocusEffect } from '@react-navigation/native';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
 import type { CoachInsight } from '@/components/dashboard/CoachInsightCard';
 import { useAuth } from '@/hooks/useAuth';
@@ -104,42 +104,28 @@ export function useHomeMetrics(): HomeMetrics {
   const [healthResolved, setHealthResolved] = useState(false);
   const [healthEmpty, setHealthEmpty] = useState(false);
   const [loading, setLoading] = useState(true);
+  const loadGenerationRef = useRef(0);
 
   const refresh = useCallback(async () => {
     if (!user?.id) {
-      setLoading(false);
+      // Stay loading until auth has a user — otherwise tiles flash empty CTAs on cold start.
       return;
     }
+
+    const generation = ++loadGenerationRef.current;
     setLoading(true);
+
     try {
       const dates = recentDates(user.timezone);
-      const [
-        streakResult,
-        healthResult,
-        gainResult,
-        recoveryResult,
-        recoveryTrendResult,
-        nutritionResult,
-      ] = await Promise.all([
-        analyticsService.getWorkoutStreak(user.id),
+
+      // Fast path: recovery + sleep paint as soon as these resolve — do not wait on coach insight.
+      const [healthResult, recoveryResult, recoveryTrendResult] = await Promise.all([
         healthService.getDailySummaries(user.id, DAYS, user.timezone),
-        coachInsightService.getStrengthGain(user.id),
-        recoveryService.getToday(user.id),
+        recoveryService.getToday(user.id, user.timezone),
         recoveryService.getTrend(user.id),
-        // Without the user's zone this falls back to the device clock, which disagrees with the
-        // date meals are logged against whenever the two differ — so a meal logged today counts
-        // toward a day the home screen is not looking at.
-        nutritionService.getDailySummary(user.id, dates[dates.length - 1]),
       ]);
+      if (generation !== loadGenerationRef.current) return;
 
-      if (streakResult.success) {
-        const days = streakResult.data;
-        setStreak({ value: days, history: [] });
-      }
-
-      // Sleep can arrive from Apple Health or from the recovery check-in, and the check-in is the
-      // only source for anyone without a wearable. Reading Health alone left a hand-entered figure
-      // invisible on the home screen even though the same number drives the recovery score.
       const checkInSleepHours =
         recoveryResult.success && recoveryResult.data?.sleepHours != null
           ? recoveryResult.data.sleepHours
@@ -147,7 +133,9 @@ export function useHomeMetrics(): HomeMetrics {
 
       if (healthResult.success) {
         const summaries = healthResult.data;
-        setSleepHours(withTodayFallback(seriesFor(summaries, dates, (day) => day.sleepHours), checkInSleepHours));
+        setSleepHours(
+          withTodayFallback(seriesFor(summaries, dates, (day) => day.sleepHours), checkInSleepHours),
+        );
         setActiveCalories(seriesFor(summaries, dates, (day) => day.activeCalories));
         setHrvMs(seriesFor(summaries, dates, (day) => day.hrvMs));
         setHealthEmpty(summaries.length === 0);
@@ -155,8 +143,6 @@ export function useHomeMetrics(): HomeMetrics {
         setSleepHours(withTodayFallback(EMPTY, checkInSleepHours));
         setHealthEmpty(false);
       } else {
-        // A failed query is not an empty one: prompting "connect Apple Health" to somebody who
-        // already has would be wrong, so leave the tiles blank instead.
         setHealthEmpty(false);
       }
       setHealthResolved(true);
@@ -175,7 +161,6 @@ export function useHomeMetrics(): HomeMetrics {
       }
 
       if (recoveryTrendResult.success) {
-        // Check-ins are sparse by nature, so days without one stay as gaps rather than zeros.
         const byDate = new Map(
           recoveryTrendResult.data.map((point) => [point.checkInDate, point.recoveryScore]),
         );
@@ -188,10 +173,22 @@ export function useHomeMetrics(): HomeMetrics {
         setRecovery({ value: todayScore, history: [] });
       }
 
+      // Recovery/sleep are ready — stop showing empty CTAs while slower tiles finish.
+      setLoading(false);
+
+      const [streakResult, nutritionResult, gainResult] = await Promise.all([
+        analyticsService.getWorkoutStreak(user.id),
+        nutritionService.getDailySummary(user.id, dates[dates.length - 1]),
+        coachInsightService.getStrengthGain(user.id),
+      ]);
+      if (generation !== loadGenerationRef.current) return;
+
+      if (streakResult.success) {
+        setStreak({ value: streakResult.data, history: [] });
+      }
+
       if (nutritionResult.success && nutritionResult.data) {
         const summary = nutritionResult.data;
-        // Zero logged calories means "nothing logged yet", which the tile shows as a prompt rather
-        // than as a genuine 0 of 2,400.
         setNutrition({
           caloriesConsumed: summary.caloriesConsumed > 0 ? summary.caloriesConsumed : undefined,
           caloriesTarget: summary.caloriesTarget,
@@ -214,7 +211,9 @@ export function useHomeMetrics(): HomeMetrics {
         setCoachInsight(undefined);
       }
     } finally {
-      setLoading(false);
+      if (generation === loadGenerationRef.current) {
+        setLoading(false);
+      }
     }
   }, [user?.id, user?.timezone, units.preferredWeightUnit, units.weightLabel]);
 

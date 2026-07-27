@@ -87,7 +87,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="nutrition"
         options={{
-          title: 'Nutritional',
+          title: 'Nutrition',
           tabBarIcon: ({ color, focused }) => (
             <AppSymbol
               name="leaf.fill"

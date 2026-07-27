@@ -28,9 +28,15 @@ export function HomeHeader({
     <View style={styles.root}>
       <View style={styles.topRow}>
         <View style={styles.greetingBlock}>
-          <AppText variant="hero" color="accent" numberOfLines={1} style={styles.greetingLine}>
-            {name ? `${greet}, ${name}` : greet}
+          {/* Time-of-day and name on separate lines so the brand lockup cannot clip "Good Morning, Timothy". */}
+          <AppText variant="hero" color="accent" style={styles.greetingLine}>
+            {name ? `${greet},` : greet}
           </AppText>
+          {name ? (
+            <AppText variant="hero" color="accent" numberOfLines={1} style={styles.nameLine}>
+              {name}
+            </AppText>
+          ) : null}
           <AppText variant="footnote" color="textTertiary">
             Ready to become 1% better today?
           </AppText>
@@ -70,13 +76,13 @@ export function HomeHeader({
               tintColor={LiftFlowColors.textTertiary}
             />
           </Pressable>
-          {/* Small monogram + company name — the real lockup, not a lone icon or text-only mark. */}
+          {/* Compact lockup — keeps brand visible without eating the greeting column. */}
           <View
             accessible
             accessibilityRole="header"
             accessibilityLabel="ONE MORE Fitness"
             style={styles.lockup}>
-            <LiftFlowLogo size={22} variant="primary" />
+            <LiftFlowLogo size={18} variant="primary" />
             <View style={styles.wordmark}>
               <AppText variant="label" style={styles.brandPrimary} numberOfLines={1}>
                 ONE MORE
@@ -100,7 +106,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
-    gap: Spacing.md,
+    gap: Spacing.sm,
   },
   greetingBlock: {
     flex: 1,
@@ -108,12 +114,19 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   greetingLine: {
+    fontSize: 26,
+    lineHeight: 32,
+  },
+  nameLine: {
     fontSize: 28,
     lineHeight: 34,
+    marginTop: -2,
   },
   brandBlock: {
+    flexShrink: 0,
     alignItems: 'flex-end',
     gap: Spacing.sm,
+    maxWidth: 96,
   },
   iconButton: {
     minWidth: TouchTarget.min,
@@ -124,23 +137,23 @@ const styles = StyleSheet.create({
   lockup: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 5,
   },
   wordmark: {
     alignItems: 'flex-start',
   },
   brandPrimary: {
     color: LiftFlowColors.restTimer,
-    fontSize: 11,
-    lineHeight: 13,
-    letterSpacing: 0.6,
+    fontSize: 10,
+    lineHeight: 12,
+    letterSpacing: 0.5,
     fontWeight: '700',
   },
   brandSecondary: {
     color: LiftFlowColors.textTertiary,
-    fontSize: 7,
-    lineHeight: 9,
-    letterSpacing: 1.4,
+    fontSize: 6,
+    lineHeight: 8,
+    letterSpacing: 1.2,
   },
   streak: {
     alignSelf: 'flex-start',

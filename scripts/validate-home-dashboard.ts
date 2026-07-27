@@ -306,7 +306,32 @@ check('streak sits under the greeting on the left', homeHeader.includes("alignSe
 check('header uses the real ONE MORE logo mark', homeHeader.includes('LiftFlowLogo'), true);
 check('header shows the ONE MORE company name', homeHeader.includes('ONE MORE'), true);
 check('header shows the FITNESS wordmark', homeHeader.includes('FITNESS'), true);
+check('greeting is not forced onto a single clipped line', homeHeader.includes('`${greet}, ${name}`'), false);
+check('name renders on its own line under the time-of-day greeting', homeHeader.includes('nameLine'), true);
 check('text wordmark is no longer the top-right brand', homeHeader.includes('BrandWordmark'), false);
+check(
+  'recovery/sleep paint before coach insight finishes',
+  source('src/hooks/useHomeMetrics.ts').includes('Fast path') &&
+    source('src/hooks/useHomeMetrics.ts').includes('loadGenerationRef'),
+  true,
+);
+check(
+  'recovery today falls back to Supabase with the user timezone',
+  source('src/services/recoveryService.ts').includes('readTodayFromSupabase') &&
+    source('src/services/recoveryService.ts').includes('localDateString(new Date(), timeZone)'),
+  true,
+);
+check(
+  'home tiles do not claim missing recovery while still loading',
+  source('src/app/(tabs)/dashboard.tsx').includes("metrics.loading ? 'Loading…'"),
+  true,
+);
+check(
+  'nutrition tab label is Nutrition, not Nutritional',
+  source('src/app/(tabs)/_layout.tsx').includes("title: 'Nutrition'") &&
+    !source('src/app/(tabs)/_layout.tsx').includes("title: 'Nutritional'"),
+  true,
+);
 check(
   'auth backfills an empty profile display name',
   source('src/services/authService.ts').includes("update({ display_name: resolved })"),

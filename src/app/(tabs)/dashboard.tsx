@@ -138,7 +138,8 @@ export default function DashboardScreen() {
           caption={metrics.recoveryScoreLabel ?? 'Check in'}
           accent="recovery"
           history={metrics.recovery.history}
-          emptyHint="Check in to score"
+          // While loading, don't pretend there is no check-in — that CTA was a cold-start lie.
+          emptyHint={metrics.loading ? 'Loading…' : 'Check in to score'}
           // Viewing the trend, not recording one — the hero button owns the check-in itself.
           onPress={() => router.push('/(features)/recovery-analysis')}
         />
@@ -149,7 +150,11 @@ export default function DashboardScreen() {
           accent="sleep"
           history={metrics.sleepHours.history}
           emptyHint={
-            metrics.healthEmpty ? 'Connect Apple Health' : 'Log sleep in check-in'
+            metrics.loading
+              ? 'Loading…'
+              : metrics.healthEmpty
+                ? 'Connect Apple Health'
+                : 'Log sleep in check-in'
           }
           onPress={() =>
             router.push(
