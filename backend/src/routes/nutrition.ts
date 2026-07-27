@@ -5,6 +5,11 @@ import { loadCoachContext } from '../lib/coachContext.js';
 import { loadDailyMacroInputs, macroContextFrom } from '../lib/dailyMacroInputs.js';
 import { loadNutritionIntelligence } from '../lib/loadNutritionIntelligence.js';
 import { syncNutritionForDates } from '../lib/nutritionDaySync.js';
+import {
+    nutritionGoalsNeedUpdate,
+    resolvePlanMacroTargets,
+    type MacroSplit,
+} from '../lib/nutritionGoals.js';
 import { requireAdmin } from '../lib/supabase.js';
 import {
     calculateMacroTargets,
@@ -89,16 +94,53 @@ nutritionRouter.post('/meal-plan/generate', async (req, res) => {
       calories = goals.daily_calories ?? calories;
     }
     let today: string | undefined;
+    let macroTargets: MacroSplit | null = null;
     try {
       const ctx = await loadCoachContext(userId);
       today = ctx.today;
       if (ctx.macroTargets) {
         proteinG = ctx.macroTargets.proteinG;
         calories = ctx.macroTargets.calories;
+        macroTargets = {
+          calories: ctx.macroTargets.calories,
+          proteinG: ctx.macroTargets.proteinG,
+          carbsG: ctx.macroTargets.carbsG,
+          fatG: ctx.macroTargets.fatG,
+        };
       }
     } catch {
       // Keep goals/defaults — never fail meal generation on coach context.
     }
+
+    // The plan is built around these numbers, so they become the saved goal. Without this a user
+    // who never ran coach activation had meals sized for a target nothing recorded, leaving the
+    // home protein tile with nothing to measure against.
+    const resolvedTargets = resolvePlanMacroTargets({
+      macroTargets,
+      existing: goals,
+      fallback: { calories, proteinG },
+    });
+
+    if (nutritionGoalsNeedUpdate(goals, resolvedTargets)) {
+      try {
+        await db.from('nutrition_goals').update({ is_active: false }).eq('user_id', userId).eq('is_active', true);
+        await db.from('nutrition_goals').insert({
+          user_id: userId,
+          daily_calories: resolvedTargets.calories,
+          protein_g: resolvedTargets.proteinG,
+          carbs_g: resolvedTargets.carbsG,
+          fat_g: resolvedTargets.fatG,
+          water_ml: 3000,
+          is_active: true,
+          effective_from: today ?? new Date().toISOString().slice(0, 10),
+        });
+      } catch {
+        // A plan the user can eat is worth more than a goal row; never fail generation on this.
+      }
+    }
+
+    proteinG = resolvedTargets.proteinG;
+    calories = resolvedTargets.calories;
 
     const prefs = await resolveNutritionPreferences(userId, dietaryRestrictions, foodPreferences);
     const resolvedStyle =
