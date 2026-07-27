@@ -45,12 +45,13 @@ initSentry();
 app.set('trust proxy', 1);
 app.disable('x-powered-by');
 
+// Health checks should be as lightweight as possible and must not depend on auth/rate limits.
+app.use('/health', healthRouter);
+
 app.use(cors(corsOptions));
 app.use(express.json({ limit: '2mb' }));
 app.use(globalLimiter);
 
-// Health
-app.use('/health', healthRouter);
 app.use(debugRouter);
 app.use('/auth', authRouter);
 app.use('/legal', legalRouter);

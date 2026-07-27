@@ -49,6 +49,8 @@ export const globalLimiter = rateLimit({
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   keyGenerator: userOrIpKey,
+  // Render's uptime probe must remain responsive even during bursts.
+  skip: (req) => req.path === '/health' || req.originalUrl === '/health',
   message: { message: 'Too many requests — slow down', code: 'RATE_LIMITED' },
 });
 
