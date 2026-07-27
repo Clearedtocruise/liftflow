@@ -1,5 +1,6 @@
 import { isCatalogVariantSlug } from '../exerciseCatalogDedup.js';
 import { findEquipmentSubstitute } from '../equipmentSubstitutionEngine.js';
+import { capSetsForExperience, resolveExperienceVolume } from '../experienceVolume.js';
 import { applySubstitutionsToExercises, type LimitationContext } from '../exerciseSubstitution.js';
 import { maxPatternUsesForDayFocus, patternExclusionGroupId } from '../movementPatternExclusion.js';
 import { applyWeeklyProgression } from '../programProgression.js';
@@ -374,6 +375,7 @@ export async function buildReferenceStyleWorkoutPlan(
   const performance = await getLastPerformanceBySlug(userId);
   const limitations = await loadActiveLimitations(userId);
   const recoveryMods = await loadRecoveryModifiers(userId);
+  const volumeProfile = resolveExperienceVolume(profile.trainingExperience, options.weekNumber);
 
   const recentSlugs = new Set<string>();
   for (const [slug, history] of performance) {
@@ -410,10 +412,14 @@ export async function buildReferenceStyleWorkoutPlan(
       continue;
     }
 
+    if (draft.length >= volumeProfile.maxExercisesPerSession) {
+      break;
+    }
+
     const resolvedName = catalogExercise.name;
     const resolvedSlug = catalogExercise.slug;
 
-    let sets = block.sets;
+    let sets = capSetsForExperience(block.sets, volumeProfile);
     if (recoveryMods.volumeMultiplier < 1) {
       sets = Math.max(2, Math.round(sets * recoveryMods.volumeMultiplier));
     }
@@ -486,15 +492,12 @@ export async function buildReferenceStyleWorkoutPlan(
     ? ' Recovery Mode — volume adjusted while preserving reference structure.'
     : '';
 
-  const estimatedMinutes = Math.max(
-    50,
-    Math.min(
-      75,
-      Math.round(
-        supersetted.reduce((sum, exercise) => sum + exercise.sets * 2 + exercise.restSeconds / 60, 0),
-      ),
-    ),
+  // A trimmed beginner session genuinely is shorter, so the floor tracks the prescription rather
+  // than advertising an hour the user will not spend.
+  const rawMinutes = Math.round(
+    supersetted.reduce((sum, exercise) => sum + exercise.sets * 2 + exercise.restSeconds / 60, 0),
   );
+  const estimatedMinutes = Math.max(20, Math.min(75, rawMinutes));
 
   const programLabel = useExactPrescription
     ? 'Month 1 reference program'
@@ -502,7 +505,7 @@ export async function buildReferenceStyleWorkoutPlan(
 
   return {
     name: `${reference.slotLabel} — Week ${options.weekNumber}`,
-    rationale: `${options.rationalePrefix ?? programLabel} · Compound-first split with B1/B2 supersets and ~12 working sets per target muscle.${recoveryNote}`,
+    rationale: `${options.rationalePrefix ?? programLabel} · Compound-first split with B1/B2 supersets. ${volumeProfile.rationale}${recoveryNote}`,
     muscleGroups: targetMuscles,
     exercises: supersetted,
     estimatedMinutes,

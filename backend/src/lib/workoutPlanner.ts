@@ -1,5 +1,6 @@
 import { expandEquipmentRequirements } from './equipmentCatalog.js';
 import { isCatalogVariantSlug } from './exerciseCatalogDedup.js';
+import { capSetsForExperience, resolveExperienceVolume } from './experienceVolume.js';
 import {
     applySubstitutionsToExercises,
     type LimitationContext,
@@ -913,6 +914,8 @@ export type BuildWorkoutPlanOptions = {
   splitOccurrenceIndex?: number;
   /** Day label from the program schedule (e.g. "Back, Biceps & Core"). */
   slotLabel?: string;
+  /** Program week, so a beginner's volume ramp knows how far into training the user is. */
+  weekNumber?: number;
 };
 
 export function normalizeTargetMuscleGroups(muscles: string[]): string[] {
@@ -987,15 +990,27 @@ export async function buildAdaptiveWorkoutPlan(
     : undefined;
   const focusPlan = options?.slotLabel ? resolveDayFocusPlan(options.slotLabel) : null;
 
-  const targetCount = Math.max(
-    options?.minimumExercises ?? WORKOUT_MIN_EXERCISES,
-    options?.targetExerciseCount ?? preset.exerciseCount,
+  const volumeProfile = resolveExperienceVolume(profile.trainingExperience, options?.weekNumber ?? 1);
+
+  const targetCount = Math.min(
+    volumeProfile.maxExercisesPerSession,
+    Math.max(
+      options?.minimumExercises ?? WORKOUT_MIN_EXERCISES,
+      options?.targetExerciseCount ?? preset.exerciseCount,
+    ),
   );
-  const minimumSets = Math.max(WORKOUT_MIN_SETS, options?.minimumSets ?? WORKOUT_MIN_SETS);
+  // The experience ceiling outranks the global floor: a beginner's 2 sets must survive it.
+  const minimumSets = Math.min(
+    volumeProfile.maxSetsPerExercise,
+    Math.max(WORKOUT_MIN_SETS, options?.minimumSets ?? WORKOUT_MIN_SETS),
+  );
 
   const adjustedPreset = {
     ...preset,
-    sets: Math.max(minimumSets, Math.round(preset.sets * recoveryMods.volumeMultiplier)),
+    sets: Math.max(
+      minimumSets,
+      Math.round(capSetsForExperience(preset.sets, volumeProfile) * recoveryMods.volumeMultiplier),
+    ),
     exerciseCount: targetCount,
     restSeconds: recoveryMods.recoveryModeActive
       ? Math.round(preset.restSeconds * 1.15)

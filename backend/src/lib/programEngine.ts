@@ -381,6 +381,7 @@ export async function generateTrainingProgram(input: CreateProgramInput) {
               rotationSeed,
               splitOccurrenceIndex,
               slotLabel: slot.label,
+              weekNumber: week,
             },
           ));
 
