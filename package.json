@@ -125,6 +125,7 @@
     "validate:workout-plan-edit-save": "npx tsx scripts/validate-workout-plan-edit-save.ts",
     "validate:home-dashboard": "npx tsx scripts/validate-home-dashboard.ts",
     "validate:hero-backdrop": "npx tsx scripts/validate-hero-backdrop.ts",
+    "validate:superset-overpairing": "npx tsx scripts/validate-superset-overpairing.ts",
     "validate:sprint10-exercise-replacement": "node scripts/validate-sprint10-exercise-replacement.mjs",
     "validate:voice-rate-limit": "node scripts/validate-voice-rate-limit.mjs",
     "migrate:019": "node scripts/apply-migration-019.mjs",
