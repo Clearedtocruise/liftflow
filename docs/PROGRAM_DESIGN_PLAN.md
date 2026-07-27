@@ -233,6 +233,37 @@ Concretely: reserve one to two slots per session for the pattern rather than the
 full-gym user still gets a push-up or plank where it is the better tool. Add an explicit bodyweight
 score bonus for the core and finisher roles instead of relying on the +6 tiebreak.
 
+### Phase 5b — Experience-scaled volume (complete)
+
+The blueprint prescribed **4 sets on 94.9% of its 234 slots**, averaging 38.5 working sets across 9.8
+exercises per session. `training_experience` was stored as an enum, loaded into the profile, and read
+only by the AI prompt — it never changed a single set.
+
+`backend/src/lib/experienceVolume.ts` now caps sets and exercise count by experience, with a
+four-week ramp for beginners:
+
+| Level | Sets/exercise | Exercises | Session working sets |
+| --- | --- | --- | --- |
+| Beginner, weeks 1–4 | 2 | 7 | 14 (~39 min) |
+| Beginner, week 5+ | 3 | 8 | 24 (~61 min) |
+| Intermediate | 3 | 9 | 26 (~66 min) |
+| Advanced | 4 | 10 | 31 (~77 min) |
+| Elite | 5 | 12 | — |
+
+The cap never inflates a deliberately light prescription, and the session-length estimate floor
+dropped from a hardcoded 50 minutes to 20 so a shorter beginner session is described honestly. The
+reason is surfaced in the plan rationale rather than silently changing the numbers.
+
+**On the evidence:** the justification is *not* that beginners grow better on less. Krieger's
+meta-regressions found 2–3 sets beat 1 set for both strength (+46%) and hypertrophy (+40%), with
+explicitly **no interaction with training status**. The case for starting lower is tolerance and
+adherence: the ACSM position stand recommends 1–3 sets for novices (evidence category A); volume is
+the primary driver of early-phase soreness, which falls sharply after 2–3 sessions via the repeated
+bout effect; and in a cohort of 522,994 app users only 18.1% of beginners were still training at six
+months, with **consistency in the first 28 days the strongest predictor of adherence**. In the
+STRRIDE trials, 67% of dropouts quit before or during ramp-up. Starting at a dose people can finish
+is a retention strategy, not a compromise on results.
+
 ### Phase 6 — Use the variables you already collect but ignore
 
 Three inputs are captured and discarded:
@@ -272,8 +303,68 @@ The last one would have caught this bug before it reached a build.
 
 ---
 
+## Appendix — the longevity dose
+
+Worth separating from the hypertrophy question, because the answer is strikingly different.
+
+For **health outcomes rather than maximum muscle**, the effective dose is very low. Momma et al.
+(BJSM 2022, 16 cohort studies) found a J-shaped curve with maximum risk reduction of 10–20% for
+all-cause mortality, cardiovascular disease and total cancer at roughly **30–60 minutes per week** of
+muscle-strengthening activity, with the lowest relative risk at 40 min/week. Shailendra et al. (AJPM
+2022) found a 27% maximum reduction at around 60 min/week, with benefits diminishing above that. A
+2025 analysis of 147,374 participants followed up to 30 years found benefits plateauing near 120
+min/week, and the largest reductions when resistance training was combined with aerobic work.
+
+The implication for a longevity-focused product: the beginner prescription above (~39 minutes,
+2–3 sessions per week) already sits in the range associated with the largest mortality benefit. More
+volume serves physique and performance goals, not healthspan. That is a genuinely motivating message
+for the users most likely to quit — the floor for health benefit is far lower than most people think,
+and the app should say so rather than implying that only long sessions count.
+
+A useful framing for the UI: separate a **health floor** (hit this and you have earned the mortality
+benefit) from **goal volume** (what physique or strength progress requires). Beginners hitting the
+floor consistently should be told they are succeeding, not shown a completion percentage against an
+advanced lifter's workload.
+
+## Suggested reading
+
+Programming and volume:
+
+- Haff & Triplett, *Essentials of Strength Training and Conditioning* (NSCA, 4th ed.) — the field
+  textbook; volume/intensity prescription by training status.
+- Zatsiorsky, Kraemer & Fry, *Science and Practice of Strength Training* (3rd ed.) — the theory
+  behind why novices and advanced lifters need different doses.
+- Helms, Morgan & Valdez, *The Muscle and Strength Pyramid: Training* — the most practical
+  evidence-to-application bridge; prioritises adherence explicitly.
+- Israetel et al., *Scientific Principles of Hypertrophy Training* — the MEV/MAV/MRV framework, which
+  is essentially the formal version of the volume ramp implemented above.
+- Rippetoe & Baker, *Practical Programming for Strength Training* — the clearest treatment of why
+  novice progression differs structurally from intermediate.
+- Bompa & Buzzichelli, *Periodization: Theory and Methodology of Training* — long-horizon planning.
+
+Longevity and health outcomes:
+
+- Attia, *Outlive* — muscle mass and strength as healthspan determinants.
+- Lieberman, *Exercised* — why adherence fails, from an evolutionary angle. Useful product thinking.
+- ACSM, *Guidelines for Exercise Testing and Prescription* (11th ed.) — the reference standard for
+  minimum effective dose.
+
 ## References
 
+- Krieger JW. *Single versus multiple sets of resistance exercise: a meta-regression.* J Strength
+  Cond Res, 2009. 2–3 sets = 46% greater strength gains than 1 set; no training-status interaction.
+- Krieger JW. *Single vs. multiple sets of resistance exercise for muscle hypertrophy: a
+  meta-analysis.* J Strength Cond Res, 2010. Multiple sets = 40% greater hypertrophy effect sizes.
+- ACSM. *Progression Models in Resistance Training for Healthy Adults* (position stand), 2009.
+  1–3 sets for novices, evidence category A; 2–3 days/week novice frequency.
+- Momma H et al. *Muscle-strengthening activities are associated with lower risk and mortality in
+  major non-communicable diseases.* BJSM, 2022. J-shaped curve, peak benefit 30–60 min/week.
+- Shailendra P et al. *Resistance Training and Mortality Risk: A Systematic Review and
+  Meta-Analysis.* AJPM, 2022. 27% maximum risk reduction at ~60 min/week.
+- Doma K et al. *The Repeated Bout Effect of Multiarticular Exercises on Muscle Damage Markers.*
+  J Strength Cond Res, 2023.
+- *Predictors of long-term resistance exercise adherence among beginners.* SportRxiv, 2024.
+  522,994 app users; 18.1% beginner adherence at 6 months; first-28-day consistency dominant.
 - Pelland JC et al. *The Resistance Training Dose Response: Meta-Regressions Exploring the Effects of
   Weekly Volume and Frequency on Muscle Hypertrophy and Strength Gains.* Sports Medicine, 2025.
   67 studies, 2,058 participants.
