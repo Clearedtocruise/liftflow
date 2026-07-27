@@ -2,6 +2,7 @@ import { apiClient } from '@/api/client';
 import { fromError, ok } from '@/lib/serviceResult';
 import { getAccessToken } from '@/supabase/client';
 import type { CoachActivationResult, PostWorkoutCoachSummary } from '@/types/coachActivation';
+import type { ServiceResult } from '@/types/common';
 import type { ProgramDashboard } from '@/types/training';
 
 function mapProgramDashboard(raw: Record<string, unknown>): ProgramDashboard | null {
@@ -29,7 +30,7 @@ function mapProgramDashboard(raw: Record<string, unknown>): ProgramDashboard | n
 }
 
 export const coachActivationService = {
-  async activate(userId: string) {
+  async activate(userId: string): Promise<ServiceResult<CoachActivationResult>> {
     try {
       const token = await getAccessToken();
       const raw = await apiClient.post<Record<string, unknown>>('/api/training/coach/activate', { userId }, token);
@@ -50,7 +51,7 @@ export const coachActivationService = {
     }
   },
 
-  async getPostWorkoutSummary(userId: string, sessionId: string) {
+  async getPostWorkoutSummary(userId: string, sessionId: string): Promise<ServiceResult<PostWorkoutCoachSummary>> {
     try {
       const token = await getAccessToken();
       const raw = await apiClient.post<PostWorkoutCoachSummary>(

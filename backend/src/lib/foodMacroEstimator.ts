@@ -397,19 +397,18 @@ async function callOpenAiFoodMacros(foodName: string, servingSize: string): Prom
   if (!content) return null;
   const parsed = JSON.parse(content) as AiFoodMacroResponse;
 
-  const components = (parsed.components ?? [])
-    .map((part) => {
-      if (part.calories == null || part.proteinG == null) return null;
-      return {
-        name: part.name?.trim() || 'Item',
-        amount: part.amount,
-        calories: Math.round(part.calories),
-        proteinG: Math.round((part.proteinG ?? 0) * 10) / 10,
-        carbsG: Math.round((part.carbsG ?? 0) * 10) / 10,
-        fatG: Math.round((part.fatG ?? 0) * 10) / 10,
-      } satisfies FoodMacroComponent;
-    })
-    .filter((part): part is FoodMacroComponent => part != null);
+  const components: FoodMacroComponent[] = [];
+  for (const part of parsed.components ?? []) {
+    if (part.calories == null || part.proteinG == null) continue;
+    components.push({
+      name: part.name?.trim() || 'Item',
+      amount: part.amount,
+      calories: Math.round(part.calories),
+      proteinG: Math.round((part.proteinG ?? 0) * 10) / 10,
+      carbsG: Math.round((part.carbsG ?? 0) * 10) / 10,
+      fatG: Math.round((part.fatG ?? 0) * 10) / 10,
+    });
+  }
 
   if (components.length > 0) {
     const totals = sumMacroComponents(components);
