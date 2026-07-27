@@ -38,6 +38,7 @@ export type HomeMetrics = {
     caloriesConsumed?: number;
     caloriesTarget?: number;
     proteinG?: number;
+    proteinTargetG?: number;
   };
   /** Absent when no genuine strength gain can be evidenced — the card is then not rendered. */
   coachInsight?: CoachInsight;
@@ -180,6 +181,7 @@ export function useHomeMetrics(): HomeMetrics {
           caloriesConsumed: summary.caloriesConsumed > 0 ? summary.caloriesConsumed : undefined,
           caloriesTarget: summary.caloriesTarget,
           proteinG: summary.proteinG > 0 ? summary.proteinG : undefined,
+          proteinTargetG: summary.proteinTargetG,
         });
       } else {
         setNutrition({});

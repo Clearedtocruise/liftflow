@@ -375,6 +375,7 @@ export const nutritionService: INutritionService = {
         caloriesConsumed: aggregated.caloriesConsumed,
         caloriesTarget: goalsResult.data?.daily_calories ?? undefined,
         proteinG: aggregated.proteinG,
+        proteinTargetG: goalsResult.data?.protein_g ?? undefined,
         carbsG: aggregated.carbsG,
         fatG: aggregated.fatG,
         waterMl: (hydrationResult.data ?? []).reduce((s, h) => s + h.amount_ml, 0),

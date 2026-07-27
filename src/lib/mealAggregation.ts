@@ -207,6 +207,7 @@ export function buildDailySummaryFromMeals(
     caloriesConsumed: aggregated.caloriesConsumed,
     caloriesTarget: goals?.dailyCalories,
     proteinG: aggregated.proteinG,
+    proteinTargetG: goals?.proteinG,
     carbsG: aggregated.carbsG,
     fatG: aggregated.fatG,
     waterMl,

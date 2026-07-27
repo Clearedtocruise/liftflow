@@ -13,7 +13,7 @@ import { Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 import { useHomeMetrics } from '@/hooks/useHomeMetrics';
 import { useTodayDashboard } from '@/hooks/useTodayDashboard';
-import { describeCalorieBudget } from '@/lib/calorieBudget';
+import { describeProteinBudget } from '@/lib/calorieBudget';
 import { profileFigureGender, resolveExerciseMuscles } from '@/lib/exerciseMuscleMap';
 import { exercisesFromPlannedWorkout } from '@/lib/workoutPlan';
 
@@ -69,9 +69,11 @@ export default function DashboardScreen() {
     [upcomingWorkout],
   );
 
-  const fuel = useMemo(
-    () => describeCalorieBudget(metrics.nutrition.caloriesConsumed, metrics.nutrition.caloriesTarget),
-    [metrics.nutrition.caloriesConsumed, metrics.nutrition.caloriesTarget],
+  // Protein over calories on the home tile: it is the macro that decides whether the training
+  // actually turns into muscle. Calories stay on the nutrition screen alongside it.
+  const protein = useMemo(
+    () => describeProteinBudget(metrics.nutrition.proteinG, metrics.nutrition.proteinTargetG),
+    [metrics.nutrition.proteinG, metrics.nutrition.proteinTargetG],
   );
 
 
@@ -140,12 +142,12 @@ export default function DashboardScreen() {
           onPress={() => router.push('/(features)/healthkit')}
         />
         <StatTile
-          label="Calories"
-          value={fuel.value}
-          caption={fuel.caption}
+          label="Protein"
+          value={protein.value}
+          caption={protein.caption}
           accent="nutrition"
-          progressPercent={fuel.percent}
-          emptyHint={fuel.emptyHint}
+          progressPercent={protein.percent}
+          emptyHint={protein.emptyHint}
           onPress={() => router.push('/(tabs)/nutrition')}
         />
       </View>

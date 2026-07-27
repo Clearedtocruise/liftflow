@@ -9,7 +9,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { describeCalorieBudget } from '@/lib/calorieBudget';
+import { describeCalorieBudget, describeProteinBudget } from '@/lib/calorieBudget';
 import { describeStrengthGain, findStrengthGain, weeklyBest, type CoachSetSample } from '@/lib/coachInsight';
 
 let failures = 0;
@@ -189,6 +189,28 @@ check('overage is labelled over', describeCalorieBudget(2600, 2400).caption, 'of
 check('percent exceeds 100 when over', describeCalorieBudget(2600, 2400).percent, 108);
 // The bar clamps in the component; the number underneath still tells the truth.
 check('a large overage still reports honestly', describeCalorieBudget(4800, 2400).percent, 200);
+
+console.log('\nThe protein tile carries its unit and follows the same rules');
+check('grams are suffixed on the value', describeProteinBudget(120, 180).value, '120g');
+check('grams are suffixed throughout the caption', describeProteinBudget(120, 180).caption, 'of 180g · 60g left');
+check('percent is intake over target', describeProteinBudget(90, 180).percent, 50);
+check('nothing logged shows the goal in grams', describeProteinBudget(undefined, 180).emptyHint, 'Goal 180g');
+check('nothing logged shows no value', describeProteinBudget(undefined, 180).value, undefined);
+check('no goal set asks for a meal', describeProteinBudget(undefined, undefined).emptyHint, 'Log a meal');
+check('over target is labelled over', describeProteinBudget(200, 180).caption, 'of 180g · 20g over');
+check('intake without a target still shows', describeProteinBudget(120, undefined).value, '120g');
+
+console.log('\nProtein on home does not remove calories from the nutrition screen');
+// The home tile changed to protein by request; the nutrition screen is where calories still live,
+// so a future tidy-up of that header must not quietly take them away.
+const nutritionHeader = source('src/components/nutrition/NutritionProgressHeader.tsx');
+check('the nutrition header still reports calories', nutritionHeader.includes('cal'), true);
+check('the nutrition header still reports protein', nutritionHeader.includes('protein'), true);
+check(
+  'the protein target reaches the daily summary',
+  source('src/services/nutritionService.ts').includes('proteinTargetG: goalsResult.data?.protein_g'),
+  true,
+);
 
 console.log(`\nHome dashboard: ${failures === 0 ? 'PASS' : `FAIL (${failures})`}`);
 process.exit(failures === 0 ? 0 : 1);
