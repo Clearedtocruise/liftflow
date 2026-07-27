@@ -3,13 +3,23 @@
  *
  * Usage: npx tsx scripts/validate-superset-overpairing.ts
  */
-import { applyBlockSupersets, enrichWithSmartSupersetGroups } from '../backend/src/lib/liftingReference/applyReferenceSupersets.ts';
+import {
+  applyBlockSupersets,
+  enrichWithSmartSupersetGroups,
+} from '../backend/src/lib/liftingReference/applyReferenceSupersets';
 import {
   enrichWithSupersetGroups,
   inferExecutionModeFromPlan,
   sanitizeOverpairedSupersets,
 } from '@/lib/supersetFlow';
 import type { EditableWorkoutExercise } from '@/types/workoutExecution';
+
+type NamedCandidate = {
+  name: string;
+  block?: string;
+  supersetGroupId?: string;
+  metadata?: { movement_family?: string };
+};
 
 let failures = 0;
 
@@ -24,7 +34,7 @@ function check(label: string, actual: unknown, expected: unknown): void {
 console.log('\nSmart pairing must not invent groups without movement families');
 check(
   'empty metadata stays unpaired',
-  enrichWithSmartSupersetGroups([
+  enrichWithSmartSupersetGroups<NamedCandidate>([
     { name: 'Bench' },
     { name: 'Row' },
     { name: 'Curl' },
@@ -36,7 +46,7 @@ check(
 console.log('\nBlock supersets only pair numbered stations');
 check(
   'bare A compounds stay solo',
-  applyBlockSupersets([
+  applyBlockSupersets<NamedCandidate>([
     { block: 'A', name: 'Bench' },
     { block: 'A', name: 'Also' },
     { block: 'B1', name: 'Fly' },

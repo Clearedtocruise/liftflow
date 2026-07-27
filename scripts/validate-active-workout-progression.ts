@@ -49,6 +49,8 @@ function sessionExercise(id: string, name: string, sortOrder: number, setCount: 
       id: `${id}-set-${index}`,
       workoutExerciseId: id,
       setNumber: index + 1,
+      type: 'normal' as const,
+      loggedAt: '2026-01-01T00:00:00.000Z',
       createdAt: '2026-01-01T00:00:00.000Z',
     })),
     createdAt: '2026-01-01T00:00:00.000Z',
