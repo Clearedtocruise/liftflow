@@ -6,6 +6,7 @@ import {
   enrichMealMeta,
   type MealReplacementReason,
 } from '@/lib/mealIngredients';
+import { reconcileFoodMacroEstimate } from '@/lib/reconcileFoodMacroEstimate';
 import { fromError, ok } from '@/lib/serviceResult';
 import { getAccessToken } from '@/supabase/client';
 import type { FoodMacroEstimate } from '@/types/nutrition';
@@ -83,7 +84,7 @@ export const nutritionAdvisoryService = {
       );
 
       if (raw.data?.calories != null) {
-        return ok(raw.data);
+        return ok(reconcileFoodMacroEstimate(raw.data));
       }
     } catch (e) {
       if (__DEV__) {
@@ -91,9 +92,11 @@ export const nutritionAdvisoryService = {
       }
     }
 
-    return ok({
-      ...estimateFoodMacrosLocal(foodName, servingSize),
-      reasoning: 'On-device macro estimate while coach AI is unavailable.',
-    } satisfies FoodMacroEstimate);
+    return ok(
+      reconcileFoodMacroEstimate({
+        ...estimateFoodMacrosLocal(foodName, servingSize),
+        reasoning: 'On-device macro estimate while coach AI is unavailable.',
+      }),
+    );
   },
 };
