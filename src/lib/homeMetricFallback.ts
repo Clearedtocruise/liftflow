@@ -14,14 +14,18 @@ export type MetricSeries = {
 };
 
 /**
- * Measured data always wins where it exists — a wearable recorded the night, a person estimated it.
- * The fallback only fills a gap, and only for the most recent day.
+ * Measured data for *today* always wins where it exists — a wearable recorded the night, a person
+ * estimated it. Older days in the series must not block today's check-in: previously any value
+ * anywhere in the week (usually yesterday's Health sleep) made the fallback a no-op, so a hand-
+ * entered night never appeared on home.
  */
 export function withTodayFallback(metric: MetricSeries, todayValue?: number): MetricSeries {
   if (todayValue == null || !Number.isFinite(todayValue)) return metric;
-  if (metric.value != null) return metric;
 
   const history = [...metric.history];
-  if (history.length > 0) history[history.length - 1] = todayValue;
+  const todayIndex = history.length - 1;
+  if (todayIndex >= 0 && history[todayIndex] != null) return metric;
+
+  if (todayIndex >= 0) history[todayIndex] = todayValue;
   return { value: todayValue, history };
 }

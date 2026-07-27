@@ -2,15 +2,16 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
+import { CelebrationBurst } from '@/components/dashboard/CelebrationBurst';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { AppText } from '@/components/ui/AppText';
 import { ProgressRing } from '@/components/ui/ProgressRing';
 import {
-    Gradients,
-    LiftFlowColors,
-    MetricAccents,
-    Radius,
-    Spacing,
+  Gradients,
+  LiftFlowColors,
+  MetricAccents,
+  Radius,
+  Spacing,
 } from '@/constants/theme';
 import { isDaytimeHour, resolveHeroBackdrop } from '@/lib/heroBackdrop';
 
@@ -19,6 +20,8 @@ export type HeroState =
   | { kind: 'error' }
   | { kind: 'no-program' }
   | { kind: 'workout'; name: string; exercises: string[]; extraCount: number }
+  | { kind: 'in-progress'; name: string; exercises: string[]; extraCount: number }
+  | { kind: 'completed'; name: string }
   | { kind: 'rest' };
 
 type TodayHeroCardProps = {
@@ -34,6 +37,8 @@ type TodayHeroCardProps = {
   onRetry: () => void;
   onOpenRecovery: () => void;
   onManageWorkout?: () => void;
+  onContinueWorkout?: () => void;
+  onViewHistory?: () => void;
 };
 
 export function TodayHeroCard({
@@ -47,8 +52,11 @@ export function TodayHeroCard({
   onRetry,
   onOpenRecovery,
   onManageWorkout,
+  onContinueWorkout,
+  onViewHistory,
 }: TodayHeroCardProps) {
   const resting = state.kind === 'rest';
+  const celebrating = state.kind === 'completed';
   const hour = new Date().getHours();
   const backdrop = resolveHeroBackdrop(resting ? 'recovery' : 'workout', hour);
   // A day photo needs less dimming than a night one to stay recognisable, but the text still has to
@@ -56,19 +64,25 @@ export function TodayHeroCard({
   const scrim: readonly [string, string, string] = isDaytimeHour(hour)
     ? ['rgba(8,11,16,0.20)', 'rgba(8,11,16,0.72)', 'rgba(8,11,16,0.94)']
     : ['rgba(8,11,16,0.35)', 'rgba(8,11,16,0.82)', 'rgba(8,11,16,0.96)'];
+  const cardColors = celebrating
+    ? (['#0B3B2E', '#10243A', '#080B10'] as const)
+    : resting
+      ? Gradients.recovery
+      : Gradients.hero;
 
   return (
     <LinearGradient
-      colors={resting ? [...Gradients.recovery] : [...Gradients.hero]}
+      colors={[...cardColors]}
       start={{ x: 0.1, y: 0 }}
       end={{ x: 0.9, y: 1 }}
-      style={styles.card}>
+      style={[styles.card, celebrating && styles.cardCelebrating]}>
       <Image source={backdrop} style={styles.backdrop} contentFit="cover" transition={220} />
       <LinearGradient colors={[...scrim]} style={styles.backdropScrim} />
+      {celebrating ? <CelebrationBurst seed={state.name} /> : null}
 
       <View style={styles.topRow}>
         <AppText variant="label" color="accent">
-          TODAY
+          {celebrating ? 'SESSION DONE' : 'TODAY'}
         </AppText>
         {hrvMs != null ? (
           <View style={styles.hrvBadge}>
@@ -112,6 +126,24 @@ export function TodayHeroCard({
             icon="✨"
           />
         </>
+      ) : state.kind === 'completed' ? (
+        <>
+          <AppText variant="title">Workout Complete</AppText>
+          <AppText variant="footnote" color="textSecondary">
+            Congratulations — {state.name} is in the books. Recover well and come back stronger.
+          </AppText>
+          <RecoveryBlock
+            percent={recoveryPercent}
+            label={recoveryLabel}
+            onOpenRecovery={onOpenRecovery}
+          />
+          <PrimaryButton
+            label="View History"
+            onPress={onViewHistory ?? onOpenRecovery}
+            size="large"
+          />
+          <PrimaryButton label="Focus on Recovery" variant="secondary" onPress={onOpenRecovery} />
+        </>
       ) : state.kind === 'rest' ? (
         <>
           <AppText variant="title">Recovery Day</AppText>
@@ -132,6 +164,34 @@ export function TodayHeroCard({
             icon="✨"
           />
           <PrimaryButton label="Focus on Recovery" variant="secondary" onPress={onOpenRecovery} />
+        </>
+      ) : state.kind === 'in-progress' ? (
+        <>
+          <AppText variant="title">{state.name}</AppText>
+          <AppText variant="footnote" color="textSecondary">
+            Session in progress — pick up where you left off.
+          </AppText>
+          {state.exercises.length > 0 ? (
+            <View style={styles.preview}>
+              {state.exercises.map((name, index) => (
+                <AppText key={`${name}-${index}`} variant="footnote" color="textSecondary">
+                  {index + 1}. {name}
+                </AppText>
+              ))}
+              {state.extraCount > 0 ? (
+                <AppText variant="caption" color="textTertiary">
+                  +{state.extraCount} more
+                </AppText>
+              ) : null}
+            </View>
+          ) : null}
+          <PrimaryButton
+            label="Continue Workout"
+            onPress={onContinueWorkout ?? onStart}
+            loading={busy}
+            disabled={busy}
+            size="large"
+          />
         </>
       ) : (
         <>
@@ -245,6 +305,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(14, 144, 255, 0.28)',
     overflow: 'hidden',
+  },
+  cardCelebrating: {
+    borderColor: 'rgba(0, 229, 168, 0.35)',
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,

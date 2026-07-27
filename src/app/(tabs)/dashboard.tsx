@@ -28,6 +28,8 @@ export default function DashboardScreen() {
   const { user, isProfileHydrated } = useAuth();
   const {
     todaysWorkout,
+    completedTodaysWorkout,
+    inProgressTodaysWorkout,
     upcomingWorkout,
     loading,
     error,
@@ -51,6 +53,18 @@ export default function DashboardScreen() {
   const heroState: HeroState = useMemo(() => {
     if (loading) return { kind: 'loading' };
     if (error) return { kind: 'error' };
+    if (completedTodaysWorkout) {
+      return { kind: 'completed', name: completedTodaysWorkout.name };
+    }
+    if (inProgressTodaysWorkout) {
+      const exercises = exercisesFromPlannedWorkout(inProgressTodaysWorkout);
+      return {
+        kind: 'in-progress',
+        name: inProgressTodaysWorkout.name,
+        exercises: exercises.slice(0, 4).map((exercise) => exercise.name),
+        extraCount: Math.max(exercises.length - 4, 0),
+      };
+    }
     if (todaysWorkout) {
       const exercises = exercisesFromPlannedWorkout(todaysWorkout);
       return {
@@ -62,7 +76,7 @@ export default function DashboardScreen() {
     }
     if (!hasProgram) return { kind: 'no-program' };
     return { kind: 'rest' };
-  }, [loading, error, todaysWorkout, hasProgram]);
+  }, [loading, error, todaysWorkout, completedTodaysWorkout, inProgressTodaysWorkout, hasProgram]);
 
   const upNextMuscles = useMemo(
     () => (upcomingWorkout ? resolveExerciseMuscles(upcomingWorkout.name) : null),
@@ -97,9 +111,11 @@ export default function DashboardScreen() {
             if (ok) router.push('/(tabs)/workout');
           });
         }}
+        onContinueWorkout={() => router.push('/(tabs)/workout')}
         onGenerate={() => void generateWorkout()}
         onRetry={() => void refresh()}
         onOpenRecovery={() => router.push('/(features)/recovery-check-in')}
+        onViewHistory={() => router.push('/(tabs)/history')}
         onManageWorkout={() => {
           if (!todaysWorkout) return;
           router.push({
@@ -126,7 +142,9 @@ export default function DashboardScreen() {
           caption={metrics.sleepHours.value != null && metrics.sleepHours.value >= 7 ? 'Good' : 'Short'}
           accent="sleep"
           history={metrics.sleepHours.history}
-          emptyHint={metrics.healthEmpty ? 'Connect Apple Health' : 'No data yet'}
+          emptyHint={
+            metrics.healthEmpty ? 'Connect Apple Health' : 'Check in or sync Health'
+          }
           onPress={() => router.push('/(features)/healthkit')}
         />
       </View>

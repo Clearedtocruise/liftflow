@@ -26,6 +26,16 @@ export type UpcomingWorkout = {
 
 type TodayDashboardState = {
   todaysWorkout: PlannedWorkout | null;
+  /**
+   * Today's scheduled session when it is already finished. Distinct from `todaysWorkout` so the
+   * home hero can congratulate instead of collapsing into a recovery day.
+   */
+  completedTodaysWorkout: PlannedWorkout | null;
+  /**
+   * Today's scheduled session when a workout is already underway (`active` / `paused`). Kept
+   * separate from startable `todaysWorkout` so Continue does not look like a rest day.
+   */
+  inProgressTodaysWorkout: PlannedWorkout | null;
   upcomingWorkout: UpcomingWorkout | null;
   loading: boolean;
   /** True when the plan fetch failed — distinct from a genuine rest day. */
@@ -75,6 +85,8 @@ export function useTodayDashboard(): TodayDashboardState {
     useWorkoutPlanDraft();
 
   const [todaysWorkout, setTodaysWorkout] = useState<PlannedWorkout | null>(null);
+  const [completedTodaysWorkout, setCompletedTodaysWorkout] = useState<PlannedWorkout | null>(null);
+  const [inProgressTodaysWorkout, setInProgressTodaysWorkout] = useState<PlannedWorkout | null>(null);
   const [upcomingWorkout, setUpcomingWorkout] = useState<UpcomingWorkout | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -85,6 +97,8 @@ export function useTodayDashboard(): TodayDashboardState {
   const refresh = useCallback(async () => {
     if (!user) {
       setTodaysWorkout(null);
+      setCompletedTodaysWorkout(null);
+      setInProgressTodaysWorkout(null);
       setUpcomingWorkout(null);
       setLoading(false);
       return;
@@ -102,6 +116,8 @@ export function useTodayDashboard(): TodayDashboardState {
         // nothing scheduled when the request simply never came back.
         setError(true);
         setTodaysWorkout(null);
+        setCompletedTodaysWorkout(null);
+        setInProgressTodaysWorkout(null);
         setUpcomingWorkout(null);
         return;
       }
@@ -112,6 +128,10 @@ export function useTodayDashboard(): TodayDashboardState {
         timeZone: user.timezone,
       });
       setTodaysWorkout(active.isStartableWorkoutDay ? active.workout : null);
+      const scheduled = active.scheduledWorkout;
+      const status = scheduled?.status ?? null;
+      setCompletedTodaysWorkout(status === 'completed' ? scheduled : null);
+      setInProgressTodaysWorkout(status === 'active' || status === 'paused' ? scheduled : null);
       setUpcomingWorkout(
         nextResult.success && nextResult.data
           ? describeUpcoming(nextResult.data, today, user.timezone)
@@ -207,6 +227,8 @@ export function useTodayDashboard(): TodayDashboardState {
 
   return {
     todaysWorkout,
+    completedTodaysWorkout,
+    inProgressTodaysWorkout,
     upcomingWorkout,
     loading,
     error,

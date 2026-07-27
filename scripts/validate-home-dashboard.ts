@@ -230,9 +230,19 @@ check(
   [undefined, 7.5],
 );
 check(
-  'measured data is never overwritten by an estimate',
+  'measured data for today is never overwritten by an estimate',
   withTodayFallback({ value: 6.2, history: [6.0, 6.2] }, 9).value,
   6.2,
+);
+check(
+  'yesterday\'s Health reading does not hide today\'s check-in',
+  withTodayFallback({ value: 6.2, history: [6.2, undefined] }, 8).value,
+  8,
+);
+check(
+  'yesterday stays in history when today is filled from check-in',
+  withTodayFallback({ value: 6.2, history: [6.2, undefined] }, 8).history,
+  [6.2, 8],
 );
 check('no fallback value leaves the metric alone', withTodayFallback(EMPTY_METRIC, undefined).value, undefined);
 check('a non-finite fallback is ignored', withTodayFallback(EMPTY_METRIC, Number.NaN).value, undefined);
@@ -251,6 +261,20 @@ check(
   source('src/hooks/useHomeMetrics.ts').includes('withTodayFallback('),
   true,
 );
+
+console.log('\nA completed workout congratulates — it does not become a recovery day');
+// Finishing a session flips planned status to completed. Only startable (`planned`) workouts used
+// to reach the hero, so home collapsed into Recovery Day the moment the session ended.
+const heroCard = source('src/components/dashboard/TodayHeroCard.tsx');
+const todayHook = source('src/hooks/useTodayDashboard.ts');
+const dash = source('src/app/(tabs)/dashboard.tsx');
+check('hero has a completed state', heroCard.includes("kind: 'completed'"), true);
+check('completed hero says congratulations', heroCard.includes('Congratulations'), true);
+check('completed hero launches fireworks', heroCard.includes('CelebrationBurst'), true);
+check('Recovery Day is reserved for genuine rest', heroCard.includes('Recovery Day'), true);
+check('the hook tracks completed today separately', todayHook.includes('completedTodaysWorkout'), true);
+check('the screen prefers completed over rest', dash.includes('completedTodaysWorkout'), true);
+check('fireworks component exists', source('src/components/dashboard/CelebrationBurst.tsx').includes('CelebrationBurst'), true);
 
 console.log('\nThe Up Next tile uses an icon, not a squeezed anatomy figure');
 // The anatomy SVG is 200×400 and nothing legible survives a thumbnail, so the tile carries a glyph.
