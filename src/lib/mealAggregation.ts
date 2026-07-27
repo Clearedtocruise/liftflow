@@ -1,6 +1,6 @@
 import { isSameCalendarDate, localMinutesSinceMidnight, parseScheduledTimeToMinutes } from '@/lib/localDate';
 import { pickMealsToKeep } from '@/lib/mealCleanup';
-import { resolveMealMacros } from '@/lib/mealIngredients';
+import { enrichMealMeta, resolveMealMacros } from '@/lib/mealIngredients';
 import type { MealType } from '@/types/common';
 import type { DailyNutritionSummary, Meal, NutritionGoals } from '@/types/nutrition';
 
@@ -36,9 +36,16 @@ function mealStatus(meal: Meal) {
 /**
  * Counts toward daily consumed macros. Only an explicit completed/modified
  * status counts — a plan slot the user never touched is not food they ate.
+ *
+ * Replacements used to write `modified` only into the instructions JSON while
+ * leaving the row `planned`, so home showed "Goal 194g" with a dash after the
+ * lifter had already swapped in real food. Honor that metadata so those meals
+ * count, and keep preferring the column when it is set.
  */
 export function isConsumedMeal(meal: Meal): boolean {
-  return meal.status === 'completed' || meal.status === 'modified';
+  if (meal.status === 'completed' || meal.status === 'modified') return true;
+  const metaStatus = enrichMealMeta(meal.name, meal.instructions).status;
+  return metaStatus === 'completed' || metaStatus === 'modified';
 }
 
 function isScheduledMeal(meal: Meal): boolean {
@@ -73,10 +80,7 @@ export function aggregateDailyMeals(meals: Meal[]): DailyMealAggregation {
     fatG += macros.fatG;
   }
 
-  const mealsCompleted = dedupedMeals.filter((meal) => {
-    const status = mealStatus(meal);
-    return status === 'completed' || status === 'modified';
-  }).length;
+  const mealsCompleted = dedupedMeals.filter((meal) => isConsumedMeal(meal)).length;
 
   return {
     dedupedMeals,

@@ -134,6 +134,9 @@ jobs:
             validate:branding
             validate:home-dashboard
             validate:hero-backdrop
+            validate:protein-meal-replace
+            validate:voice-rate-limit
+            validate:superset-overpairing
           "
           failed=0
           for guard in $guards; do

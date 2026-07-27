@@ -563,6 +563,7 @@ export default function NutritionScreen() {
         proteinG: option.proteinG,
         carbsG: option.carbsG,
         fatG: option.fatG,
+        status: 'modified',
         instructions: serializeMealMeta(meta),
       });
       if (!result.success) {
@@ -596,6 +597,7 @@ export default function NutritionScreen() {
         proteinG: nextMacros.proteinG,
         carbsG: nextMacros.carbsG,
         fatG: nextMacros.fatG,
+        status: 'modified',
         instructions,
       });
       if (!result.success) {

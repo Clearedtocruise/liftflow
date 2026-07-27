@@ -100,6 +100,7 @@ export function buildSmartIngredientReplacementUpdate(
     proteinG: Math.max(0, nextMacros.proteinG),
     carbsG: Math.max(0, nextMacros.carbsG),
     fatG: Math.max(0, nextMacros.fatG),
+    status: 'modified',
     instructions: serializeMealMeta(meta),
   };
 }
@@ -118,6 +119,7 @@ export function buildSmartMealReplacementUpdate(
     proteinG: replacement.macros.proteinG,
     carbsG: replacement.macros.carbsG,
     fatG: replacement.macros.fatG,
+    status: 'modified',
     instructions: serializeMealMeta(meta),
   };
 }

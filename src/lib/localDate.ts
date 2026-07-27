@@ -141,7 +141,7 @@ export function buildTimezoneDebugInfo(profileTimeZone?: string | null): Timezon
   };
 }
 
-if (__DEV__) {
+if (typeof __DEV__ !== 'undefined' && __DEV__) {
   // eslint-disable-next-line no-console
   console.info('[localDate] device TZ:', deviceTimeZone());
 }

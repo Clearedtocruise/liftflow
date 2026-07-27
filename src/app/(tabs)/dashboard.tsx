@@ -143,9 +143,13 @@ export default function DashboardScreen() {
           accent="sleep"
           history={metrics.sleepHours.history}
           emptyHint={
-            metrics.healthEmpty ? 'Connect Apple Health' : 'Check in or sync Health'
+            metrics.healthEmpty ? 'Connect Apple Health' : 'Log sleep in check-in'
           }
-          onPress={() => router.push('/(features)/healthkit')}
+          onPress={() =>
+            router.push(
+              metrics.healthEmpty ? '/(features)/healthkit' : '/(features)/recovery-check-in',
+            )
+          }
         />
       </View>
 
