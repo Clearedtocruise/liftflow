@@ -79,7 +79,13 @@ export default function DashboardScreen() {
   }, [loading, error, todaysWorkout, completedTodaysWorkout, inProgressTodaysWorkout, hasProgram]);
 
   const upNextMuscles = useMemo(
-    () => (upcomingWorkout ? resolveExerciseMuscles(upcomingWorkout.name) : null),
+    () =>
+      upcomingWorkout
+        ? resolveExerciseMuscles(
+            upcomingWorkout.name,
+            upcomingWorkout.workout.suggestedMuscleGroups,
+          )
+        : null,
     [upcomingWorkout],
   );
 

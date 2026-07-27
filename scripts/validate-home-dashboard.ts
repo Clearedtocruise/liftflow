@@ -13,6 +13,7 @@ import { describeCalorieBudget, describeProteinBudget } from '@/lib/calorieBudge
 import { describeStrengthGain, findStrengthGain, weeklyBest, type CoachSetSample } from '@/lib/coachInsight';
 import { greetingForHour, greetingName } from '@/lib/homeGreeting';
 import { resolveDisplayName } from '@/lib/resolveDisplayName';
+import { resolveExerciseMuscles } from '@/lib/exerciseMuscleMap';
 import { withTodayFallback } from '@/lib/homeMetricFallback';
 import { upNextGlyph } from '@/lib/upNextGlyph';
 
@@ -292,9 +293,9 @@ check(
   'Timothy Barrett',
 );
 check(
-  'email local-part is a last-resort name so we never greet nobody',
-  resolveDisplayName({ email: 'timothy.barrett@example.com' }),
-  'Timothy',
+  'email local-part is never invented as a greeting name',
+  resolveDisplayName({ profileName: null, metadata: null }),
+  undefined,
 );
 check(
   'profile name wins over metadata',
@@ -303,6 +304,8 @@ check(
 );
 check('streak sits under the greeting on the left', homeHeader.includes("alignSelf: 'flex-start'"), true);
 check('header uses the real ONE MORE logo mark', homeHeader.includes('LiftFlowLogo'), true);
+check('header shows the ONE MORE company name', homeHeader.includes('ONE MORE'), true);
+check('header shows the FITNESS wordmark', homeHeader.includes('FITNESS'), true);
 check('text wordmark is no longer the top-right brand', homeHeader.includes('BrandWordmark'), false);
 check(
   'auth backfills an empty profile display name',
@@ -335,6 +338,21 @@ check(
   upNextGlyph('chest').gradient[0] !== upNextGlyph('quads').gradient[0],
   true,
 );
+
+console.log('\nUp Next reads multi-focus day titles, not a stray core keyword');
+{
+  const day = resolveExerciseMuscles('Back, Biceps & Core — Week 2', ['core', 'back', 'biceps']);
+  check('Back/Biceps/Core day leads with back', day.primary[0], 'mid-back');
+  check(
+    'Back/Biceps/Core day uses the pull glyph, not core',
+    upNextGlyph(day.primary[0]).symbol,
+    upNextGlyph('lats').symbol,
+  );
+  const coreOnlyGroups = resolveExerciseMuscles('Back, Biceps & Core', ['abs']);
+  check('day title beats a lone abs group', coreOnlyGroups.primary[0], 'mid-back');
+  const accessoryFirst = resolveExerciseMuscles('Pull Day', ['core', 'lats', 'biceps']);
+  check('accessory groups do not steal the lead focus', accessoryFirst.primary[0], 'lats');
+}
 
 console.log(`\nHome dashboard: ${failures === 0 ? 'PASS' : `FAIL (${failures})`}`);
 process.exit(failures === 0 ? 0 : 1);

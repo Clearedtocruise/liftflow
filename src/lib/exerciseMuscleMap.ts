@@ -107,6 +107,15 @@ function aliasToMuscle(raw: string): MuscleId | undefined {
   return MUSCLE_ALIASES[key];
 }
 
+/** Accessory focuses should not win the Up Next icon when a compound day also trains back/legs/push. */
+const ACCESSORY_FOCUS: ReadonlySet<MuscleId> = new Set([
+  'core',
+  'abs',
+  'obliques',
+  'forearms',
+  'neck',
+]);
+
 function deriveFromMuscleGroups(groups: string[]): ExerciseMuscleProfile {
   const mapped = groups
     .map(aliasToMuscle)
@@ -116,14 +125,23 @@ function deriveFromMuscleGroups(groups: string[]): ExerciseMuscleProfile {
     return { primary: ['full-body'], secondary: [] };
   }
 
+  const main = mapped.filter((muscle) => !ACCESSORY_FOCUS.has(muscle));
+  const ordered = main.length > 0 ? [...main, ...mapped.filter((m) => ACCESSORY_FOCUS.has(m))] : mapped;
+
   return {
-    primary: [mapped[0]],
-    secondary: mapped.slice(1),
+    primary: [ordered[0]],
+    secondary: ordered.slice(1),
   };
 }
 
 function deriveFromNamePattern(name: string): ExerciseMuscleProfile {
   const lower = name.toLowerCase();
+
+  // Day titles like "Back, Biceps & Core — Week 2" list focuses in order. Matching a single
+  // exercise keyword (e.g. "core") first made pull days show a core icon.
+  const dayFocus = deriveFromDayFocusList(lower);
+  if (dayFocus) return dayFocus;
+
   if (/\b(bench|fly|push-up|pushup|dip)\b/.test(lower)) {
     return { primary: ['chest'], secondary: ['triceps', 'front-delts'] };
   }
@@ -142,7 +160,7 @@ function deriveFromNamePattern(name: string): ExerciseMuscleProfile {
   if (/\b(press|ohp|shoulder)\b/.test(lower)) {
     return { primary: ['shoulders'], secondary: ['triceps'] };
   }
-  if (/\b(plank|core|crunch)\b/.test(lower)) {
+  if (/\b(plank|crunch)\b/.test(lower) || /(^|[^a-z])core([^a-z]|$)/.test(lower)) {
     return { primary: ['core'], secondary: ['abs'] };
   }
   if (/\b(weighted\s+sit[\s-]?up|sit[\s-]?up|windshield\s*wiper|russian\s+twist|dead\s+bug|hanging\s+leg\s+raise|leg\s+raise|toes?\s+to\s+bar|v[\s-]?up|hollow\s+rock)\b/.test(lower)) {
@@ -157,10 +175,41 @@ function deriveFromNamePattern(name: string): ExerciseMuscleProfile {
   return { primary: ['full-body'], secondary: [] };
 }
 
+/**
+ * "Back, Biceps & Core — Week 2" → primary mid-back, then biceps/core as secondary.
+ * Only kicks in when the title looks like a multi-focus day label, not a single exercise.
+ * Split on en/em dashes only — ASCII hyphens live inside muscle names like "upper-back".
+ */
+function deriveFromDayFocusList(lowerName: string): ExerciseMuscleProfile | null {
+  const title = lowerName.split(/\s*[—–]\s*/)[0] ?? lowerName;
+  const parts = title
+    .split(/,|&|\band\b|\//)
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0 && !/^week\b/.test(part));
+  if (parts.length < 2) return null;
+
+  const mapped = parts
+    .map((part) => aliasToMuscle(part))
+    .filter((muscle): muscle is MuscleId => muscle != null && muscle !== 'full-body');
+  if (mapped.length < 2) return null;
+
+  const main = mapped.filter((muscle) => !ACCESSORY_FOCUS.has(muscle));
+  const ordered = main.length > 0 ? [...main, ...mapped.filter((m) => ACCESSORY_FOCUS.has(m))] : mapped;
+
+  return {
+    primary: [ordered[0]],
+    secondary: ordered.slice(1),
+  };
+}
+
 export function resolveExerciseMuscles(
   exerciseName: string,
   muscleGroups?: string[],
 ): ExerciseMuscleProfile {
+  // Suggested groups sometimes put core first (or alone). Day titles encode the real lead focus.
+  const dayFocus = deriveFromDayFocusList(exerciseName.toLowerCase());
+  if (dayFocus) return dayFocus;
+
   const slug = normalizeExerciseSlug(exerciseName);
   const authored = EXERCISE_MUSCLE_PROFILES[slug];
   if (authored) return authored;

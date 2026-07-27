@@ -15,11 +15,10 @@ export function greetingName(displayName?: string): string | undefined {
   return trimmed.split(/\s+/)[0];
 }
 
-/** Resolve from profile / auth metadata / email, then take the first name. */
+/** Resolve from profile / auth metadata, then take the first name. */
 export function greetingNameFromAuth(input: {
   profileName?: string | null;
   metadata?: Record<string, unknown> | null;
-  email?: string | null;
 }): string | undefined {
   return greetingName(resolveDisplayName(input));
 }

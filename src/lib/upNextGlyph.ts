@@ -23,8 +23,8 @@ const PUSH: UpNextGlyph = {
 };
 
 const PULL: UpNextGlyph = {
-  symbol: 'figure.play',
-  fallback: '🤸',
+  symbol: 'figure.strengthtraining.functional',
+  fallback: '🏋️',
   gradient: ['#7B5BFF', '#4B2FD8'],
 };
 

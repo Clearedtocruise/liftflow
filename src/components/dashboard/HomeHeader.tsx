@@ -29,7 +29,7 @@ export function HomeHeader({
       <View style={styles.topRow}>
         <View style={styles.greetingBlock}>
           <AppText variant="hero" color="accent" numberOfLines={1} style={styles.greetingLine}>
-            {name ? `${greet}, ${name}` : `${greet}`}
+            {name ? `${greet}, ${name}` : greet}
           </AppText>
           <AppText variant="footnote" color="textTertiary">
             Ready to become 1% better today?
@@ -57,7 +57,6 @@ export function HomeHeader({
         </View>
 
         <View style={styles.brandBlock}>
-          {/* Settings left the tab bar to make room for the quick-add button, so it lives here. */}
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Settings"
@@ -71,12 +70,21 @@ export function HomeHeader({
               tintColor={LiftFlowColors.textTertiary}
             />
           </Pressable>
+          {/* Small monogram + company name — the real lockup, not a lone icon or text-only mark. */}
           <View
             accessible
-            accessibilityRole="image"
-            accessibilityLabel="ONE MORE"
-            style={styles.logoWrap}>
-            <LiftFlowLogo size={40} variant="primary" />
+            accessibilityRole="header"
+            accessibilityLabel="ONE MORE Fitness"
+            style={styles.lockup}>
+            <LiftFlowLogo size={22} variant="primary" />
+            <View style={styles.wordmark}>
+              <AppText variant="label" style={styles.brandPrimary} numberOfLines={1}>
+                ONE MORE
+              </AppText>
+              <AppText variant="label" style={styles.brandSecondary} numberOfLines={1}>
+                FITNESS
+              </AppText>
+            </View>
           </View>
         </View>
       </View>
@@ -113,11 +121,26 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     justifyContent: 'center',
   },
-  logoWrap: {
-    width: 44,
-    height: 44,
+  lockup: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 6,
+  },
+  wordmark: {
+    alignItems: 'flex-start',
+  },
+  brandPrimary: {
+    color: LiftFlowColors.restTimer,
+    fontSize: 11,
+    lineHeight: 13,
+    letterSpacing: 0.6,
+    fontWeight: '700',
+  },
+  brandSecondary: {
+    color: LiftFlowColors.textTertiary,
+    fontSize: 7,
+    lineHeight: 9,
+    letterSpacing: 1.4,
   },
   streak: {
     alignSelf: 'flex-start',

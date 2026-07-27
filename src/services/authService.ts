@@ -17,7 +17,6 @@ function stubProfileFromAuth(user: { id: string; email?: string | null; user_met
     email: user.email ?? '',
     displayName: resolveDisplayName({
       metadata: user.user_metadata,
-      email: user.email,
     }),
     preferredUnits: 'imperial',
     ...DEFAULT_UNIT_PREFERENCES,
@@ -36,7 +35,7 @@ async function fetchProfile(userId: string, email: string, metadata?: Record<str
     return {
       id: userId,
       email,
-      displayName: resolveDisplayName({ metadata, email }),
+      displayName: resolveDisplayName({ metadata }),
       preferredUnits: 'imperial',
       ...DEFAULT_UNIT_PREFERENCES,
       confirmationMode: 'smart',
@@ -49,7 +48,6 @@ async function fetchProfile(userId: string, email: string, metadata?: Record<str
   const resolved = resolveDisplayName({
     profileName: profile.displayName,
     metadata,
-    email: profile.email || email,
   });
 
   // Signup used to leave profiles.display_name null while the name sat in auth metadata.
