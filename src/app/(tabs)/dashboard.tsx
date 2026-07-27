@@ -4,7 +4,6 @@ import { StyleSheet, View } from 'react-native';
 
 import { CoachInsightCard } from '@/components/dashboard/CoachInsightCard';
 import { HomeHeader } from '@/components/dashboard/HomeHeader';
-import { QuickActionGrid, type QuickAction } from '@/components/dashboard/QuickActionGrid';
 import { StatTile } from '@/components/dashboard/StatTile';
 import { TodayHeroCard, type HeroState } from '@/components/dashboard/TodayHeroCard';
 import { UpNextCard } from '@/components/dashboard/UpNextCard';
@@ -69,39 +68,6 @@ export default function DashboardScreen() {
     [upcomingWorkout],
   );
 
-  /**
-   * Shortcuts to tasks, not copies of the tab bar: logging a past session and recording a check-in
-   * both live several taps deep, which is why they earn a place here.
-   */
-  const quickActions: QuickAction[] = useMemo(
-    () => [
-      {
-        label: 'Log Workout',
-        icon: '🏋',
-        accent: 'streak',
-        onPress: () => router.push('/(tabs)/workout/manual-log'),
-      },
-      {
-        label: 'Log Meal',
-        icon: '🍽',
-        accent: 'nutrition',
-        onPress: () => router.push('/(tabs)/nutrition'),
-      },
-      {
-        label: 'Progress Photo',
-        icon: '📷',
-        accent: 'coach',
-        onPress: () => router.push('/(tabs)/progress'),
-      },
-      {
-        label: 'Body Check-In',
-        icon: '❤',
-        accent: 'body',
-        onPress: () => router.push('/(features)/recovery-check-in'),
-      },
-    ],
-    [],
-  );
 
   return (
     <ScreenContainer contentContainerStyle={styles.content}>
@@ -143,7 +109,8 @@ export default function DashboardScreen() {
           accent="recovery"
           history={metrics.recovery.history}
           emptyHint="Check in to score"
-          onPress={() => router.push('/(features)/recovery-check-in')}
+          // Viewing the trend, not recording one — the hero button owns the check-in itself.
+          onPress={() => router.push('/(features)/recovery-analysis')}
         />
         <StatTile
           label="Sleep"
@@ -184,13 +151,6 @@ export default function DashboardScreen() {
         />
       ) : null}
 
-      <View style={styles.section}>
-        <AppText variant="label" color="textTertiary">
-          QUICK ACTIONS
-        </AppText>
-        <QuickActionGrid actions={quickActions} />
-      </View>
-
       {upcomingWorkout && upNextMuscles ? (
         <View style={styles.section}>
           <AppText variant="label" color="textTertiary">
@@ -202,7 +162,13 @@ export default function DashboardScreen() {
             focus={upcomingWorkout.focus}
             muscles={upNextMuscles}
             gender={profileFigureGender(user?.sex)}
-            onPress={() => router.push('/(tabs)/workout')}
+            // Opens the upcoming session itself; the Workout tab always shows today.
+            onPress={() =>
+              router.push({
+                pathname: '/(tabs)/workout/day',
+                params: { id: upcomingWorkout.workout.id },
+              })
+            }
           />
         </View>
       ) : null}
