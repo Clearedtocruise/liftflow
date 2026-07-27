@@ -12,6 +12,7 @@ import { join } from 'node:path';
 import { describeCalorieBudget, describeProteinBudget } from '@/lib/calorieBudget';
 import { describeStrengthGain, findStrengthGain, weeklyBest, type CoachSetSample } from '@/lib/coachInsight';
 import { withTodayFallback } from '@/lib/homeMetricFallback';
+import { upNextGlyph } from '@/lib/upNextGlyph';
 
 const EMPTY_METRIC = { value: undefined, history: [] as (number | undefined)[] };
 
@@ -251,13 +252,26 @@ check(
   true,
 );
 
-console.log('\nThe Up Next thumbnail shows a whole figure rather than a cropped slice');
-// The anatomy SVG is 200×400. A square slot with overflow:hidden centre-cropped it, so the card
-// showed an unreadable piece of a torso instead of a body with the trained muscles highlighted.
+console.log('\nThe Up Next tile uses an icon, not a squeezed anatomy figure');
+// The anatomy SVG is 200×400 and nothing legible survives a thumbnail, so the tile carries a glyph.
+// The card already names the session, which is what the figure was redundantly trying to say.
 const upNext = source('src/components/dashboard/UpNextCard.tsx');
-check('the slot keeps the figure 1:2 ratio', upNext.includes('400 * THUMB_SCALE'), true);
-check('the figure is scaled to fit rather than cropped', upNext.includes('scale={THUMB_SCALE}'), true);
-check('the old square preset is gone', upNext.includes('size="active"'), false);
+check('no body figure is rendered in the tile', upNext.includes('MuscleMapFigure'), false);
+check('the tile renders a symbol', upNext.includes('AppSymbol'), true);
+
+console.log('\nEvery training focus resolves to a legible glyph');
+for (const muscle of ['chest', 'lats', 'quads', 'abs', 'biceps'] as const) {
+  const glyph = upNextGlyph(muscle);
+  check(`${muscle} has a symbol`, glyph.symbol.length > 0, true);
+  check(`${muscle} has an Android fallback`, glyph.fallback.length > 0, true);
+}
+check('an unknown focus still returns a glyph', upNextGlyph(undefined).symbol.length > 0, true);
+// Push and legs must not look identical, or the tile stops carrying information at a glance.
+check(
+  'push and legs are visually distinct',
+  upNextGlyph('chest').gradient[0] !== upNextGlyph('quads').gradient[0],
+  true,
+);
 
 console.log(`\nHome dashboard: ${failures === 0 ? 'PASS' : `FAIL (${failures})`}`);
 process.exit(failures === 0 ? 0 : 1);

@@ -1,39 +1,39 @@
+import { LinearGradient } from 'expo-linear-gradient';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { MuscleMapFigure } from '@/components/exercise/anatomy/MuscleMapFigure';
+import { AppSymbol } from '@/components/ui/AppSymbol';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
-import { buildBodyHighlightData, resolveBodySide, type ExerciseMuscleProfile } from '@/lib/exerciseMuscleMap';
-
-/** The anatomy SVG is 200×400, so the slot keeps that 1:2 ratio and the scale fits it inside. */
-const THUMB_SCALE = 0.2;
-const THUMB_WIDTH = 200 * THUMB_SCALE + 8;
-const THUMB_HEIGHT = 400 * THUMB_SCALE + 8;
+import type { ExerciseMuscleProfile } from '@/lib/exerciseMuscleMap';
+import { upNextGlyph } from '@/lib/upNextGlyph';
 
 type UpNextCardProps = {
   /** e.g. "Tomorrow", or a weekday for anything further out. */
   when: string;
   name: string;
   focus?: string;
-  /** Drives the thumbnail, so the card shows what the session trains rather than a stock image. */
+  /** Chooses the icon, so the tile reflects what the session trains. */
   muscles: ExerciseMuscleProfile;
-  gender: 'male' | 'female';
   onPress: () => void;
 };
 
-export function UpNextCard({ when, name, focus, muscles, gender, onPress }: UpNextCardProps) {
-  const side = resolveBodySide(muscles);
-  const data = buildBodyHighlightData(muscles.primary, muscles.secondary, side);
+/**
+ * An anatomy figure used to sit here, but the body is drawn at 200×400 and nothing legible survives
+ * being squeezed into a thumbnail — it read as a cropped smear. The card already says "Chest Day",
+ * so the tile carries a crisp icon instead of a redundant and unreadable diagram.
+ */
+export function UpNextCard({ when, name, focus, muscles, onPress }: UpNextCardProps) {
+  const glyph = upNextGlyph(muscles.primary[0]);
 
   return (
     <View style={styles.card}>
-      <View style={styles.thumb}>
-        {data.length > 0 ? (
-          // The figure is 200×400, so it needs a portrait slot and an explicit scale. Dropping it
-          // into a square box only ever showed a cropped slice of the torso.
-          <MuscleMapFigure data={data} side={side} gender={gender} scale={THUMB_SCALE} />
-        ) : null}
-      </View>
+      <LinearGradient
+        colors={glyph.gradient}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.thumb}>
+        <AppSymbol name={glyph.symbol} fallback={glyph.fallback} size={24} tintColor="#FFFFFF" />
+      </LinearGradient>
 
       <View style={styles.body}>
         <AppText variant="caption" color="accent">
@@ -74,15 +74,11 @@ const styles = StyleSheet.create({
     backgroundColor: LiftFlowColors.surface,
   },
   thumb: {
-    width: THUMB_WIDTH,
-    height: THUMB_HEIGHT,
+    width: 46,
+    height: 46,
     borderRadius: Radius.md,
     alignItems: 'center',
     justifyContent: 'center',
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: LiftFlowColors.borderSubtle,
-    backgroundColor: LiftFlowColors.backgroundSecondary,
   },
   body: {
     flex: 1,

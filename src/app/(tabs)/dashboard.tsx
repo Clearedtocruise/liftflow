@@ -14,7 +14,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useHomeMetrics } from '@/hooks/useHomeMetrics';
 import { useTodayDashboard } from '@/hooks/useTodayDashboard';
 import { describeProteinBudget } from '@/lib/calorieBudget';
-import { profileFigureGender, resolveExerciseMuscles } from '@/lib/exerciseMuscleMap';
+import { resolveExerciseMuscles } from '@/lib/exerciseMuscleMap';
 import { exercisesFromPlannedWorkout } from '@/lib/workoutPlan';
 
 function formatSleep(hours?: number): string | undefined {
@@ -169,7 +169,6 @@ export default function DashboardScreen() {
             name={upcomingWorkout.name}
             focus={upcomingWorkout.focus}
             muscles={upNextMuscles}
-            gender={profileFigureGender(user?.sex)}
             // Opens the upcoming session itself; the Workout tab always shows today.
             onPress={() =>
               router.push({
