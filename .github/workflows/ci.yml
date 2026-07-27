@@ -67,7 +67,7 @@ jobs:
       # regression to land green, then from 58 to the measured count once #18 landed.
       - name: Typecheck (no new errors vs. baseline)
         env:
-          BASELINE: '46'
+          BASELINE: '45'
         run: |
           set +e
           npm run typecheck > typecheck.log 2>&1
