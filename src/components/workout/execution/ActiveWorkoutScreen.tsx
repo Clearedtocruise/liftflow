@@ -1054,16 +1054,16 @@ export function ActiveWorkoutScreen({
       if (!activeName) {
         return { ok: false, reason: 'No exercise is selected.' };
       }
-      if (!payload.exerciseName) {
-        return { ok: false, reason: `Say the exercise name, for example "${activeName}".` };
-      }
 
-      const match = matchSpokenExercise(payload.exerciseName, activeName);
-      if (match.kind === 'different') {
-        // Previously a silent `false`, which surfaced as "Could not save that set" with no hint
-        // that the name was the problem — sighted users got no reason at all.
-        AccessibilityInfo.announceForAccessibility(match.reason);
-        return { ok: false, reason: match.reason };
+      const spokenExercise = payload.exerciseName?.trim();
+      if (spokenExercise) {
+        const match = matchSpokenExercise(spokenExercise, activeName);
+        if (match.kind === 'different') {
+          // Previously a silent `false`, which surfaced as "Could not save that set" with no hint
+          // that the name was the problem — sighted users got no reason at all.
+          AccessibilityInfo.announceForAccessibility(match.reason);
+          return { ok: false, reason: match.reason };
+        }
       }
 
       if (payload.weight != null) {

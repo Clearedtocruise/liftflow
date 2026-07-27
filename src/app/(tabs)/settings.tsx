@@ -294,16 +294,13 @@ export default function SettingsScreen() {
         <SettingsRow
           label="Mic input mode"
           value={
-            voiceInputMode === 'push_to_talk'
-              ? 'Push-to-talk'
-              : voiceInputMode === 'continuous'
+            voiceInputMode === 'continuous'
                 ? 'Continuous'
                 : 'Tap toggle'
           }
           onPress={() => {
             Alert.alert('Voice input mode', 'Choose how the workout microphone activates', [
-              { text: 'Push-to-talk (default)', onPress: () => saveVoiceInputMode('push_to_talk') },
-              { text: 'Tap toggle', onPress: () => saveVoiceInputMode('tap_toggle') },
+              { text: 'Tap toggle (recommended)', onPress: () => saveVoiceInputMode('tap_toggle') },
               { text: 'Continuous', onPress: () => saveVoiceInputMode('continuous') },
               { text: 'Cancel', style: 'cancel' },
             ]);

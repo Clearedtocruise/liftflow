@@ -139,16 +139,32 @@ export const exportService: IExportService = {
   },
 
   async downloadAndShare(userId: string, request: ExportRequest) {
-    const result = await this.generatePdf(userId, request);
-    if (!result.success || !result.data.fileUrl) return result;
+    try {
+      const result = await this.generatePdf(userId, request);
+      if (!result.success || !result.data.fileUrl) return result;
 
-    const localPath = `${FileSystem.cacheDirectory}${result.data.title.replace(/\s+/g, '_')}.pdf`;
-    const download = await FileSystem.downloadAsync(result.data.fileUrl, localPath);
+      const safeTitle = (result.data.title || 'export')
+        .replace(/[^a-z0-9-_]+/gi, '_')
+        .replace(/_+/g, '_')
+        .replace(/^_|_$/g, '');
+      const localPath = `${FileSystem.cacheDirectory}${safeTitle || 'export'}.pdf`;
 
-    if (await Sharing.isAvailableAsync()) {
-      await Sharing.shareAsync(download.uri);
+      if (result.data.fileUrl.startsWith('data:application/pdf;base64,')) {
+        const base64 = result.data.fileUrl.replace('data:application/pdf;base64,', '');
+        await FileSystem.writeAsStringAsync(localPath, base64, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+      } else {
+        await FileSystem.downloadAsync(result.data.fileUrl, localPath);
+      }
+
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(localPath);
+      }
+
+      return result;
+    } catch (e) {
+      return fromError(e);
     }
-
-    return result;
   },
 };

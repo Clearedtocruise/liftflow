@@ -74,7 +74,7 @@ export type VoiceSettings = {
   autoLog: boolean;
   /** Speak/haptic feedback after successful log */
   voiceFeedback: boolean;
-  /** Default push-to-talk for battery savings */
+  /** Default tap-to-toggle for one-touch logging */
   inputMode: VoiceInputMode;
   /** Future: "Hey ONE MORE" wake phrase */
   wakePhraseEnabled: boolean;
@@ -84,7 +84,7 @@ export const DEFAULT_VOICE_SETTINGS: VoiceSettings = {
   confirmationMode: 'smart',
   autoLog: true,
   voiceFeedback: true,
-  inputMode: 'push_to_talk',
+  inputMode: 'tap_toggle',
   wakePhraseEnabled: false,
 };
 

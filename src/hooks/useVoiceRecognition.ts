@@ -25,7 +25,7 @@ export type VoiceRecognitionOptions = {
 const PERMISSION_DENIED = 'Microphone access is off. Enable it in Settings to log sets by voice.';
 
 export function useVoiceRecognition(options: VoiceRecognitionOptions = {}) {
-  const { enabled = true, inputMode = 'push_to_talk', onFinalTranscript } = options;
+  const { enabled = true, inputMode = 'tap_toggle', onFinalTranscript } = options;
 
   const transcriptRef = useRef('');
   const recordingRef = useRef<Audio.Recording | null>(null);

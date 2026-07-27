@@ -1,5 +1,6 @@
 import type { HealthMetricSample } from '@/integrations/types';
 import type { HealthSyncConflictPolicy } from '@/integrations/healthConstants';
+import { localDateString } from '@/lib/localDate';
 
 export type StoredHealthSample = {
   id?: string;
@@ -120,11 +121,14 @@ export type HealthDailySummary = {
 };
 
 /** Aggregate synced samples into daily summaries for recovery scoring */
-export function summarizeHealthByDay(samples: StoredHealthSample[]): HealthDailySummary[] {
+export function summarizeHealthByDay(
+  samples: StoredHealthSample[],
+  timeZone?: string | null,
+): HealthDailySummary[] {
   const byDate = new Map<string, HealthDailySummary>();
 
   function dayOf(iso: string): string {
-    return iso.slice(0, 10);
+    return localDateString(new Date(iso), timeZone);
   }
 
   function ensure(date: string): HealthDailySummary {

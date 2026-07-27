@@ -10,6 +10,7 @@ import { localDateString } from '@/lib/localDate';
 import { analyticsService } from '@/services/analyticsService';
 import { coachInsightService } from '@/services/coachInsightService';
 import { healthService } from '@/services/healthService';
+import { recoveryService } from '@/services/recoveryService';
 
 /**
  * A metric the home screen can show. `value` is undefined when the measure exists but has not been
@@ -27,6 +28,8 @@ export type HomeMetrics = {
   sleepHours: HomeMetric;
   activeCalories: HomeMetric;
   hrvMs: HomeMetric;
+  recoveryScorePercent?: number;
+  recoveryScoreLabel?: string;
   /** Absent when no genuine strength gain can be evidenced — the card is then not rendered. */
   coachInsight?: CoachInsight;
   /** True once the health query has come back, whether or not it found anything. */
@@ -38,6 +41,14 @@ export type HomeMetrics = {
 };
 
 const DAYS = 7;
+
+function formatRecoveryLabel(status?: string): string | undefined {
+  if (!status) return undefined;
+  return status
+    .replace(/_/g, ' ')
+    .toLowerCase()
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
 
 function seriesFor(
   summaries: HealthDailySummary[],
@@ -74,6 +85,8 @@ export function useHomeMetrics(): HomeMetrics {
   const [sleepHours, setSleepHours] = useState<HomeMetric>(EMPTY);
   const [activeCalories, setActiveCalories] = useState<HomeMetric>(EMPTY);
   const [hrvMs, setHrvMs] = useState<HomeMetric>(EMPTY);
+  const [recoveryScorePercent, setRecoveryScorePercent] = useState<number | undefined>(undefined);
+  const [recoveryScoreLabel, setRecoveryScoreLabel] = useState<string | undefined>(undefined);
   const [coachInsight, setCoachInsight] = useState<CoachInsight | undefined>(undefined);
   const [healthResolved, setHealthResolved] = useState(false);
   const [healthEmpty, setHealthEmpty] = useState(false);
@@ -87,10 +100,11 @@ export function useHomeMetrics(): HomeMetrics {
     setLoading(true);
     try {
       const dates = recentDates(user.timezone);
-      const [streakResult, healthResult, gainResult] = await Promise.all([
+      const [streakResult, healthResult, gainResult, recoveryResult] = await Promise.all([
         analyticsService.getWorkoutStreak(user.id),
-        healthService.getDailySummaries(user.id, DAYS),
+        healthService.getDailySummaries(user.id, DAYS, user.timezone),
         coachInsightService.getStrengthGain(user.id),
+        recoveryService.getToday(user.id),
       ]);
 
       if (streakResult.success) {
@@ -110,6 +124,16 @@ export function useHomeMetrics(): HomeMetrics {
         setHealthEmpty(false);
       }
       setHealthResolved(true);
+
+      if (recoveryResult.success && recoveryResult.data) {
+        setRecoveryScorePercent(
+          Math.min(100, Math.max(0, Math.round(recoveryResult.data.recoveryScore))),
+        );
+        setRecoveryScoreLabel(formatRecoveryLabel(recoveryResult.data.status));
+      } else {
+        setRecoveryScorePercent(undefined);
+        setRecoveryScoreLabel(undefined);
+      }
 
       if (gainResult.success && gainResult.data) {
         const gain = gainResult.data;
@@ -138,6 +162,8 @@ export function useHomeMetrics(): HomeMetrics {
     sleepHours,
     activeCalories,
     hrvMs,
+    recoveryScorePercent,
+    recoveryScoreLabel,
     coachInsight,
     healthResolved,
     healthEmpty,

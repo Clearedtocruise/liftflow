@@ -63,9 +63,9 @@ export default function HealthKitScreen() {
         `Saved ${report.synced} records (${report.inserted} new, ${report.updated} updated, ${report.conflicts} conflicts resolved). Types: ${report.dataTypes.join(', ') || 'none'}.`,
       );
       refreshConnections();
-    } else if (error) {
-      Alert.alert('Sync failed', error);
+      return;
     }
+    Alert.alert('Sync failed', error ?? 'Could not sync Apple Health data. Please recheck permissions and try again.');
   }
 
   async function handleStravaConnect() {

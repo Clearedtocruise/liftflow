@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Pressable, StyleSheet } from 'react-native';
+import { Pressable, StyleSheet } from 'react-native';
 
 import { RecoveryCheckInForm } from '@/components/coaching/RecoveryCheckInForm';
 import { RecoveryScoreCard } from '@/components/coaching/RecoveryScoreCard';
@@ -50,7 +50,7 @@ export default function RecoveryCheckInScreen() {
         onComplete={(result) => {
           setCheckIn(result);
           load();
-          Alert.alert('Recovery logged', `Score: ${result.recoveryScore} — ${result.dailyRecommendation}`);
+          router.replace('/(tabs)/dashboard');
         }}
       />
     </ScreenContainer>

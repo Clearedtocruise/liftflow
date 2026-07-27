@@ -137,7 +137,7 @@ export function VoiceSetLogger({
   );
 
   const voice = useVoiceRecognition({
-    inputMode: settings.inputMode,
+    inputMode: settings.inputMode === 'push_to_talk' ? 'tap_toggle' : settings.inputMode,
     enabled: !disabled,
     onFinalTranscript: (text) => void handleTranscript(text),
   });

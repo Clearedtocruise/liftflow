@@ -8,7 +8,8 @@ export const VOICE_PREF_KEYS = {
 } as const;
 
 function parseInputMode(value: unknown): VoiceInputMode {
-  if (value === 'tap_toggle' || value === 'continuous' || value === 'push_to_talk') return value;
+  if (value === 'continuous') return value;
+  if (value === 'push_to_talk' || value === 'tap_toggle') return 'tap_toggle';
   return DEFAULT_VOICE_SETTINGS.inputMode;
 }
 

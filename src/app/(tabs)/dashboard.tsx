@@ -79,6 +79,8 @@ export default function DashboardScreen() {
       <TodayHeroCard
         state={heroState}
         hrvMs={metrics.hrvMs.value}
+        recoveryPercent={metrics.recoveryScorePercent}
+        recoveryLabel={metrics.recoveryScoreLabel}
         busy={starting || generating}
         onStart={() => {
           void startWorkout().then((ok) => {
@@ -105,7 +107,7 @@ export default function DashboardScreen() {
           accent="sleep"
           history={metrics.sleepHours.history}
           emptyHint={metrics.healthEmpty ? 'Connect Apple Health' : 'No data yet'}
-          onPress={() => router.push('/(features)/apple-watch')}
+          onPress={() => router.push('/(features)/healthkit')}
         />
         <StatTile
           label="Calories"
@@ -114,7 +116,7 @@ export default function DashboardScreen() {
           accent="energy"
           history={metrics.activeCalories.history}
           emptyHint={metrics.healthEmpty ? 'Connect Apple Health' : 'No data yet'}
-          onPress={() => router.push('/(features)/apple-watch')}
+          onPress={() => router.push('/(features)/healthkit')}
         />
       </View>
 
@@ -126,7 +128,7 @@ export default function DashboardScreen() {
           accent="recovery"
           history={metrics.hrvMs.history}
           emptyHint={metrics.healthEmpty ? 'Needs Apple Watch' : 'No data yet'}
-          onPress={() => router.push('/(features)/apple-watch')}
+          onPress={() => router.push('/(features)/healthkit')}
         />
         <StatTile
           label="Streak"

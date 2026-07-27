@@ -198,12 +198,16 @@ export const healthService = {
     }
   },
 
-  async getDailySummaries(userId: string, days = 14): Promise<ServiceResult<HealthDailySummary[]>> {
+  async getDailySummaries(
+    userId: string,
+    days = 14,
+    timeZone?: string | null,
+  ): Promise<ServiceResult<HealthDailySummary[]>> {
     try {
       const since = new Date();
       since.setDate(since.getDate() - days);
       const rows = await fetchExistingSamples(userId, since);
-      return ok(summarizeHealthByDay(rows));
+      return ok(summarizeHealthByDay(rows, timeZone));
     } catch (e) {
       return fromError(e);
     }
