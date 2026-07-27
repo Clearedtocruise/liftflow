@@ -10,6 +10,7 @@ import { localDateString } from '@/lib/localDate';
 import { analyticsService } from '@/services/analyticsService';
 import { coachInsightService } from '@/services/coachInsightService';
 import { healthService } from '@/services/healthService';
+import { nutritionService } from '@/services/nutritionService';
 import { recoveryService } from '@/services/recoveryService';
 
 /**
@@ -32,6 +33,12 @@ export type HomeMetrics = {
   recovery: HomeMetric;
   recoveryScorePercent?: number;
   recoveryScoreLabel?: string;
+  /** Calories eaten today against the active nutrition goal — distinct from calories burned. */
+  nutrition: {
+    caloriesConsumed?: number;
+    caloriesTarget?: number;
+    proteinG?: number;
+  };
   /** Absent when no genuine strength gain can be evidenced — the card is then not rendered. */
   coachInsight?: CoachInsight;
   /** True once the health query has come back, whether or not it found anything. */
@@ -88,6 +95,7 @@ export function useHomeMetrics(): HomeMetrics {
   const [activeCalories, setActiveCalories] = useState<HomeMetric>(EMPTY);
   const [hrvMs, setHrvMs] = useState<HomeMetric>(EMPTY);
   const [recovery, setRecovery] = useState<HomeMetric>(EMPTY);
+  const [nutrition, setNutrition] = useState<HomeMetrics['nutrition']>({});
   const [recoveryScorePercent, setRecoveryScorePercent] = useState<number | undefined>(undefined);
   const [recoveryScoreLabel, setRecoveryScoreLabel] = useState<string | undefined>(undefined);
   const [coachInsight, setCoachInsight] = useState<CoachInsight | undefined>(undefined);
@@ -103,14 +111,21 @@ export function useHomeMetrics(): HomeMetrics {
     setLoading(true);
     try {
       const dates = recentDates(user.timezone);
-      const [streakResult, healthResult, gainResult, recoveryResult, recoveryTrendResult] =
-        await Promise.all([
-          analyticsService.getWorkoutStreak(user.id),
-          healthService.getDailySummaries(user.id, DAYS, user.timezone),
-          coachInsightService.getStrengthGain(user.id),
-          recoveryService.getToday(user.id),
-          recoveryService.getTrend(user.id),
-        ]);
+      const [
+        streakResult,
+        healthResult,
+        gainResult,
+        recoveryResult,
+        recoveryTrendResult,
+        nutritionResult,
+      ] = await Promise.all([
+        analyticsService.getWorkoutStreak(user.id),
+        healthService.getDailySummaries(user.id, DAYS, user.timezone),
+        coachInsightService.getStrengthGain(user.id),
+        recoveryService.getToday(user.id),
+        recoveryService.getTrend(user.id),
+        nutritionService.getDailySummary(user.id),
+      ]);
 
       if (streakResult.success) {
         const days = streakResult.data;
@@ -157,6 +172,19 @@ export function useHomeMetrics(): HomeMetrics {
         setRecovery({ value: todayScore, history: [] });
       }
 
+      if (nutritionResult.success && nutritionResult.data) {
+        const summary = nutritionResult.data;
+        // Zero logged calories means "nothing logged yet", which the tile shows as a prompt rather
+        // than as a genuine 0 of 2,400.
+        setNutrition({
+          caloriesConsumed: summary.caloriesConsumed > 0 ? summary.caloriesConsumed : undefined,
+          caloriesTarget: summary.caloriesTarget,
+          proteinG: summary.proteinG > 0 ? summary.proteinG : undefined,
+        });
+      } else {
+        setNutrition({});
+      }
+
       if (gainResult.success && gainResult.data) {
         const gain = gainResult.data;
         const delta = units.preferredWeightUnit === 'lb' ? gain.deltaKg * 2.2046226218 : gain.deltaKg;
@@ -187,6 +215,7 @@ export function useHomeMetrics(): HomeMetrics {
     recovery,
     recoveryScorePercent,
     recoveryScoreLabel,
+    nutrition,
     coachInsight,
     healthResolved,
     healthEmpty,

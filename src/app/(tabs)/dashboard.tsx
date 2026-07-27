@@ -13,6 +13,7 @@ import { Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 import { useHomeMetrics } from '@/hooks/useHomeMetrics';
 import { useTodayDashboard } from '@/hooks/useTodayDashboard';
+import { describeCalorieBudget } from '@/lib/calorieBudget';
 import { profileFigureGender, resolveExerciseMuscles } from '@/lib/exerciseMuscleMap';
 import { exercisesFromPlannedWorkout } from '@/lib/workoutPlan';
 
@@ -66,6 +67,11 @@ export default function DashboardScreen() {
   const upNextMuscles = useMemo(
     () => (upcomingWorkout ? resolveExerciseMuscles(upcomingWorkout.name) : null),
     [upcomingWorkout],
+  );
+
+  const fuel = useMemo(
+    () => describeCalorieBudget(metrics.nutrition.caloriesConsumed, metrics.nutrition.caloriesTarget),
+    [metrics.nutrition.caloriesConsumed, metrics.nutrition.caloriesTarget],
   );
 
 
@@ -125,22 +131,22 @@ export default function DashboardScreen() {
 
       <View style={styles.tiles}>
         <StatTile
-          label="Calories"
+          label="Burned"
           value={metrics.activeCalories.value != null ? String(Math.round(metrics.activeCalories.value)) : undefined}
-          caption="Active"
+          caption="Active today"
           accent="energy"
           history={metrics.activeCalories.history}
           emptyHint={metrics.healthEmpty ? 'Connect Apple Health' : 'No data yet'}
           onPress={() => router.push('/(features)/healthkit')}
         />
         <StatTile
-          label="Streak"
-          value={metrics.streak.value != null ? String(metrics.streak.value) : undefined}
-          caption={metrics.streak.value === 1 ? 'day' : 'days'}
-          accent="streak"
-          chart="bars"
-          emptyHint="Log a workout"
-          onPress={() => router.push('/(tabs)/history')}
+          label="Calories"
+          value={fuel.value}
+          caption={fuel.caption}
+          accent="nutrition"
+          progressPercent={fuel.percent}
+          emptyHint={fuel.emptyHint}
+          onPress={() => router.push('/(tabs)/nutrition')}
         />
       </View>
 

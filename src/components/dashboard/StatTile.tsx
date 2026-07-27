@@ -12,6 +12,11 @@ type StatTileProps = {
   accent: MetricAccent;
   history?: (number | undefined)[];
   chart?: 'line' | 'bars';
+  /**
+   * 0–100 progress toward a target. Replaces the sparkline, because "how far through today am I"
+   * is a position against a goal rather than a trend over days.
+   */
+  progressPercent?: number;
   /** Shown in place of the caption when there is nothing to show yet. */
   emptyHint?: string;
   onPress?: () => void;
@@ -24,11 +29,14 @@ export function StatTile({
   accent,
   history = [],
   chart = 'line',
+  progressPercent,
   emptyHint,
   onPress,
 }: StatTileProps) {
-  const { tint } = MetricAccents[accent];
+  const { tint, glow } = MetricAccents[accent];
   const hasValue = value != null;
+  // Over-target still fills the bar rather than overflowing it; the caption carries the overage.
+  const filled = progressPercent != null ? Math.max(0, Math.min(100, progressPercent)) : null;
 
   const body = (
     <>
@@ -41,8 +49,14 @@ export function StatTile({
       <AppText variant="caption" color="textTertiary" numberOfLines={1}>
         {hasValue ? (caption ?? ' ') : (emptyHint ?? 'No data yet')}
       </AppText>
-      {/* No reserved space when there is no series: an empty chart slot reads as a failed chart. */}
-      {history.filter((point) => point != null).length > 1 ? (
+      {hasValue && filled != null ? (
+        <View style={styles.chart}>
+          <View style={[styles.track, { backgroundColor: glow }]}>
+            <View style={[styles.fill, { width: `${filled}%`, backgroundColor: tint }]} />
+          </View>
+        </View>
+      ) : /* No reserved space when there is no series: an empty chart slot reads as a failed chart. */
+      history.filter((point) => point != null).length > 1 ? (
         <View style={styles.chart}>
           <Sparkline values={history} tint={tint} width={112} height={30} variant={chart} />
         </View>
@@ -84,5 +98,14 @@ const styles = StyleSheet.create({
     marginTop: Spacing.xs,
     height: 30,
     justifyContent: 'flex-end',
+  },
+  track: {
+    height: 6,
+    borderRadius: Radius.full,
+    overflow: 'hidden',
+  },
+  fill: {
+    height: '100%',
+    borderRadius: Radius.full,
   },
 });

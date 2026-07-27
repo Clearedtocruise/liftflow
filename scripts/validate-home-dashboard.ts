@@ -9,6 +9,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { describeCalorieBudget } from '@/lib/calorieBudget';
 import { describeStrengthGain, findStrengthGain, weeklyBest, type CoachSetSample } from '@/lib/coachInsight';
 
 let failures = 0;
@@ -165,6 +166,29 @@ check(
   dashboardHook.includes('trainingService.getNextPlannedWorkout(user.id, today)'),
   true,
 );
+
+console.log('\nThe calorie tile never invents a number it does not have');
+// "0 of 2,400" for somebody who has not logged breakfast yet reads as a failure to eat rather than
+// a failure to log, which is the same class of lie the health tiles avoid.
+check('nothing logged shows no value', describeCalorieBudget(undefined, 2400).value, undefined);
+check('nothing logged prompts with the goal', describeCalorieBudget(undefined, 2400).emptyHint, 'Goal 2,400 cal');
+check('zero logged is treated as nothing logged', describeCalorieBudget(0, 2400).value, undefined);
+check('no goal and no intake asks for a meal', describeCalorieBudget(undefined, undefined).emptyHint, 'Log a meal');
+check('no progress bar without a target', describeCalorieBudget(1800, undefined).percent, undefined);
+check('intake still shows without a target', describeCalorieBudget(1800, undefined).value, '1,800');
+
+console.log('\nProgress against a target is reported accurately');
+check('value is the amount eaten', describeCalorieBudget(1840, 2400).value, '1,840');
+check('caption names the target and the remainder', describeCalorieBudget(1840, 2400).caption, 'of 2,400 · 560 left');
+check('percent is intake over target', describeCalorieBudget(1200, 2400).percent, 50);
+check('hitting the target exactly is 100%', describeCalorieBudget(2400, 2400).percent, 100);
+check('reaching the target leaves nothing', describeCalorieBudget(2400, 2400).caption, 'of 2,400 · 0 left');
+
+console.log('\nGoing over the target is reported as over, not as leftover');
+check('overage is labelled over', describeCalorieBudget(2600, 2400).caption, 'of 2,400 · 200 over');
+check('percent exceeds 100 when over', describeCalorieBudget(2600, 2400).percent, 108);
+// The bar clamps in the component; the number underneath still tells the truth.
+check('a large overage still reports honestly', describeCalorieBudget(4800, 2400).percent, 200);
 
 console.log(`\nHome dashboard: ${failures === 0 ? 'PASS' : `FAIL (${failures})`}`);
 process.exit(failures === 0 ? 0 : 1);
