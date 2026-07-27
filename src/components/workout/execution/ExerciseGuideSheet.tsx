@@ -3,6 +3,7 @@ import { Linking, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-n
 
 import { ExerciseMovementPhases } from '@/components/exercise/ExerciseMovementPhases';
 import { ExerciseMusclePanel } from '@/components/exercise/ExerciseMusclePanel';
+import { MuscleBreakdownRow } from '@/components/exercise/MuscleBreakdownRow';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { AppText } from '@/components/ui/AppText';
 import { muscleLabel } from '@/constants/muscles';
@@ -163,6 +164,10 @@ export function ExerciseGuideSheet({
               gender={gender}
               variant="hero"
             />
+
+            {profile.primary.length > 0 ? (
+              <MuscleBreakdownRow muscles={profile.primary} gender={gender} />
+            ) : null}
           </View>
 
           {exercise?.tutorialUrl ? (
