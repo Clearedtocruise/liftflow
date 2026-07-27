@@ -8,7 +8,7 @@ import { supabaseAdmin } from './lib/supabase.js';
 import { optionalUser, requireUser } from './middleware/authUser.js';
 import { apiErrorHandler } from './middleware/errorHandler.js';
 import { requireFounderAdminPage } from './middleware/requireFounder.js';
-import { aiLimiter, allowedOrigins, corsOptions, globalLimiter } from './middleware/security.js';
+import { aiLimiter, allowedOrigins, corsOptions, globalLimiter, voiceLimiter } from './middleware/security.js';
 import { aiRouter } from './routes/ai.js';
 import { analyticsRouter } from './routes/analytics.js';
 import { authRouter } from './routes/auth.js';
@@ -45,22 +45,23 @@ initSentry();
 app.set('trust proxy', 1);
 app.disable('x-powered-by');
 
+// Health checks should be as lightweight as possible and must not depend on auth/rate limits.
+app.use('/health', healthRouter);
+
 app.use(cors(corsOptions));
 app.use(express.json({ limit: '2mb' }));
 app.use(globalLimiter);
 
-// Health
-app.use('/health', healthRouter);
 app.use(debugRouter);
 app.use('/auth', authRouter);
 app.use('/legal', legalRouter);
 
-// Legacy parse route (redirect to voice)
-app.use('/api/parse', requireUser, aiLimiter, parseRouter);
+// Legacy parse route (redirect to voice) — shares the voice budget, not the coach/LLM budget.
+app.use('/api/parse', requireUser, voiceLimiter, parseRouter);
 
 // Authenticated domain routes. requireUser is mounted here rather than per-handler so a new
 // route in any of these files cannot be added without authentication.
-app.use('/api/voice', requireUser, aiLimiter, voiceRouter);
+app.use('/api/voice', requireUser, voiceLimiter, voiceRouter);
 app.use('/api/watch', requireUser, watchRouter);
 app.use('/api/ai', requireUser, aiLimiter, aiRouter);
 app.use('/api/workouts', requireUser, workoutsRouter);
