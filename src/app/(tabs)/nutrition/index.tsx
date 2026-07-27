@@ -449,7 +449,14 @@ export default function NutritionScreen() {
 
       loadGenerationRef.current += 1;
       setWeekMeals(meals);
-      setSummary((prev) => buildDailySummaryFromMeals(meals, today, goals, prev?.waterMl ?? 0));
+
+      // Generation writes the macro targets the plan was built around, so the local copy is stale
+      // the moment it returns. Without this the screen shows the new meals against the old goal.
+      const refreshedGoals = await nutritionService.getGoals(user.id);
+      const activeGoals = refreshedGoals.success && refreshedGoals.data ? refreshedGoals.data : goals;
+      if (refreshedGoals.success && refreshedGoals.data) setGoals(refreshedGoals.data);
+
+      setSummary((prev) => buildDailySummaryFromMeals(meals, today, activeGoals, prev?.waterMl ?? 0));
       void planDataCache.writeMeals(user.id, from, to, meals);
       setLoadError(null);
       setSection('today');
