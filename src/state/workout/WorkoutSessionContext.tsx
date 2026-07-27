@@ -9,10 +9,10 @@ import {
     type ReactNode,
 } from 'react';
 import { AccessibilityInfo, AppState, Vibration } from 'react-native';
-import * as Speech from 'expo-speech';
 
 import { DEFAULT_REST_SECONDS } from '@/constants/workout';
 import { isStaleWorkoutSession } from '@/lib/staleWorkoutSession';
+import { speakCue } from '@/lib/voice/speakCue';
 import { peakMusicService } from '@/services/peakMusicService';
 import { workoutService } from '@/services/workoutService';
 import type { CreateSetPayload, RestPeriod, StartSessionPayload, UpdateSetPayload, WorkoutSession, WorkoutSet } from '@/types';
@@ -197,8 +197,7 @@ export function WorkoutSessionProvider({
 
     // A vibration is silent if the user set the phone down, so speak the completion cue as well.
     AccessibilityInfo.announceForAccessibility('Rest complete. Ready for your next set.');
-    Speech.stop();
-    Speech.speak('Rest complete. Ready for your next set.', { rate: 1, pitch: 1 });
+    void speakCue('Rest complete. Ready for your next set.', { rate: 1, pitch: 1 });
     const restPeriodId = activeRestPeriod.id;
     const recommended = activeRestPeriod.recommendedSeconds ?? DEFAULT_REST_SECONDS;
 

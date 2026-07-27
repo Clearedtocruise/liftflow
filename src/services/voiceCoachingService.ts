@@ -5,6 +5,7 @@ import { Platform } from 'react-native';
 import { API_BASE_URL } from '@/constants/api';
 import { fail, fromError, ok } from '@/lib/serviceResult';
 import { enterVoicePlaybackMode, releaseAudioSession } from '@/lib/voice/audioSession';
+import { speakCue } from '@/lib/voice/speakCue';
 import { aiService } from '@/services/aiService';
 import { getAccessToken } from '@/supabase/client';
 import type { CoachingRequest } from '@/types/ai';
@@ -62,7 +63,7 @@ export const voiceCoachingService = {
       const playedOpenAi = await playOpenAiSpeech(responseText);
 
       if (!playedOpenAi) {
-        Speech.speak(responseText, {
+        await speakCue(responseText, {
           language: 'en-US',
           rate: Platform.OS === 'ios' ? 0.52 : 0.9,
           pitch: 1.0,
@@ -82,12 +83,13 @@ export const voiceCoachingService = {
   stopSpeaking() {
     Speech.stop();
     sound?.stopAsync().catch(() => undefined);
+    void releaseAudioSession();
   },
 
   async speakLine(text: string): Promise<boolean> {
     const playedOpenAi = await playOpenAiSpeech(text);
     if (!playedOpenAi) {
-      Speech.speak(text, {
+      await speakCue(text, {
         language: 'en-US',
         rate: Platform.OS === 'ios' ? 0.52 : 0.9,
         pitch: 1.0,

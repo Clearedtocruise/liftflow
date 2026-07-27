@@ -1,12 +1,11 @@
-import * as Speech from 'expo-speech';
 import { Platform, Vibration } from 'react-native';
 
+import { speakCue } from '@/lib/voice/speakCue';
 import type { ParsedVoiceCommandExtended } from '@/types/voice';
 
 export function speakRecoveryLine(message: string, enabled: boolean): void {
   if (!enabled || Platform.OS === 'web') return;
-  Speech.stop();
-  Speech.speak(message, { rate: 1.0, pitch: 1 });
+  void speakCue(message, { rate: 1.0, pitch: 1 });
   Vibration.vibrate(20);
 }
 
@@ -41,7 +40,6 @@ export function speakVoiceConfirmation(
     message = command.transformationVoiceLine ?? 'Running transformation projection';
   }
 
-  Speech.stop();
-  Speech.speak(message, { rate: 1.05, pitch: 1 });
+  void speakCue(message, { rate: 1.05, pitch: 1 });
   Vibration.vibrate(20);
 }
