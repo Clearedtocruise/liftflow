@@ -536,5 +536,12 @@ export function showWeeklyEditDayMenu(
   const content = buildEditDayMenu(deps, date, { onStartWorkout });
   if (!content) {
     presentAlert('Edit Day', 'No workouts available to adjust this week.');
+    return;
   }
+  // Prefer ManageDayModal — Alert cannot host move/swap pickers.
+  presentAlert(
+    content.title ?? 'Edit Day',
+    `${content.todayLabel}\n\nOpen Edit day from the Workout week list to move or swap days.`,
+    [{ text: 'OK' }],
+  );
 }

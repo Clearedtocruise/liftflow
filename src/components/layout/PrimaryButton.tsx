@@ -16,6 +16,7 @@ type PrimaryButtonProps = {
   size?: 'default' | 'large';
   /** A short glyph set before the label. Decorative, so it stays out of the accessibility label. */
   icon?: string;
+  testID?: string;
 };
 
 export function PrimaryButton({
@@ -26,6 +27,7 @@ export function PrimaryButton({
   variant = 'primary',
   size = 'default',
   icon,
+  testID,
 }: PrimaryButtonProps) {
   const scale = useSharedValue(1);
   const animStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
@@ -34,6 +36,7 @@ export function PrimaryButton({
   if (variant === 'primary') {
     return (
       <AnimatedPressable
+        testID={testID}
         onPress={onPress}
         disabled={isDisabled}
         onPressIn={() => {
@@ -70,6 +73,7 @@ export function PrimaryButton({
 
   return (
     <AnimatedPressable
+      testID={testID}
       onPress={onPress}
       disabled={isDisabled}
       onPressIn={() => {
