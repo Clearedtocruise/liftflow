@@ -75,7 +75,6 @@ export const nutritionAdvisoryService = {
   },
 
   async estimateFoodMacros(foodName: string, servingSize: string) {
-    const local = estimateFoodMacrosLocal(foodName, servingSize);
     try {
       const token = await getAccessToken();
       const raw = await apiClient.post<{ data: FoodMacroEstimate }>(
@@ -85,21 +84,10 @@ export const nutritionAdvisoryService = {
       );
 
       if (raw.data?.calories != null) {
-        const reconciled = reconcileFoodMacroEstimate(raw.data);
-        // If the model narrated multiple foods but returned a single-food tile (eggs without
-        // whites), prefer the on-device split that actually added every part.
-        const aiDroppedParts =
-          local.calories > reconciled.calories * 1.12 &&
-          local.proteinG > reconciled.proteinG + 4;
-        if (aiDroppedParts) {
-          return ok(
-            reconcileFoodMacroEstimate({
-              ...local,
-              reasoning: `On-device estimate for ${foodName} (${servingSize}): ${local.calories} cal, ${local.proteinG}g protein, ${local.carbsG}g carbs, ${local.fatG}g fat.`,
-            }),
-          );
-        }
-        return ok(reconciled);
+        // Trust the model (+ reconcile so itemized lines and the tile agree). The previous
+        // "prefer local when higher" guard fired on unknown foods that fall through to a
+        // 200 kcal generic stub and overrode good AI estimates (salad / tuna / cucumber).
+        return ok(reconcileFoodMacroEstimate(raw.data));
       }
     } catch (e) {
       if (__DEV__) {
@@ -109,7 +97,7 @@ export const nutritionAdvisoryService = {
 
     return ok(
       reconcileFoodMacroEstimate({
-        ...local,
+        ...estimateFoodMacrosLocal(foodName, servingSize),
         reasoning: 'On-device macro estimate while coach AI is unavailable.',
       }),
     );
