@@ -13,6 +13,7 @@ const CORE_BODYWEIGHT_NAME_PATTERN =
 const CORE_STRENGTH_NAME_PATTERN =
   /\b(weighted\s+sit[\s-]?up|sit[\s-]?up|crunch|cable\s+crunch|ab\s+rollout|rollout|wood\s+chop|pallof\s+press)\b/i;
 
+// Prefer rowing/erg terms — bare "row" matches strength moves (Hammer Row, Cable Row).
 const CARDIO_NAME_PATTERN =
   /\b(run|running|jog|jogging|sprint|swim|swimming|cycle|cycling|bike|biking|walk(?:ing)?|treadmill|elliptical|stair\s*climber|hiit|cardio|jump\s*rope)\b/i;
 
@@ -73,7 +74,12 @@ export function classifyExercise(input: ExerciseClassificationInput): ExerciseTy
   const equipment = normalize(input.equipment);
   const movementCategory = normalize(input.movementCategory);
 
-  if (movementCategory === 'cardio' || isCardioName(name)) {
+  // Name heuristics can false-positive (e.g. bare "row" in Hammer Row). Never demote an
+  // explicitly loaded strength catalog row to cardio — that skips rest timers and blocks weight.
+  const loadedStrength =
+    input.exerciseType === 'strength' && LOADED_EQUIPMENT.has(equipment);
+
+  if (movementCategory === 'cardio' || (isCardioName(name) && !loadedStrength)) {
     return 'cardio';
   }
 

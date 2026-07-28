@@ -24,12 +24,15 @@ const cases: Array<{ label: string; input: Parameters<typeof classifyExercise>[0
   },
   // A bare "row" used to classify as cardio, which put pulling lifts on the distance logger.
   { label: 'Hammer Row', input: { name: 'Hammer Row', equipment: 'machine' }, expected: 'strength' },
+  { label: 'Hammer Row loaded strength', input: { slug: 'hammer-row', name: 'Hammer Row', equipment: 'dumbbell', exerciseType: 'strength' }, expected: 'strength' },
+  { label: 'Hammer Low Row', input: { name: 'Hammer Low Row', equipment: 'machine' }, expected: 'strength' },
   { label: 'Seated Cable Row', input: { name: 'Seated Cable Row', equipment: 'cable' }, expected: 'strength' },
   { label: 'Bent Over Row', input: { name: 'Bent Over Row', equipment: 'barbell' }, expected: 'strength' },
   { label: 'Upright Row', input: { name: 'Upright Row', equipment: 'dumbbell' }, expected: 'strength' },
   { label: 'Inverted Row', input: { name: 'Inverted Row', equipment: 'bodyweight' }, expected: 'bodyweight' },
   { label: 'Rowing Machine', input: { name: 'Rowing Machine', equipment: 'machine' }, expected: 'cardio' },
   { label: 'Row Erg', input: { name: 'Row Erg', equipment: 'machine' }, expected: 'cardio' },
+  { label: 'Rowing remains cardio', input: { name: 'Rowing', equipment: 'rower' }, expected: 'cardio' },
   // Loaded carries and walking lunges read as cardio but are weight-and-reps work.
   { label: 'Walking Lunge without slug', input: { name: 'Walking Lunge', equipment: 'dumbbell' }, expected: 'bodyweight' },
   { label: "Farmer's Walk", input: { name: "Farmer's Walk", equipment: 'dumbbell' }, expected: 'strength' },
