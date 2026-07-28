@@ -633,6 +633,11 @@ export function ActiveWorkoutScreen({
     const sessionSets = completedSetsRef.current;
     const sessionLastSet = sessionSets[sessionSets.length - 1];
 
+    // Reset loading method for THIS exercise immediately — otherwise Distance from a prior
+    // cardio (or misclassified) lift sticks on Hammer Curl / other strength moves.
+    setLoadingMethod(
+      inferLoadingMethodFromHistory(exercise.exercise, exercise.exercise?.slug, undefined, undefined),
+    );
     setDurationSeconds(defaultTimedDurationSeconds(repRange));
     setDistanceKm(0);
 
