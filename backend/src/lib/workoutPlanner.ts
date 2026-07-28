@@ -633,26 +633,63 @@ export function suggestWeightLbs(
   }
 
   if (history) {
+    // workout_sets.weight is stored in kg; planner suggestions are lbs.
+    const historyWeightLbs = Math.round(history.weight * 2.20462 * 10) / 10;
     const topRep = goal === 'strength' ? 6 : goal === 'fat_loss' ? 15 : 12;
     if (history.reps >= topRep) {
-      return Math.round((history.weight + 5) * 10) / 10;
+      return Math.round((historyWeightLbs + 5) * 10) / 10;
     }
-    return history.weight;
+    return historyWeightLbs;
   }
 
   const bw = bodyWeightKg ?? 75;
   const base = bw * 2.20462;
-  const factor =
-    exercise.metadata?.movement_family === 'squat_pattern'
-      ? 0.65
-      : exercise.metadata?.movement_family === 'hinge_pattern'
-        ? 0.55
-        : exercise.metadata?.movement_family === 'horizontal_press'
-          ? 0.45
-          : exercise.metadata?.movement_family === 'vertical_press'
-            ? 0.25
-            : 0.2;
-  return Math.round((base * factor) / 5) * 5;
+  const family = exercise.metadata?.movement_family ?? '';
+  const name = exercise.name.toLowerCase();
+  const factor = startingLoadFactor(family, name, exercise.equipment);
+  const raw = Math.round((base * factor) / 5) * 5;
+  const cap = startingLoadCapLbs(family, name);
+  return Math.min(raw, cap);
+}
+
+/** Fraction of bodyweight (lbs) used when an exercise has no logged history. */
+function startingLoadFactor(family: string, name: string, equipment?: string | null): number {
+  if (
+    family === 'biceps' ||
+    family === 'triceps' ||
+    family === 'rear_delt' ||
+    family === 'lateral_raise' ||
+    family === 'forearms' ||
+    family === 'calves' ||
+    /\b(curl|extension|kickback|raise|fly|flye|shrug|wrist)\b/.test(name) ||
+    /\bplate\b/.test(name)
+  ) {
+    // Isolation accessories are a small fraction of bodyweight — never bench/squat territory.
+    if (/\bplate\b/.test(name) && /\bcurl\b/.test(name)) return 0.08;
+    return 0.1;
+  }
+  if (family === 'squat_pattern') return 0.65;
+  if (family === 'hinge_pattern') return 0.55;
+  if (family === 'horizontal_press') return 0.45;
+  if (family === 'vertical_press') return 0.25;
+  if (family === 'horizontal_pull' || family === 'vertical_pull') return 0.35;
+  if (equipment === 'dumbbell' || equipment === 'cable' || equipment === 'machine') return 0.15;
+  return 0.2;
+}
+
+function startingLoadCapLbs(family: string, name: string): number {
+  if (/\bplate\b/.test(name) && /\bcurl\b/.test(name)) return 45;
+  if (
+    family === 'biceps' ||
+    family === 'triceps' ||
+    family === 'rear_delt' ||
+    family === 'lateral_raise' ||
+    family === 'forearms' ||
+    /\b(curl|extension|kickback|raise|fly|flye)\b/.test(name)
+  ) {
+    return 60;
+  }
+  return 405;
 }
 
 export function selectFocusedSplitExercises(

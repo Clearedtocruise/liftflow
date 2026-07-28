@@ -29,6 +29,7 @@ import {
     computeWorkoutSetProgress,
     formatCoachTargetLine,
 } from '@/lib/activeWorkoutMetrics';
+import { isPlausibleWorkingWeightKg } from '@/lib/exerciseStartingLoad';
 import {
     inferLoadingMethodFromHistory,
     loadingMethodOptions,
@@ -433,14 +434,27 @@ export function ActiveWorkoutScreen({
   );
   const coachTargetLine = useMemo(() => {
     if (!coachPrescription) return null;
+    const weightKg = isPlausibleWorkingWeightKg(
+      currentExercise?.exercise?.name,
+      coachPrescription.targets.weightKg,
+    )
+      ? coachPrescription.targets.weightKg
+      : 0;
     return formatCoachTargetLine(
-      coachPrescription.targets,
+      { ...coachPrescription.targets, weightKg },
       loggingMode,
       (kg) => formatWorkoutWeightForInput(kg, units.preferredWeightUnit),
       units.weightLabel,
       repRange,
     );
-  }, [coachPrescription, loggingMode, units.preferredWeightUnit, units.weightLabel, repRange]);
+  }, [
+    coachPrescription,
+    currentExercise?.exercise?.name,
+    loggingMode,
+    units.preferredWeightUnit,
+    units.weightLabel,
+    repRange,
+  ]);
   const groupComplete =
     usesSupersetRotation && inSuperset && supersetGroup
       ? isSupersetGroupComplete(supersetGroup, sortedExercises, planExercises)
@@ -515,13 +529,11 @@ export function ActiveWorkoutScreen({
     if (!intervalTimer) setIntervalOverlayOpen(false);
   }, [intervalTimer]);
 
+  const circuitTimerActive = circuitTimer != null && circuitTimer.phase !== 'done';
   useEffect(() => {
-    if (circuitTimer != null && circuitTimer.phase !== 'done') {
-      setCircuitOverlayOpen(true);
-    } else {
-      setCircuitOverlayOpen(false);
-    }
-  }, [circuitTimer != null, circuitTimer?.phase]);
+    if (circuitTimerActive) setCircuitOverlayOpen(true);
+    else setCircuitOverlayOpen(false);
+  }, [circuitTimerActive]);
 
   useEffect(() => {
     setIntervalOverlayOpen(false);
@@ -707,7 +719,10 @@ export function ActiveWorkoutScreen({
         if (last?.weightKg != null && last.reps != null) {
           setWeightKg(last.weightKg);
           setReps(last.reps);
-        } else if (exercise.suggestedWeight) {
+        } else if (
+          exercise.suggestedWeight &&
+          isPlausibleWorkingWeightKg(exercise.exercise?.name, exercise.suggestedWeight)
+        ) {
           setWeightKg(exercise.suggestedWeight);
           setReps(parseTargetReps(repRange));
         } else {
@@ -1524,7 +1539,14 @@ export function ActiveWorkoutScreen({
                   formatWeight={(kg) => formatWorkoutWeightForInput(kg, units.preferredWeightUnit)}
                   weightLabel={units.weightLabel}
                   distanceUnit={units.preferredDistanceUnit}
-                  fallbackWeightKg={weightKg > 0 ? weightKg : currentExercise.suggestedWeight}
+                  fallbackWeightKg={
+                    isPlausibleWorkingWeightKg(
+                      currentExercise.exercise?.name,
+                      currentExercise.suggestedWeight,
+                    )
+                      ? currentExercise.suggestedWeight
+                      : undefined
+                  }
                 />
               ) : null}
 
