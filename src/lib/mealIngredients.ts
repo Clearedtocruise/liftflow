@@ -382,6 +382,12 @@ function correctInflatedPlanMacros(meal: MealMacroFields): MealMacros {
   };
 }
 
+/** Corrected macros when a plan row looks inflated; otherwise null. */
+export function correctedMacrosIfInflated(meal: MealMacroFields): MealMacros | null {
+  if (!looksLikeInflatedPlanMacros(meal)) return null;
+  return correctInflatedPlanMacros(meal);
+}
+
 /**
  * Fill in macros the user never entered by distributing the calories that
  * protein/carbs/fat do not already account for. A quick log of "600 kcal, 40 g

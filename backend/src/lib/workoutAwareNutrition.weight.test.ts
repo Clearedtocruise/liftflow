@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { calculateMacroTargets, normalizeBodyWeightKg } from './workoutAwareNutrition.js';
+import { calculateMacroTargets, isInvertedBodyWeightKg, normalizeBodyWeightKg } from './workoutAwareNutrition.js';
 import { generateWeeklyMealPlanMeals } from './mealPlanTemplates.js';
 
 test('normalizeBodyWeightKg undoes lbs multiplied by 2.2', () => {
@@ -9,6 +9,11 @@ test('normalizeBodyWeightKg undoes lbs multiplied by 2.2', () => {
   assert.ok(Math.abs(normalizeBodyWeightKg(402.2) - 82.8) < 0.5);
   assert.equal(normalizeBodyWeightKg(85), 85);
   assert.equal(normalizeBodyWeightKg(undefined), 75);
+});
+
+test('isInvertedBodyWeightKg flags classic lbs×2.2 storage', () => {
+  assert.equal(isInvertedBodyWeightKg(402.2), true);
+  assert.equal(isInvertedBodyWeightKg(85), false);
 });
 
 test('fat-loss macros for mis-stored ~402 kg no longer yield 3392-cal dinners', () => {

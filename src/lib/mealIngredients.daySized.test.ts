@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  correctedMacrosIfInflated,
   looksLikeDaySizedMealMacros,
   looksLikeInflatedPlanMacros,
   resolveMealMacros,
@@ -112,4 +113,30 @@ test('normal dinner macros are left alone', () => {
     carbsG: 32,
     fatG: 32,
   });
+});
+
+test('Today screenshot breakfast/snack correct via correctedMacrosIfInflated', () => {
+  const breakfast = correctedMacrosIfInflated({
+    name: 'Greek yogurt bowl with berries',
+    mealType: 'breakfast',
+    calories: 2827,
+    proteinG: 221,
+    carbsG: 212,
+    fatG: 122,
+  });
+  assert.ok(breakfast);
+  assert.ok(breakfast!.calories < 600, `got ${breakfast!.calories}`);
+  assert.notEqual(breakfast!.calories, 2827);
+
+  const snack = correctedMacrosIfInflated({
+    name: 'Apple with almond butter',
+    mealType: 'snack',
+    calories: 1131,
+    proteinG: 89,
+    carbsG: 85,
+    fatG: 49,
+  });
+  assert.ok(snack);
+  assert.ok(snack!.calories < 350, `got ${snack!.calories}`);
+  assert.notEqual(snack!.calories, 1131);
 });

@@ -93,6 +93,12 @@ export function normalizeBodyWeightKg(raw: number | null | undefined): number {
   return raw;
 }
 
+/** True when stored weight_kg is a classic lbs↔kg inversion that normalize would rewrite. */
+export function isInvertedBodyWeightKg(raw: number | null | undefined): boolean {
+  if (raw == null || !Number.isFinite(raw) || raw <= 0) return false;
+  return Math.abs(normalizeBodyWeightKg(raw) - raw) > 1;
+}
+
 function clampDailyCalories(calories: number): number {
   return Math.max(MIN_DAILY_CALORIES, Math.min(MAX_DAILY_CALORIES, Math.round(calories)));
 }
