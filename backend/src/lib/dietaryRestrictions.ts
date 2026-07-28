@@ -78,7 +78,10 @@ function applyFoodPreferences(name: string, preferences: string[] = []): string 
     return name.replace(/chicken|beef|turkey|steak/gi, 'salmon');
   }
   if (/beef/i.test(pref) && !/beef|steak|ribeye/i.test(lower)) {
-    return name.replace(/chicken|salmon|turkey|fish/gi, 'lean beef');
+    // Replace the protein word (and a leading "lean/grilled/baked") so
+    // "Lean salmon …" becomes "lean beef …", not "Lean lean beef …".
+    return name.replace(/\b(?:lean|grilled|baked)\s+(chicken|salmon|turkey|fish)\b/gi, 'lean beef')
+      .replace(/\b(chicken|salmon|turkey|fish)\b/gi, 'lean beef');
   }
   if (/eggs/i.test(pref) && !/egg/i.test(lower)) {
     return `Eggs with ${name.split(' ').slice(-2).join(' ')}`;

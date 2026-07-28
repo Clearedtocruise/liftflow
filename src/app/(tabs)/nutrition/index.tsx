@@ -38,6 +38,7 @@ import { aggregateDailyMeals, aggregateWeeklyMeals, buildDailySummaryFromMeals, 
 import {
     enrichMealMeta,
     mealNameFromIngredients,
+    resolveMealMacros,
     resolveMealMacrosFromIngredients,
     serializeMealMeta,
 } from '@/lib/mealIngredients';
@@ -820,6 +821,7 @@ export default function NutritionScreen() {
                         schedule,
                         day.date === today && hasWorkoutToday,
                       );
+                      const macros = resolveMealMacros(meal);
                       return (
                         <View key={meal.id} style={styles.weekMealRow}>
                           <AppText variant="footnote" color="accent">
@@ -827,8 +829,8 @@ export default function NutritionScreen() {
                           </AppText>
                           <AppText variant="body">{meal.name}</AppText>
                           <AppText variant="caption" color="textSecondary">
-                            {meal.calories ?? 0} cal · {Math.round(meal.proteinG ?? 0)}P · {Math.round(meal.carbsG ?? 0)}C ·{' '}
-                            {Math.round(meal.fatG ?? 0)}F
+                            {macros.calories} cal · {Math.round(macros.proteinG)}P · {Math.round(macros.carbsG)}C ·{' '}
+                            {Math.round(macros.fatG)}F
                           </AppText>
                         </View>
                       );

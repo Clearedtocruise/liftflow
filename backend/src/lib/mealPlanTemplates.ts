@@ -370,8 +370,12 @@ export function generateWeeklyMealPlanMeals(
     const post = scaleMeal(pickAllowedFromPool(POST_WORKOUT_POOL, dayIndex, prefs.dietaryRestrictions), safeCalories, safeProtein);
     const core = selectDailyCoreMeals(dateStr, { calories: safeCalories, proteinG: safeProtein, carbsG, fatG }, style, prefs);
 
-    for (const meal of [pre, post, ...core]) {
-      meals.push({ ...meal, name: adaptMealName(meal.name, meal.mealType, prefs).name, scheduledDate: dateStr });
+    // Core meals already ran through adaptMealName in selectDailyCoreMeals —
+    // adapting again turns "Lean salmon…" → "lean beef…" → "Lean lean beef…".
+    const adaptedPre = { ...pre, name: adaptMealName(pre.name, pre.mealType, prefs).name };
+    const adaptedPost = { ...post, name: adaptMealName(post.name, post.mealType, prefs).name };
+    for (const meal of [adaptedPre, adaptedPost, ...core]) {
+      meals.push({ ...meal, scheduledDate: dateStr });
     }
   }
 
