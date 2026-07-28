@@ -14,6 +14,8 @@ import { requireAdmin } from '../lib/supabase.js';
 import {
     calculateMacroTargets,
     generateDailyMeals,
+    isInvertedBodyWeightKg,
+    normalizeBodyWeightKg,
 } from '../lib/workoutAwareNutrition.js';
 import { inferDietaryStyle, type NutritionPreferenceInput } from '../lib/dietaryRestrictions.js';
 import { authedUserId } from '../middleware/authUser.js';
@@ -80,6 +82,8 @@ nutritionRouter.post('/meal-plan/generate', async (req, res) => {
     };
     let proteinG = 180;
     let calories = 2400;
+    let goalCalories: number | null = null;
+    let goalProtein: number | null = null;
 
     const db = requireAdmin();
     const { data: goals } = await db
@@ -90,27 +94,57 @@ nutritionRouter.post('/meal-plan/generate', async (req, res) => {
       .limit(1)
       .maybeSingle();
     if (goals) {
-      proteinG = goals.protein_g ?? proteinG;
-      calories = goals.daily_calories ?? calories;
+      goalProtein = goals.protein_g ?? null;
+      goalCalories = goals.daily_calories ?? null;
+      proteinG = goalProtein ?? proteinG;
+      calories = goalCalories ?? calories;
     }
+
+    // Persist lbs×2.2 weight inversions so the next generate/sync stays correct.
+    try {
+      const { data: profile } = await db.from('profiles').select('weight_kg').eq('id', userId).maybeSingle();
+      const rawWeight = profile?.weight_kg != null ? Number(profile.weight_kg) : null;
+      if (isInvertedBodyWeightKg(rawWeight)) {
+        await db.from('profiles').update({ weight_kg: normalizeBodyWeightKg(rawWeight) }).eq('id', userId);
+      }
+    } catch {
+      // Non-fatal — meal generation still proceeds with clamped targets.
+    }
+
     let today: string | undefined;
     let macroTargets: MacroSplit | null = null;
     try {
       const ctx = await loadCoachContext(userId);
       today = ctx.today;
       if (ctx.macroTargets) {
-        proteinG = ctx.macroTargets.proteinG;
-        calories = ctx.macroTargets.calories;
-        macroTargets = {
-          calories: ctx.macroTargets.calories,
-          proteinG: ctx.macroTargets.proteinG,
-          carbsG: ctx.macroTargets.carbsG,
-          fatG: ctx.macroTargets.fatG,
-        };
+        const coachCal = ctx.macroTargets.calories;
+        const goalsLookSane = goalCalories != null && goalCalories >= 1200 && goalCalories <= 4500;
+        // Prefer active goals when coach macros still look like the weight-unit bug
+        // (header can show 2241 while generate would otherwise write 11k-day meals).
+        const coachLooksInflated =
+          coachCal > 4500 || (goalsLookSane && coachCal > goalCalories! * 1.5);
+        if (!coachLooksInflated) {
+          proteinG = ctx.macroTargets.proteinG;
+          calories = ctx.macroTargets.calories;
+          macroTargets = {
+            calories: ctx.macroTargets.calories,
+            proteinG: ctx.macroTargets.proteinG,
+            carbsG: ctx.macroTargets.carbsG,
+            fatG: ctx.macroTargets.fatG,
+          };
+        }
       }
     } catch {
       // Keep goals/defaults — never fail meal generation on coach context.
     }
+
+    // Inflated goals (from a bad weight_kg) must not ship 3k-calorie dinners.
+    if (calories > 4500) {
+      const scale = 4500 / calories;
+      calories = 4500;
+      proteinG = Math.round(proteinG * scale);
+    }
+    if (calories < 1200) calories = 1200;
 
     // The plan is built around these numbers, so they become the saved goal. Without this a user
     // who never ran coach activation had meals sized for a target nothing recorded, leaving the

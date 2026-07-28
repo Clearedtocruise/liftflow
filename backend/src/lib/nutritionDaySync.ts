@@ -6,6 +6,8 @@ import {
     calculateMacroTargets,
     generateDailyMeals,
     inferWorkoutType,
+    isInvertedBodyWeightKg,
+    normalizeBodyWeightKg,
     type MacroTargets,
     type NutritionContext,
 } from './workoutAwareNutrition.js';
@@ -180,6 +182,14 @@ export async function syncNutritionForDate(userId: string, date: string): Promis
   ]);
 
   const profile = profileRes.data;
+  const rawWeight = profile?.weight_kg != null ? Number(profile.weight_kg) : null;
+  const bodyWeightKg = isInvertedBodyWeightKg(rawWeight)
+    ? normalizeBodyWeightKg(rawWeight)
+    : (rawWeight ?? undefined);
+  if (bodyWeightKg != null && isInvertedBodyWeightKg(rawWeight)) {
+    await db.from('profiles').update({ weight_kg: bodyWeightKg }).eq('id', userId);
+  }
+
   const workout = (workoutRes.data as PlannedWorkoutRow | null) ?? null;
   const sessionKind = sessionKindForRow(workout);
   const isTrainingDay = sessionKind !== 'rest';
@@ -193,7 +203,7 @@ export async function syncNutritionForDate(userId: string, date: string): Promis
 
   const macros = calculateMacroTargets({
     goal: toNutritionGoal(rankedGoals[0]),
-    bodyWeightKg: profile?.weight_kg ?? undefined,
+    bodyWeightKg,
     recoveryScore: recoveryRes.data?.recovery_score ?? undefined,
     recoveryModeActive: recoveryRes.data?.recovery_mode_active ?? false,
     workoutType,
@@ -273,7 +283,7 @@ export async function syncNutritionForDate(userId: string, date: string): Promis
     date,
     macros,
     mealTiming: mealTimingLabels(sessionKind !== 'rest', targetMeals.length),
-    hydrationNote: hydrationNote(profile?.weight_kg ?? 75, sessionKind),
+    hydrationNote: hydrationNote(bodyWeightKg ?? 75, sessionKind),
     isTrainingDay,
     workoutName: workout?.name,
     mealsUpdated,

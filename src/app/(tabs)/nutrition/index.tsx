@@ -830,6 +830,7 @@ export default function NutritionScreen() {
                         schedule,
                         day.date === today && hasWorkoutToday,
                       );
+                      const macros = resolveMealMacros(meal);
                       return (
                         <View key={meal.id} style={styles.weekMealRow}>
                           <AppText variant="footnote" color="accent">

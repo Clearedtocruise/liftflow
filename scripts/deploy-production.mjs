@@ -5,7 +5,8 @@
  * Required env vars (export before running):
  *   GITHUB_TOKEN or `gh auth login`
  *   RENDER_API_KEY — https://dashboard.render.com/u/settings#api-keys
- *   EXPO_TOKEN — https://expo.dev/accounts/[account]/settings/access-tokens
+ *   EXPO_TOKEN1 — liftflow1 access token (https://expo.dev/settings/access-tokens)
+ *                 Do NOT use EXPO_TOKEN — that credential is immadoer and cannot build this app.
  *
  * Reads secrets from local .env (not committed):
  *   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, OPENAI_API_KEY
@@ -112,13 +113,19 @@ async function verifyHealth() {
 }
 
 async function easBuilds() {
-  if (!process.env.EXPO_TOKEN) {
-    report.push(['EAS builds', 'SKIP', 'Set EXPO_TOKEN and run: npm run build:ios && npm run build:android:apk']);
+  const token = process.env.EXPO_TOKEN1;
+  if (!token) {
+    report.push([
+      'EAS builds',
+      'SKIP',
+      'Set EXPO_TOKEN1 (liftflow1) — do not use EXPO_TOKEN (immadoer). Then: npm run build:ios && npm run build:android:apk',
+    ]);
     return;
   }
   try {
-    run('npx eas-cli build --platform ios --profile production --non-interactive');
-    run('npx eas-cli build --platform android --profile production-apk --non-interactive');
+    const env = { ...process.env, EXPO_TOKEN: token };
+    run('npx eas-cli build --platform ios --profile production --non-interactive', env);
+    run('npx eas-cli build --platform android --profile production-apk --non-interactive', env);
     report.push(['EAS builds', 'PASS', 'Builds queued on expo.dev']);
   } catch (e) {
     report.push(['EAS builds', 'FAIL', e.message]);

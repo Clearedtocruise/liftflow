@@ -8,8 +8,8 @@ type HealthKitModule = {
   requestAuthorization: (opts: { toRead: readonly string[]; toShare?: readonly string[] }) => Promise<boolean>;
   queryQuantitySamples: (
     id: string,
-    filter: { from: Date; to: Date; limit: number },
-  ) => Promise<{ uuid: string; quantity: number; endDate: Date; startDate?: Date }[]>;
+    filter: { from: Date; to: Date; limit: number; unit?: string },
+  ) => Promise<{ uuid: string; quantity: number; unit?: string; endDate: Date; startDate?: Date }[]>;
   queryCategorySamples?: (
     id: string,
     filter: { from: Date; to: Date; limit: number },
@@ -88,12 +88,23 @@ export async function fetchHealthKitSamples(since: Date): Promise<HealthMetricSa
     });
   }
 
-  const weights = await hk.queryQuantitySamples('HKQuantityTypeIdentifierBodyMass', filter);
+  const weights = await hk.queryQuantitySamples('HKQuantityTypeIdentifierBodyMass', {
+    ...filter,
+    // Prefer kg explicitly — without a unit, HealthKit uses the user's preferred
+    // unit (often lb), and we previously stored that number as weight_kg.
+    unit: 'kg',
+  });
   for (const s of weights) {
+    const quantity = Number(s.quantity);
+    const unit = String((s as { unit?: string }).unit ?? 'kg').toLowerCase();
+    let kg = quantity;
+    if (unit === 'lb' || unit === 'lbs') kg = quantity / 2.2046226218;
+    else if (unit === 'g') kg = quantity / 1000;
+
     samples.push({
       dataType: 'weight',
       externalId: s.uuid,
-      value: { kg: s.quantity },
+      value: { kg },
       recordedAt: s.endDate.toISOString(),
       unit: 'kg',
     });
