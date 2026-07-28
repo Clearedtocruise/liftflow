@@ -9,6 +9,7 @@ const SATISFIES: Record<string, string[]> = {
   ez_curl_bar: ['barbell'],
   trap_bar: ['barbell'],
   weight_plates: ['barbell'],
+  landmine: ['landmine'],
   squat_rack: ['rack'],
   power_rack: ['rack'],
   smith_machine: ['rack', 'machines'],
@@ -49,6 +50,7 @@ const ALL_REQUIREMENTS = [
   'barbell',
   'rack',
   'machines',
+  'landmine',
 ] as const;
 
 export function expandEquipmentRequirements(selected: string[]): Set<string> {

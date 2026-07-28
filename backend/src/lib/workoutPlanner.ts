@@ -336,6 +336,11 @@ export function resolveExerciseRequirements(exercise: ExerciseRecord): string[] 
   const field = EQUIPMENT_FIELD_REQUIREMENTS[exercise.equipment];
   const meta = exercise.metadata?.requires ?? [];
 
+  // Specialty implements (landmine / T-bar station) are not implied by a plain barbell.
+  if (meta.includes('landmine')) {
+    return [...new Set(meta)];
+  }
+
   if (exercise.equipment === 'barbell') {
     const needs = new Set<string>(['barbell']);
     if (meta.includes('rack')) needs.add('rack');

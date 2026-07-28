@@ -29,6 +29,7 @@ export const EQUIPMENT_CATALOG: EquipmentItem[] = [
   { id: 'ez_curl_bar', label: 'EZ curl bar', category: 'free_weights', satisfies: ['barbell'] },
   { id: 'trap_bar', label: 'Trap / hex bar', category: 'free_weights', satisfies: ['barbell'] },
   { id: 'weight_plates', label: 'Weight plates', category: 'free_weights', satisfies: ['barbell'] },
+  { id: 'landmine', label: 'Landmine / T-bar', category: 'free_weights', satisfies: ['landmine'] },
   // Racks & benches
   { id: 'squat_rack', label: 'Squat rack', category: 'racks_benches', satisfies: ['rack'] },
   { id: 'power_rack', label: 'Power rack', category: 'racks_benches', satisfies: ['rack'] },
@@ -89,6 +90,7 @@ export function expandEquipmentRequirements(selected: string[]): Set<string> {
       'barbell',
       'rack',
       'machines',
+      'landmine',
     ]);
   }
 
@@ -182,6 +184,7 @@ export const EQUIPMENT_PRESETS = {
       'leg_curl',
       'pull_up_bar',
       'smith_machine',
+      'landmine',
     ),
   },
   powerlifting_gym: {
