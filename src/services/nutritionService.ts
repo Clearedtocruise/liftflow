@@ -339,7 +339,7 @@ export const nutritionService: INutritionService = {
       if (updates.mealType !== undefined) payload.meal_type = updates.mealType;
       if (updates.status !== undefined) {
         payload.status = updates.status;
-        // Replacements count as eaten; without consumed_at some paths still look untouched.
+        // Ate confirmation stamps consumed_at; replace/skip clears it.
         if (updates.status === 'completed' || updates.status === 'modified') {
           payload.consumed_at = new Date().toISOString();
         } else if (updates.status === 'planned' || updates.status === 'skipped') {

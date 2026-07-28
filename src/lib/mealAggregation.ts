@@ -34,13 +34,10 @@ function mealStatus(meal: Meal) {
 }
 
 /**
- * Counts toward daily consumed macros. Only an explicit completed/modified
- * status counts — a plan slot the user never touched is not food they ate.
- *
- * Replacements used to write `modified` only into the instructions JSON while
- * leaving the row `planned`, so home showed "Goal 194g" with a dash after the
- * lifter had already swapped in real food. Honor that metadata so those meals
- * count, and keep preferring the column when it is set.
+ * Counts toward daily consumed macros. Only an explicit ate confirmation
+ * (`completed` / `modified`) counts — replacing a plan slot does not mean
+ * the user ate it yet. Prefer the status column; fall back to instructions
+ * metadata for older rows.
  */
 export function isConsumedMeal(meal: Meal): boolean {
   if (meal.status === 'completed' || meal.status === 'modified') return true;
