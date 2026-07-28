@@ -69,6 +69,18 @@ const CORE_STRENGTH_NAME_PATTERN =
 const CARDIO_NAME_PATTERN =
   /\b(run|running|jog|sprint|swim|swimming|cycle|cycling|bike|biking|rowing|rower|row\s*erg|erg\s*row|concept\s*2|walk(?:ing)?|treadmill|elliptical|hiit|cardio|jump\s*rope)\b/i;
 
+const LOADED_EQUIPMENT = new Set([
+  'barbell',
+  'dumbbell',
+  'cable',
+  'machine',
+  'bands',
+  'kettlebell',
+  'smith',
+  'ez_bar',
+  'trap_bar',
+]);
+
 function normalize(value: string | undefined | null): string {
   return (value ?? '').trim().toLowerCase();
 }
@@ -83,7 +95,13 @@ export function classifyExercise(input: ExerciseClassificationInput): ExerciseTy
   const equipment = normalize(input.equipment);
   const movementCategory = normalize(input.movementCategory);
 
-  if (movementCategory === 'cardio' || CARDIO_NAME_PATTERN.test(name)) return 'cardio';
+  // Never demote loaded strength moves to cardio (skips between-set rest / blocks weight).
+  const loadedStrength =
+    input.exerciseType === 'strength' && LOADED_EQUIPMENT.has(equipment);
+
+  if (movementCategory === 'cardio' || (CARDIO_NAME_PATTERN.test(name) && !loadedStrength)) {
+    return 'cardio';
+  }
   if (TIMED_NAME_PATTERN.test(name)) return 'timed';
   if (CORE_BODYWEIGHT_NAME_PATTERN.test(name)) return 'bodyweight';
   if (CORE_STRENGTH_NAME_PATTERN.test(name)) return 'strength';

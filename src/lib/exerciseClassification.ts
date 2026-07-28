@@ -55,7 +55,12 @@ export function classifyExercise(input: ExerciseClassificationInput): ExerciseTy
   const equipment = normalize(input.equipment);
   const movementCategory = normalize(input.movementCategory);
 
-  if (movementCategory === 'cardio' || CARDIO_NAME_PATTERN.test(name)) {
+  // Name heuristics can false-positive (e.g. bare "row" in Hammer Row). Never demote an
+  // explicitly loaded strength catalog row to cardio — that skips rest timers and blocks weight.
+  const loadedStrength =
+    input.exerciseType === 'strength' && LOADED_EQUIPMENT.has(equipment);
+
+  if (movementCategory === 'cardio' || (CARDIO_NAME_PATTERN.test(name) && !loadedStrength)) {
     return 'cardio';
   }
 
