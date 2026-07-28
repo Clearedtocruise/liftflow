@@ -504,7 +504,11 @@ export function ActiveWorkoutScreen({
   }, [restSecondsRemaining]);
 
   useEffect(() => {
-    if (!restActive) setRestOverlayOpen(false);
+    // Between-set rest used to open the full timer automatically. The ghost-layer fix gated it
+    // behind restOverlayOpen but never set that flag on rest start, so users only got a banner
+    // and had to tap "Open timer". Open on rest start; dismiss still sticks until rest ends.
+    if (restActive) setRestOverlayOpen(true);
+    else setRestOverlayOpen(false);
   }, [restActive]);
 
   useEffect(() => {
@@ -512,8 +516,12 @@ export function ActiveWorkoutScreen({
   }, [intervalTimer]);
 
   useEffect(() => {
-    if (!circuitTimer || circuitTimer.phase === 'done') setCircuitOverlayOpen(false);
-  }, [circuitTimer]);
+    if (circuitTimer != null && circuitTimer.phase !== 'done') {
+      setCircuitOverlayOpen(true);
+    } else {
+      setCircuitOverlayOpen(false);
+    }
+  }, [circuitTimer != null, circuitTimer?.phase]);
 
   useEffect(() => {
     setIntervalOverlayOpen(false);
