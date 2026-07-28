@@ -2,6 +2,8 @@ import { Audio } from 'expo-av';
 import { File } from 'expo-file-system';
 import { Platform } from 'react-native';
 
+import { enterVoiceCaptureMode, releaseAudioSession } from '@/lib/voice/audioSession';
+
 /**
  * HIGH_QUALITY rather than LOW_QUALITY because the low preset writes `.caf` on iOS and `.3gp` on
  * Android, neither of which the transcription API accepts. High quality yields `.m4a` on both.
@@ -23,10 +25,16 @@ export async function hasMicrophonePermission(): Promise<boolean> {
 }
 
 export async function startRecording(): Promise<Audio.Recording> {
-  // allowsRecordingIOS must be set before createAsync or iOS refuses to open the input route.
-  await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
-  const { recording } = await Audio.Recording.createAsync(RECORDING_OPTIONS);
-  return recording;
+  await enterVoiceCaptureMode();
+  try {
+    const { recording } = await Audio.Recording.createAsync(RECORDING_OPTIONS);
+    return recording;
+  } catch (error) {
+    // A recorder that never opened still left the session ducked, so the lifter's music stayed
+    // quiet with nothing listening.
+    await releaseAudioSession();
+    throw error;
+  }
 }
 
 function contentTypeForUri(uri: string): string {
@@ -44,7 +52,7 @@ export async function stopRecording(recording: Audio.Recording): Promise<Recorde
   try {
     await recording.stopAndUnloadAsync();
   } finally {
-    await Audio.setAudioModeAsync({ allowsRecordingIOS: false }).catch(() => undefined);
+    await releaseAudioSession();
   }
 
   const uri = recording.getURI();
@@ -68,5 +76,5 @@ export async function cancelRecording(recording: Audio.Recording): Promise<void>
   } catch {
     // already unloaded
   }
-  await Audio.setAudioModeAsync({ allowsRecordingIOS: false }).catch(() => undefined);
+  await releaseAudioSession();
 }

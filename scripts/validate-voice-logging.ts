@@ -115,5 +115,40 @@ check(
   true,
 );
 
+console.log('\nThe microphone gives the lifter their music back');
+// Recording forces iOS into PlayAndRecord. Without an explicit duck it interrupts whatever is
+// playing, and an interrupted app only resumes on a deactivation flag expo-av does not expose —
+// so the music stopped when the mic opened and never returned.
+const audioSession = source('src/lib/voice/audioSession.ts');
+const recordAudio = source('src/lib/voice/recordAudio.ts');
+const coachSpeech = source('src/services/voiceCoachingService.ts');
+
+check('capture ducks other audio rather than interrupting it', audioSession.includes('InterruptionModeIOS.DuckOthers'), true);
+check('Android ducks too', audioSession.includes('InterruptionModeAndroid.DuckOthers'), true);
+check('releasing hands playback back to other apps', audioSession.includes('InterruptionModeIOS.MixWithOthers'), true);
+check('releasing turns recording off so audio leaves the earpiece', audioSession.includes('allowsRecordingIOS: false'), true);
+check('the session is never held into the background', audioSession.includes('staysActiveInBackground: false'), true);
+
+console.log('\nEvery path out of recording releases the session');
+check('stopping releases it', recordAudio.includes('await releaseAudioSession()'), true);
+check('a recorder that fails to open releases it', recordAudio.includes('await releaseAudioSession();\n    throw error;'), true);
+check('spoken replies release it when they finish', coachSpeech.includes('didJustFinish) void releaseAudioSession()'), true);
+check('device Speech fallbacks also release via speakCue', coachSpeech.includes("from '@/lib/voice/speakCue'"), true);
+
+console.log('\nRest-complete and voice confirmations restore music after speaking');
+const speakCue = source('src/lib/voice/speakCue.ts');
+const restTimer = source('src/state/workout/WorkoutSessionContext.tsx');
+const voiceFeedback = source('src/lib/voice/voiceFeedback.ts');
+check('speakCue ducks while the cue plays', speakCue.includes('enterVoicePlaybackMode'), true);
+check('speakCue releases when speech finishes', speakCue.includes('onDone: finish') && speakCue.includes('releaseAudioSession'), true);
+check('rest complete uses speakCue (not bare Speech.speak)', restTimer.includes("speakCue('Rest complete. Ready for your next set.'"), true);
+check('rest complete does not call bare Speech.speak', restTimer.includes('Speech.speak'), false);
+check('voice confirmations use speakCue', voiceFeedback.includes('speakCue(message'), true);
+
+console.log('\nAudio mode is set in one place, so two callers cannot fight over it');
+check('the recorder does not patch the mode itself', recordAudio.includes('setAudioModeAsync'), false);
+check('the coach does not patch the mode itself', coachSpeech.includes('setAudioModeAsync'), false);
+check('speakCue does not patch the mode itself', speakCue.includes('setAudioModeAsync'), false);
+
 console.log(`\nVoice logging: ${failures === 0 ? 'PASS' : `FAIL (${failures})`}`);
 process.exit(failures === 0 ? 0 : 1);
