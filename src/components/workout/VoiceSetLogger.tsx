@@ -9,6 +9,7 @@ import { useUnits } from '@/hooks/useUnits';
 import { useVoiceRecognition } from '@/hooks/useVoiceRecognition';
 import { useVoiceSettings } from '@/hooks/useVoiceSettings';
 import { normalizeVoiceWeightToKg } from '@/lib/unitConversion';
+import { speakVoiceConfirmation } from '@/lib/voice/voiceFeedback';
 import { processVoiceTranscript } from '@/services/voiceService';
 import type { ParsedVoiceCommandExtended } from '@/types/voice';
 
@@ -18,10 +19,22 @@ export type VoiceSetLogPayload = {
   reps?: number;
 };
 
+export type VoiceSetLogResult = {
+  ok: boolean;
+  /** Why the set was not saved, phrased for the lifter. Shown instead of the generic failure. */
+  reason?: string;
+  /** The exercise the set landed on, when the catalog spells it differently to what was said. */
+  loggedAs?: string;
+};
+
 type VoiceSetLoggerProps = {
   userId: string | undefined;
-  /** The app's existing manual set-entry path — voice never writes sets on its own. */
-  onLogSet: (payload: VoiceSetLogPayload) => Promise<boolean>;
+  /**
+   * The app's existing manual set-entry path — voice never writes sets on its own. Returning a
+   * `VoiceSetLogResult` rather than a bare boolean lets the caller explain a refusal; a bare
+   * `false` can only ever produce the generic message.
+   */
+  onLogSet: (payload: VoiceSetLogPayload) => Promise<boolean | VoiceSetLogResult>;
   activeExerciseName?: string;
   lastWeightKg?: number;
   lastReps?: number;
@@ -52,13 +65,34 @@ export function VoiceSetLogger({
   const [status, setStatus] = useState<string | null>(null);
 
   const logParsedSet = useCallback(
-    async (exercise: string, weightKg: number | undefined, reps: number | undefined) => {
-      const saved = await onLogSet({ exerciseName: exercise, weight: weightKg, reps });
-      setStatus(saved ? `Logged ${exercise}` : null);
-      if (!saved) setParseError('Could not save that set. Try logging it manually.');
-      return saved;
+    async (
+      exercise: string,
+      weightKg: number | undefined,
+      reps: number | undefined,
+      command?: ParsedVoiceCommandExtended,
+    ) => {
+      const outcome = await onLogSet({ exerciseName: exercise, weight: weightKg, reps });
+      const result: VoiceSetLogResult = typeof outcome === 'boolean' ? { ok: outcome } : outcome;
+
+      if (!result.ok) {
+        setStatus(null);
+        setParseError(result.reason ?? 'Could not save that set. Try logging it manually.');
+        return false;
+      }
+
+      const loggedAs = result.loggedAs ?? exercise;
+      setParseError(null);
+      setStatus(`Logged ${loggedAs}`);
+      if (command) {
+        speakVoiceConfirmation(
+          { ...command, exercise: loggedAs, reps: reps ?? command.reps },
+          settings.voiceFeedback,
+          units.weightLabel,
+        );
+      }
+      return true;
     },
-    [onLogSet],
+    [onLogSet, settings.voiceFeedback, units.weightLabel],
   );
 
   const handleTranscript = useCallback(
@@ -97,7 +131,7 @@ export function VoiceSetLogger({
         return;
       }
 
-      await logParsedSet(parsed.exercise, weightKg, parsed.reps);
+      await logParsedSet(parsed.exercise, weightKg, parsed.reps, parsed);
     },
     [userId, activeExerciseName, lastWeightKg, lastReps, units.preferredWeightUnit, logParsedSet],
   );
@@ -110,7 +144,7 @@ export function VoiceSetLogger({
 
   async function handleConfirm(set: ConfirmedVoiceSet) {
     setSaving(true);
-    const saved = await logParsedSet(set.exercise, set.weightKg, set.reps);
+    const saved = await logParsedSet(set.exercise, set.weightKg, set.reps, pending?.parsed);
     setSaving(false);
     if (saved) {
       setPending(null);

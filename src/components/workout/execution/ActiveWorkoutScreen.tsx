@@ -17,7 +17,11 @@ import { WorkoutChallengeModal } from '@/components/workout/execution/WorkoutCha
 import { WorkoutTimerOverlay } from '@/components/workout/execution/WorkoutTimerOverlay';
 import { WorkoutUpNextCard } from '@/components/workout/execution/WorkoutUpNextCard';
 import { ExerciseCoachCard } from '@/components/workout/ExerciseCoachCard';
-import { VoiceSetLogger, type VoiceSetLogPayload } from '@/components/workout/VoiceSetLogger';
+import {
+    VoiceSetLogger,
+    type VoiceSetLogPayload,
+    type VoiceSetLogResult,
+} from '@/components/workout/VoiceSetLogger';
 import { LiftFlowColors, Radius, Spacing, TouchTarget } from '@/constants/theme';
 import { useAppResume } from '@/hooks/useAppResume';
 import { useAuth } from '@/hooks/useAuth';
@@ -61,6 +65,7 @@ import {
 } from '@/lib/timerEngine';
 import { TABATA_BETWEEN_EXERCISE_REST_BOUNDS, TABATA_BETWEEN_EXERCISE_REST_DEFAULT, TABATA_INTERVAL_BOUNDS, TABATA_PREP_SECONDS_DEFAULT, clampTabataBetweenExerciseRest, clampTabataIntervalSeconds, tabataModeSummary } from '@/lib/trainingPreferences';
 import { formatWorkoutWeightForInput } from '@/lib/unitConversion';
+import { matchSpokenExercise } from '@/lib/voice/matchSpokenExercise';
 import { pickWorkoutChallenge } from '@/lib/workoutChallengeFlow';
 import { normalizeExecutionMode } from '@/lib/workoutExecutionMode';
 import { alignPlanExercisesToSession, parseTargetReps } from '@/lib/workoutPlan';
@@ -1028,6 +1033,8 @@ export function ActiveWorkoutScreen({
     reps?: number;
     durationSeconds?: number;
     distanceKm?: number;
+    /** Voice can clear an active rest and continue; manual Log Set still waits out the timer. */
+    ignoreActiveRest?: boolean;
   }): Promise<LogSetResult> => {
     if (!currentExercise) {
       return { ok: false, error: 'No exercise selected.' };
@@ -1041,7 +1048,7 @@ export function ActiveWorkoutScreen({
     if (allSetsDone) {
       return { ok: false, error: 'All planned sets are already logged.' };
     }
-    if (restActive || intervalTimer != null || transitionActive) {
+    if ((!overrides?.ignoreActiveRest && restActive) || intervalTimer != null || transitionActive) {
       return { ok: false, error: 'Finish the current rest or transition before logging the next set.' };
     }
 
@@ -1219,18 +1226,43 @@ export function ActiveWorkoutScreen({
   );
 
   const handleVoiceLogSet = useCallback(
-    async (payload: VoiceSetLogPayload): Promise<boolean> => {
+    async (payload: VoiceSetLogPayload): Promise<VoiceSetLogResult> => {
       const activeName = currentExercise?.exercise?.name;
-      if (!payload.exerciseName || !activeName) return false;
-      if (payload.exerciseName.trim().toLowerCase() !== activeName.trim().toLowerCase()) {
-        AccessibilityInfo.announceForAccessibility(
-          `Voice logging is limited to the current exercise: ${activeName}.`,
-        );
-        return false;
+      if (!activeName) {
+        return { ok: false, reason: 'No exercise is selected.' };
+      }
+      if (!payload.exerciseName) {
+        return { ok: false, reason: `Say the exercise name, for example "${activeName}".` };
+      }
+
+      const match = matchSpokenExercise(payload.exerciseName, activeName);
+      if (match.kind === 'different') {
+        // Previously a silent `false`, which surfaced as "Could not save that set" with no hint
+        // that the name was the problem — sighted users got no reason at all.
+        AccessibilityInfo.announceForAccessibility(match.reason);
+        return { ok: false, reason: match.reason };
+      }
+
+      // Hands-free: if the between-set rest overlay is up, clear it and log the next set.
+      if (restActive) {
+        setRestOverlayOpen(false);
+        await skipRestTimer();
+        setRestPaused(false);
       }
 
       if (payload.weight != null) {
         setWeightKg(payload.weight);
+        if (currentExerciseKey) {
+          draftByExerciseKeyRef.current[currentExerciseKey] = {
+            weightKg: payload.weight,
+            reps: payload.reps ?? repsRef.current,
+            durationSeconds:
+              draftByExerciseKeyRef.current[currentExerciseKey]?.durationSeconds ??
+              durationSecondsRef.current,
+            distanceKm:
+              draftByExerciseKeyRef.current[currentExerciseKey]?.distanceKm ?? distanceKmRef.current,
+          };
+        }
       }
       if (payload.reps != null) {
         setReps(payload.reps);
@@ -1239,12 +1271,18 @@ export function ActiveWorkoutScreen({
       const result = await commitSetLog({
         weightKg: payload.weight,
         reps: payload.reps,
+        ignoreActiveRest: true,
       });
-      return result.ok;
+      // `commitSetLog` already explains paused sessions and completed set targets.
+      if (!result.ok) return { ok: false, reason: result.error };
+      return { ok: true, loggedAs: activeName };
     },
     [
       currentExercise?.exercise?.name,
+      currentExerciseKey,
       commitSetLog,
+      restActive,
+      skipRestTimer,
     ],
   );
 
@@ -1746,7 +1784,6 @@ export function ActiveWorkoutScreen({
                       disabled={
                         isPaused ||
                         logging ||
-                        restActive ||
                         intervalTimer != null ||
                         (circuitTimer != null && circuitTimer.phase !== 'done')
                       }
