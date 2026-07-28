@@ -13,8 +13,9 @@ const CORE_BODYWEIGHT_NAME_PATTERN =
 const CORE_STRENGTH_NAME_PATTERN =
   /\b(weighted\s+sit[\s-]?up|sit[\s-]?up|crunch|cable\s+crunch|ab\s+rollout|rollout|wood\s+chop|pallof\s+press)\b/i;
 
+// Prefer rowing/erg terms — bare "row" matches strength moves (Hammer Row, Cable Row).
 const CARDIO_NAME_PATTERN =
-  /\b(run|running|jog|sprint|swim|swimming|cycle|cycling|bike|biking|row(?:ing)?|walk(?:ing)?|treadmill|elliptical|hiit|cardio|jump\s*rope)\b/i;
+  /\b(run|running|jog|sprint|swim|swimming|cycle|cycling|bike|biking|rowing|rower|row\s*erg|erg\s*row|concept\s*2|walk(?:ing)?|treadmill|elliptical|hiit|cardio|jump\s*rope)\b/i;
 
 const LOADED_EQUIPMENT = new Set([
   'barbell',

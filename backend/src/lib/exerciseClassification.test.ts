@@ -22,6 +22,21 @@ const cases: Array<{ label: string; input: Parameters<typeof classifyExercise>[0
     input: { name: 'Weighted Sit-Up', equipment: 'dumbbell', exerciseType: 'strength' },
     expected: 'strength',
   },
+  {
+    label: 'Hammer Row is strength (bare row must not match cardio)',
+    input: { slug: 'hammer-row', name: 'Hammer Row', equipment: 'dumbbell', exerciseType: 'strength' },
+    expected: 'strength',
+  },
+  {
+    label: 'Hammer Low Row is strength',
+    input: { name: 'Hammer Low Row', equipment: 'machine' },
+    expected: 'strength',
+  },
+  {
+    label: 'Rowing remains cardio',
+    input: { name: 'Rowing', equipment: 'rower' },
+    expected: 'cardio',
+  },
 ];
 
 for (const testCase of cases) {
