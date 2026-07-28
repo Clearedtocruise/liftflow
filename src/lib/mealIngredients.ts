@@ -39,6 +39,11 @@ const MEAL_INGREDIENT_TEMPLATES: Record<string, MealIngredient[]> = {
     { name: 'Mixed vegetables', serving: '2 cups' },
     { name: 'Olive oil', serving: '1 tbsp' },
   ],
+  'lean beef with roasted vegetables': [
+    { name: 'Lean beef', serving: '6 oz' },
+    { name: 'Mixed vegetables', serving: '2 cups' },
+    { name: 'Olive oil', serving: '1 tbsp' },
+  ],
   'protein shake with banana': [
     { name: 'Whey protein', serving: '1 scoop' },
     { name: 'Banana', serving: '1 medium' },
@@ -150,6 +155,7 @@ const MEAL_MACROS: Record<string, MealMacros> = {
   'greek yogurt bowl with berries': { calories: 450, proteinG: 35, carbsG: 45, fatG: 12 },
   'grilled chicken rice bowl': { calories: 650, proteinG: 50, carbsG: 60, fatG: 14 },
   'salmon with roasted vegetables': { calories: 700, proteinG: 45, carbsG: 30, fatG: 38 },
+  'lean beef with roasted vegetables': { calories: 720, proteinG: 48, carbsG: 32, fatG: 32 },
   'protein shake with banana': { calories: 300, proteinG: 30, carbsG: 30, fatG: 5 },
   'apple with almond butter': { calories: 220, proteinG: 6, carbsG: 28, fatG: 12 },
   'egg white omelette with turkey': { calories: 320, proteinG: 42, carbsG: 8, fatG: 8 },
@@ -267,6 +273,7 @@ export function mealNameFromIngredients(ingredients: MealIngredient[]): string |
 
 type MealMacroFields = {
   name: string;
+  mealType?: string;
   instructions?: string;
   calories?: number;
   proteinG?: number;
@@ -277,6 +284,15 @@ type MealMacroFields = {
 };
 
 const CARB_SHARE_OF_REMAINING_KCAL = 0.55;
+
+const MEAL_TYPE_DAILY_SHARE: Record<string, number> = {
+  breakfast: 0.25,
+  lunch: 0.35,
+  dinner: 0.3,
+  snack: 0.1,
+  pre_workout: 0.12,
+  post_workout: 0.13,
+};
 
 function round1(value: number): number {
   return Math.round(value * 10) / 10;
@@ -298,6 +314,30 @@ function macrosFromIngredients(meal: MealMacroFields): MealMacros | null {
     },
     { calories: 0, proteinG: 0, carbsG: 0, fatG: 0 },
   );
+}
+
+/**
+ * True when stored macros look like a full daily target parked on one meal
+ * (weight-unit bug → ~11k daily → dinner ~3392/266P).
+ */
+export function looksLikeDaySizedMealMacros(meal: MealMacroFields): boolean {
+  const calories = meal.calories ?? 0;
+  const proteinG = meal.proteinG ?? 0;
+  return calories >= 1800 || proteinG >= 140;
+}
+
+function correctDaySizedMealMacros(meal: MealMacroFields): MealMacros {
+  const named = macrosForMealName(meal.name);
+  const isGenericFallback = named.calories === 400 && named.proteinG === 30;
+  if (!isGenericFallback) return named;
+
+  const ratio = MEAL_TYPE_DAILY_SHARE[meal.mealType ?? 'dinner'] ?? 0.3;
+  return {
+    calories: Math.round((meal.calories ?? 0) * ratio),
+    proteinG: Math.round((meal.proteinG ?? 0) * ratio),
+    carbsG: Math.round((meal.carbsG ?? 0) * ratio),
+    fatG: Math.round((meal.fatG ?? 0) * ratio),
+  };
 }
 
 /**
@@ -337,10 +377,14 @@ function distributeRemainingCalories(meal: MealMacroFields): MealMacros {
 
 /**
  * Stored macros when they were actually measured; otherwise estimate from the
- * logged ingredients. A row explicitly marked as measured keeps its zeros, so a
- * genuinely calorie-free food is not silently replaced by a guess.
+ * logged ingredients. Day-sized values on a single meal (bad weight → inflated
+ * plan) are replaced with the meal template or a meal-type share of that day.
  */
 export function resolveMealMacros(meal: MealMacroFields): MealMacros {
+  if (looksLikeDaySizedMealMacros(meal)) {
+    return correctDaySizedMealMacros(meal);
+  }
+
   const hasAnyStoredValue =
     meal.calories != null || meal.proteinG != null || meal.carbsG != null || meal.fatG != null;
   const measured = meal.macrosProvided ?? hasAnyStoredValue;

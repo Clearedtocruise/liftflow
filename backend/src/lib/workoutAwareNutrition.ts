@@ -56,16 +56,64 @@ function trainingVolumeAdjustment(ctx: NutritionContext): { multiplier: number; 
   };
 }
 
+const LB_PER_KG = 2.20462;
+const MIN_BODY_WEIGHT_KG = 35;
+const MAX_BODY_WEIGHT_KG = 250;
+/** Hard ceiling so a bad weight_kg (e.g. lbs×2.2 ≈ 400) cannot prescribe 10k+ kcal days. */
+const MAX_DAILY_CALORIES = 4500;
+const MIN_DAILY_CALORIES = 1200;
+
+/**
+ * Body mass for macro math. Catches the classic lbs↔kg inversion where ~180 lb
+ * is stored as ~400 kg (multiply by 2.2 instead of divide), which produced dinners
+ * like 3392 kcal / 266P on a single "lean beef with roasted vegetables" slot.
+ *
+ * stored ≈ lbs × 2.2  →  true kg = lbs / 2.2 = stored / 2.2²
+ */
+export function normalizeBodyWeightKg(raw: number | null | undefined): number {
+  if (raw == null || !Number.isFinite(raw) || raw <= 0) return 75;
+
+  // ~140–250 lb multiplied by 2.2 instead of divided → ~300–550 "kg".
+  if (raw >= 300 && raw <= 550) {
+    const trueKg = raw / (LB_PER_KG * LB_PER_KG);
+    if (trueKg >= MIN_BODY_WEIGHT_KG && trueKg <= MAX_BODY_WEIGHT_KG) {
+      return Math.round(trueKg * 10) / 10;
+    }
+  }
+
+  if (raw > MAX_BODY_WEIGHT_KG) {
+    const asSingleConversion = raw / LB_PER_KG;
+    if (asSingleConversion >= MIN_BODY_WEIGHT_KG && asSingleConversion <= MAX_BODY_WEIGHT_KG) {
+      return Math.round(asSingleConversion * 10) / 10;
+    }
+    return MAX_BODY_WEIGHT_KG;
+  }
+
+  if (raw < MIN_BODY_WEIGHT_KG) return MIN_BODY_WEIGHT_KG;
+  return raw;
+}
+
+function clampDailyCalories(calories: number): number {
+  return Math.max(MIN_DAILY_CALORIES, Math.min(MAX_DAILY_CALORIES, Math.round(calories)));
+}
+
 export function calculateMacroTargets(ctx: NutritionContext): MacroTargets {
-  const bw = ctx.bodyWeightKg ?? 75;
-  const bwLbs = bw * 2.20462;
+  const bw = normalizeBodyWeightKg(ctx.bodyWeightKg);
+  const bwLbs = bw * LB_PER_KG;
   const ageMods = ageNutritionAdjustments(ctx.ageYears);
+  const weightCorrected =
+    ctx.bodyWeightKg != null &&
+    Number.isFinite(ctx.bodyWeightKg) &&
+    Math.abs(ctx.bodyWeightKg - bw) > 1;
 
   const maintenanceCalories = Math.round(bwLbs * 15);
   let calories = maintenanceCalories;
   let proteinG = Math.round(bw * 2);
   let carbRatio = 0.4;
   const notes: string[] = [];
+  if (weightCorrected) {
+    notes.push('Body weight looked like a unit conversion error — macros use a corrected kg value');
+  }
 
   switch (ctx.goal) {
     case 'fat_loss':
@@ -156,11 +204,24 @@ export function calculateMacroTargets(ctx: NutritionContext): MacroTargets {
     notes.push('Calories raised to cover protein and essential fat minimums');
   }
 
+  let finalCalories = clampDailyCalories(reconciled.calories);
+  let finalProtein = reconciled.proteinG;
+  let finalCarbs = reconciled.carbsG;
+  let finalFat = reconciled.fatG;
+
+  if (finalCalories !== reconciled.calories && reconciled.calories > 0) {
+    const scale = finalCalories / reconciled.calories;
+    finalProtein = Math.round(reconciled.proteinG * scale);
+    finalCarbs = Math.round(reconciled.carbsG * scale);
+    finalFat = Math.round(reconciled.fatG * scale);
+    notes.push(`Daily calories capped at ${MAX_DAILY_CALORIES}`);
+  }
+
   return {
-    calories: reconciled.calories,
-    proteinG: reconciled.proteinG,
-    carbsG: reconciled.carbsG,
-    fatG: reconciled.fatG,
+    calories: finalCalories,
+    proteinG: finalProtein,
+    carbsG: finalCarbs,
+    fatG: finalFat,
     rationale: notes.join('. ') + '.',
   };
 }

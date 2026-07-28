@@ -100,6 +100,14 @@ nutritionRouter.post('/meal-plan/generate', async (req, res) => {
       // Keep goals/defaults — never fail meal generation on coach context.
     }
 
+    // Inflated goals (from a bad weight_kg) must not ship 3k-calorie dinners.
+    if (calories > 4500) {
+      const scale = 4500 / calories;
+      calories = 4500;
+      proteinG = Math.round(proteinG * scale);
+    }
+    if (calories < 1200) calories = 1200;
+
     const prefs = await resolveNutritionPreferences(userId, dietaryRestrictions, foodPreferences);
     const resolvedStyle =
       (dietaryStyle as 'balanced' | 'high_protein' | 'low_carb' | 'keto' | 'mediterranean' | 'vegetarian' | undefined)
