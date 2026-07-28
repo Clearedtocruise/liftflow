@@ -32,49 +32,34 @@ async function main() {
 
   record('eas.json testflight profile', fs.readFileSync(path.join(root, 'eas.json'), 'utf8').includes('"testflight"'));
 
-  // Build 323 succeeded only with a liftflow1 token. immadoer tokens get Entity not authorized.
-  let expoAccount = 'unknown';
-  try {
-    const identity = spawnSync(
-      'npx',
-      ['eas-cli', 'whoami', '--json'],
-      { cwd: root, encoding: 'utf8', env: process.env, timeout: 60000 },
-    );
-    const raw = (identity.stdout || '').trim();
-    if (raw) {
-      try {
-        const parsed = JSON.parse(raw);
-        expoAccount = parsed?.username ?? parsed?.accounts?.[0]?.name ?? raw;
-      } catch {
-        expoAccount = raw.split('\n').filter(Boolean).pop() ?? raw;
-      }
-    }
-  } catch {
-    expoAccount = 'unreachable';
-  }
-  // whoami --json may not exist on all eas-cli versions — fall back to GraphQL.
-  if (expoAccount === 'unknown' || expoAccount === 'unreachable' || /error|not found/i.test(expoAccount)) {
+  // EXPO_TOKEN is the wrong (immadoer) credential. Only EXPO_TOKEN1 (liftflow1) can build.
+  const expoToken = process.env.EXPO_TOKEN1;
+  record(
+    'EXPO_TOKEN1 secret present',
+    Boolean(expoToken),
+    expoToken
+      ? 'ok'
+      : 'missing — add EXPO_TOKEN1 in https://cursor.com/dashboard/cloud-agents and delete EXPO_TOKEN, then restart the agent',
+  );
+
+  let expoAccount = 'missing-token';
+  if (expoToken) {
     try {
-      const token = process.env.EXPO_TOKEN1 || process.env.EXPO_TOKEN;
-      if (token) {
-        const res = await fetch('https://api.expo.dev/graphql', {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query: 'query { me { username } }' }),
-        });
-        const json = (await res.json()) as { data?: { me?: { username?: string } } };
-        expoAccount = json.data?.me?.username ?? 'unauthorized';
-      }
+      const res = await fetch('https://api.expo.dev/graphql', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${expoToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: 'query { me { username } }' }),
+      });
+      const json = (await res.json()) as { data?: { me?: { username?: string } }; errors?: unknown };
+      expoAccount = json.data?.me?.username ?? (res.ok ? 'unauthorized' : `http-${res.status}`);
     } catch {
-      expoAccount = 'unauthorized';
+      expoAccount = 'unreachable';
     }
   }
   record(
-    'Expo account is liftflow1 (not immadoer)',
+    'EXPO_TOKEN1 is liftflow1 (not immadoer)',
     expoAccount === 'liftflow1',
-    expoAccount === 'liftflow1'
-      ? 'ok'
-      : `got ${expoAccount} — set EXPO_TOKEN to a liftflow1 access token (or EXPO_TOKEN1), same as Build 323`,
+    expoAccount === 'liftflow1' ? 'ok' : `got ${expoAccount}`,
   );
 
   record(
@@ -122,11 +107,12 @@ async function main() {
   }
 
   console.log('Starting EAS build (testflight profile)...\n');
-  // Prefer EXPO_TOKEN1 (liftflow1) when present — plain EXPO_TOKEN may be immadoer.
+  // eas-cli reads EXPO_TOKEN; map the correct liftflow1 secret into that slot.
   const buildEnv = {
     ...process.env,
-    EXPO_TOKEN: process.env.EXPO_TOKEN1 || process.env.EXPO_TOKEN,
+    EXPO_TOKEN: expoToken,
   };
+  delete buildEnv.EXPO_TOKEN1; // avoid ambiguity — only the mapped token is used
   const build = spawnSync('npx', ['eas-cli', 'build', '--platform', 'ios', '--profile', 'testflight', '--non-interactive'], {
     cwd: root,
     encoding: 'utf8',
