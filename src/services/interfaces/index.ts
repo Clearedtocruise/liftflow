@@ -103,6 +103,11 @@ export interface IWorkoutService {
   deleteSession(sessionId: string): Promise<ServiceResult<void>>;
   updateSession(sessionId: string, updates: { name?: string; notes?: string }): Promise<ServiceResult<WorkoutSession>>;
   addExercise(sessionId: string, exerciseId: string, sortOrder?: number): Promise<ServiceResult<import('@/types').WorkoutExercise>>;
+  /**
+   * Swap an exercise mid-session. Entries with logged sets keep them and the replacement is inserted
+   * straight after, so the returned exercise is the one the user should move to.
+   */
+  replaceExercise(workoutExerciseId: string, exerciseId: string): Promise<ServiceResult<import('@/types').WorkoutExercise>>;
   findOrCreateExerciseByName(name: string, userId: string): Promise<ServiceResult<string>>;
   /** Rest timers */
   startRestTimer(sessionId: string, setId: string, recommendedSeconds: number): Promise<ServiceResult<RestPeriod>>;
