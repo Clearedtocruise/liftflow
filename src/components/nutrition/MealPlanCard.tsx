@@ -4,7 +4,7 @@ import { Card } from '@/components/layout/Card';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { AppText } from '@/components/ui/AppText';
 import { Spacing, TouchTarget } from '@/constants/theme';
-import { enrichMealMeta } from '@/lib/mealIngredients';
+import { enrichMealMeta, resolveMealMacros } from '@/lib/mealIngredients';
 import { mealTypeLabel } from '@/lib/mealSchedule';
 import type { Meal } from '@/types';
 
@@ -28,6 +28,7 @@ export function MealPlanCard({
   pending = false,
 }: MealPlanCardProps) {
   const meta = enrichMealMeta(meal.name, meal.instructions);
+  const macros = resolveMealMacros(meal);
   const completed = meta.status === 'completed';
 
   return (
@@ -78,8 +79,8 @@ export function MealPlanCard({
         <AppText
           variant="footnote"
           color="textSecondary"
-          accessibilityLabel={`${meal.calories ?? 0} calories, ${Math.round(meal.proteinG ?? 0)} grams protein, ${Math.round(meal.carbsG ?? 0)} grams carbs, ${Math.round(meal.fatG ?? 0)} grams fat`}>
-          {meal.calories ?? 0} cal · {Math.round(meal.proteinG ?? 0)}P · {Math.round(meal.carbsG ?? 0)}C · {Math.round(meal.fatG ?? 0)}F
+          accessibilityLabel={`${macros.calories} calories, ${Math.round(macros.proteinG)} grams protein, ${Math.round(macros.carbsG)} grams carbs, ${Math.round(macros.fatG)} grams fat`}>
+          {macros.calories} cal · {Math.round(macros.proteinG)}P · {Math.round(macros.carbsG)}C · {Math.round(macros.fatG)}F
         </AppText>
 
         {!completed ? (

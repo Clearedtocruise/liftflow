@@ -16,3 +16,13 @@ test('2 tbsp peanut butter alone stays near label calories', () => {
   const estimate = estimateFoodMacrosLocal('2 tablespoons peanut butter', '1');
   assert.ok(estimate.calories >= 170 && estimate.calories <= 220, `got ${estimate.calories}`);
 });
+
+test('oatmeal with banana and peanut butter is not 800 calories', () => {
+  const estimate = estimateFoodMacrosLocal('Oatmeal with banana and peanut butter', '1 serving');
+  assert.ok(estimate.calories < 550, `got ${estimate.calories}`);
+});
+
+test('bare peanut butter serving 1 uses tbsp default', () => {
+  const estimate = estimateFoodMacrosLocal('Peanut Butter', '1');
+  assert.ok(estimate.calories >= 170 && estimate.calories <= 220, `got ${estimate.calories}`);
+});

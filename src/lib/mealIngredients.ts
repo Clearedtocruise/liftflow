@@ -52,6 +52,35 @@ const MEAL_INGREDIENT_TEMPLATES: Record<string, MealIngredient[]> = {
     { name: 'Apple', serving: '1 medium' },
     { name: 'Almond butter', serving: '2 tbsp' },
   ],
+  'oatmeal with banana and peanut butter': [
+    { name: 'Oatmeal', serving: '1 serving' },
+    { name: 'Banana', serving: '1 medium' },
+    { name: 'Peanut butter', serving: '2 tbsp' },
+  ],
+  'rice cakes with peanut butter': [
+    { name: 'Rice cakes', serving: '2 pieces' },
+    { name: 'Peanut butter', serving: '2 tbsp' },
+  ],
+  'celery with peanut butter': [
+    { name: 'Celery', serving: '2 stalks' },
+    { name: 'Peanut butter', serving: '2 tbsp' },
+  ],
+  'celery with almond butter': [
+    { name: 'Celery', serving: '2 stalks' },
+    { name: 'Almond butter', serving: '2 tbsp' },
+  ],
+  'chia pudding with almond butter': [
+    { name: 'Chia pudding', serving: '1 cup' },
+    { name: 'Almond butter', serving: '1 tbsp' },
+  ],
+  'apple with peanut butter': [
+    { name: 'Apple', serving: '1 medium' },
+    { name: 'Peanut butter', serving: '2 tbsp' },
+  ],
+  'apple with rice cakes': [
+    { name: 'Apple', serving: '1 medium' },
+    { name: 'Rice cakes', serving: '2 pieces' },
+  ],
   'egg white omelette with turkey': [
     { name: 'Egg whites', serving: '1 cup' },
     { name: 'Turkey breast', serving: '4 oz' },
@@ -155,7 +184,14 @@ const MEAL_MACROS: Record<string, MealMacros> = {
   'grilled chicken rice bowl': { calories: 650, proteinG: 50, carbsG: 60, fatG: 14 },
   'salmon with roasted vegetables': { calories: 700, proteinG: 45, carbsG: 30, fatG: 38 },
   'protein shake with banana': { calories: 300, proteinG: 30, carbsG: 30, fatG: 5 },
-  'apple with almond butter': { calories: 220, proteinG: 6, carbsG: 28, fatG: 12 },
+  'apple with almond butter': { calories: 295, proteinG: 7, carbsG: 28, fatG: 16 },
+  'oatmeal with banana and peanut butter': { calories: 420, proteinG: 18, carbsG: 55, fatG: 14 },
+  'rice cakes with peanut butter': { calories: 230, proteinG: 10, carbsG: 26, fatG: 10 },
+  'celery with peanut butter': { calories: 200, proteinG: 8, carbsG: 10, fatG: 14 },
+  'celery with almond butter': { calories: 210, proteinG: 6, carbsG: 8, fatG: 16 },
+  'chia pudding with almond butter': { calories: 370, proteinG: 16, carbsG: 18, fatG: 24 },
+  'apple with peanut butter': { calories: 295, proteinG: 7, carbsG: 28, fatG: 16 },
+  'apple with rice cakes': { calories: 230, proteinG: 4, carbsG: 48, fatG: 2 },
   'egg white omelette with turkey': { calories: 320, proteinG: 42, carbsG: 8, fatG: 8 },
   'grilled chicken and quinoa': { calories: 580, proteinG: 48, carbsG: 52, fatG: 12 },
   'protein-forward greek bowl': { calories: 420, proteinG: 45, carbsG: 35, fatG: 8 },
@@ -321,6 +357,27 @@ function macrosFromIngredients(meal: MealMacroFields): MealMacros | null {
 }
 
 /**
+ * Detect the peanut-butter-as-whole-meal bug: stored calories much higher than a
+ * sane ingredient estimate, usually with extreme fat density on a mixed snack.
+ */
+export function looksLikeInflatedMealMacros(
+  meal: MealMacroFields,
+  estimated: MealMacros | null,
+): boolean {
+  const storedCal = meal.calories ?? 0;
+  if (storedCal < 450 || !estimated || estimated.calories <= 0) return false;
+
+  if (storedCal >= estimated.calories * 1.45 && estimated.calories >= 150) return true;
+
+  const fatKcalShare = ((meal.fatG ?? 0) * 9) / storedCal;
+  const mixed =
+    /,|\bwith\b|\band\b|\+/.test(meal.name) ||
+    (enrichMealMeta(meal.name, meal.instructions).ingredients?.length ?? 0) > 1;
+  const denseName = /peanut butter|almond butter|olive oil|peanuts/i.test(meal.name);
+  return mixed && denseName && fatKcalShare >= 0.55 && storedCal > estimated.calories * 1.25;
+}
+
+/**
  * Fill in macros the user never entered by distributing the calories that
  * protein/carbs/fat do not already account for. A quick log of "600 kcal, 40 g
  * protein" otherwise reports zero carbs and zero fat.
@@ -357,17 +414,22 @@ function distributeRemainingCalories(meal: MealMacroFields): MealMacros {
 
 /**
  * Stored macros when they were actually measured; otherwise estimate from the
- * logged ingredients. A row explicitly marked as measured keeps its zeros, so a
- * genuinely calorie-free food is not silently replaced by a guess.
+ * logged ingredients. Inflated legacy estimates (composite snacks priced as
+ * peanut butter) are replaced with the ingredient-based estimate.
  */
 export function resolveMealMacros(meal: MealMacroFields): MealMacros {
+  const estimated = macrosFromIngredients(meal);
   const hasAnyStoredValue =
     meal.calories != null || meal.proteinG != null || meal.carbsG != null || meal.fatG != null;
   const measured = meal.macrosProvided ?? hasAnyStoredValue;
 
+  if (measured && looksLikeInflatedMealMacros(meal, estimated) && estimated) {
+    return estimated;
+  }
+
   if (measured) return distributeRemainingCalories(meal);
 
-  return macrosFromIngredients(meal) ?? { calories: 0, proteinG: 0, carbsG: 0, fatG: 0 };
+  return estimated ?? { calories: 0, proteinG: 0, carbsG: 0, fatG: 0 };
 }
 
 export function resolveMealMacrosFromIngredients(

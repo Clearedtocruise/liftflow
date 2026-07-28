@@ -137,6 +137,19 @@ const UNIT_PATTERNS: [ServingUnit, RegExp][] = [
 const EMBEDDED_SERVING_RE =
   /^((?:\d+\s+\d+\/\d+|\d+\/\d+|\d+(?:\.\d+)?)\s*(?:tbsp|tablespoons?|tsp|teaspoons?|cups?|oz|ounces?|g|grams?|kg|kilograms?|lbs?|pounds?|ml|milliliters?|l|liters?|scoops?|slices?|pieces?|containers?|medium|large|small|servings?)(?:\s+of)?)\s+(.+)$/i;
 
+const TRAILING_SERVING_RE =
+  /^(.+?)\s+((?:\d+\s+\d+\/\d+|\d+\/\d+|\d+(?:\.\d+)?)\s*(?:tbsp|tablespoons?|tsp|teaspoons?|cups?|oz|ounces?|g|grams?|kg|kilograms?|lbs?|pounds?|ml|milliliters?|l|liters?|scoops?|slices?|pieces?|containers?|medium|large|small|servings?))$/i;
+
+/** Default single servings for calorie-dense foods — never invent a 4 oz "serving". */
+const DENSE_FOOD_DEFAULT_SERVING: Record<string, string> = {
+  'peanut butter': '2 tbsp',
+  'almond butter': '2 tbsp',
+  'peanuts': '1 oz',
+  'honey': '1 tbsp',
+  'olive oil': '1 tbsp',
+  'whey protein': '1 scoop',
+};
+
 function normalizeFood(name: string): string {
   return name.trim().toLowerCase().replace(/\s+/g, ' ');
 }
@@ -179,7 +192,6 @@ function scaleMacros(base: FoodMacroEstimate, multiplier: number): FoodMacroEsti
     proteinG: Math.round(base.proteinG * multiplier * 10) / 10,
     carbsG: Math.round(base.carbsG * multiplier * 10) / 10,
     fatG: Math.round(base.fatG * multiplier * 10) / 10,
-    reasoning: base.reasoning,
   };
 }
 
@@ -208,11 +220,23 @@ export function isGenericServingSize(servingSize: string): boolean {
   );
 }
 
-/** Pull "2 tablespoons peanut butter" → food + serving when qty lives in the name. */
+/** Pull "2 tablespoons peanut butter" or "chicken breast 6 oz" into food + serving. */
 export function extractEmbeddedServing(foodName: string): { food: string; serving: string } | null {
-  const match = foodName.trim().match(EMBEDDED_SERVING_RE);
-  if (!match) return null;
-  return { serving: match[1].trim(), food: match[2].trim() };
+  const trimmed = foodName.trim();
+  const leading = trimmed.match(EMBEDDED_SERVING_RE);
+  if (leading) return { serving: leading[1].trim(), food: leading[2].trim() };
+  const trailing = trimmed.match(TRAILING_SERVING_RE);
+  if (trailing) return { food: trailing[1].trim(), serving: trailing[2].trim() };
+  return null;
+}
+
+function splitOnConnectors(part: string): string[] {
+  // Split "banana and peanut butter" / "PB + peanuts" without breaking "mac and cheese"-style
+  // names that aren't in our catalog (acceptable — those fall through to generic).
+  return part
+    .split(/\s*(?:\+|\&|\band\b)\s*/i)
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
 /** Split composite titles like "yogurt, blueberries, 2 tbsp peanut butter". */
@@ -230,7 +254,11 @@ export function splitCompositeFoodParts(foodName: string): string[] {
       .split(/\s+with\s+/i)
       .map((item) => item.trim())
       .filter(Boolean);
-    return withParts.length > 1 ? withParts : [part];
+    const afterWith = withParts.length > 1 ? withParts : [part];
+    return afterWith.flatMap((item) => {
+      const connected = splitOnConnectors(item);
+      return connected.length > 1 ? connected : [item];
+    });
   });
 
   return parts.length > 1 ? parts : [normalized];
@@ -240,18 +268,40 @@ function lookupFoodKey(foodName: string): string | null {
   const key = normalizeFood(foodName);
   if (FOOD_PER_OZ[key]) return key;
 
+  // Longest match first so "lean ground beef" wins over "ground beef".
+  // Word boundaries keep "peanuts" from becoming peanut butter.
   const patterns = Object.keys(FOOD_PER_OZ).sort((a, b) => b.length - a.length);
   return (
     patterns.find((pattern) => new RegExp(`\\b${escapeRegExp(pattern)}\\b`, 'i').test(key)) ?? null
   );
 }
 
-function servingSizeInOunces(foodKey: string | null, servingSize: string): number | null {
+function defaultServingForFood(foodKey: string | null): string {
+  if (foodKey && DENSE_FOOD_DEFAULT_SERVING[foodKey]) return DENSE_FOOD_DEFAULT_SERVING[foodKey];
+  if (foodKey === 'oikos' || foodKey === 'oikos triple zero' || foodKey === 'greek yogurt') {
+    return '1 container';
+  }
+  if (foodKey === 'blueberries' || foodKey === 'berries') return '1/2 cup';
+  if (foodKey === 'banana' || foodKey === 'apple' || foodKey === 'egg') return '1 medium';
+  return '1 serving';
+}
+
+/** Ounces described by a serving string, using per-food unit weights where known. */
+export function servingSizeInOunces(foodKey: string | null, servingSize: string): number | null {
   const amount = parseAmount(servingSize);
   if (amount == null || !Number.isFinite(amount) || amount <= 0) return null;
 
   const unit = parseUnit(servingSize);
-  if (!unit) return amount * OZ_PER_UNIT.serving;
+  if (!unit) {
+    // Bare "1" / "2" without a unit: for dense foods use their real default, not 4 oz.
+    if (foodKey && DENSE_FOOD_DEFAULT_SERVING[foodKey] && isGenericServingSize(servingSize)) {
+      return servingSizeInOunces(foodKey, DENSE_FOOD_DEFAULT_SERVING[foodKey]);
+    }
+    if (foodKey && DENSE_FOOD_DEFAULT_SERVING[foodKey] && amount === 1) {
+      return servingSizeInOunces(foodKey, DENSE_FOOD_DEFAULT_SERVING[foodKey]);
+    }
+    return amount * OZ_PER_UNIT.serving;
+  }
 
   const perFood = foodKey ? FOOD_UNIT_OZ[foodKey]?.[unit] : undefined;
   return amount * (perFood ?? OZ_PER_UNIT[unit]);
@@ -260,30 +310,37 @@ function servingSizeInOunces(foodKey: string | null, servingSize: string): numbe
 function estimateSingleFood(foodName: string, servingSize: string): FoodMacroEstimate {
   const embedded = extractEmbeddedServing(foodName);
   const cleanName = embedded?.food ?? foodName;
-  const effectiveServing =
-    embedded && isGenericServingSize(servingSize) ? embedded.serving : servingSize || embedded?.serving || '1 serving';
-
   const key = lookupFoodKey(cleanName);
+
+  let effectiveServing: string;
+  if (embedded && isGenericServingSize(servingSize)) {
+    effectiveServing = embedded.serving;
+  } else if (!servingSize || isGenericServingSize(servingSize)) {
+    effectiveServing = defaultServingForFood(key);
+  } else {
+    effectiveServing = servingSize;
+  }
+
   const base = key ? FOOD_PER_OZ[key] : { calories: 50, proteinG: 5, carbsG: 3, fatG: 2 };
   const ounces = servingSizeInOunces(key, effectiveServing);
-  return scaleMacros(base, ounces ?? OZ_PER_UNIT.serving);
+  return scaleMacros(base, ounces ?? servingSizeInOunces(key, defaultServingForFood(key)) ?? 1);
 }
 
 export function estimateFoodMacrosLocal(foodName: string, servingSize: string): FoodMacroEstimate {
   const parts = splitCompositeFoodParts(foodName);
   if (parts.length > 1) {
-    const partServing = isGenericServingSize(servingSize) ? '1 serving' : servingSize;
     return sumMacros(
       parts.map((part) => {
         const embedded = extractEmbeddedServing(part);
         if (embedded) return estimateSingleFood(part, embedded.serving);
-        return estimateSingleFood(part, isGenericServingSize(servingSize) ? '1 serving' : partServing);
+        return estimateSingleFood(part, isGenericServingSize(servingSize) ? '1 serving' : servingSize);
       }),
     );
   }
 
   return estimateSingleFood(foodName, servingSize);
 }
+
 
 async function callOpenAiFoodMacros(foodName: string, servingSize: string): Promise<FoodMacroEstimate | null> {
   const openai = getOpenAI();

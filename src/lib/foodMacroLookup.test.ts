@@ -19,6 +19,17 @@ test('does not price a mixed snack as several ounces of peanut butter', () => {
   assert.ok(estimate.calories > 200, `expected a real snack, got ${estimate.calories}`);
 });
 
+test('oatmeal with banana and peanut butter stays near plan calories', () => {
+  const estimate = estimateFoodMacrosLocal('Oatmeal with banana and peanut butter', '1 serving');
+  assert.ok(estimate.calories < 550, `got ${estimate.calories}`);
+  assert.ok(estimate.fatG < 25, `got ${estimate.fatG}`);
+});
+
+test('bare peanut butter with serving "1" uses 2 tbsp not 4 oz', () => {
+  const estimate = estimateFoodMacrosLocal('Peanut Butter', '1');
+  assert.ok(estimate.calories >= 170 && estimate.calories <= 220, `got ${estimate.calories}`);
+});
+
 test('ingredient line with embedded tbsp uses that serving when qty is "1"', () => {
   const estimate = estimateFoodMacrosLocal('2 tablespoons peanut butter', '1');
   // ~1.14 oz × 168 ≈ 191
