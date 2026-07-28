@@ -6,6 +6,7 @@ import { mealSlotKey, remapApiMealsToClientWeek, type ApiPlanMeal } from '@/lib/
 import { aggregateDailyMeals, mealsForCalendarDay } from '@/lib/mealAggregation';
 import { isReplaceablePlannedMeal, pickMealsToKeep, weekEndDate } from '@/lib/mealCleanup';
 import { enrichMealMeta, correctedMacrosIfInflated, serializeMealMeta } from '@/lib/mealIngredients';
+import { isInvertedBodyWeightKg, normalizeBodyWeightKg } from '@/lib/bodyWeightKg';
 import { fail, fromError, ok } from '@/lib/serviceResult';
 import { getWeekRange } from '@/lib/weekPlan';
 import type { INutritionService } from '@/services/interfaces';
@@ -29,6 +30,18 @@ function normalizeGroceryName(name: string): string {
 
 function weekStartDate(timeZone?: string | null): string {
   return getWeekRange(new Date(), resolveTimeZone(timeZone)).from;
+}
+
+/** Fix profiles.weight_kg when it looks like lbs×2.2 (~400 kg). Fire-and-forget safe. */
+async function healInvertedProfileWeight(userId: string): Promise<void> {
+  try {
+    const { data } = await supabase.from('profiles').select('weight_kg').eq('id', userId).maybeSingle();
+    const raw = data?.weight_kg != null ? Number(data.weight_kg) : null;
+    if (!isInvertedBodyWeightKg(raw)) return;
+    await supabase.from('profiles').update({ weight_kg: normalizeBodyWeightKg(raw) }).eq('id', userId);
+  } catch {
+    // Non-fatal — meal heal still runs.
+  }
 }
 
 /**
@@ -296,6 +309,7 @@ export const nutritionService: INutritionService = {
 
   async getMealsForWeek(userId: string, from: string, to: string) {
     try {
+      void healInvertedProfileWeight(userId);
       const { data, error } = await supabase
         .from('meals')
         .select('*')
@@ -479,6 +493,7 @@ export const nutritionService: INutritionService = {
 
   async generateWeeklyMealPlan(userId, timeZone?: string | null, prefs?: { dietaryStyle?: string; dietaryRestrictions?: string[]; foodPreferences?: string[] }) {
     try {
+      await healInvertedProfileWeight(userId);
       const tz = resolveTimeZone(timeZone);
       const token = await getAccessToken();
       const plan = await api.generateMealPlan({ userId, ...prefs }, token);
