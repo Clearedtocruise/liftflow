@@ -1,4 +1,8 @@
-import { estimateFoodMacrosLocal } from '@/lib/foodMacroLookup';
+import {
+  estimateFoodMacrosLocal,
+  extractEmbeddedServing,
+  splitCompositeFoodParts,
+} from '@/lib/foodMacroLookup';
 
 export type MealIngredient = {
   name: string;
@@ -211,8 +215,24 @@ function mealKey(name: string): string {
 
 export function ingredientsForMealName(name: string): MealIngredient[] {
   const key = mealKey(name);
-  return MEAL_INGREDIENT_TEMPLATES[key] ?? [{ name, serving: '1 serving' }];
+  if (MEAL_INGREDIENT_TEMPLATES[key]) return MEAL_INGREDIENT_TEMPLATES[key];
+
+  // Prefer splitting free-text snack titles over estimating the whole string as one food.
+  const parts = splitCompositeFoodParts(name);
+  if (parts.length > 1) {
+    return parts.map((part) => {
+      const embedded = extractEmbeddedServing(part);
+      if (embedded) return { name: embedded.food, serving: embedded.serving };
+      return { name: part, serving: '1 serving' };
+    });
+  }
+
+  const embedded = extractEmbeddedServing(name);
+  if (embedded) return [{ name: embedded.food, serving: embedded.serving }];
+
+  return [{ name, serving: '1 serving' }];
 }
+
 
 export function macrosForMealName(name: string): MealMacros {
   const key = mealKey(name);
