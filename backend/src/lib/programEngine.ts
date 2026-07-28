@@ -387,7 +387,7 @@ export async function generateTrainingProgram(input: CreateProgramInput) {
         let exercises = referencePlan
           ? plan.exercises
           : scaleExercises(plan.exercises, phaseSpec.volumeMultiplier, phaseSpec.repRangeAdjust);
-        if (equipment?.length && !referencePlan) {
+        if (equipment?.length) {
           const exercisePool = await loadAvailableExercises(input.userId, equipment);
           const swapped = applyEquipmentSubstitutionsToExercises(exercises, equipment, exercisePool);
           exercises = swapped.exercises;

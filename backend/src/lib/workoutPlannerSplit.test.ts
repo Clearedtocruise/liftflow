@@ -8,6 +8,7 @@ import {
     isAllowedOnDayFocus,
     isCoreFocusedExercise,
     resolveDayFocusPlan,
+    resolveExerciseRequirements,
     selectFocusedSplitExercises,
     suggestWeightLbs,
     type ExerciseRecord,
@@ -202,6 +203,24 @@ test('dumbbell-only profile excludes kettlebell and cable catalog rows', () => {
   assert.equal(exerciseMeetsEquipment(kbCurl, dumbbellsOnly), false);
   assert.equal(exerciseMeetsEquipment(cableCurl, dumbbellsOnly), false);
   assert.equal(exerciseMeetsEquipment(dbCurl, dumbbellsOnly), true);
+});
+
+test('t-bar row requires landmine — barbell + rack alone is not enough', () => {
+  const tBarRow: ExerciseRecord = {
+    id: 't-bar-row',
+    name: 'T-Bar Row',
+    slug: 't-bar-row',
+    category: 'pull',
+    equipment: 'barbell',
+    muscle_groups: ['back'],
+    metadata: { movement_family: 'horizontal_pull', requires: ['landmine'] },
+  };
+  const garage = new Set(['barbell', 'rack', 'dumbbells', 'bench', 'bodyweight']);
+  const withLandmine = new Set([...garage, 'landmine']);
+
+  assert.deepEqual(resolveExerciseRequirements(tBarRow), ['landmine']);
+  assert.equal(exerciseMeetsEquipment(tBarRow, garage), false);
+  assert.equal(exerciseMeetsEquipment(tBarRow, withLandmine), true);
 });
 
 test('bodyweight core names do not receive external load targets when metadata is wrong', () => {

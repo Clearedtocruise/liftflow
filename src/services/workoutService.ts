@@ -417,6 +417,13 @@ export const workoutService: IWorkoutService = {
         await syncPlannedWorkoutStatus(session.plannedWorkoutId, 'completed');
       }
 
+      try {
+        const { notificationService } = await import('@/services/notificationService');
+        await notificationService.rescheduleAfterWorkoutCompleted(18, 0);
+      } catch {
+        // Local reminders are best-effort — completion must still succeed.
+      }
+
       const updated = await loadSession(sessionId);
       if (!updated) return fail('Failed to load completed session');
       return ok(updated);
