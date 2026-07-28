@@ -17,7 +17,11 @@ import { WorkoutChallengeModal } from '@/components/workout/execution/WorkoutCha
 import { WorkoutTimerOverlay } from '@/components/workout/execution/WorkoutTimerOverlay';
 import { WorkoutUpNextCard } from '@/components/workout/execution/WorkoutUpNextCard';
 import { ExerciseCoachCard } from '@/components/workout/ExerciseCoachCard';
-import { VoiceSetLogger, type VoiceSetLogPayload } from '@/components/workout/VoiceSetLogger';
+import {
+    VoiceSetLogger,
+    type VoiceSetLogPayload,
+    type VoiceSetLogResult,
+} from '@/components/workout/VoiceSetLogger';
 import { LiftFlowColors, Radius, Spacing, TouchTarget } from '@/constants/theme';
 import { useAppResume } from '@/hooks/useAppResume';
 import { useAuth } from '@/hooks/useAuth';
@@ -29,6 +33,7 @@ import {
     computeWorkoutSetProgress,
     formatCoachTargetLine,
 } from '@/lib/activeWorkoutMetrics';
+import { isPlausibleWorkingWeightKg } from '@/lib/exerciseStartingLoad';
 import {
     inferLoadingMethodFromHistory,
     loadingMethodOptions,
@@ -60,6 +65,7 @@ import {
 } from '@/lib/timerEngine';
 import { TABATA_BETWEEN_EXERCISE_REST_BOUNDS, TABATA_BETWEEN_EXERCISE_REST_DEFAULT, TABATA_INTERVAL_BOUNDS, TABATA_PREP_SECONDS_DEFAULT, clampTabataBetweenExerciseRest, clampTabataIntervalSeconds, tabataModeSummary } from '@/lib/trainingPreferences';
 import { formatWorkoutWeightForInput } from '@/lib/unitConversion';
+import { matchSpokenExercise } from '@/lib/voice/matchSpokenExercise';
 import { pickWorkoutChallenge } from '@/lib/workoutChallengeFlow';
 import { normalizeExecutionMode } from '@/lib/workoutExecutionMode';
 import { alignPlanExercisesToSession, parseTargetReps } from '@/lib/workoutPlan';
@@ -81,6 +87,47 @@ import type { WorkoutExecutionMode } from '@/types/workoutExecutionMode';
 
 /** Brief pause on exercise complete before auto-advancing (hands-free flow). */
 const AUTO_ADVANCE_EXERCISE_MS = 1800;
+
+function historyModeFor(
+  exercise: WorkoutSession['exercises'][number],
+  repRange: string | undefined,
+) {
+  const mode = getExerciseLoggingMode(exercise.exercise, repRange, exercise.exercise?.name);
+  return loadingMethodOptions(exercise.exercise, exercise.exercise?.slug).length > 1
+    ? ('any' as const)
+    : mode;
+}
+
+function applySessionLastSetToInputs(
+  sessionLastSet: { weight?: number; reps?: number; durationSeconds?: number; distanceMeters?: number },
+  mode: ReturnType<typeof getExerciseLoggingMode>,
+  repRange: string,
+  setWeightKg: (value: number) => void,
+  setReps: (value: number) => void,
+  setDurationSeconds: (value: number) => void,
+  setDistanceKm: (value: number) => void,
+) {
+  if (mode === 'timed') {
+    setWeightKg(0);
+    setReps(1);
+    if (sessionLastSet.durationSeconds) setDurationSeconds(sessionLastSet.durationSeconds);
+    return;
+  }
+  if (mode === 'cardio') {
+    setWeightKg(0);
+    setReps(1);
+    if (sessionLastSet.durationSeconds) setDurationSeconds(sessionLastSet.durationSeconds);
+    if (sessionLastSet.distanceMeters) setDistanceKm(sessionLastSet.distanceMeters / 1000);
+    return;
+  }
+  if (mode === 'bodyweight') {
+    setWeightKg(0);
+    setReps(sessionLastSet.reps ?? parseTargetReps(repRange));
+    return;
+  }
+  setWeightKg(sessionLastSet.weight ?? 0);
+  setReps(sessionLastSet.reps ?? parseTargetReps(repRange));
+}
 
 type ActiveWorkoutScreenProps = {
   session: WorkoutSession;
@@ -151,17 +198,15 @@ export function ActiveWorkoutScreen({
     refreshSession,
     deleteSet,
     addExerciseByName,
+    replaceExerciseByName,
     setActiveExerciseIndex,
     watchDraftReps,
     setWatchDraftReps,
-    watchDraftWeightKg,
     setWatchDraftWeightKg,
   } = useWorkoutSession();
 
   const watchDraftRepsRef = useRef<number | null>(null);
   watchDraftRepsRef.current = watchDraftReps;
-  const watchDraftWeightKgRef = useRef<number | null>(null);
-  watchDraftWeightKgRef.current = watchDraftWeightKg;
 
   const elapsedSeconds = useWorkoutElapsedSeconds(session.startedAt, session.status);
 
@@ -215,6 +260,7 @@ export function ActiveWorkoutScreen({
   const [circuitRound, setCircuitRound] = useState(1);
   const [bonusSets, setBonusSets] = useState(0);
   const [exercisePickerVisible, setExercisePickerVisible] = useState(false);
+  const [exercisePickerMode, setExercisePickerMode] = useState<'add' | 'swap'>('add');
   const [exerciseGuideOpen, setExerciseGuideOpen] = useState(false);
   const [intervalOverlayOpen, setIntervalOverlayOpen] = useState(false);
   const [restOverlayOpen, setRestOverlayOpen] = useState(false);
@@ -230,8 +276,23 @@ export function ActiveWorkoutScreen({
   const tabataExercisePrepPendingRef = useRef(false);
   const tabataPrepDoneForExerciseRef = useRef<string | null>(null);
   const intervalStartedForExerciseRef = useRef<string | null>(null);
+  /** Per-exercise input drafts so A↔B switches never reuse another movement's last weight. */
+  const draftByExerciseKeyRef = useRef<
+    Record<string, { weightKg: number; reps: number; durationSeconds: number; distanceKm: number }>
+  >({});
+  const previousExerciseKeyRef = useRef<string | null>(null);
+  const weightKgRef = useRef(0);
+  const repsRef = useRef(8);
+  const durationSecondsRef = useRef(30);
+  const distanceKmRef = useRef(0);
 
   const currentExercise = sortedExercises[currentIndex];
+  const currentExerciseKey =
+    currentExercise?.exerciseId != null ? `${currentExercise.id}:${currentExercise.exerciseId}` : null;
+  weightKgRef.current = weightKg;
+  repsRef.current = reps;
+  durationSecondsRef.current = durationSeconds;
+  distanceKmRef.current = distanceKm;
   const planMeta = planExercises[currentIndex];
   const targetSets = planMeta?.sets ?? 3;
   const coachRecommendedSets = coachPrescription?.targets.sets ?? targetSets;
@@ -239,6 +300,12 @@ export function ActiveWorkoutScreen({
   const effectiveTargetSets = Math.max(targetSets + bonusSets, coachRecommendedSets);
   const repRange = planMeta?.repRange ?? currentExercise?.suggestedReps ?? '8-10';
   const completedSets = currentExercise?.sets ?? [];
+  const completedSetsCountRef = useRef(0);
+  completedSetsCountRef.current = completedSets.length;
+  const currentExerciseRef = useRef(currentExercise);
+  currentExerciseRef.current = currentExercise;
+  const completedSetsRef = useRef(completedSets);
+  completedSetsRef.current = completedSets;
   const isPaused = session.status === 'paused';
   const restActive =
     executionModeUsesTraditionalRest(executionMode) &&
@@ -372,14 +439,27 @@ export function ActiveWorkoutScreen({
   );
   const coachTargetLine = useMemo(() => {
     if (!coachPrescription) return null;
+    const weightKg = isPlausibleWorkingWeightKg(
+      currentExercise?.exercise?.name,
+      coachPrescription.targets.weightKg,
+    )
+      ? coachPrescription.targets.weightKg
+      : 0;
     return formatCoachTargetLine(
-      coachPrescription.targets,
+      { ...coachPrescription.targets, weightKg },
       loggingMode,
       (kg) => formatWorkoutWeightForInput(kg, units.preferredWeightUnit),
       units.weightLabel,
       repRange,
     );
-  }, [coachPrescription, loggingMode, units.preferredWeightUnit, units.weightLabel, repRange]);
+  }, [
+    coachPrescription,
+    currentExercise?.exercise?.name,
+    loggingMode,
+    units.preferredWeightUnit,
+    units.weightLabel,
+    repRange,
+  ]);
   const groupComplete =
     usesSupersetRotation && inSuperset && supersetGroup
       ? isSupersetGroupComplete(supersetGroup, sortedExercises, planExercises)
@@ -443,16 +523,22 @@ export function ActiveWorkoutScreen({
   }, [restSecondsRemaining]);
 
   useEffect(() => {
-    if (!restActive) setRestOverlayOpen(false);
+    // Between-set rest used to open the full timer automatically. The ghost-layer fix gated it
+    // behind restOverlayOpen but never set that flag on rest start, so users only got a banner
+    // and had to tap "Open timer". Open on rest start; dismiss still sticks until rest ends.
+    if (restActive) setRestOverlayOpen(true);
+    else setRestOverlayOpen(false);
   }, [restActive]);
 
   useEffect(() => {
     if (!intervalTimer) setIntervalOverlayOpen(false);
   }, [intervalTimer]);
 
+  const circuitTimerActive = circuitTimer != null && circuitTimer.phase !== 'done';
   useEffect(() => {
-    if (!circuitTimer || circuitTimer.phase === 'done') setCircuitOverlayOpen(false);
-  }, [circuitTimer]);
+    if (circuitTimerActive) setCircuitOverlayOpen(true);
+    else setCircuitOverlayOpen(false);
+  }, [circuitTimerActive]);
 
   useEffect(() => {
     setIntervalOverlayOpen(false);
@@ -474,24 +560,6 @@ export function ActiveWorkoutScreen({
   }, [executionMode, dismissIntervalTimer, dismissCircuitTimer]);
 
   useEffect(() => {
-    const nextRest = planMeta?.restSeconds ?? resolveTraditionalRestSeconds(executionMode);
-    setRestTargetSeconds(nextRest);
-  }, [currentExercise?.id, planMeta?.restSeconds, executionMode]);
-
-  useEffect(() => {
-    // Clear exercise-specific UI state immediately so the next card never renders stale history or
-    // carry-over defaults from the previous exercise while async history loads.
-    setHistorySets([]);
-    setCoachPrescription(null);
-    setExerciseHadPr(false);
-    setShowComplete(false);
-    setDistanceKm(0);
-    setWeightKg(0);
-    setReps(parseTargetReps(planExercises[currentIndex]?.repRange ?? currentExercise?.suggestedReps));
-    setDurationSeconds(defaultTimedDurationSeconds(planExercises[currentIndex]?.repRange ?? currentExercise?.suggestedReps));
-  }, [currentExercise?.id]);
-
-  useEffect(() => {
     if (circuitTimer?.phase !== 'done') return;
     if (tabataExercisePrepPendingRef.current || tabataBetweenExercisePendingRef.current) return;
     dismissCircuitTimer();
@@ -508,6 +576,12 @@ export function ActiveWorkoutScreen({
   }, [circuitTimer?.phase, dismissCircuitTimer]);
 
   useEffect(() => {
+    const nextRest = planMeta?.restSeconds ?? resolveTraditionalRestSeconds(executionMode);
+    setRestTargetSeconds(nextRest);
+  }, [currentExerciseKey, planMeta?.restSeconds, executionMode]);
+
+  useEffect(() => {
+    // Watch weight drafts stay optional and must not overwrite another exercise's stepper value.
     if (watchDraftReps != null) {
       setReps(watchDraftReps);
       return;
@@ -519,89 +593,162 @@ export function ActiveWorkoutScreen({
   }, [watchDraftReps]);
 
   useEffect(() => {
-    if (watchDraftWeightKg != null) {
-      setWeightKg(watchDraftWeightKg);
-      return;
-    }
-    const pending = watchPhoneBridge.getPendingWatchWeightKg();
-    if (pending != null) {
-      setWeightKg(pending);
-    }
-  }, [watchDraftWeightKg]);
+    const exercise = currentExerciseRef.current;
+    if (!user || !exercise?.exerciseId || !currentExerciseKey) return;
 
-  useEffect(() => {
-    if (!user || !currentExercise?.exerciseId) return;
+    const switchedExercise = previousExerciseKeyRef.current !== currentExerciseKey;
+    if (previousExerciseKeyRef.current && previousExerciseKeyRef.current !== currentExerciseKey) {
+      draftByExerciseKeyRef.current[previousExerciseKeyRef.current] = {
+        weightKg: weightKgRef.current,
+        reps: repsRef.current,
+        durationSeconds: durationSecondsRef.current,
+        distanceKm: distanceKmRef.current,
+      };
+    }
+    previousExerciseKeyRef.current = currentExerciseKey;
 
-    const mode = getExerciseLoggingMode(
-      currentExercise.exercise,
-      repRange,
-      currentExercise.exercise?.name,
+    // Session refresh recreates exercise objects. Only re-seed inputs when the active movement
+    // changes — otherwise history would keep winning over the weight the user set for set 2+.
+    if (!switchedExercise) {
+      let cancelled = false;
+      void workoutService
+        .getRecentSetsForExercise(user.id, exercise.exerciseId, 5, historyModeFor(exercise, repRange))
+        .then((result) => {
+          if (!cancelled && result.success) setHistorySets(result.data);
+        });
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    // Clear immediately so the next card never shows another exercise's last weight while history loads.
+    setHistorySets([]);
+    setCoachPrescription(null);
+    setExerciseHadPr(false);
+    setShowComplete(false);
+
+    const mode = getExerciseLoggingMode(exercise.exercise, repRange, exercise.exercise?.name);
+    const historyMode = historyModeFor(exercise, repRange);
+    const cachedDraft = draftByExerciseKeyRef.current[currentExerciseKey];
+    const sessionSets = completedSetsRef.current;
+    const sessionLastSet = sessionSets[sessionSets.length - 1];
+
+    // Reset loading method for THIS exercise immediately — otherwise Distance from a prior
+    // cardio (or misclassified) lift sticks on Hammer Curl / other strength moves.
+    setLoadingMethod(
+      inferLoadingMethodFromHistory(exercise.exercise, exercise.exercise?.slug, undefined, undefined),
     );
-    const historyMode =
-      loadingMethodOptions(currentExercise.exercise, currentExercise.exercise?.slug).length > 1
-        ? ('any' as const)
-        : mode;
     setDurationSeconds(defaultTimedDurationSeconds(repRange));
+    setDistanceKm(0);
+
+    if (sessionLastSet) {
+      const inferredMethod = inferLoadingMethodFromHistory(
+        exercise.exercise,
+        exercise.exercise?.slug,
+        sessionLastSet.weight,
+        sessionLastSet.durationSeconds,
+      );
+      setLoadingMethod(inferredMethod);
+      if (cachedDraft) {
+        setWeightKg(cachedDraft.weightKg);
+        setReps(cachedDraft.reps);
+        setDurationSeconds(cachedDraft.durationSeconds);
+        setDistanceKm(cachedDraft.distanceKm);
+      } else {
+        applySessionLastSetToInputs(
+          sessionLastSet,
+          mode,
+          repRange,
+          setWeightKg,
+          setReps,
+          setDurationSeconds,
+          setDistanceKm,
+        );
+      }
+      let cancelled = false;
+      void workoutService
+        .getRecentSetsForExercise(user.id, exercise.exerciseId, 5, historyMode)
+        .then((result) => {
+          if (!cancelled && result.success) setHistorySets(result.data);
+        });
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (cachedDraft) {
+      setWeightKg(cachedDraft.weightKg);
+      setReps(cachedDraft.reps);
+      setDurationSeconds(cachedDraft.durationSeconds);
+      setDistanceKm(cachedDraft.distanceKm);
+    } else {
+      setWeightKg(0);
+      setReps(parseTargetReps(repRange));
+    }
 
     let cancelled = false;
     void workoutService
-      .getRecentSetsForExercise(user.id, currentExercise.exerciseId, 5, historyMode)
+      .getRecentSetsForExercise(user.id, exercise.exerciseId, 5, historyMode)
       .then((result: Awaited<ReturnType<typeof workoutService.getRecentSetsForExercise>>) => {
-      if (cancelled || !result.success) return;
-      setHistorySets(result.data);
+        if (cancelled || !result.success) return;
+        setHistorySets(result.data);
 
-      const last = result.data[0];
-      const inferredMethod = inferLoadingMethodFromHistory(
-        currentExercise.exercise,
-        currentExercise.exercise?.slug,
-        last?.weightKg,
-        last?.durationSeconds,
-      );
-      setLoadingMethod(inferredMethod);
+        if (cachedDraft) {
+          setWeightKg(cachedDraft.weightKg);
+          setReps(cachedDraft.reps);
+          return;
+        }
 
-      if (mode === 'timed') {
-        setReps(1);
-        if (last?.durationSeconds) {
-          setDurationSeconds(last.durationSeconds);
-        }
-        return;
-      }
-      if (mode === 'cardio') {
-        setReps(1);
-        if (last?.durationSeconds) {
-          setDurationSeconds(last.durationSeconds);
-        }
-        if (last?.distanceMeters) {
-          setDistanceKm(last.distanceMeters / 1000);
-        }
-        return;
-      }
-      if (mode === 'bodyweight') {
-        setReps(last?.reps ?? parseTargetReps(repRange));
-        return;
-      }
-      if (last?.weightKg != null && last.reps != null) {
-        setWeightKg(last.weightKg);
-        setReps(last.reps);
-      } else if (currentExercise.suggestedWeight) {
-        setWeightKg(currentExercise.suggestedWeight);
-        setReps(parseTargetReps(repRange));
-      } else {
-        setReps(parseTargetReps(repRange));
-      }
+        const last = result.data[0];
+        const inferredMethod = inferLoadingMethodFromHistory(
+          exercise.exercise,
+          exercise.exercise?.slug,
+          last?.weightKg,
+          last?.durationSeconds,
+        );
+        setLoadingMethod(inferredMethod);
 
-      if (watchDraftRepsRef.current != null) {
-        setReps(watchDraftRepsRef.current);
-      }
-      if (watchDraftWeightKgRef.current != null) {
-        setWeightKg(watchDraftWeightKgRef.current);
-      }
-    });
+        if (mode === 'timed') {
+          setWeightKg(0);
+          setReps(1);
+          if (last?.durationSeconds) setDurationSeconds(last.durationSeconds);
+          return;
+        }
+        if (mode === 'cardio') {
+          setWeightKg(0);
+          setReps(1);
+          if (last?.durationSeconds) setDurationSeconds(last.durationSeconds);
+          if (last?.distanceMeters) setDistanceKm(last.distanceMeters / 1000);
+          return;
+        }
+        if (mode === 'bodyweight') {
+          setWeightKg(0);
+          setReps(last?.reps ?? parseTargetReps(repRange));
+          return;
+        }
+        if (last?.weightKg != null && last.reps != null) {
+          setWeightKg(last.weightKg);
+          setReps(last.reps);
+        } else if (
+          exercise.suggestedWeight &&
+          isPlausibleWorkingWeightKg(exercise.exercise?.name, exercise.suggestedWeight)
+        ) {
+          setWeightKg(exercise.suggestedWeight);
+          setReps(parseTargetReps(repRange));
+        } else {
+          setWeightKg(0);
+          setReps(parseTargetReps(repRange));
+        }
+
+        if (watchDraftRepsRef.current != null) {
+          setReps(watchDraftRepsRef.current);
+        }
+      });
 
     return () => {
       cancelled = true;
     };
-  }, [currentExercise?.id, currentExercise?.exerciseId, currentExercise?.exercise, currentExercise?.suggestedWeight, repRange, user]);
+  }, [currentExerciseKey, completedSets.length, repRange, user]);
 
   /**
    * Prep countdown and interval start are one decision keyed on the exercise, so re-running this
@@ -695,6 +842,9 @@ export function ActiveWorkoutScreen({
 
   useEffect(() => {
     if (coachExtraSets <= 0) return;
+    // A coach prescription that arrives after the planned sets are logged must not reopen the
+    // exercise, which left the screen asking for a set the user had already finished.
+    if (completedSetsCountRef.current >= targetSets) return;
     setBonusSets((current) => (current >= coachExtraSets ? current : coachExtraSets));
     setShowComplete(false);
     pendingExerciseAdvanceAfterRestRef.current = false;
@@ -703,7 +853,7 @@ export function ActiveWorkoutScreen({
       clearTimeout(autoAdvanceTimeoutRef.current);
       autoAdvanceTimeoutRef.current = null;
     }
-  }, [coachExtraSets, currentExercise?.id]);
+  }, [coachExtraSets, currentExercise?.id, targetSets]);
 
   useEffect(() => {
     // Interval modes own their own completion signal; a set count must not override it.
@@ -749,24 +899,47 @@ export function ActiveWorkoutScreen({
   }
 
   function handlePreviousExercise() {
-    if (currentIndex <= 0 || logging || restActive || intervalTimer != null || transitionActive) return;
+    if (currentIndex <= 0 || logging || intervalTimer != null || transitionActive) return;
     clearPendingExerciseAdvance();
     setShowComplete(false);
     setCurrentIndex((index) => Math.max(0, index - 1));
   }
 
-  async function handleAddExercise(exercise: Exercise) {
-    const workoutExerciseId = await addExerciseByName(exercise.name);
-    if (!workoutExerciseId) return;
-    await refreshSession();
+  /** Jumps to a workout exercise by id, using session order so the index matches what is rendered. */
+  async function focusWorkoutExercise(workoutExerciseId: string) {
     const refreshed = await workoutService.getSession(session.id);
-    if (refreshed.success) {
-      const nextIndex = refreshed.data.exercises.findIndex((item) => item.id === workoutExerciseId);
-      if (nextIndex >= 0) {
-        setCurrentIndex(nextIndex);
-        setShowComplete(false);
-      }
+    if (!refreshed.success) return;
+    const nextIndex = [...refreshed.data.exercises]
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .findIndex((item) => item.id === workoutExerciseId);
+    if (nextIndex < 0) return;
+    clearPendingExerciseAdvance();
+    setCurrentIndex(nextIndex);
+    setShowComplete(false);
+  }
+
+  async function handleAddExercise(exercise: Exercise) {
+    // The new exercise slots in directly after the current one rather than at the end of the
+    // workout, and the user is only moved there once the exercise they are on is finished.
+    const wasMidExercise = !allSetsDone;
+    const workoutExerciseId = await addExerciseByName(exercise.name, {
+      afterWorkoutExerciseId: currentExercise?.id,
+    });
+    if (!workoutExerciseId || wasMidExercise) return;
+    await focusWorkoutExercise(workoutExerciseId);
+  }
+
+  async function handleSwapExercise(exercise: Exercise) {
+    if (!currentExercise || !currentExerciseKey) return;
+    // Drop the draft for the movement being replaced so the new exercise loads its own last weight.
+    delete draftByExerciseKeyRef.current[currentExerciseKey];
+    previousExerciseKeyRef.current = null;
+    const workoutExerciseId = await replaceExerciseByName(currentExercise.id, exercise.name);
+    if (!workoutExerciseId) {
+      Alert.alert('Could not swap exercise', 'Please try again.');
+      return;
     }
+    await focusWorkoutExercise(workoutExerciseId);
   }
 
   const offerBetweenSetsChallenge = useCallback(() => {
@@ -865,6 +1038,8 @@ export function ActiveWorkoutScreen({
     reps?: number;
     durationSeconds?: number;
     distanceKm?: number;
+    /** Voice can clear an active rest and continue; manual Log Set still waits out the timer. */
+    ignoreActiveRest?: boolean;
   }): Promise<LogSetResult> => {
     if (!currentExercise) {
       return { ok: false, error: 'No exercise selected.' };
@@ -878,7 +1053,7 @@ export function ActiveWorkoutScreen({
     if (allSetsDone) {
       return { ok: false, error: 'All planned sets are already logged.' };
     }
-    if (restActive || intervalTimer != null || transitionActive) {
+    if ((!overrides?.ignoreActiveRest && restActive) || intervalTimer != null || transitionActive) {
       return { ok: false, error: 'Finish the current rest or transition before logging the next set.' };
     }
 
@@ -982,6 +1157,14 @@ export function ActiveWorkoutScreen({
       }
 
       clearWatchDrafts();
+      if (currentExerciseKey) {
+        draftByExerciseKeyRef.current[currentExerciseKey] = {
+          weightKg: resolvedWeightKg,
+          reps: resolvedReps,
+          durationSeconds: resolvedDurationSeconds,
+          distanceKm: resolvedDistanceKm,
+        };
+      }
       return { ok: true };
     } finally {
       loggingInFlightRef.current = false;
@@ -992,6 +1175,7 @@ export function ActiveWorkoutScreen({
     circuitRound,
     clearWatchDrafts,
     currentExercise,
+    currentExerciseKey,
     currentIndex,
     distanceKm,
     durationSeconds,
@@ -1016,19 +1200,74 @@ export function ActiveWorkoutScreen({
 
   const handleLogSet = useCallback(() => commitSetLog(), [commitSetLog]);
 
+  const handleChangeWeight = useCallback(
+    (nextWeightKg: number) => {
+      setWeightKg(nextWeightKg);
+      if (!currentExerciseKey) return;
+      draftByExerciseKeyRef.current[currentExerciseKey] = {
+        weightKg: nextWeightKg,
+        reps: draftByExerciseKeyRef.current[currentExerciseKey]?.reps ?? repsRef.current,
+        durationSeconds:
+          draftByExerciseKeyRef.current[currentExerciseKey]?.durationSeconds ?? durationSecondsRef.current,
+        distanceKm: draftByExerciseKeyRef.current[currentExerciseKey]?.distanceKm ?? distanceKmRef.current,
+      };
+    },
+    [currentExerciseKey],
+  );
+
+  const handleChangeReps = useCallback(
+    (nextReps: number) => {
+      setReps(nextReps);
+      if (!currentExerciseKey) return;
+      draftByExerciseKeyRef.current[currentExerciseKey] = {
+        weightKg: draftByExerciseKeyRef.current[currentExerciseKey]?.weightKg ?? weightKgRef.current,
+        reps: nextReps,
+        durationSeconds:
+          draftByExerciseKeyRef.current[currentExerciseKey]?.durationSeconds ?? durationSecondsRef.current,
+        distanceKm: draftByExerciseKeyRef.current[currentExerciseKey]?.distanceKm ?? distanceKmRef.current,
+      };
+    },
+    [currentExerciseKey],
+  );
+
   const handleVoiceLogSet = useCallback(
-    async (payload: VoiceSetLogPayload): Promise<boolean> => {
+    async (payload: VoiceSetLogPayload): Promise<VoiceSetLogResult> => {
       const activeName = currentExercise?.exercise?.name;
-      if (!payload.exerciseName || !activeName) return false;
-      if (payload.exerciseName.trim().toLowerCase() !== activeName.trim().toLowerCase()) {
-        AccessibilityInfo.announceForAccessibility(
-          `Voice logging is limited to the current exercise: ${activeName}.`,
-        );
-        return false;
+      if (!activeName) {
+        return { ok: false, reason: 'No exercise is selected.' };
+      }
+      if (!payload.exerciseName) {
+        return { ok: false, reason: `Say the exercise name, for example "${activeName}".` };
+      }
+
+      const match = matchSpokenExercise(payload.exerciseName, activeName);
+      if (match.kind === 'different') {
+        // Previously a silent `false`, which surfaced as "Could not save that set" with no hint
+        // that the name was the problem — sighted users got no reason at all.
+        AccessibilityInfo.announceForAccessibility(match.reason);
+        return { ok: false, reason: match.reason };
+      }
+
+      // Hands-free: if the between-set rest overlay is up, clear it and log the next set.
+      if (restActive) {
+        setRestOverlayOpen(false);
+        await skipRestTimer();
+        setRestPaused(false);
       }
 
       if (payload.weight != null) {
         setWeightKg(payload.weight);
+        if (currentExerciseKey) {
+          draftByExerciseKeyRef.current[currentExerciseKey] = {
+            weightKg: payload.weight,
+            reps: payload.reps ?? repsRef.current,
+            durationSeconds:
+              draftByExerciseKeyRef.current[currentExerciseKey]?.durationSeconds ??
+              durationSecondsRef.current,
+            distanceKm:
+              draftByExerciseKeyRef.current[currentExerciseKey]?.distanceKm ?? distanceKmRef.current,
+          };
+        }
       }
       if (payload.reps != null) {
         setReps(payload.reps);
@@ -1037,12 +1276,18 @@ export function ActiveWorkoutScreen({
       const result = await commitSetLog({
         weightKg: payload.weight,
         reps: payload.reps,
+        ignoreActiveRest: true,
       });
-      return result.ok;
+      // `commitSetLog` already explains paused sessions and completed set targets.
+      if (!result.ok) return { ok: false, reason: result.error };
+      return { ok: true, loggedAs: activeName };
     },
     [
       currentExercise?.exercise?.name,
+      currentExerciseKey,
       commitSetLog,
+      restActive,
+      skipRestTimer,
     ],
   );
 
@@ -1193,12 +1438,10 @@ export function ActiveWorkoutScreen({
     setRestPaused(false);
   }
 
+  // Rest deliberately does not block this. Being unable to step back to the exercise you are on is
+  // worse than a rest timer that keeps counting while you navigate.
   const canGoToPreviousExercise =
-    currentIndex > 0 &&
-    !logging &&
-    !restActive &&
-    intervalTimer == null &&
-    !transitionActive;
+    currentIndex > 0 && !logging && intervalTimer == null && !transitionActive;
 
   if (!currentExercise) {
     return (
@@ -1339,7 +1582,14 @@ export function ActiveWorkoutScreen({
                   formatWeight={(kg) => formatWorkoutWeightForInput(kg, units.preferredWeightUnit)}
                   weightLabel={units.weightLabel}
                   distanceUnit={units.preferredDistanceUnit}
-                  fallbackWeightKg={weightKg > 0 ? weightKg : currentExercise.suggestedWeight}
+                  fallbackWeightKg={
+                    isPlausibleWorkingWeightKg(
+                      currentExercise.exercise?.name,
+                      currentExercise.suggestedWeight,
+                    )
+                      ? currentExercise.suggestedWeight
+                      : undefined
+                  }
                 />
               ) : null}
 
@@ -1490,8 +1740,8 @@ export function ActiveWorkoutScreen({
                     reps={reps}
                     durationSeconds={durationSeconds}
                     distanceKm={distanceKm}
-                    onChangeWeight={setWeightKg}
-                    onChangeReps={setReps}
+                    onChangeWeight={handleChangeWeight}
+                    onChangeReps={handleChangeReps}
                     onChangeDuration={setDurationSeconds}
                     onChangeDistance={setDistanceKm}
                     disabled={
@@ -1502,22 +1752,33 @@ export function ActiveWorkoutScreen({
                       (circuitTimer != null && circuitTimer.phase !== 'done')
                     }
                   />
-                  <PrimaryButton
-                    label={allSetsDone ? 'All sets logged' : `Log Set ${nextSetNumber}`}
-                    size="large"
-                    loading={logging}
-                    disabled={
-                      isPaused ||
-                      logging ||
-                      allSetsDone ||
-                      restActive ||
-                      intervalTimer != null ||
-                      (circuitTimer != null && circuitTimer.phase !== 'done')
-                    }
-                    onPress={() => {
-                      void handleLogSet();
-                    }}
-                  />
+                  {allSetsDone ? (
+                    // Every set is in but the exercise-complete card is not up, so this is the way
+                    // forward instead of a disabled button the user cannot get past.
+                    <PrimaryButton
+                      label={isFinalExercise ? 'Finish Workout' : 'Next Exercise'}
+                      size="large"
+                      loading={finishing}
+                      disabled={isPaused || logging}
+                      onPress={isFinalExercise ? onFinish : handleNextExercise}
+                    />
+                  ) : (
+                    <PrimaryButton
+                      label={`Log Set ${nextSetNumber}`}
+                      size="large"
+                      loading={logging}
+                      disabled={
+                        isPaused ||
+                        logging ||
+                        restActive ||
+                        intervalTimer != null ||
+                        (circuitTimer != null && circuitTimer.phase !== 'done')
+                      }
+                      onPress={() => {
+                        void handleLogSet();
+                      }}
+                    />
+                  )}
                   {user && (loggingMode === 'weighted' || loggingMode === 'bodyweight') ? (
                     <VoiceSetLogger
                       userId={user.id}
@@ -1528,7 +1789,6 @@ export function ActiveWorkoutScreen({
                       disabled={
                         isPaused ||
                         logging ||
-                        restActive ||
                         intervalTimer != null ||
                         (circuitTimer != null && circuitTimer.phase !== 'done')
                       }
@@ -1539,7 +1799,19 @@ export function ActiveWorkoutScreen({
                     <PrimaryButton
                       label="+ Add Exercise"
                       variant="secondary"
-                      onPress={() => setExercisePickerVisible(true)}
+                      onPress={() => {
+                        setExercisePickerMode('add');
+                        setExercisePickerVisible(true);
+                      }}
+                      disabled={isPaused}
+                    />
+                    <PrimaryButton
+                      label="Swap Exercise"
+                      variant="secondary"
+                      onPress={() => {
+                        setExercisePickerMode('swap');
+                        setExercisePickerVisible(true);
+                      }}
                       disabled={isPaused}
                     />
                     {completedSets.length > 0 ? (
@@ -1705,8 +1977,12 @@ export function ActiveWorkoutScreen({
       <ExercisePickerModal
         visible={exercisePickerVisible}
         onClose={() => setExercisePickerVisible(false)}
-        onSelect={handleAddExercise}
-        title="Add Exercise"
+        onSelect={exercisePickerMode === 'swap' ? handleSwapExercise : handleAddExercise}
+        title={
+          exercisePickerMode === 'swap'
+            ? `Swap ${currentExercise.exercise?.name ?? 'Exercise'}`
+            : 'Add Exercise'
+        }
       />
 
       <ExerciseGuideSheet

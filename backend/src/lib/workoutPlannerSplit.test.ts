@@ -226,6 +226,31 @@ test('bodyweight core names do not receive external load targets when metadata i
 
   assert.equal(suggestWeightLbs(windshieldWiper, 'muscle_gain', undefined, 80), undefined);
   assert.notEqual(suggestWeightLbs(weightedSitUp, 'muscle_gain', undefined, 80), undefined);
+
+  const plateCurl: ExerciseRecord = {
+    id: 'plate-curl',
+    name: 'Plate Curl',
+    slug: 'plate-curl',
+    category: 'pull',
+    equipment: 'machine',
+    muscle_groups: ['biceps'],
+    metadata: { movement_family: 'biceps', requires: ['machines'] },
+  };
+  const plateCurlStart = suggestWeightLbs(plateCurl, 'muscle_gain', undefined, 80);
+  assert.ok(plateCurlStart != null && plateCurlStart > 0);
+  assert.ok(
+    plateCurlStart <= 45,
+    `Plate Curl cold-start should stay in plate territory, got ${plateCurlStart} lb`,
+  );
+
+  // History is stored in kg on workout_sets; suggestions are returned in lbs.
+  const fromHistory = suggestWeightLbs(
+    plateCurl,
+    'muscle_gain',
+    { weight: 11.34, reps: 10, loggedAt: new Date() },
+    80,
+  );
+  assert.ok(fromHistory != null && fromHistory >= 20 && fromHistory <= 30);
 });
 
 console.log('workoutPlannerSplit.test.ts — all assertions passed');
