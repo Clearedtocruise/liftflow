@@ -14,6 +14,7 @@ type PrimaryButtonProps = {
   disabled?: boolean;
   variant?: 'primary' | 'secondary' | 'ghost';
   size?: 'default' | 'large';
+  testID?: string;
 };
 
 export function PrimaryButton({
@@ -23,6 +24,7 @@ export function PrimaryButton({
   disabled,
   variant = 'primary',
   size = 'default',
+  testID,
 }: PrimaryButtonProps) {
   const scale = useSharedValue(1);
   const animStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
@@ -31,6 +33,7 @@ export function PrimaryButton({
   if (variant === 'primary') {
     return (
       <AnimatedPressable
+        testID={testID}
         onPress={onPress}
         disabled={isDisabled}
         onPressIn={() => {
@@ -65,6 +68,7 @@ export function PrimaryButton({
 
   return (
     <AnimatedPressable
+      testID={testID}
       onPress={onPress}
       disabled={isDisabled}
       onPressIn={() => {
