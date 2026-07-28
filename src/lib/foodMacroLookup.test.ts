@@ -57,3 +57,29 @@ test('extractEmbeddedServing pulls tbsp amounts out of the food name', () => {
   const embedded = extractEmbeddedServing('2 Tablespoons Peanut Butter');
   assert.deepEqual(embedded, { serving: '2 Tablespoons', food: 'Peanut Butter' });
 });
+
+test('3 whole eggs counts as three eggs, not a generic 4 oz food', () => {
+  const embedded = extractEmbeddedServing('3 whole eggs');
+  assert.deepEqual(embedded, { serving: '3 piece', food: 'egg' });
+  const estimate = estimateFoodMacrosLocal('3 whole eggs', '1');
+  // ~3 × 1.75 oz × 41 cal ≈ 215
+  assert.ok(estimate.calories >= 190 && estimate.calories <= 240, `got ${estimate.calories}`);
+  assert.ok(estimate.proteinG >= 16 && estimate.proteinG <= 22, `got ${estimate.proteinG}`);
+  assert.ok(estimate.carbsG < 3, `eggs should not invent ~12g carbs, got ${estimate.carbsG}`);
+});
+
+test('eggs plus egg whites sums both foods', () => {
+  const estimate = estimateFoodMacrosLocal('3 whole eggs, 1/2 cup egg whites', '1');
+  // eggs ~215 + whites ~65 ≈ 280
+  assert.ok(estimate.calories >= 250 && estimate.calories <= 320, `got ${estimate.calories}`);
+  assert.ok(estimate.proteinG >= 28 && estimate.proteinG <= 40, `got ${estimate.proteinG}`);
+});
+
+test('eggs whites and whey include the protein shake', () => {
+  const estimate = estimateFoodMacrosLocal(
+    '3 Whole Eggs, 1/2 Cup Egg Whites with Optimum Whey Protein In Water',
+    '1',
+  );
+  assert.ok(estimate.calories >= 350 && estimate.calories <= 450, `got ${estimate.calories}`);
+  assert.ok(estimate.proteinG >= 48 && estimate.proteinG <= 70, `got ${estimate.proteinG}`);
+});

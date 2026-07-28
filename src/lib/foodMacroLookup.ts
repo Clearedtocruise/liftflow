@@ -143,8 +143,17 @@ const DENSE_FOOD_DEFAULT_SERVING: Record<string, string> = {
 };
 
 function normalizeFood(name: string): string {
-  return name.trim().toLowerCase().replace(/\s+/g, ' ');
+  return name
+    .trim()
+    .toLowerCase()
+    // "3 whole eggs" / "eggs" must resolve to the egg row — `\begg\b` does not match "eggs".
+    .replace(/\bwhole\s+eggs?\b/g, 'egg')
+    .replace(/\beggs\b/g, 'egg')
+    .replace(/\s+/g, ' ');
 }
+
+/** "3 eggs" / "3 whole eggs" → count as pieces, not a 4 oz generic serving. */
+const EGG_COUNT_RE = /^((?:\d+\s+\d+\/\d+|\d+\/\d+|\d+(?:\.\d+)?))\s+(?:whole\s+)?eggs?\b(.*)$/i;
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -215,6 +224,15 @@ export function isGenericServingSize(servingSize: string): boolean {
 /** Pull "2 tablespoons peanut butter" or "chicken breast 6 oz" into food + serving. */
 export function extractEmbeddedServing(foodName: string): { food: string; serving: string } | null {
   const trimmed = foodName.trim();
+  const eggCount = trimmed.match(EGG_COUNT_RE);
+  if (eggCount) {
+    const rest = eggCount[2].trim();
+    // Bare "3 eggs" / "3 whole eggs". Leave "3 eggs with spinach" to the composite splitter.
+    if (!rest || /^(large|medium|small)\b/i.test(rest)) {
+      const size = rest.match(/^(large|medium|small)\b/i)?.[1] ?? 'piece';
+      return { serving: `${eggCount[1]} ${size}`, food: 'egg' };
+    }
+  }
   const leading = trimmed.match(EMBEDDED_SERVING_RE);
   if (leading) return { serving: leading[1].trim(), food: leading[2].trim() };
   const trailing = trimmed.match(TRAILING_SERVING_RE);

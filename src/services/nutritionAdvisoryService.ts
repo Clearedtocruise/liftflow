@@ -75,6 +75,7 @@ export const nutritionAdvisoryService = {
   },
 
   async estimateFoodMacros(foodName: string, servingSize: string) {
+    const local = estimateFoodMacrosLocal(foodName, servingSize);
     try {
       const token = await getAccessToken();
       const raw = await apiClient.post<{ data: FoodMacroEstimate }>(
@@ -84,7 +85,21 @@ export const nutritionAdvisoryService = {
       );
 
       if (raw.data?.calories != null) {
-        return ok(reconcileFoodMacroEstimate(raw.data));
+        const reconciled = reconcileFoodMacroEstimate(raw.data);
+        // If the model narrated multiple foods but returned a single-food tile (eggs without
+        // whites), prefer the on-device split that actually added every part.
+        const aiDroppedParts =
+          local.calories > reconciled.calories * 1.12 &&
+          local.proteinG > reconciled.proteinG + 4;
+        if (aiDroppedParts) {
+          return ok(
+            reconcileFoodMacroEstimate({
+              ...local,
+              reasoning: `On-device estimate for ${foodName} (${servingSize}): ${local.calories} cal, ${local.proteinG}g protein, ${local.carbsG}g carbs, ${local.fatG}g fat.`,
+            }),
+          );
+        }
+        return ok(reconciled);
       }
     } catch (e) {
       if (__DEV__) {
@@ -94,7 +109,7 @@ export const nutritionAdvisoryService = {
 
     return ok(
       reconcileFoodMacroEstimate({
-        ...estimateFoodMacrosLocal(foodName, servingSize),
+        ...local,
         reasoning: 'On-device macro estimate while coach AI is unavailable.',
       }),
     );
