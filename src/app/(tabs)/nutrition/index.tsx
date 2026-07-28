@@ -548,7 +548,8 @@ export default function NutritionScreen() {
     setReplaceMeal(null);
     try {
       const meta = enrichMealMeta(meal.name, meal.instructions);
-      meta.status = 'modified';
+      // Replace changes what is planned; Home protein counts on Ate as planned.
+      meta.status = 'planned';
       meta.ingredients = option.ingredients;
       const result = await nutritionService.updateMeal(meal.id, {
         name: option.name,
@@ -556,6 +557,7 @@ export default function NutritionScreen() {
         proteinG: option.proteinG,
         carbsG: option.carbsG,
         fatG: option.fatG,
+        status: 'planned',
         instructions: serializeMealMeta(meta),
       });
       if (!result.success) {
@@ -579,7 +581,7 @@ export default function NutritionScreen() {
       meta.ingredients = (meta.ingredients ?? []).map((item) =>
         item.name === ingredientName ? { name: replacement, serving: item.serving } : item,
       );
-      meta.status = 'modified';
+      meta.status = 'planned';
       const instructions = serializeMealMeta(meta);
       const nextName = mealNameFromIngredients(meta.ingredients ?? []) ?? meal.name;
       const nextMacros = resolveMealMacrosFromIngredients(nextName, instructions);
@@ -589,6 +591,7 @@ export default function NutritionScreen() {
         proteinG: nextMacros.proteinG,
         carbsG: nextMacros.carbsG,
         fatG: nextMacros.fatG,
+        status: 'planned',
         instructions,
       });
       if (!result.success) {

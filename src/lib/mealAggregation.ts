@@ -34,8 +34,9 @@ function mealStatus(meal: Meal) {
 }
 
 /**
- * Counts toward daily consumed macros. Only an explicit completed/modified
- * status counts — a plan slot the user never touched is not food they ate.
+ * Counts toward daily consumed macros. Only an explicit ate confirmation
+ * (`completed` / `Modified`) counts — replacing a plan slot does not mean
+ * the user ate it yet.
  */
 export function isConsumedMeal(meal: Meal): boolean {
   return meal.status === 'completed' || meal.status === 'modified';

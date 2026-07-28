@@ -76,7 +76,7 @@ export function buildSmartIngredientReplacementUpdate(
       ? { name: replacement.foodName, serving: replacement.servingSize }
       : item,
   );
-  meta.status = 'modified';
+  meta.status = 'planned';
   const nextIngredients = meta.ingredients ?? [];
   const nextName = mealNameFromIngredients(nextIngredients) ?? meal.name;
   const nextMacros = nextIngredients.reduce<MealMacros>(
@@ -96,6 +96,7 @@ export function buildSmartIngredientReplacementUpdate(
 
   return {
     name: nextName,
+    status: 'planned',
     calories: Math.max(0, Math.round(nextMacros.calories)),
     proteinG: Math.max(0, nextMacros.proteinG),
     carbsG: Math.max(0, nextMacros.carbsG),
@@ -109,11 +110,13 @@ export function buildSmartMealReplacementUpdate(
   replacement: SmartReplacementInput,
 ): Partial<Meal> & { instructions: string } {
   const meta = enrichMealMeta(meal.name, meal.instructions);
-  meta.status = 'modified';
+  // Replace edits the plan only — macros count when the user taps Ate as planned.
+  meta.status = 'planned';
   meta.ingredients = [{ name: replacement.foodName, serving: replacement.servingSize }];
 
   return {
     name: replacement.foodName,
+    status: 'planned',
     calories: replacement.macros.calories,
     proteinG: replacement.macros.proteinG,
     carbsG: replacement.macros.carbsG,

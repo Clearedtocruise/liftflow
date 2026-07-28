@@ -249,7 +249,13 @@ export const nutritionService: INutritionService = {
       if (updates.fatG !== undefined) payload.fat_g = updates.fatG;
       if (updates.instructions !== undefined) payload.instructions = updates.instructions;
       if (updates.mealType !== undefined) payload.meal_type = updates.mealType;
-      if (updates.status !== undefined) payload.status = updates.status;
+      if (updates.status !== undefined) {
+        payload.status = updates.status;
+        // Replacing a meal keeps it planned — clear any prior consumed stamp.
+        if (updates.status === 'planned' || updates.status === 'skipped') {
+          payload.consumed_at = null;
+        }
+      }
       if (updates.calories !== undefined || updates.proteinG !== undefined || updates.carbsG !== undefined || updates.fatG !== undefined) {
         payload.macros_provided = true;
       }
