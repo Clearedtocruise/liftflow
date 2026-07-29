@@ -250,8 +250,14 @@ export function ActiveWorkoutScreen({
   const planMeta = planExercises[currentIndex];
   const targetSets = planMeta?.sets ?? 3;
   const coachRecommendedSets = coachPrescription?.targets.sets ?? targetSets;
-  const coachExtraSets = Math.max(0, coachRecommendedSets - targetSets);
-  const effectiveTargetSets = Math.max(targetSets + bonusSets, coachRecommendedSets);
+  const coachExtraSets = executionModeUsesIntervalTimer(executionMode)
+    ? 0
+    : Math.max(0, coachRecommendedSets - targetSets);
+  // Tabata/HIIT use rounds from the plan (default 3). Coach set-boosts that push
+  // beginners toward 5 sets do not apply on interval protocols.
+  const effectiveTargetSets = executionModeUsesIntervalTimer(executionMode)
+    ? targetSets + bonusSets
+    : Math.max(targetSets + bonusSets, coachRecommendedSets);
   const repRange = planMeta?.repRange ?? currentExercise?.suggestedReps ?? '8-10';
   const completedSets = currentExercise?.sets ?? [];
   const completedSetsCountRef = useRef(0);
@@ -314,7 +320,7 @@ export function ActiveWorkoutScreen({
     ) {
       return resolveTabataPrepUpNext(
         currentExercise?.exercise?.name ?? 'Exercise',
-        targetSets,
+        effectiveTargetSets,
       );
     }
 
@@ -645,17 +651,37 @@ export function ActiveWorkoutScreen({
     }
 
     intervalStartedForExerciseRef.current = exerciseKey;
-    startIntervalTimer(undefined, executionMode === 'tabata');
-    setIntervalOverlayOpen(false);
-  }, [currentExercise?.id, executionMode, showComplete, startIntervalTimer, startCircuitTransition, circuitTimer]);
+    startIntervalTimer(
+      {
+        workSeconds: planMeta?.intervalWorkSeconds,
+        restSeconds: planMeta?.intervalRestSeconds,
+        rounds: planMeta?.intervalRounds ?? effectiveTargetSets,
+      },
+      executionMode === 'tabata',
+    );
+    setIntervalOverlayOpen(executionMode === 'tabata');
+  }, [
+    currentExercise?.id,
+    effectiveTargetSets,
+    executionMode,
+    planMeta?.intervalRestSeconds,
+    planMeta?.intervalRounds,
+    planMeta?.intervalWorkSeconds,
+    showComplete,
+    startIntervalTimer,
+    startCircuitTransition,
+    circuitTimer,
+  ]);
 
-  // For interval modes the protocol's rounds decide when the exercise is done, not the set count.
+  // For interval modes the protocol's rounds decide when the exercise block is done.
+  // Dismiss the timer so the lifter can log weight/reps before auto-advance.
   useEffect(() => {
     if (!executionModeUsesIntervalTimer(executionMode) || showComplete || isPaused) return;
     if (intervalTimer?.phase !== 'done') return;
     setShowComplete(true);
     setExerciseHadPr(completedSets.some((set) => set.isPr));
-  }, [executionMode, showComplete, isPaused, intervalTimer?.phase, completedSets]);
+    dismissIntervalTimer();
+  }, [executionMode, showComplete, isPaused, intervalTimer?.phase, completedSets, dismissIntervalTimer]);
 
   useEffect(() => {
     setTimersPaused(isPaused);
@@ -671,6 +697,13 @@ export function ActiveWorkoutScreen({
 
   useEffect(() => {
     if (!showComplete || restActive || activeChallenge || isPaused) return;
+    // Tabata/HIIT: wait for the lifter to log the rounds they just finished before advancing.
+    if (
+      executionModeUsesIntervalTimer(executionMode) &&
+      completedSets.length < effectiveTargetSets
+    ) {
+      return;
+    }
     scheduleAutoExerciseAdvance();
     return () => {
       if (autoAdvanceTimeoutRef.current) {
@@ -678,7 +711,17 @@ export function ActiveWorkoutScreen({
         autoAdvanceTimeoutRef.current = null;
       }
     };
-  }, [showComplete, restActive, activeChallenge, isPaused, currentIndex, scheduleAutoExerciseAdvance]);
+  }, [
+    showComplete,
+    restActive,
+    activeChallenge,
+    isPaused,
+    currentIndex,
+    scheduleAutoExerciseAdvance,
+    executionMode,
+    completedSets.length,
+    effectiveTargetSets,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -717,6 +760,7 @@ export function ActiveWorkoutScreen({
 
   useEffect(() => {
     if (coachExtraSets <= 0) return;
+    if (executionModeUsesIntervalTimer(executionMode)) return;
     // A coach prescription that arrives after the planned sets are logged must not reopen the
     // exercise, which left the screen asking for a set the user had already finished.
     if (completedSetsCountRef.current >= targetSets) return;
@@ -728,7 +772,7 @@ export function ActiveWorkoutScreen({
       clearTimeout(autoAdvanceTimeoutRef.current);
       autoAdvanceTimeoutRef.current = null;
     }
-  }, [coachExtraSets, currentExercise?.id, targetSets]);
+  }, [coachExtraSets, currentExercise?.id, targetSets, executionMode]);
 
   useEffect(() => {
     // Interval modes own their own completion signal; a set count must not override it.
@@ -744,6 +788,11 @@ export function ActiveWorkoutScreen({
   function handleAddSet() {
     setBonusSets((count) => count + 1);
     setShowComplete(false);
+    if (intervalTimer && intervalTimer.phase !== 'done') {
+      handleIntervalConfigChange({
+        rounds: Math.min(6, intervalTimer.config.rounds + 1),
+      });
+    }
   }
 
   function clearPendingExerciseAdvance() {
@@ -911,6 +960,12 @@ export function ActiveWorkoutScreen({
     watchPhoneBridge.clearPendingWatchWeightKg();
   }, [setWatchDraftReps, setWatchDraftWeightKg]);
 
+  const intervalBlocksLogging =
+    intervalTimer != null && intervalTimer.phase !== 'done';
+  // Prep / between-exercise rest is the log-your-weight window — do not block it.
+  const transitionBlocksLogging =
+    transitionActive && executionMode !== 'tabata' && executionMode !== 'hiit';
+
   const commitSetLog = useCallback(async (overrides?: {
     weightKg?: number;
     reps?: number;
@@ -932,14 +987,16 @@ export function ActiveWorkoutScreen({
     }
     const logCompletedSets = logExercise.sets ?? [];
     const logPlanMeta = planExercises[logIndex];
-    const logTargetSets = Math.max(
-      (logPlanMeta?.sets ?? 3) + bonusSets,
-      coachPrescription?.targets.sets ?? logPlanMeta?.sets ?? 3,
-    );
+    const logTargetSets = executionModeUsesIntervalTimer(executionMode)
+      ? (logPlanMeta?.sets ?? 3) + bonusSets
+      : Math.max(
+          (logPlanMeta?.sets ?? 3) + bonusSets,
+          coachPrescription?.targets.sets ?? logPlanMeta?.sets ?? 3,
+        );
     if (logCompletedSets.length >= logTargetSets) {
       return { ok: false, error: 'All planned sets are already logged.' };
     }
-    if (restActive || intervalTimer != null || transitionActive) {
+    if (restActive || intervalBlocksLogging || transitionBlocksLogging) {
       return { ok: false, error: 'Finish the current rest or transition before logging the next set.' };
     }
 
@@ -1058,7 +1115,7 @@ export function ActiveWorkoutScreen({
     distanceKm,
     durationSeconds,
     executionMode,
-    intervalTimer,
+    intervalBlocksLogging,
     isPaused,
     logSet,
     logging,
@@ -1070,7 +1127,7 @@ export function ActiveWorkoutScreen({
     restTargetSeconds,
     sortedExercises,
     startCircuitTransition,
-    transitionActive,
+    transitionBlocksLogging,
     weightKg,
   ]);
 
@@ -1217,14 +1274,25 @@ export function ActiveWorkoutScreen({
   }
 
   function handleFinishBetweenExerciseRest() {
+    if (pendingAdvanceRef.current != null) {
+      // Stamp prep-done for the next exercise before dismissing so Skip cannot restart prep.
+      tabataPrepDoneForExerciseRef.current = sortedExercises[pendingAdvanceRef.current]?.id ?? null;
+      currentIndexRef.current = pendingAdvanceRef.current;
+      setCurrentIndex(pendingAdvanceRef.current);
+      pendingAdvanceRef.current = null;
+    }
+    setPendingAdvanceIndex(null);
     tabataBetweenExercisePendingRef.current = false;
-    skipCircuitTimer();
+    setShowComplete(false);
+    dismissCircuitTimer();
   }
 
   function handleFinishTabataPrep() {
+    // Stamp prep-done before clearing pending — otherwise Skip restarts the 60s prep forever.
+    tabataPrepDoneForExerciseRef.current = currentExercise?.id ?? null;
     tabataExercisePrepPendingRef.current = false;
     setIsTabataPrepActive(false);
-    skipCircuitTimer();
+    dismissCircuitTimer();
   }
 
   function handleFinishCircuitTimer() {
@@ -1483,13 +1551,15 @@ export function ActiveWorkoutScreen({
               !showComplete ? (
                 <View style={styles.intervalBanner}>
                   <AppText variant="label" color="accent">
-                    {isTabataPrepActive ? 'Get ready' : 'Rest between exercises'}
+                    {isTabataPrepActive ? 'Get ready — log your weight' : 'Rest between exercises'}
                   </AppText>
                   <AppText variant="bodyBold">
                     {formatTimerSeconds(circuitTimer.secondsRemaining)}
                   </AppText>
                   <AppText variant="footnote" color="textSecondary">
-                    {workoutPosition.currentSetLabel} · {workoutPosition.upNextLabel}
+                    {isTabataPrepActive
+                      ? `Dial in load · ${effectiveTargetSets} rounds · timer starts when prep ends`
+                      : `${workoutPosition.currentSetLabel} · ${workoutPosition.upNextLabel}`}
                   </AppText>
                   <PrimaryButton
                     label={circuitOverlayOpen ? 'Hide timer' : 'Open timer'}
@@ -1567,8 +1637,8 @@ export function ActiveWorkoutScreen({
                       isPaused ||
                       logging ||
                       restActive ||
-                      intervalTimer != null ||
-                      (circuitTimer != null && circuitTimer.phase !== 'done')
+                      intervalBlocksLogging ||
+                      transitionBlocksLogging
                     }
                   />
                   {allSetsDone ? (
@@ -1590,8 +1660,8 @@ export function ActiveWorkoutScreen({
                         isPaused ||
                         logging ||
                         restActive ||
-                        intervalTimer != null ||
-                        (circuitTimer != null && circuitTimer.phase !== 'done')
+                        intervalBlocksLogging ||
+                        transitionBlocksLogging
                       }
                       onPress={() => {
                         void handleLogSet();
@@ -1609,8 +1679,8 @@ export function ActiveWorkoutScreen({
                         isPaused ||
                         logging ||
                         restActive ||
-                        intervalTimer != null ||
-                        (circuitTimer != null && circuitTimer.phase !== 'done')
+                        intervalBlocksLogging ||
+                        transitionBlocksLogging
                       }
                     />
                   ) : null}

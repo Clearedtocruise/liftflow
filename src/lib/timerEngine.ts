@@ -247,3 +247,6 @@ export function executionModeUsesTraditionalRest(mode: WorkoutExecutionMode): bo
     mode === 'superset'
   );
 }
+
+/** Soft ceiling so a rounds stepper cannot keep a Tabata block going forever. */
+export const INTERVAL_ROUNDS_MAX = 6;

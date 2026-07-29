@@ -234,7 +234,11 @@ export function WorkoutTimerOverlay({
                   label="Rounds"
                   value={interval.config.rounds}
                   onDecrease={() => onIntervalConfigChange({ rounds: Math.max(1, interval.config.rounds - 1) })}
-                  onIncrease={() => onIntervalConfigChange({ rounds: interval.config.rounds + 1 })}
+                  onIncrease={() =>
+                    onIntervalConfigChange({
+                      rounds: Math.min(6, interval.config.rounds + 1),
+                    })
+                  }
                 />
               </View>
               <View style={styles.controls}>

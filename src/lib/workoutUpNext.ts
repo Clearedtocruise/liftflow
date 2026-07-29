@@ -57,7 +57,7 @@ export function resolveTabataPrepUpNext(
 ): WorkoutPositionLabels {
   return {
     exerciseName,
-    currentSetLabel: 'Get ready',
-    upNextLabel: `Set 1 of ${targetSets}`,
+    currentSetLabel: 'Log weight · get ready',
+    upNextLabel: `Then ${targetSets} round${targetSets === 1 ? '' : 's'}`,
   };
 }

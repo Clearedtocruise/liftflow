@@ -130,7 +130,12 @@ export function exercisesForSessionStart(
 ): EditableWorkoutExercise[] {
   const base = exercisesFromPlannedWorkout(workout);
   if (!tabataModeEnabled) return base;
-  return remapExercisesForExecutionMode(base, 'tabata');
+  // Tabata mode is a short-interval overlay on a strength day — keep the beginner-friendly
+  // 3-round default even when the underlying plan was written for 4–5 strength sets.
+  return remapExercisesForExecutionMode(
+    base.map((exercise) => ({ ...exercise, sets: 3 })),
+    'tabata',
+  );
 }
 
 const WORKING_SECONDS_PER_SET = 45;
