@@ -42,11 +42,13 @@ record('Tabata defaults 20/10/3 (strength-session protocol)', modes.includes('ta
 record('Interval skip round', engine.includes('skipIntervalRound') && overlay.includes('Skip round'));
 record('Interval phase cues', fs.existsSync(path.join(root, 'src/lib/intervalTimerFeedback.ts')));
 record('Tabata auto-start uses plan rounds', active.includes('rounds: planMeta?.intervalRounds ?? effectiveTargetSets'));
-record('Tabata prep is a log window', active.includes('Get ready — log sets & dial work/rest'));
+record('Tabata prep is a log window', active.includes('Prep between exercises — log load'));
 record('Interval countdown cues', read('src/lib/intervalTimerFeedback.ts').includes('cueIntervalCountdown'));
 record('Interval rounds capped', engine.includes('INTERVAL_ROUNDS_MAX = 12'));
 record('Tabata prep exposes work/rest/rounds', overlay.includes('prepIntervalConfig') && active.includes('onPrepIntervalConfigChange'));
 record('Tabata starts from dialed session config', active.includes('workSeconds: tabataSessionConfig.workSeconds'));
+record('Tabata prep runs on every exercise change', active.includes('beginNextTabataExercise'));
+record('Paused Tabata allows weight changes', active.includes("intervalTimer.phase !== 'done' && intervalTimer.running"));
 record('Interval tick machine', engine.includes('tickIntervalTimer'));
 record('Circuit transition timer', engine.includes('tickCircuitTimer') && engine.includes('circuit_transition'));
 record('Unified timer hook', hook.includes('useWorkoutTimerEngine'));

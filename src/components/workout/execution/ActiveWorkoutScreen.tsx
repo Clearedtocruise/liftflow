@@ -66,7 +66,7 @@ import {
     resolveTraditionalRestSeconds,
     type IntervalTimerConfig,
 } from '@/lib/timerEngine';
-import { TABATA_BETWEEN_EXERCISE_REST_BOUNDS, TABATA_BETWEEN_EXERCISE_REST_DEFAULT, TABATA_INTERVAL_BOUNDS, TABATA_PREP_SECONDS_DEFAULT, clampTabataBetweenExerciseRest, clampTabataIntervalSeconds } from '@/lib/trainingPreferences';
+import { TABATA_BETWEEN_EXERCISE_REST_BOUNDS, TABATA_BETWEEN_EXERCISE_REST_DEFAULT, TABATA_INTERVAL_BOUNDS, clampTabataBetweenExerciseRest, clampTabataIntervalSeconds } from '@/lib/trainingPreferences';
 import { formatWorkoutWeightForInput } from '@/lib/unitConversion';
 import { matchSpokenExercise } from '@/lib/voice/matchSpokenExercise';
 import { pickWorkoutChallenge } from '@/lib/workoutChallengeFlow';
@@ -673,9 +673,14 @@ export function ActiveWorkoutScreen({
       tabataExercisePrepPendingRef.current = true;
       setIsTabataPrepActive(true);
       setCircuitOverlayOpen(true);
-      startCircuitTransition('transition', 1, {
-        restBetweenExercisesSeconds: TABATA_PREP_SECONDS_DEFAULT,
-      }, TABATA_PREP_SECONDS_DEFAULT);
+      // Prep runs once per exercise change (not between rounds). Duration matches the
+      // between-exercise rest preference so every handoff has the same log/dial window.
+      startCircuitTransition(
+        'transition',
+        1,
+        { restBetweenExercisesSeconds: tabataBetweenExerciseRestSeconds },
+        tabataBetweenExerciseRestSeconds,
+      );
       return;
     }
 
@@ -709,6 +714,7 @@ export function ActiveWorkoutScreen({
     tabataSessionConfig.workSeconds,
     tabataSessionConfig.restSeconds,
     tabataSessionConfig.rounds,
+    tabataBetweenExerciseRestSeconds,
   ]);
 
   // For interval modes the protocol's rounds decide when the exercise block is done.
@@ -1027,8 +1033,9 @@ export function ActiveWorkoutScreen({
   }, [setWatchDraftReps, setWatchDraftWeightKg]);
 
   const intervalBlocksLogging =
-    intervalTimer != null && intervalTimer.phase !== 'done';
+    intervalTimer != null && intervalTimer.phase !== 'done' && intervalTimer.running;
   // Prep / between-exercise rest is the log-your-weight window — do not block it.
+  // While the Tabata timer is paused, weight/reps stay editable so the lifter can add load.
   const transitionBlocksLogging =
     transitionActive && executionMode !== 'tabata' && executionMode !== 'hiit';
 
@@ -1274,6 +1281,22 @@ export function ActiveWorkoutScreen({
     watchDraftReps,
   ]);
 
+  function beginNextTabataExercise(nextIndex: number) {
+    // Advance first so prep/logging target the upcoming exercise. Prep is per exercise
+    // change only — rounds keep flowing with work/rest until the block ends.
+    dismissIntervalTimer();
+    intervalStartedForExerciseRef.current = null;
+    tabataPrepDoneForExerciseRef.current = null;
+    tabataExercisePrepPendingRef.current = false;
+    tabataBetweenExercisePendingRef.current = false;
+    pendingAdvanceRef.current = null;
+    setPendingAdvanceIndex(null);
+    setIsTabataPrepActive(false);
+    currentIndexRef.current = nextIndex;
+    setCurrentIndex(nextIndex);
+    setShowComplete(false);
+  }
+
   function performExerciseAdvanceDirect(options?: { auto?: boolean }) {
     if (autoAdvanceTimeoutRef.current) {
       clearTimeout(autoAdvanceTimeoutRef.current);
@@ -1296,13 +1319,7 @@ export function ActiveWorkoutScreen({
       const next = nextExerciseIndexAfterGroup(supersetGroup, sortedExercises.length);
       if (next != null) {
         if (executionMode === 'tabata') {
-          pendingAdvanceRef.current = next;
-          setPendingAdvanceIndex(next);
-          tabataBetweenExercisePendingRef.current = true;
-          dismissIntervalTimer();
-          startCircuitTransition('transition', 1, {
-            restBetweenExercisesSeconds: tabataBetweenExerciseRestSeconds,
-          });
+          beginNextTabataExercise(next);
           return;
         }
         currentIndexRef.current = next;
@@ -1318,13 +1335,7 @@ export function ActiveWorkoutScreen({
       return;
     }
     if (executionMode === 'tabata') {
-      pendingAdvanceRef.current = currentIndexRef.current + 1;
-      setPendingAdvanceIndex(currentIndexRef.current + 1);
-      tabataBetweenExercisePendingRef.current = true;
-      dismissIntervalTimer();
-      startCircuitTransition('transition', 1, {
-        restBetweenExercisesSeconds: tabataBetweenExerciseRestSeconds,
-      });
+      beginNextTabataExercise(currentIndexRef.current + 1);
       return;
     }
     const nextIndex = currentIndexRef.current + 1;
@@ -1617,14 +1628,16 @@ export function ActiveWorkoutScreen({
               !showComplete ? (
                 <View style={styles.intervalBanner}>
                   <AppText variant="label" color="accent">
-                    {isTabataPrepActive ? 'Get ready — log sets & dial work/rest' : 'Rest between exercises'}
+                    {isTabataPrepActive
+                      ? 'Prep between exercises — log load'
+                      : 'Rest between exercises'}
                   </AppText>
                   <AppText variant="bodyBold">
                     {formatTimerSeconds(circuitTimer.secondsRemaining)}
                   </AppText>
                   <AppText variant="footnote" color="textSecondary">
                     {isTabataPrepActive
-                      ? `${tabataSessionConfig.workSeconds}s work · ${tabataSessionConfig.restSeconds}s rest · ${tabataSessionConfig.rounds} rounds · log before work starts`
+                      ? `${tabataSessionConfig.workSeconds}s work · ${tabataSessionConfig.restSeconds}s rest · ${tabataSessionConfig.rounds} rounds · no prep between rounds`
                       : `${workoutPosition.currentSetLabel} · ${workoutPosition.upNextLabel}`}
                   </AppText>
                   <PrimaryButton
@@ -1648,6 +1661,7 @@ export function ActiveWorkoutScreen({
                       </AppText>
                       <AppText variant="footnote" color="textSecondary">
                         {workoutPosition.currentSetLabel} · {workoutPosition.upNextLabel}
+                        {intervalTimer.running ? '' : ' · paused — change weight anytime'}
                       </AppText>
                     </>
                   ) : (
@@ -1896,9 +1910,7 @@ export function ActiveWorkoutScreen({
         }
         betweenExerciseRestSeconds={
           executionMode === 'tabata' && circuitTimer && circuitTimer.phase !== 'done'
-            ? isTabataPrepActive
-              ? TABATA_PREP_SECONDS_DEFAULT
-              : tabataBetweenExerciseRestSeconds
+            ? tabataBetweenExerciseRestSeconds
             : undefined
         }
         circuitTimerMode={isTabataPrepActive ? 'prep' : 'between_exercises'}

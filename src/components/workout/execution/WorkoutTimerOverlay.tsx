@@ -256,9 +256,18 @@ export function WorkoutTimerOverlay({
               <AppText variant="footnote" color="textTertiary" align="center">
                 Work and rest · {intervalMin}–{intervalMax}s · up to {INTERVAL_ROUNDS_MAX} rounds
               </AppText>
+              {!interval.running && interval.phase !== 'done' ? (
+                <AppText variant="footnote" color="accent" align="center">
+                  Paused — change weight below, then resume
+                </AppText>
+              ) : (
+                <AppText variant="footnote" color="textSecondary" align="center">
+                  Pause anytime to change weight · prep is only between exercises
+                </AppText>
+              )}
               <View style={styles.controls}>
                 <PrimaryButton
-                  label={interval.running ? 'Pause' : interval.phase === 'done' ? 'Restart' : 'Start'}
+                  label={interval.running ? 'Pause' : interval.phase === 'done' ? 'Restart' : 'Resume'}
                   onPress={onIntervalToggle}
                 />
                 <Pressable style={styles.controlButtonWide} onPress={onIntervalSkip}>
@@ -300,7 +309,7 @@ export function WorkoutTimerOverlay({
               {circuitTimerMode === 'prep' && prepIntervalConfig && onPrepIntervalConfigChange ? (
                 <>
                   <AppText variant="footnote" color="textSecondary" align="center">
-                    Log your planned sets below, then Skip when ready
+                    Between exercises only — log load, then Start when ready. Rounds keep going after this.
                   </AppText>
                   <IntervalConfigGrid
                     config={prepIntervalConfig}
@@ -309,6 +318,30 @@ export function WorkoutTimerOverlay({
                     intervalStep={intervalStep}
                     onChange={onPrepIntervalConfigChange}
                   />
+                  {betweenExerciseRestSeconds != null &&
+                  onBetweenExerciseRestChange &&
+                  betweenExerciseRestBounds ? (
+                    <ConfigStepper
+                      label="Prep (sec)"
+                      value={betweenExerciseRestSeconds}
+                      onDecrease={() =>
+                        onBetweenExerciseRestChange(
+                          Math.max(
+                            betweenExerciseRestBounds.min,
+                            betweenExerciseRestSeconds - betweenExerciseRestBounds.step,
+                          ),
+                        )
+                      }
+                      onIncrease={() =>
+                        onBetweenExerciseRestChange(
+                          Math.min(
+                            betweenExerciseRestBounds.max,
+                            betweenExerciseRestSeconds + betweenExerciseRestBounds.step,
+                          ),
+                        )
+                      }
+                    />
+                  ) : null}
                 </>
               ) : betweenExerciseRestSeconds != null &&
                 onBetweenExerciseRestChange &&
