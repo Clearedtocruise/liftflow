@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
   advanceIntervalPhase,
+  clampIntervalRounds,
   createIntervalTimerState,
   INTERVAL_ROUNDS_MAX,
 } from './timerEngine';
@@ -38,9 +39,31 @@ test('tabata defaults to 3 rounds and stops after the last rest', () => {
   assert.equal(state.secondsRemaining, 0);
 });
 
-test('interval rounds can be capped when starting from a plan override', () => {
-  const state = createIntervalTimerState('tabata', { rounds: INTERVAL_ROUNDS_MAX + 4 });
-  // createIntervalTimerState itself does not cap — the hook does — but the soft max constant exists.
-  assert.equal(INTERVAL_ROUNDS_MAX, 6);
-  assert.ok(state.config.rounds > INTERVAL_ROUNDS_MAX);
+test('tabata supports 10 rounds of 20s work / 20s rest', () => {
+  let state = createIntervalTimerState('tabata', {
+    workSeconds: 20,
+    restSeconds: 20,
+    rounds: 10,
+  });
+  assert.equal(state.config.workSeconds, 20);
+  assert.equal(state.config.restSeconds, 20);
+  assert.equal(state.config.rounds, 10);
+  assert.equal(clampIntervalRounds(10), 10);
+  assert.ok(10 <= INTERVAL_ROUNDS_MAX);
+
+  for (let round = 1; round <= 10; round += 1) {
+    assert.equal(state.phase, 'work');
+    assert.equal(state.round, round);
+    state = advanceIntervalPhase(state);
+    assert.equal(state.phase, 'rest');
+    assert.equal(state.round, round);
+    state = advanceIntervalPhase(state);
+  }
+  assert.equal(state.phase, 'done');
+});
+
+test('interval rounds soft max is 12', () => {
+  assert.equal(INTERVAL_ROUNDS_MAX, 12);
+  assert.equal(clampIntervalRounds(INTERVAL_ROUNDS_MAX + 4), INTERVAL_ROUNDS_MAX);
+  assert.equal(clampIntervalRounds(0), 1);
 });

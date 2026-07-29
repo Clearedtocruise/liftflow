@@ -7,9 +7,9 @@ import {
     advanceCircuitTimerToNow,
     advanceIntervalPhase,
     advanceIntervalTimerToNow,
+    clampIntervalRounds,
     createCircuitTimerState,
     createIntervalTimerState,
-    INTERVAL_ROUNDS_MAX,
     type CircuitPhase,
     type CircuitTimerConfig,
     type CircuitTimerState,
@@ -161,7 +161,7 @@ export function useWorkoutTimerEngine(executionMode: WorkoutExecutionMode) {
       if (executionMode !== 'hiit' && executionMode !== 'tabata') return;
       const capped =
         overrides?.rounds != null
-          ? { ...overrides, rounds: Math.min(INTERVAL_ROUNDS_MAX, Math.max(1, overrides.rounds)) }
+          ? { ...overrides, rounds: clampIntervalRounds(overrides.rounds) }
           : overrides;
       const state = createIntervalTimerState(executionMode, capped);
       if (autoStart) syncIntervalDeadline(state.secondsRemaining);
@@ -212,7 +212,7 @@ export function useWorkoutTimerEngine(executionMode: WorkoutExecutionMode) {
         if (!current) return current;
         const nextPatch =
           patch.rounds != null
-            ? { ...patch, rounds: Math.min(INTERVAL_ROUNDS_MAX, Math.max(1, patch.rounds)) }
+            ? { ...patch, rounds: clampIntervalRounds(patch.rounds) }
             : patch;
         const config = { ...current.config, ...nextPatch };
         if (current.phase === 'done') return { ...current, config };

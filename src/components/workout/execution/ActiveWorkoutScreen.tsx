@@ -55,14 +55,18 @@ import {
     resolveSupersetWorkoutPosition,
     shouldShowSupersetPrep,
 } from '@/lib/supersetFlow';
+import { INTERVAL_MODE_DEFAULTS } from '@/constants/workoutExecutionModes';
 import {
+    clampIntervalRounds,
     executionModeUsesIntervalTimer,
     executionModeUsesTraditionalRest,
     formatTimerSeconds,
+    INTERVAL_ROUNDS_MAX,
     intervalPhaseLabel,
     resolveTraditionalRestSeconds,
+    type IntervalTimerConfig,
 } from '@/lib/timerEngine';
-import { TABATA_BETWEEN_EXERCISE_REST_BOUNDS, TABATA_BETWEEN_EXERCISE_REST_DEFAULT, TABATA_INTERVAL_BOUNDS, TABATA_PREP_SECONDS_DEFAULT, clampTabataBetweenExerciseRest, clampTabataIntervalSeconds, tabataModeSummary } from '@/lib/trainingPreferences';
+import { TABATA_BETWEEN_EXERCISE_REST_BOUNDS, TABATA_BETWEEN_EXERCISE_REST_DEFAULT, TABATA_INTERVAL_BOUNDS, TABATA_PREP_SECONDS_DEFAULT, clampTabataBetweenExerciseRest, clampTabataIntervalSeconds } from '@/lib/trainingPreferences';
 import { formatWorkoutWeightForInput } from '@/lib/unitConversion';
 import { matchSpokenExercise } from '@/lib/voice/matchSpokenExercise';
 import { pickWorkoutChallenge } from '@/lib/workoutChallengeFlow';
@@ -127,17 +131,33 @@ export function ActiveWorkoutScreen({
     setTimersPaused,
   } = useWorkoutTimerEngine(executionMode);
 
+  const [tabataSessionConfig, setTabataSessionConfig] = useState<IntervalTimerConfig>(() => ({
+    ...INTERVAL_MODE_DEFAULTS.tabata,
+  }));
+
   const handleIntervalConfigChange = useCallback(
-    (patch: Partial<{ workSeconds: number; restSeconds: number; rounds: number }>) => {
+    (patch: Partial<IntervalTimerConfig>) => {
       const next = { ...patch };
       if (executionMode === 'tabata') {
         if (next.workSeconds != null) next.workSeconds = clampTabataIntervalSeconds(next.workSeconds);
         if (next.restSeconds != null) next.restSeconds = clampTabataIntervalSeconds(next.restSeconds);
+        if (next.rounds != null) next.rounds = clampIntervalRounds(next.rounds);
+        setTabataSessionConfig((current) => ({ ...current, ...next }));
       }
       updateIntervalConfig(next);
     },
     [executionMode, updateIntervalConfig],
   );
+
+  const handleTabataPrepConfigChange = useCallback((patch: Partial<IntervalTimerConfig>) => {
+    setTabataSessionConfig((current) => {
+      const next: IntervalTimerConfig = { ...current, ...patch };
+      if (patch.workSeconds != null) next.workSeconds = clampTabataIntervalSeconds(patch.workSeconds);
+      if (patch.restSeconds != null) next.restSeconds = clampTabataIntervalSeconds(patch.restSeconds);
+      if (patch.rounds != null) next.rounds = clampIntervalRounds(patch.rounds);
+      return next;
+    });
+  }, []);
 
   const { user } = useAuth();
   const figureGender = profileFigureGender(user?.sex);
@@ -253,11 +273,14 @@ export function ActiveWorkoutScreen({
   const coachExtraSets = executionModeUsesIntervalTimer(executionMode)
     ? 0
     : Math.max(0, coachRecommendedSets - targetSets);
-  // Tabata/HIIT use rounds from the plan (default 3). Coach set-boosts that push
-  // beginners toward 5 sets do not apply on interval protocols.
-  const effectiveTargetSets = executionModeUsesIntervalTimer(executionMode)
-    ? targetSets + bonusSets
-    : Math.max(targetSets + bonusSets, coachRecommendedSets);
+  // Tabata uses the dialed-in session config (work/rest/rounds). HIIT uses plan sets + bonus.
+  // Coach set-boosts that push beginners toward 5 sets do not apply on interval protocols.
+  const effectiveTargetSets =
+    executionMode === 'tabata'
+      ? intervalTimer?.config.rounds ?? tabataSessionConfig.rounds
+      : executionModeUsesIntervalTimer(executionMode)
+        ? targetSets + bonusSets
+        : Math.max(targetSets + bonusSets, coachRecommendedSets);
   const repRange = planMeta?.repRange ?? currentExercise?.suggestedReps ?? '8-10';
   const completedSets = currentExercise?.sets ?? [];
   const completedSetsCountRef = useRef(0);
@@ -284,7 +307,12 @@ export function ActiveWorkoutScreen({
   const coachLoggingMode =
     loggingMode === 'any' ? undefined : (loggingMode as Exclude<typeof loggingMode, 'any'>);
   const nextSetNumber = completedSets.length + 1;
-  const remainingSets = Math.max(effectiveTargetSets - completedSets.length, 0);
+  const tabataTimerActive =
+    executionMode === 'tabata' && intervalTimer != null && intervalTimer.phase !== 'done';
+  const displayCurrentSet = tabataTimerActive ? intervalTimer.round : nextSetNumber;
+  const remainingSets = tabataTimerActive
+    ? Math.max(0, intervalTimer.config.rounds - intervalTimer.round + 1)
+    : Math.max(effectiveTargetSets - completedSets.length, 0);
   const supersetGroup = getSupersetGroupForIndex(currentIndex, planExercises);
   const stationLabel = planMeta
     ? formatExerciseStationLabel(planMeta, currentIndex, planExercises)
@@ -644,6 +672,7 @@ export function ActiveWorkoutScreen({
     if (executionMode === 'tabata' && tabataPrepDoneForExerciseRef.current !== exerciseKey) {
       tabataExercisePrepPendingRef.current = true;
       setIsTabataPrepActive(true);
+      setCircuitOverlayOpen(true);
       startCircuitTransition('transition', 1, {
         restBetweenExercisesSeconds: TABATA_PREP_SECONDS_DEFAULT,
       }, TABATA_PREP_SECONDS_DEFAULT);
@@ -652,11 +681,17 @@ export function ActiveWorkoutScreen({
 
     intervalStartedForExerciseRef.current = exerciseKey;
     startIntervalTimer(
-      {
-        workSeconds: planMeta?.intervalWorkSeconds,
-        restSeconds: planMeta?.intervalRestSeconds,
-        rounds: planMeta?.intervalRounds ?? effectiveTargetSets,
-      },
+      executionMode === 'tabata'
+        ? {
+            workSeconds: tabataSessionConfig.workSeconds,
+            restSeconds: tabataSessionConfig.restSeconds,
+            rounds: tabataSessionConfig.rounds,
+          }
+        : {
+            workSeconds: planMeta?.intervalWorkSeconds,
+            restSeconds: planMeta?.intervalRestSeconds,
+            rounds: planMeta?.intervalRounds ?? effectiveTargetSets,
+          },
       executionMode === 'tabata',
     );
     setIntervalOverlayOpen(executionMode === 'tabata');
@@ -671,6 +706,9 @@ export function ActiveWorkoutScreen({
     startIntervalTimer,
     startCircuitTransition,
     circuitTimer,
+    tabataSessionConfig.workSeconds,
+    tabataSessionConfig.restSeconds,
+    tabataSessionConfig.rounds,
   ]);
 
   // For interval modes the protocol's rounds decide when the exercise block is done.
@@ -756,7 +794,25 @@ export function ActiveWorkoutScreen({
 
   useEffect(() => {
     setBonusSets(0);
-  }, [currentExercise?.id]);
+    if (executionMode === 'tabata') {
+      setTabataSessionConfig({
+        workSeconds: clampTabataIntervalSeconds(
+          planMeta?.intervalWorkSeconds ?? INTERVAL_MODE_DEFAULTS.tabata.workSeconds,
+        ),
+        restSeconds: clampTabataIntervalSeconds(
+          planMeta?.intervalRestSeconds ?? INTERVAL_MODE_DEFAULTS.tabata.restSeconds,
+        ),
+        rounds: clampIntervalRounds(planMeta?.intervalRounds ?? targetSets),
+      });
+    }
+  }, [
+    currentExercise?.id,
+    executionMode,
+    planMeta?.intervalWorkSeconds,
+    planMeta?.intervalRestSeconds,
+    planMeta?.intervalRounds,
+    targetSets,
+  ]);
 
   useEffect(() => {
     if (coachExtraSets <= 0) return;
@@ -786,11 +842,21 @@ export function ActiveWorkoutScreen({
   }, [groupComplete, completedSets, allSetsDone, executionMode]);
 
   function handleAddSet() {
-    setBonusSets((count) => count + 1);
     setShowComplete(false);
+    if (executionMode === 'tabata') {
+      const currentRounds = intervalTimer?.config.rounds ?? tabataSessionConfig.rounds;
+      const nextRounds = clampIntervalRounds(currentRounds + 1);
+      if (intervalTimer && intervalTimer.phase !== 'done') {
+        handleIntervalConfigChange({ rounds: nextRounds });
+      } else {
+        handleTabataPrepConfigChange({ rounds: nextRounds });
+      }
+      return;
+    }
+    setBonusSets((count) => count + 1);
     if (intervalTimer && intervalTimer.phase !== 'done') {
       handleIntervalConfigChange({
-        rounds: Math.min(6, intervalTimer.config.rounds + 1),
+        rounds: clampIntervalRounds(intervalTimer.config.rounds + 1),
       });
     }
   }
@@ -1466,7 +1532,7 @@ export function ActiveWorkoutScreen({
 
               {!showComplete ? (
                 <GuidedWorkoutMetrics
-                  currentSet={nextSetNumber}
+                  currentSet={displayCurrentSet}
                   targetSets={effectiveTargetSets}
                   remainingSets={remainingSets}
                   loggingMode={loggingMode}
@@ -1551,14 +1617,14 @@ export function ActiveWorkoutScreen({
               !showComplete ? (
                 <View style={styles.intervalBanner}>
                   <AppText variant="label" color="accent">
-                    {isTabataPrepActive ? 'Get ready — log your weight' : 'Rest between exercises'}
+                    {isTabataPrepActive ? 'Get ready — log sets & dial work/rest' : 'Rest between exercises'}
                   </AppText>
                   <AppText variant="bodyBold">
                     {formatTimerSeconds(circuitTimer.secondsRemaining)}
                   </AppText>
                   <AppText variant="footnote" color="textSecondary">
                     {isTabataPrepActive
-                      ? `Dial in load · ${effectiveTargetSets} rounds · timer starts when prep ends`
+                      ? `${tabataSessionConfig.workSeconds}s work · ${tabataSessionConfig.restSeconds}s rest · ${tabataSessionConfig.rounds} rounds · log before work starts`
                       : `${workoutPosition.currentSetLabel} · ${workoutPosition.upNextLabel}`}
                   </AppText>
                   <PrimaryButton
@@ -1587,7 +1653,7 @@ export function ActiveWorkoutScreen({
                   ) : (
                     <AppText variant="footnote" color="textSecondary">
                       {executionMode === 'tabata'
-                        ? `${tabataModeSummary()} · adjust ${TABATA_INTERVAL_BOUNDS.minSeconds}–${TABATA_INTERVAL_BOUNDS.maxSeconds}s each in timer`
+                        ? `${tabataSessionConfig.workSeconds}s/${tabataSessionConfig.restSeconds}s × ${tabataSessionConfig.rounds} · adjust work & rest in timer (max ${INTERVAL_ROUNDS_MAX} rounds)`
                         : 'Configurable work, rest, and rounds'}
                     </AppText>
                   )}
@@ -1836,6 +1902,12 @@ export function ActiveWorkoutScreen({
             : undefined
         }
         circuitTimerMode={isTabataPrepActive ? 'prep' : 'between_exercises'}
+        prepIntervalConfig={
+          executionMode === 'tabata' && isTabataPrepActive ? tabataSessionConfig : null
+        }
+        onPrepIntervalConfigChange={
+          executionMode === 'tabata' && isTabataPrepActive ? handleTabataPrepConfigChange : undefined
+        }
         onBetweenExerciseRestChange={(seconds) => {
           const next = clampTabataBetweenExerciseRest(seconds);
           setTabataBetweenExerciseRestSeconds(next);

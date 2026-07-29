@@ -48,7 +48,7 @@ export function GuidedWorkoutMetrics({
       <View style={styles.metricRow}>
         <View style={styles.metricCell}>
           <AppText variant="caption" color="textSecondary">
-            Current Set
+            Current set
           </AppText>
           <AppText variant="bodyBold">
             {Math.min(currentSet, targetSets)} of {targetSets}
@@ -56,7 +56,7 @@ export function GuidedWorkoutMetrics({
         </View>
         <View style={styles.metricCell}>
           <AppText variant="caption" color="textSecondary">
-            Remaining Sets
+            Sets left
           </AppText>
           <AppText variant="bodyBold">{Math.max(remainingSets, 0)}</AppText>
         </View>

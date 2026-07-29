@@ -6,13 +6,16 @@ import { WorkoutUpNextCard } from '@/components/workout/execution/WorkoutUpNextC
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import {
     circuitPhaseLabel,
+    clampIntervalRounds,
     formatTimerSeconds,
+    INTERVAL_ROUNDS_MAX,
     intervalPhaseLabel,
     TRADITIONAL_REST_PRESETS,
     type CircuitTimerState,
+    type IntervalTimerConfig,
     type IntervalTimerState,
 } from '@/lib/timerEngine';
-import type { WorkoutPositionLabels } from '@/lib/workoutUpNext';
+import { formatIntervalRoundProgress, type WorkoutPositionLabels } from '@/lib/workoutUpNext';
 
 type WorkoutTimerOverlayProps = {
   visible: boolean;
@@ -44,6 +47,9 @@ type WorkoutTimerOverlayProps = {
   onBetweenExerciseRestChange?: (seconds: number) => void;
   betweenExerciseRestBounds?: { min: number; max: number; step: number };
   circuitTimerMode?: 'prep' | 'between_exercises';
+  /** Tabata prep — dial work/rest/rounds before the first work interval. */
+  prepIntervalConfig?: IntervalTimerConfig | null;
+  onPrepIntervalConfigChange?: (patch: Partial<IntervalTimerConfig>) => void;
   circuit?: CircuitTimerState | null;
   onCircuitSkip?: () => void;
   onCircuitDismiss?: () => void;
@@ -78,6 +84,45 @@ function ConfigStepper({
   );
 }
 
+function IntervalConfigGrid({
+  config,
+  intervalMin,
+  intervalMax,
+  intervalStep,
+  onChange,
+}: {
+  config: IntervalTimerConfig;
+  intervalMin: number;
+  intervalMax: number;
+  intervalStep: number;
+  onChange: (patch: Partial<IntervalTimerConfig>) => void;
+}) {
+  const clampSeconds = (value: number) => Math.min(intervalMax, Math.max(intervalMin, value));
+
+  return (
+    <View style={styles.configGrid}>
+      <ConfigStepper
+        label="Work (sec)"
+        value={config.workSeconds}
+        onDecrease={() => onChange({ workSeconds: clampSeconds(config.workSeconds - intervalStep) })}
+        onIncrease={() => onChange({ workSeconds: clampSeconds(config.workSeconds + intervalStep) })}
+      />
+      <ConfigStepper
+        label="Rest (sec)"
+        value={config.restSeconds}
+        onDecrease={() => onChange({ restSeconds: clampSeconds(config.restSeconds - intervalStep) })}
+        onIncrease={() => onChange({ restSeconds: clampSeconds(config.restSeconds + intervalStep) })}
+      />
+      <ConfigStepper
+        label="Rounds"
+        value={config.rounds}
+        onDecrease={() => onChange({ rounds: clampIntervalRounds(config.rounds - 1) })}
+        onIncrease={() => onChange({ rounds: clampIntervalRounds(config.rounds + 1) })}
+      />
+    </View>
+  );
+}
+
 export function WorkoutTimerOverlay({
   visible,
   position,
@@ -97,6 +142,8 @@ export function WorkoutTimerOverlay({
   onBetweenExerciseRestChange,
   betweenExerciseRestBounds,
   circuitTimerMode,
+  prepIntervalConfig,
+  onPrepIntervalConfigChange,
   circuit,
   onCircuitSkip,
   onCircuitDismiss,
@@ -107,9 +154,6 @@ export function WorkoutTimerOverlay({
   const intervalMin = intervalSecondBounds?.min ?? 5;
   const intervalMax = intervalSecondBounds?.max ?? 300;
   const intervalStep = intervalSecondBounds?.step ?? 5;
-
-  const clampIntervalSeconds = (value: number) =>
-    Math.min(intervalMax, Math.max(intervalMin, value));
 
   function handleRequestClose() {
     if (activeMode === 'traditional') onTraditionalDismiss?.();
@@ -196,51 +240,22 @@ export function WorkoutTimerOverlay({
                 {intervalPhaseLabel(interval.phase).toUpperCase()}
               </AppText>
               <AppText variant="caption" color="textSecondary" align="center">
-                {position?.currentSetLabel ?? `Round ${interval.round} of ${interval.config.rounds}`}
+                {position?.currentSetLabel ??
+                  formatIntervalRoundProgress(interval.round, interval.config.rounds)}
               </AppText>
               <AppText variant="timer" color="restTimer" align="center" style={styles.timer}>
                 {formatTimerSeconds(interval.secondsRemaining)}
               </AppText>
-              <View style={styles.configGrid}>
-                <ConfigStepper
-                  label="Work (sec)"
-                  value={interval.config.workSeconds}
-                  onDecrease={() =>
-                    onIntervalConfigChange({
-                      workSeconds: clampIntervalSeconds(interval.config.workSeconds - intervalStep),
-                    })
-                  }
-                  onIncrease={() =>
-                    onIntervalConfigChange({
-                      workSeconds: clampIntervalSeconds(interval.config.workSeconds + intervalStep),
-                    })
-                  }
-                />
-                <ConfigStepper
-                  label="Rest (sec)"
-                  value={interval.config.restSeconds}
-                  onDecrease={() =>
-                    onIntervalConfigChange({
-                      restSeconds: clampIntervalSeconds(interval.config.restSeconds - intervalStep),
-                    })
-                  }
-                  onIncrease={() =>
-                    onIntervalConfigChange({
-                      restSeconds: clampIntervalSeconds(interval.config.restSeconds + intervalStep),
-                    })
-                  }
-                />
-                <ConfigStepper
-                  label="Rounds"
-                  value={interval.config.rounds}
-                  onDecrease={() => onIntervalConfigChange({ rounds: Math.max(1, interval.config.rounds - 1) })}
-                  onIncrease={() =>
-                    onIntervalConfigChange({
-                      rounds: Math.min(6, interval.config.rounds + 1),
-                    })
-                  }
-                />
-              </View>
+              <IntervalConfigGrid
+                config={interval.config}
+                intervalMin={intervalMin}
+                intervalMax={intervalMax}
+                intervalStep={intervalStep}
+                onChange={onIntervalConfigChange}
+              />
+              <AppText variant="footnote" color="textTertiary" align="center">
+                Work and rest · {intervalMin}–{intervalMax}s · up to {INTERVAL_ROUNDS_MAX} rounds
+              </AppText>
               <View style={styles.controls}>
                 <PrimaryButton
                   label={interval.running ? 'Pause' : interval.phase === 'done' ? 'Restart' : 'Start'}
@@ -264,7 +279,7 @@ export function WorkoutTimerOverlay({
             <>
               <AppText variant="label" color="accent" align="center">
                 {circuitTimerMode === 'prep'
-                  ? 'Get ready'
+                  ? 'Get ready — set work, rest & rounds'
                   : betweenExerciseRestSeconds != null
                     ? 'Rest between exercises'
                     : `Circuit · ${circuitPhaseLabel(circuit.phase)}`}
@@ -282,10 +297,23 @@ export function WorkoutTimerOverlay({
               <AppText variant="timer" color="restTimer" align="center" style={styles.timer}>
                 {formatTimerSeconds(circuit.secondsRemaining)}
               </AppText>
-              {betweenExerciseRestSeconds != null &&
-              onBetweenExerciseRestChange &&
-              betweenExerciseRestBounds &&
-              circuitTimerMode !== 'prep' ? (
+              {circuitTimerMode === 'prep' && prepIntervalConfig && onPrepIntervalConfigChange ? (
+                <>
+                  <AppText variant="footnote" color="textSecondary" align="center">
+                    Log your planned sets below, then Skip when ready
+                  </AppText>
+                  <IntervalConfigGrid
+                    config={prepIntervalConfig}
+                    intervalMin={intervalMin}
+                    intervalMax={intervalMax}
+                    intervalStep={intervalStep}
+                    onChange={onPrepIntervalConfigChange}
+                  />
+                </>
+              ) : betweenExerciseRestSeconds != null &&
+                onBetweenExerciseRestChange &&
+                betweenExerciseRestBounds &&
+                circuitTimerMode !== 'prep' ? (
                 <ConfigStepper
                   label="Between exercises (sec)"
                   value={betweenExerciseRestSeconds}
@@ -312,7 +340,11 @@ export function WorkoutTimerOverlay({
                 </AppText>
               )}
               <View style={styles.controls}>
-                <PrimaryButton label="Skip" onPress={onCircuitSkip} variant="secondary" />
+                <PrimaryButton
+                  label={circuitTimerMode === 'prep' ? 'Start Tabata' : 'Skip'}
+                  onPress={onCircuitSkip}
+                  variant="secondary"
+                />
                 <PrimaryButton label="Minimize timer" onPress={onCircuitDismiss} />
               </View>
             </>
@@ -359,8 +391,6 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.md,
     borderRadius: Radius.md,
     backgroundColor: LiftFlowColors.backgroundSecondary,
-    borderWidth: 1,
-    borderColor: LiftFlowColors.border,
   },
   controlButtonWide: {
     flex: 1,
@@ -369,37 +399,31 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.md,
     borderRadius: Radius.md,
     backgroundColor: LiftFlowColors.backgroundSecondary,
-    borderWidth: 1,
-    borderColor: LiftFlowColors.border,
-  },
-  presetRow: {
-    gap: Spacing.sm,
-  },
-  presetButton: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    borderRadius: Radius.full,
-    backgroundColor: LiftFlowColors.surfaceElevated,
-    borderWidth: 1,
-    borderColor: LiftFlowColors.border,
-    marginRight: Spacing.sm,
-  },
-  nextPreview: {
-    gap: Spacing.xs,
-    paddingTop: Spacing.sm,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: LiftFlowColors.border,
   },
   configGrid: {
+    flexDirection: 'row',
     gap: Spacing.sm,
   },
   configCell: {
+    flex: 1,
     gap: Spacing.xs,
   },
   configRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: Spacing.md,
+    gap: Spacing.xs,
+  },
+  presetRow: {
+    gap: Spacing.sm,
+    paddingVertical: Spacing.xs,
+  },
+  presetButton: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.md,
+    backgroundColor: LiftFlowColors.backgroundSecondary,
+  },
+  nextPreview: {
+    gap: Spacing.xs,
   },
 });
