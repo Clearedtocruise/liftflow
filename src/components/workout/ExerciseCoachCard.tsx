@@ -71,6 +71,7 @@ export function ExerciseCoachCard({
   const [initialLoading, setInitialLoading] = useState(coachUnlocked);
   const [fetchError, setFetchError] = useState(false);
   const [expanded, setExpanded] = useState(variant === 'default');
+  const [minimized, setMinimized] = useState(false);
   const [prescription, setPrescription] = useState<ExerciseCoachPrescription | null>(null);
   const prescriptionRef = useRef<ExerciseCoachPrescription | null>(null);
   prescriptionRef.current = prescription;
@@ -115,7 +116,9 @@ export function ExerciseCoachCard({
 
   useEffect(() => {
     void fetchPrescription({ showSpinner: true });
-  }, [userId, exerciseId, sessionId, loggingMode, plan?.plannedReps, plan?.plannedSets, plan?.plannedRestSeconds, coachUnlocked]);
+    setMinimized(false);
+    setExpanded(variant === 'default');
+  }, [userId, exerciseId, sessionId, loggingMode, plan?.plannedReps, plan?.plannedSets, plan?.plannedRestSeconds, coachUnlocked, variant]);
 
   useEffect(() => {
     if (!coachUnlocked || prescriptionRef.current == null) return;
@@ -223,6 +226,30 @@ export function ExerciseCoachCard({
   );
 
   const adjColor = coachAdjustmentColor(displayLabel);
+
+  if (minimized) {
+    const minimizedRow = (
+      <Pressable
+        onPress={() => setMinimized(false)}
+        style={styles.minimizedRow}
+        accessibilityRole="button"
+        accessibilityLabel="Show coach prescription">
+        <AppText variant="caption" color={adjColor}>
+          {coachAdjustmentLabel(displayLabel)}
+        </AppText>
+        <AppText variant="footnote" color="textSecondary" numberOfLines={1} style={styles.minimizedTarget}>
+          {targetLine} · applied
+        </AppText>
+        <AppText variant="caption" color="accent">
+          Show
+        </AppText>
+      </Pressable>
+    );
+    if (variant === 'inline') return <View style={styles.inlineMinimized}>{minimizedRow}</View>;
+    if (variant === 'compact') return <View style={styles.compact}>{minimizedRow}</View>;
+    return <Card style={styles.card}>{minimizedRow}</Card>;
+  }
+
   const content = (
     <>
       {showPerformanceSummary ? (
@@ -286,6 +313,11 @@ export function ExerciseCoachCard({
               {prescription.contextUsed.nutritionAdherencePct ?? '—'}%
             </AppText>
           ) : null}
+          <Pressable onPress={() => setExpanded(false)}>
+            <AppText variant="caption" color="accent">
+              Hide coach reasoning
+            </AppText>
+          </Pressable>
         </>
       ) : (
         <Pressable onPress={() => setExpanded(true)}>
@@ -298,7 +330,7 @@ export function ExerciseCoachCard({
       {onApplyTarget ? (
         <Pressable
           style={({ pressed }) => [styles.applyButton, pressed && styles.applyButtonPressed]}
-          onPress={() =>
+          onPress={() => {
             onApplyTarget({
               weightKg: loggingMode === 'timed' ? 0 : targets.weightKg,
               reps: loggingMode === 'timed' ? 1 : targets.reps,
@@ -306,8 +338,10 @@ export function ExerciseCoachCard({
                 loggingMode === 'timed'
                   ? targets.durationSeconds ?? defaultTimedDurationSeconds(targets.repRange || plan?.plannedReps)
                   : undefined,
-            })
-          }>
+            });
+            setExpanded(false);
+            setMinimized(true);
+          }}>
           <AppText variant="caption" color="accent">
             Use target
           </AppText>
@@ -347,6 +381,22 @@ const styles = StyleSheet.create({
     borderColor: LiftFlowColors.border,
   },
   compact: { gap: 2, marginTop: Spacing.xs },
+  inlineMinimized: {
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    borderRadius: Radius.md,
+    backgroundColor: LiftFlowColors.backgroundSecondary,
+    borderWidth: 1,
+    borderColor: LiftFlowColors.border,
+  },
+  minimizedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  minimizedTarget: {
+    flex: 1,
+  },
   loading: {
     flexDirection: 'row',
     alignItems: 'center',
