@@ -91,7 +91,8 @@ check(
 );
 check(
   'the active-workout handler matches names through matchSpokenExercise',
-  activeWorkout.includes('matchSpokenExercise(payload.exerciseName, activeName)'),
+  activeWorkout.includes('matchSpokenExercise(spoken, activeName)') ||
+    activeWorkout.includes('matchSpokenExercise(payload.exerciseName, activeName)'),
   true,
 );
 check(

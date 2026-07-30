@@ -22,19 +22,38 @@ type VoiceConfirmModalProps = {
   transcript: string;
   /** Parsed weight normalized to kg; the inputs render it in the user's preferred unit. */
   weightKg?: number;
+  /** Exercise currently on screen — used when the transcript omits the lift name. */
+  activeExerciseName?: string;
   /** Why confirmation was required (low confidence, implausible value) — shown as a warning. */
   reason?: string;
+  /** Save failure from the last attempt (shown in-sheet so it is not hidden behind the modal). */
+  saveError?: string | null;
   saving?: boolean;
   onConfirm: (set: ConfirmedVoiceSet) => void | Promise<void>;
   onReject: () => void;
 };
+
+/** Strip unit words so a bad parse never leaves "95 pounds" in the weight box. */
+function sanitizeWeightInput(value: string): string {
+  const cleaned = value.replace(/[^\d.]/g, '');
+  if (!cleaned) return '';
+  const parts = cleaned.split('.');
+  if (parts.length === 1) return parts[0];
+  return `${parts[0]}.${parts.slice(1).join('')}`;
+}
+
+function looksLikeWeightPhrase(value: string): boolean {
+  return /^\d+(?:\.\d+)?\s*(?:lbs?|pounds?|kg|kilos?)?$/i.test(value.trim());
+}
 
 export function VoiceConfirmModal({
   visible,
   parsed,
   transcript,
   weightKg,
+  activeExerciseName,
   reason,
+  saveError,
   saving,
   onConfirm,
   onReject,
@@ -47,18 +66,26 @@ export function VoiceConfirmModal({
   // Reseed whenever a new parse opens the sheet, so an edit from a previous attempt is not reused.
   useEffect(() => {
     if (!visible) return;
-    setExercise(parsed?.exercise ?? '');
+    const spokenExercise = parsed?.exercise?.trim() ?? '';
+    const fallbackExercise = activeExerciseName?.trim() ?? '';
+    // A mis-parse that stuffed "95 pounds" into the exercise field must not block Save.
+    const seededExercise =
+      spokenExercise && !looksLikeWeightPhrase(spokenExercise) ? spokenExercise : fallbackExercise;
+    setExercise(seededExercise);
     setWeight(formatWorkoutWeightForInput(weightKg, units.preferredWeightUnit));
     setReps(parsed?.reps != null ? String(parsed.reps) : '');
-  }, [visible, parsed, weightKg, units.preferredWeightUnit]);
+  }, [visible, parsed, weightKg, units.preferredWeightUnit, activeExerciseName]);
 
   const isSetIntent = !parsed?.intent || parsed.intent === 'log_set';
-  const canSave = isSetIntent && exercise.trim().length > 0 && reps.trim().length > 0;
+  const resolvedExercise = exercise.trim() || activeExerciseName?.trim() || '';
+  const canSave = isSetIntent && resolvedExercise.length > 0 && reps.trim().length > 0;
 
   function handleConfirm() {
+    if (!canSave || saving) return;
+    const weightText = sanitizeWeightInput(weight);
     void onConfirm({
-      exercise: exercise.trim(),
-      weightKg: weight.trim() ? units.parseWeight(weight) : undefined,
+      exercise: resolvedExercise,
+      weightKg: weightText ? units.parseWeight(weightText) : undefined,
       reps: reps.trim() ? parseInt(reps, 10) : undefined,
     });
   }
@@ -77,6 +104,12 @@ export function VoiceConfirmModal({
           {reason ? (
             <AppText variant="caption" color="warning">
               {reason}
+            </AppText>
+          ) : null}
+
+          {saveError ? (
+            <AppText variant="caption" color="error">
+              {saveError}
             </AppText>
           ) : null}
 
@@ -106,7 +139,7 @@ export function VoiceConfirmModal({
                   value={exercise}
                   onChangeText={setExercise}
                   autoCapitalize="words"
-                  placeholder="Bench Press"
+                  placeholder={activeExerciseName || 'Bench Press'}
                   placeholderTextColor={LiftFlowColors.textTertiary}
                 />
               </View>
@@ -120,7 +153,8 @@ export function VoiceConfirmModal({
                     style={styles.input}
                     keyboardType="decimal-pad"
                     value={weight}
-                    onChangeText={setWeight}
+                    onChangeText={(text) => setWeight(sanitizeWeightInput(text))}
+                    placeholder="0"
                     placeholderTextColor={LiftFlowColors.textTertiary}
                   />
                 </View>

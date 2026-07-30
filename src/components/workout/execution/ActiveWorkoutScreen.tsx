@@ -1042,12 +1042,8 @@ export function ActiveWorkoutScreen({
     }
     const logCompletedSets = logExercise.sets ?? [];
     const logPlanMeta = planExercises[logIndex];
-    const logTargetSets = executionModeUsesIntervalTimer(executionMode)
-      ? (logPlanMeta?.sets ?? 3) + bonusSets
-      : Math.max(
-          (logPlanMeta?.sets ?? 3) + bonusSets,
-          coachPrescription?.targets.sets ?? logPlanMeta?.sets ?? 3,
-        );
+    // Match on-screen set target — coach suggestions must not inflate the hard log ceiling.
+    const logTargetSets = (logPlanMeta?.sets ?? 3) + bonusSets;
     if (logCompletedSets.length >= logTargetSets) {
       return { ok: false, error: 'All planned sets are already logged.' };
     }
@@ -1197,12 +1193,17 @@ export function ActiveWorkoutScreen({
       }
 
       if (payload.exerciseName?.trim()) {
-        const match = matchSpokenExercise(payload.exerciseName, activeName);
-        if (match.kind === 'different') {
-          // Previously a silent `false`, which surfaced as "Could not save that set" with no hint
-          // that the name was the problem — sighted users got no reason at all.
-          AccessibilityInfo.announceForAccessibility(match.reason);
-          return { ok: false, reason: match.reason };
+        const spoken = payload.exerciseName.trim();
+        // Mid-set shorthand like "95 pounds" is not an exercise name — use the active lift.
+        const looksLikeWeight = /^\d+(?:\.\d+)?\s*(?:lbs?|pounds?|kg|kilos?)?$/i.test(spoken);
+        if (!looksLikeWeight) {
+          const match = matchSpokenExercise(spoken, activeName);
+          if (match.kind === 'different') {
+            // Previously a silent `false`, which surfaced as "Could not save that set" with no hint
+            // that the name was the problem — sighted users got no reason at all.
+            AccessibilityInfo.announceForAccessibility(match.reason);
+            return { ok: false, reason: match.reason };
+          }
         }
       }
 

@@ -62,6 +62,7 @@ export function VoiceSetLogger({
   const [pending, setPending] = useState<Pending | null>(null);
   const [saving, setSaving] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
 
   const logParsedSet = useCallback(
@@ -70,14 +71,15 @@ export function VoiceSetLogger({
       weightKg: number | undefined,
       reps: number | undefined,
       command?: ParsedVoiceCommandExtended,
-    ) => {
+    ): Promise<{ ok: true } | { ok: false; reason: string }> => {
       const outcome = await onLogSet({ exerciseName: exercise, weight: weightKg, reps });
       const result: VoiceSetLogResult = typeof outcome === 'boolean' ? { ok: outcome } : outcome;
 
       if (!result.ok) {
+        const reason = result.reason ?? 'Could not save that set. Try logging it manually.';
         setStatus(null);
-        setParseError(result.reason ?? 'Could not save that set. Try logging it manually.');
-        return false;
+        setParseError(reason);
+        return { ok: false, reason };
       }
 
       const loggedAs = result.loggedAs ?? exercise;
@@ -90,7 +92,7 @@ export function VoiceSetLogger({
           units.weightLabel,
         );
       }
-      return true;
+      return { ok: true };
     },
     [onLogSet, settings.voiceFeedback, units.weightLabel],
   );
@@ -98,6 +100,7 @@ export function VoiceSetLogger({
   const handleTranscript = useCallback(
     async (transcript: string) => {
       setParseError(null);
+      setSaveError(null);
       setStatus(null);
 
       if (!userId) {
@@ -123,15 +126,21 @@ export function VoiceSetLogger({
       const { parsed, requiresConfirmation, confirmationReason } = result.data;
       const weightKg = normalizeVoiceWeightToKg(parsed.weight, transcript, units.preferredWeightUnit);
       const isSetIntent = !parsed.intent || parsed.intent === 'log_set';
+      const exerciseName = parsed.exercise?.trim() || activeExerciseName?.trim() || '';
 
       // Anything other than a set — and anything the hardened parser flagged — goes to the sheet
       // rather than straight to the log.
-      if (!isSetIntent || requiresConfirmation || !parsed.exercise || parsed.reps == null) {
-        setPending({ parsed, transcript, weightKg, reason: confirmationReason });
+      if (!isSetIntent || requiresConfirmation || !exerciseName || parsed.reps == null || weightKg == null) {
+        setPending({
+          parsed: { ...parsed, exercise: exerciseName || parsed.exercise },
+          transcript,
+          weightKg,
+          reason: confirmationReason,
+        });
         return;
       }
 
-      await logParsedSet(parsed.exercise, weightKg, parsed.reps, parsed);
+      await logParsedSet(exerciseName, weightKg, parsed.reps, parsed);
     },
     [userId, activeExerciseName, lastWeightKg, lastReps, units.preferredWeightUnit, logParsedSet],
   );
@@ -144,17 +153,24 @@ export function VoiceSetLogger({
 
   async function handleConfirm(set: ConfirmedVoiceSet) {
     setSaving(true);
-    const saved = await logParsedSet(set.exercise, set.weightKg, set.reps, pending?.parsed);
+    setSaveError(null);
+    const exerciseName = set.exercise.trim() || activeExerciseName?.trim() || '';
+    const result = await logParsedSet(exerciseName, set.weightKg, set.reps, pending?.parsed);
     setSaving(false);
-    if (saved) {
+    if (result.ok) {
       setPending(null);
+      setSaveError(null);
       voice.clearTranscript();
+      return;
     }
+    // Keep the sheet open and surface the refusal here — the caption under the mic is covered.
+    setSaveError(result.reason);
   }
 
   function handleReject() {
     setPending(null);
     setParseError(null);
+    setSaveError(null);
     voice.clearTranscript();
   }
 
@@ -189,7 +205,9 @@ export function VoiceSetLogger({
         parsed={pending?.parsed ?? null}
         transcript={pending?.transcript ?? ''}
         weightKg={pending?.weightKg}
+        activeExerciseName={activeExerciseName}
         reason={pending?.reason}
+        saveError={saveError}
         saving={saving}
         onConfirm={handleConfirm}
         onReject={handleReject}
