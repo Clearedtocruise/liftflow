@@ -137,6 +137,14 @@ check('a recorder that fails to open releases it', recordAudio.includes('await r
 check('spoken replies release it when they finish', coachSpeech.includes('didJustFinish) void releaseAudioSession()'), true);
 check('device Speech fallbacks also release via speakCue', coachSpeech.includes("from '@/lib/voice/speakCue'"), true);
 
+console.log('\nTap once — silence ends the capture and restores music');
+const endOfSpeech = source('src/lib/voice/endOfSpeech.ts');
+const voiceHook = source('src/hooks/useVoiceRecognition.ts');
+check('end-of-speech reducer exists', endOfSpeech.includes('reduceEndOfSpeech'), true);
+check('recorder watches metering for end of speech', recordAudio.includes('onEndOfSpeech') && recordAudio.includes('status.metering'), true);
+check('hook auto-stops via end-of-speech callback', voiceHook.includes('onEndOfSpeech'), true);
+check('hook no longer tells users to hold the button', voiceHook.includes('Hold the button'), false);
+
 console.log('\nRest-complete and voice confirmations restore music after speaking');
 const speakCue = source('src/lib/voice/speakCue.ts');
 const restTimer = source('src/state/workout/WorkoutSessionContext.tsx');

@@ -30,9 +30,9 @@ function hintText(inputMode: VoiceInputMode, state: VoiceCaptureState): string {
   }
   if (state === 'error') return 'Tap to try again';
   if (inputMode === 'continuous') {
-    return listening ? 'Listening continuously…' : 'Tap for continuous listening';
+    return listening ? 'Listening… stops when you finish' : 'Tap for continuous listening';
   }
-  return listening ? 'Listening…' : 'Tap to log a set';
+  return listening ? "Speak now — stops when you're done" : 'Tap to log a set';
 }
 
 export function MicrophoneButton({
@@ -69,8 +69,8 @@ export function MicrophoneButton({
   const hint = hintText(inputMode, state);
   const accessibilityHint = screenReaderOn
     ? isListening
-      ? 'Double tap to stop recording'
-      : 'Double tap to start recording'
+      ? 'Recording. Double tap to stop early, or wait until you finish speaking'
+      : 'Double tap once to start. Recording stops when you finish speaking'
     : undefined;
 
   return (

@@ -322,14 +322,18 @@ export default function SettingsScreen() {
           value={
             voiceInputMode === 'continuous'
                 ? 'Continuous'
-                : 'Tap toggle'
+                : 'Tap once · auto-stop'
           }
           onPress={() => {
-            Alert.alert('Voice input mode', 'Choose how the workout microphone activates', [
-              { text: 'Tap toggle (recommended)', onPress: () => saveVoiceInputMode('tap_toggle') },
-              { text: 'Continuous', onPress: () => saveVoiceInputMode('continuous') },
-              { text: 'Cancel', style: 'cancel' },
-            ]);
+            Alert.alert(
+              'Voice input mode',
+              'Tap once to start. Recording stops when you finish speaking and your music resumes.',
+              [
+                { text: 'Tap once · auto-stop (recommended)', onPress: () => saveVoiceInputMode('tap_toggle') },
+                { text: 'Continuous', onPress: () => saveVoiceInputMode('continuous') },
+                { text: 'Cancel', style: 'cancel' },
+              ],
+            );
           }}
         />
         <SettingsRow label="Wake phrase" value="Coming soon" />
