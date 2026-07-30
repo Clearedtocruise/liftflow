@@ -72,6 +72,7 @@ import { matchSpokenExercise } from '@/lib/voice/matchSpokenExercise';
 import { pickWorkoutChallenge } from '@/lib/workoutChallengeFlow';
 import { normalizeExecutionMode } from '@/lib/workoutExecutionMode';
 import { alignPlanExercisesToSession, parseTargetReps } from '@/lib/workoutPlan';
+import { resolveExerciseSeedWeightKg } from '@/lib/activeWorkoutWeightSeed';
 import { logWorkoutProgressionDecision } from '@/lib/workoutProgressionDebug';
 import { resolveBetweenExerciseUpNext, resolveTabataPrepUpNext, resolveWorkoutUpNext } from '@/lib/workoutUpNext';
 import { workoutService } from '@/services/workoutService';
@@ -531,16 +532,36 @@ export function ActiveWorkoutScreen({
   }, [currentExercise?.id, planMeta?.restSeconds, executionMode]);
 
   useEffect(() => {
-    // Clear exercise-specific UI state immediately so the next card never renders stale history or
-    // carry-over defaults from the previous exercise while async history loads.
+    // Clear exercise-specific UI that must not leak from the previous card. Weight/reps seed from
+    // this exercise's sets already logged today (critical for supersets) before async history loads.
     setHistorySets([]);
     setCoachPrescription(null);
     setExerciseHadPr(false);
     setShowComplete(false);
     setDistanceKm(0);
-    setWeightKg(0);
-    setReps(parseTargetReps(planExercises[currentIndex]?.repRange ?? currentExercise?.suggestedReps));
-    setDurationSeconds(defaultTimedDurationSeconds(planExercises[currentIndex]?.repRange ?? currentExercise?.suggestedReps));
+
+    const sessionSets = currentExercise?.sets ?? [];
+    const planReps = planExercises[currentIndex]?.repRange ?? currentExercise?.suggestedReps;
+    const lastSession = sessionSets[sessionSets.length - 1];
+
+    setWeightKg(
+      resolveExerciseSeedWeightKg({
+        sessionSets,
+        suggestedWeightKg: currentExercise?.suggestedWeight,
+      }),
+    );
+
+    if (lastSession?.reps != null && lastSession.reps > 0) {
+      setReps(lastSession.reps);
+    } else {
+      setReps(parseTargetReps(planReps));
+    }
+
+    if (lastSession?.durationSeconds != null && lastSession.durationSeconds > 0) {
+      setDurationSeconds(lastSession.durationSeconds);
+    } else {
+      setDurationSeconds(defaultTimedDurationSeconds(planReps));
+    }
   }, [currentExercise?.id]);
 
   useEffect(() => {
@@ -633,12 +654,21 @@ export function ActiveWorkoutScreen({
         setReps(last?.reps ?? parseTargetReps(repRange));
         return;
       }
-      if (last?.weightKg != null && last.reps != null) {
-        setWeightKg(last.weightKg);
+
+      // Prefer this session's last logged set for this exercise (superset rotation returns here
+      // mid-workout). Only fall back to prior-session history / plan suggestion when empty.
+      const sessionLast = currentExercise.sets?.[currentExercise.sets.length - 1];
+      setWeightKg(
+        resolveExerciseSeedWeightKg({
+          sessionSets: currentExercise.sets ?? [],
+          historyWeightKg: last?.weightKg,
+          suggestedWeightKg: currentExercise.suggestedWeight,
+        }),
+      );
+      if (sessionLast?.reps != null && sessionLast.reps > 0) {
+        setReps(sessionLast.reps);
+      } else if (last?.reps != null && last.reps > 0) {
         setReps(last.reps);
-      } else if (currentExercise.suggestedWeight) {
-        setWeightKg(currentExercise.suggestedWeight);
-        setReps(parseTargetReps(repRange));
       } else {
         setReps(parseTargetReps(repRange));
       }
