@@ -819,15 +819,6 @@ export function ActiveWorkoutScreen({
   ]);
 
   useEffect(() => {
-    // Coach no longer auto-inflates set count — leftover bonusSets from an older session
-    // prescription must not reopen the exercise after the planned sets are done.
-    if (executionModeUsesIntervalTimer(executionMode)) return;
-    if (completedSetsCountRef.current >= targetSets && bonusSets > 0) {
-      setBonusSets(0);
-    }
-  }, [currentExercise?.id, targetSets, executionMode, bonusSets]);
-
-  useEffect(() => {
     // Interval modes own their own completion signal; a set count must not override it.
     if (executionModeUsesIntervalTimer(executionMode)) return;
     if (groupComplete && completedSets.length > 0 && allSetsDone) {
