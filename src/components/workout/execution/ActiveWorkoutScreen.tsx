@@ -261,6 +261,7 @@ export function ActiveWorkoutScreen({
   const [pendingAdvanceIndex, setPendingAdvanceIndex] = useState<number | null>(null);
   const [isTabataPrepActive, setIsTabataPrepActive] = useState(false);
   const dismissedSupersetGroupsRef = useRef<Set<string>>(new Set());
+  const skippedExerciseIdsRef = useRef<Set<string>>(new Set());
   const [supersetBannerTick, setSupersetBannerTick] = useState(0);
   const tabataBetweenExercisePendingRef = useRef(false);
   const tabataExercisePrepPendingRef = useRef(false);
@@ -827,6 +828,10 @@ export function ActiveWorkoutScreen({
   }, [circuitTimer, currentExercise?.id, dismissCircuitTimer, sortedExercises]);
 
   useEffect(() => {
+    skippedExerciseIdsRef.current.clear();
+  }, [session.id]);
+
+  useEffect(() => {
     setBonusSets(0);
     if (executionMode === 'tabata') {
       setTabataSessionConfig({
@@ -892,10 +897,10 @@ export function ActiveWorkoutScreen({
   async function handleDeleteSet(setId: string) {
     const setIndex = completedSets.findIndex((set) => set.id === setId) + 1;
     const exerciseName = currentExercise?.exercise?.name ?? 'this exercise';
-    Alert.alert('Undo last logged set', `Remove set ${setIndex} from ${exerciseName}?`, [
+    Alert.alert('Delete set', `Remove set ${setIndex} from ${exerciseName}?`, [
       { text: 'Cancel', style: 'cancel' },
       {
-        text: 'Undo set',
+        text: 'Delete',
         style: 'destructive',
         onPress: async () => {
           await deleteSet(setId);
@@ -904,6 +909,81 @@ export function ActiveWorkoutScreen({
         },
       },
     ]);
+  }
+
+  function advancePastCurrentExercise() {
+    clearPendingExerciseAdvance();
+    setShowComplete(false);
+    dismissIntervalTimer();
+    dismissCircuitTimer();
+    setIsTabataPrepActive(false);
+    tabataBetweenExercisePendingRef.current = false;
+    tabataExercisePrepPendingRef.current = false;
+
+    if (usesSupersetRotation && supersetGroup && supersetGroup.memberIndices.length >= 2) {
+      const incompletePartner = [...supersetGroup.memberIndices]
+        .sort((a, b) => a - b)
+        .find((index) => {
+          if (index === currentIndexRef.current) return false;
+          const exercise = sortedExercises[index];
+          if (exercise?.id && skippedExerciseIdsRef.current.has(exercise.id)) return false;
+          const target = planExercises[index]?.sets ?? 3;
+          return (exercise?.sets?.length ?? 0) < target;
+        });
+      if (incompletePartner != null) {
+        currentIndexRef.current = incompletePartner;
+        setCurrentIndex(incompletePartner);
+        return;
+      }
+      const next = nextExerciseIndexAfterGroup(supersetGroup, sortedExercises.length);
+      if (next != null) {
+        if (executionMode === 'tabata') {
+          beginNextTabataExercise(next);
+          return;
+        }
+        currentIndexRef.current = next;
+        setCurrentIndex(next);
+        return;
+      }
+      Alert.alert('End of workout', 'No more exercises left — tap Finish Workout when you are done.');
+      return;
+    }
+
+    if (isLastExercise) {
+      Alert.alert('Last exercise', 'This is the last exercise — tap Finish Workout when you are done.');
+      return;
+    }
+
+    if (executionMode === 'tabata') {
+      beginNextTabataExercise(currentIndexRef.current + 1);
+      return;
+    }
+
+    const nextIndex = currentIndexRef.current + 1;
+    currentIndexRef.current = nextIndex;
+    setCurrentIndex(nextIndex);
+  }
+
+  function handleSkipExercise() {
+    if (isPaused || logging) return;
+    const exerciseName = currentExercise?.exercise?.name ?? 'this exercise';
+    Alert.alert(
+      'Skip exercise',
+      `Skip ${exerciseName}? Sets you already logged will be kept.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Skip',
+          style: 'destructive',
+          onPress: () => {
+            if (currentExercise?.id) {
+              skippedExerciseIdsRef.current.add(currentExercise.id);
+            }
+            advancePastCurrentExercise();
+          },
+        },
+      ],
+    );
   }
 
   function handlePreviousExercise() {
@@ -1320,8 +1400,10 @@ export function ActiveWorkoutScreen({
         .sort((a, b) => a - b)
         .find((index) => {
           if (index === currentIndexRef.current) return false;
+          const exercise = sortedExercises[index];
+          if (exercise?.id && skippedExerciseIdsRef.current.has(exercise.id)) return false;
           const target = planExercises[index]?.sets ?? 3;
-          return (sortedExercises[index]?.sets?.length ?? 0) < target;
+          return (exercise?.sets?.length ?? 0) < target;
         });
       if (incompletePartner != null) {
         currentIndexRef.current = incompletePartner;
@@ -1784,6 +1866,12 @@ export function ActiveWorkoutScreen({
                     />
                   ) : null}
                   <View style={styles.extraActions}>
+                    <PrimaryButton
+                      label="Skip Exercise"
+                      variant="secondary"
+                      onPress={handleSkipExercise}
+                      disabled={isPaused || logging}
+                    />
                     <PrimaryButton label="+ Add Set" variant="secondary" onPress={handleAddSet} disabled={isPaused} />
                     <PrimaryButton
                       label="+ Add Exercise"
@@ -1805,7 +1893,7 @@ export function ActiveWorkoutScreen({
                     />
                     {completedSets.length > 0 ? (
                       <PrimaryButton
-                        label="Undo Last Logged Set"
+                        label="Delete Last Set"
                         variant="ghost"
                         onPress={() => handleDeleteSet(completedSets[completedSets.length - 1]!.id)}
                         disabled={isPaused}
@@ -1823,25 +1911,36 @@ export function ActiveWorkoutScreen({
             const set = completedSets[index];
             const pending = !set;
             return (
-              <Pressable
-                key={`set-${index + 1}`}
-                style={styles.setRow}
-                onLongPress={set ? () => handleDeleteSet(set.id) : undefined}>
-                <AppText variant="bodyBold" color={pending ? 'textTertiary' : 'textPrimary'}>
-                  Set {index + 1} {pending ? 'Pending' : '✓'}
-                </AppText>
-                {!pending ? (
-                  <AppText variant="footnote" color="textSecondary">
-                    {formatSetLoggedLabel(
-                      loggingMode,
-                      set,
-                      (kg) => formatWorkoutWeightForInput(kg, units.preferredWeightUnit),
-                      units.weightLabel,
-                      units.preferredDistanceUnit,
-                    )}
+              <View key={`set-${index + 1}`} style={styles.setRow}>
+                <View style={styles.setRowMain}>
+                  <AppText variant="bodyBold" color={pending ? 'textTertiary' : 'textPrimary'}>
+                    Set {index + 1} {pending ? 'Pending' : '✓'}
                   </AppText>
+                  {!pending ? (
+                    <AppText variant="footnote" color="textSecondary">
+                      {formatSetLoggedLabel(
+                        loggingMode,
+                        set,
+                        (kg) => formatWorkoutWeightForInput(kg, units.preferredWeightUnit),
+                        units.weightLabel,
+                        units.preferredDistanceUnit,
+                      )}
+                    </AppText>
+                  ) : null}
+                </View>
+                {set ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Delete set ${index + 1}`}
+                    hitSlop={12}
+                    onPress={() => handleDeleteSet(set.id)}
+                    disabled={isPaused}>
+                    <AppText variant="caption" color={isPaused ? 'textTertiary' : 'error'}>
+                      Delete
+                    </AppText>
+                  </Pressable>
                 ) : null}
-              </Pressable>
+              </View>
             );
           })}
         </Card>
@@ -2093,10 +2192,17 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   setRow: {
-    gap: Spacing.xs,
-    paddingVertical: Spacing.xs,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.md,
+    paddingVertical: Spacing.sm,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: LiftFlowColors.border,
+  },
+  setRowMain: {
+    flex: 1,
+    gap: Spacing.xs,
   },
   footerActions: {
     gap: Spacing.sm,
