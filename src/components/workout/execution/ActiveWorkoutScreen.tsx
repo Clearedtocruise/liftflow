@@ -44,6 +44,7 @@ import {
     getExerciseLoggingMode,
 } from '@/lib/exerciseModality';
 import { profileFigureGender } from '@/lib/exerciseMuscleMap';
+import { clampPlanWeightKgForExercise } from '@/lib/exerciseWeightPlausibility';
 import {
     executionModeUsesSupersetRotation,
     formatExerciseStationLabel,
@@ -423,14 +424,40 @@ export function ActiveWorkoutScreen({
   );
   const coachTargetLine = useMemo(() => {
     if (!coachPrescription) return null;
+    const name = currentExercise?.exercise?.name;
+    const slug = currentExercise?.exercise?.slug;
+    const rawWeight = coachPrescription.targets.weightKg;
+    const safeWeight =
+      rawWeight > 0
+        ? (clampPlanWeightKgForExercise(rawWeight, name, slug) ?? 0)
+        : rawWeight;
     return formatCoachTargetLine(
-      coachPrescription.targets,
+      { ...coachPrescription.targets, weightKg: safeWeight },
       loggingMode,
       (kg) => formatWorkoutWeightForInput(kg, units.preferredWeightUnit),
       units.weightLabel,
       repRange,
     );
-  }, [coachPrescription, loggingMode, units.preferredWeightUnit, units.weightLabel, repRange]);
+  }, [
+    coachPrescription,
+    loggingMode,
+    units.preferredWeightUnit,
+    units.weightLabel,
+    repRange,
+    currentExercise?.exercise?.name,
+    currentExercise?.exercise?.slug,
+  ]);
+  const safeFallbackWeightKg = useMemo(() => {
+    const name = currentExercise?.exercise?.name;
+    const slug = currentExercise?.exercise?.slug;
+    const candidate = weightKg > 0 ? weightKg : currentExercise?.suggestedWeight;
+    return clampPlanWeightKgForExercise(candidate, name, slug);
+  }, [
+    weightKg,
+    currentExercise?.suggestedWeight,
+    currentExercise?.exercise?.name,
+    currentExercise?.exercise?.slug,
+  ]);
   const groupComplete =
     usesSupersetRotation && inSuperset && supersetGroup
       ? isSupersetGroupComplete(supersetGroup, sortedExercises, planExercises)
@@ -480,11 +507,16 @@ export function ActiveWorkoutScreen({
         return;
       }
       if (loggingMode === 'weighted' && recommended.weightKg > 0) {
-        setWeightKg(recommended.weightKg);
+        const safe = clampPlanWeightKgForExercise(
+          recommended.weightKg,
+          currentExercise?.exercise?.name,
+          currentExercise?.exercise?.slug,
+        );
+        if (safe != null) setWeightKg(safe);
         setReps(recommended.reps);
       }
     },
-    [loggingMode, durationSeconds],
+    [loggingMode, durationSeconds, currentExercise?.exercise?.name, currentExercise?.exercise?.slug],
   );
 
   useEffect(() => {
@@ -548,7 +580,11 @@ export function ActiveWorkoutScreen({
     setWeightKg(
       resolveExerciseSeedWeightKg({
         sessionSets,
-        suggestedWeightKg: currentExercise?.suggestedWeight,
+        suggestedWeightKg: clampPlanWeightKgForExercise(
+          currentExercise?.suggestedWeight,
+          currentExercise?.exercise?.name,
+          currentExercise?.exercise?.slug,
+        ),
       }),
     );
 
@@ -663,7 +699,11 @@ export function ActiveWorkoutScreen({
         resolveExerciseSeedWeightKg({
           sessionSets: currentExercise.sets ?? [],
           historyWeightKg: last?.weightKg,
-          suggestedWeightKg: currentExercise.suggestedWeight,
+          suggestedWeightKg: clampPlanWeightKgForExercise(
+            currentExercise.suggestedWeight,
+            currentExercise.exercise?.name,
+            currentExercise.exercise?.slug,
+          ),
         }),
       );
       if (sessionLast?.reps != null && sessionLast.reps > 0) {
@@ -1630,6 +1670,7 @@ export function ActiveWorkoutScreen({
                   </AppText>
                   <ExerciseMusclePanel
                     exerciseName={currentExercise.exercise?.name ?? 'Exercise'}
+                    muscleGroups={currentExercise.exercise?.muscleGroups}
                     gender={figureGender}
                     variant="compact"
                   />
@@ -1654,7 +1695,7 @@ export function ActiveWorkoutScreen({
                   formatWeight={(kg) => formatWorkoutWeightForInput(kg, units.preferredWeightUnit)}
                   weightLabel={units.weightLabel}
                   distanceUnit={units.preferredDistanceUnit}
-                  fallbackWeightKg={weightKg > 0 ? weightKg : currentExercise.suggestedWeight}
+                  fallbackWeightKg={safeFallbackWeightKg}
                 />
               ) : null}
 

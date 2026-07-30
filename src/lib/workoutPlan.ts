@@ -214,7 +214,9 @@ export function alignPlanExercisesToSession(
       intervalWorkSeconds: inherited?.intervalWorkSeconds,
       intervalRestSeconds: inherited?.intervalRestSeconds,
       restBetweenExercisesSeconds: inherited?.restBetweenExercisesSeconds,
-      weightLbs: inherited?.weightLbs,
+      // Keep sets/reps/pairing from the vacated slot, but never its load — a swap from a
+      // compound press must not prescribe that weight on an isolation accessory.
+      weightLbs: undefined,
     };
   });
 }

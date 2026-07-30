@@ -9,6 +9,7 @@ import { enrichWithSmartSupersetGroups } from './liftingReference/applyReference
 import { maxPatternUsesForDayFocus, patternExclusionGroupId } from './movementPatternExclusion.js';
 import { requireAdmin } from './supabase.js';
 import { blendWorkoutPreset, resolveRankedGoals, toPlannerGoal } from './trainingGoals.js';
+import { normalizeBodyWeightKg } from './workoutAwareNutrition.js';
 
 export type GeneratedWorkoutExercise = {
   name: string;
@@ -624,6 +625,39 @@ function scoreExercise(
   return score;
 }
 
+/** Light single-joint accessories must never inherit compound press/squat load factors. */
+export function exerciseLooksLikeLightIsolation(exercise: ExerciseRecord): boolean {
+  const family = exercise.metadata?.movement_family ?? '';
+  const key = `${exercise.name} ${exercise.slug}`.toLowerCase();
+  const primary = primaryMuscleGroup(exercise);
+
+  if (['biceps', 'triceps', 'rear_delt', 'glute_pattern'].includes(family)) return true;
+  if (
+    /\bkickback\b|\blateral\s+raise\b|\bfront\s+raise\b|\brear\s+delt\b|\bconcentration\s+curl\b|\btricep(s)?\s+(pushdown|extension|kickback)\b|\bskull\s*crusher\b|\boverhead\s+(db\s+)?extension\b|\bcable\s+fly\b|\bpec\s+deck\b|\bleg\s+extension\b|\bleg\s+curl\b|\bcalf\s+raise\b/.test(
+      key,
+    )
+  ) {
+    return true;
+  }
+  if (
+    ['biceps', 'triceps', 'forearms', 'shoulders', 'glutes', 'calves'].includes(primary) &&
+    ['dumbbell', 'cable', 'bands', 'machine'].includes(exercise.equipment) &&
+    !['horizontal_press', 'vertical_press', 'squat_pattern', 'hinge_pattern', 'horizontal_pull', 'vertical_pull'].includes(
+      family,
+    )
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function isolationStartingCapLbs(exercise: ExerciseRecord): number {
+  const key = `${exercise.name} ${exercise.slug}`.toLowerCase();
+  if (/\bkickback\b|\blateral\s+raise\b|\bfront\s+raise\b/.test(key)) return 35;
+  if (exercise.equipment === 'dumbbell' || exercise.equipment === 'bands') return 45;
+  return 60;
+}
+
 export function suggestWeightLbs(
   exercise: ExerciseRecord,
   goal: TrainingGoal,
@@ -646,19 +680,26 @@ export function suggestWeightLbs(
     return history.weight;
   }
 
-  const bw = bodyWeightKg ?? 75;
+  const bw = normalizeBodyWeightKg(bodyWeightKg);
   const base = bw * 2.20462;
-  const factor =
-    exercise.metadata?.movement_family === 'squat_pattern'
+  const isolation = exerciseLooksLikeLightIsolation(exercise);
+  const family = exercise.metadata?.movement_family ?? '';
+  const factor = isolation
+    ? 0.08
+    : family === 'squat_pattern'
       ? 0.65
-      : exercise.metadata?.movement_family === 'hinge_pattern'
+      : family === 'hinge_pattern'
         ? 0.55
-        : exercise.metadata?.movement_family === 'horizontal_press'
+        : family === 'horizontal_press'
           ? 0.45
-          : exercise.metadata?.movement_family === 'vertical_press'
+          : family === 'vertical_press'
             ? 0.25
             : 0.2;
-  return Math.round((base * factor) / 5) * 5;
+  const raw = Math.round((base * factor) / 5) * 5;
+  if (isolation) {
+    return Math.min(Math.max(raw, 5), isolationStartingCapLbs(exercise));
+  }
+  return raw;
 }
 
 export function selectFocusedSplitExercises(

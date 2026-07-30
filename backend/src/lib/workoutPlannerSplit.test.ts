@@ -247,4 +247,33 @@ test('bodyweight core names do not receive external load targets when metadata i
   assert.notEqual(suggestWeightLbs(weightedSitUp, 'muscle_gain', undefined, 80), undefined);
 });
 
+test('DB Kickback never inherits compound press starting loads', () => {
+  const kickback: ExerciseRecord = {
+    id: 'db-kickback',
+    name: 'DB Kickback',
+    slug: 'db-kickback',
+    category: 'push',
+    equipment: 'dumbbell',
+    muscle_groups: ['triceps'],
+    // Catalog bug: tagged like a bench press.
+    metadata: { movement_family: 'horizontal_press', requires: ['dumbbells'] },
+  };
+  const bench: ExerciseRecord = {
+    id: 'bench',
+    name: 'Bench Press',
+    slug: 'bench-press',
+    category: 'push',
+    equipment: 'barbell',
+    muscle_groups: ['chest'],
+    metadata: { movement_family: 'horizontal_press', requires: ['barbell'] },
+  };
+
+  // 175 stored as kg (lbs entered into kg field) previously produced ~175 lb press targets.
+  const kickbackLbs = suggestWeightLbs(kickback, 'muscle_gain', undefined, 175);
+  const benchLbs = suggestWeightLbs(bench, 'muscle_gain', undefined, 175);
+  assert.ok(kickbackLbs != null && kickbackLbs <= 35, `kickback starting load ${kickbackLbs}`);
+  assert.ok(benchLbs != null && benchLbs >= 100, `bench starting load ${benchLbs}`);
+  assert.ok(kickbackLbs! < benchLbs! * 0.4);
+});
+
 console.log('workoutPlannerSplit.test.ts — all assertions passed');

@@ -64,6 +64,12 @@ export const EXERCISE_MUSCLE_PROFILES: Record<string, ExerciseMuscleProfile> = {
   'overhead-press': { primary: ['front-delts', 'side-delts'], secondary: ['triceps', 'traps', 'core'] },
   'dumbbell-shoulder-press': { primary: ['front-delts', 'side-delts'], secondary: ['triceps'] },
   'tricep-pushdown': { primary: ['triceps'], secondary: ['forearms'] },
+  'db-kickback': { primary: ['triceps'], secondary: ['shoulders'] },
+  'dumbbell-kickback': { primary: ['triceps'], secondary: ['shoulders'] },
+  'triceps-kickback': { primary: ['triceps'], secondary: ['shoulders'] },
+  'glute-kickback': { primary: ['glutes'], secondary: ['hamstrings'] },
+  'cable-kickback': { primary: ['glutes'], secondary: ['hamstrings'] },
+  'lateral-raise': { primary: ['shoulders'], secondary: ['traps'] },
   'pull-up': { primary: ['lats'], secondary: ['biceps', 'mid-back', 'rear-delts'] },
   'lat-pulldown': { primary: ['lats'], secondary: ['biceps', 'mid-back', 'rear-delts'] },
   'barbell-row': { primary: ['mid-back', 'lats'], secondary: ['rear-delts', 'biceps', 'lower-back'] },
@@ -168,6 +174,15 @@ function deriveFromNamePattern(name: string): ExerciseMuscleProfile {
   }
   if (/\b(calf)\b/.test(lower)) {
     return { primary: ['calves'], secondary: [] };
+  }
+  if (/\b(glute\s+kickback|cable\s+kickback|donkey\s+kick|fire\s+hydrant)\b/.test(lower)) {
+    return { primary: ['glutes'], secondary: ['hamstrings'] };
+  }
+  if (/\b(kickback|tricep|triceps)\b/.test(lower)) {
+    return { primary: ['triceps'], secondary: ['shoulders'] };
+  }
+  if (/\b(lateral\s+raise|front\s+raise|rear\s+delt)\b/.test(lower)) {
+    return { primary: ['shoulders'], secondary: [] };
   }
   if (/\b(run|walk|cardio|bike|cycle|swim|rower)\b/.test(lower)) {
     return { primary: ['quads'], secondary: ['calves', 'glutes'] };

@@ -177,6 +177,8 @@ export function WorkoutPlanDraftProvider({ children }: { children: ReactNode }) 
         id: `plan-${index}-${replacement.name.toLowerCase().replace(/\s+/g, '-')}`,
         name: replacement.name,
         exerciseId: replacement.exerciseId ?? previous.exerciseId,
+        // Never carry the vacated lift's load onto a swap (bench → kickback must not keep 175 lb).
+        weightLbs: undefined,
       };
       const updated = [...current];
       updated[index] = nextExercise;
