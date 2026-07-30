@@ -1562,6 +1562,12 @@ export function ActiveWorkoutScreen({
                   loggingMode={loggingMode}
                   repRange={repRange}
                   historySets={historySets}
+                  sessionSets={completedSets.map((set) => ({
+                    weightKg: set.weight,
+                    reps: set.reps,
+                    durationSeconds: set.durationSeconds,
+                    distanceMeters: set.distanceMeters,
+                  }))}
                   targetPerformanceLine={coachTargetLine}
                   formatWeight={(kg) => formatWorkoutWeightForInput(kg, units.preferredWeightUnit)}
                   weightLabel={units.weightLabel}

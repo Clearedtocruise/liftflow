@@ -7,13 +7,23 @@ import type { ExerciseLoggingMode } from '@/lib/exerciseModality';
 import type { DistanceUnit } from '@/types/common';
 import type { ExerciseHistorySet } from '@/types/workoutExecution';
 
+type SessionSetSummary = {
+  weightKg?: number;
+  reps?: number;
+  durationSeconds?: number;
+  distanceMeters?: number;
+};
+
 type GuidedWorkoutMetricsProps = {
   currentSet: number;
   targetSets: number;
   remainingSets: number;
   loggingMode: ExerciseLoggingMode;
   repRange: string;
+  /** Prior workouts only — not the sets logged earlier in this session. */
   historySets: ExerciseHistorySet[];
+  /** Sets already logged on this exercise in the active workout (supersets included). */
+  sessionSets?: SessionSetSummary[];
   targetPerformanceLine?: string | null;
   formatWeight: (kg: number) => string;
   weightLabel: string;
@@ -28,6 +38,7 @@ export function GuidedWorkoutMetrics({
   loggingMode,
   repRange,
   historySets,
+  sessionSets = [],
   targetPerformanceLine,
   formatWeight,
   weightLabel,
@@ -42,6 +53,46 @@ export function GuidedWorkoutMetrics({
     weightLabel,
     fallbackWeightKg,
   );
+
+  const lastSessionSet = [...sessionSets]
+    .reverse()
+    .find((set) => (set.weightKg ?? 0) > 0 || (set.reps ?? 0) > 0);
+  const historySet = historySets[0];
+
+  let suggestedLine: string | null = null;
+  let suggestedSource: string | null = null;
+  if (loggingMode === 'weighted') {
+    if (lastSessionSet?.weightKg != null && lastSessionSet.weightKg > 0) {
+      suggestedLine = formatPreviousPerformanceLine(
+        lastSessionSet,
+        loggingMode,
+        formatWeight,
+        weightLabel,
+        distanceUnit,
+      );
+      suggestedSource = 'from this session';
+    } else if (historySet?.weightKg != null && historySet.weightKg > 0) {
+      suggestedLine = formatPreviousPerformanceLine(
+        historySet,
+        loggingMode,
+        formatWeight,
+        weightLabel,
+        distanceUnit,
+      );
+      suggestedSource = 'from last session';
+    } else if (fallbackWeightKg != null && fallbackWeightKg > 0) {
+      suggestedLine = `${formatWeight(fallbackWeightKg)} ${weightLabel}`;
+      suggestedSource = 'from plan';
+    }
+  }
+
+  // Never tell someone on set 2+ to "log your first set."
+  const showFirstSetHint =
+    loggingMode === 'weighted' &&
+    suggestedLine == null &&
+    currentSet <= 1 &&
+    sessionSets.length === 0 &&
+    historySets.length === 0;
 
   return (
     <View style={styles.container}>
@@ -72,9 +123,19 @@ export function GuidedWorkoutMetrics({
               {formatPreviousPerformanceLine(set, loggingMode, formatWeight, weightLabel, distanceUnit)}
             </AppText>
           ))
+        ) : sessionSets.length > 0 ? (
+          sessionSets
+            .slice(-3)
+            .reverse()
+            .map((set, index) => (
+              <AppText key={`session-${index}`} variant="footnote" color="textSecondary">
+                {formatPreviousPerformanceLine(set, loggingMode, formatWeight, weightLabel, distanceUnit)}
+                {' · this session'}
+              </AppText>
+            ))
         ) : (
           <AppText variant="footnote" color="textTertiary">
-            No prior sets logged
+            No prior sessions for this exercise
           </AppText>
         )}
       </View>
@@ -83,14 +144,18 @@ export function GuidedWorkoutMetrics({
         <AppText variant="label" color="textSecondary">
           Suggested Weight
         </AppText>
-        {historySets.length > 0 && loggingMode === 'weighted' && historySets[0]?.weightKg != null && historySets[0].weightKg > 0 ? (
+        {suggestedLine ? (
           <AppText variant="bodyBold" color="accent">
-            {formatPreviousPerformanceLine(historySets[0], loggingMode, formatWeight, weightLabel, distanceUnit)}
-            {' · from last session'}
+            {suggestedLine}
+            {suggestedSource ? ` · ${suggestedSource}` : ''}
+          </AppText>
+        ) : showFirstSetHint ? (
+          <AppText variant="footnote" color="textTertiary">
+            Enter a weight for set 1 — we will remember it
           </AppText>
         ) : (
           <AppText variant="footnote" color="textTertiary">
-            Log your first set — we'll suggest weight next time
+            Use the weight field below
           </AppText>
         )}
       </View>
