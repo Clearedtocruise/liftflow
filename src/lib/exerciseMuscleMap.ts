@@ -122,13 +122,13 @@ const ACCESSORY_FOCUS: ReadonlySet<MuscleId> = new Set([
   'neck',
 ]);
 
-function deriveFromMuscleGroups(groups: string[]): ExerciseMuscleProfile {
+function deriveFromMuscleGroups(groups: string[]): ExerciseMuscleProfile | null {
   const mapped = groups
     .map(aliasToMuscle)
     .filter((muscle): muscle is MuscleId => muscle != null && muscle !== 'full-body');
 
   if (mapped.length === 0) {
-    return { primary: ['full-body'], secondary: [] };
+    return null;
   }
 
   const main = mapped.filter((muscle) => !ACCESSORY_FOCUS.has(muscle));
@@ -220,18 +220,25 @@ function deriveFromDayFocusList(lowerName: string): ExerciseMuscleProfile | null
 export function resolveExerciseMuscles(
   exerciseName: string,
   muscleGroups?: string[],
+  exerciseSlug?: string | null,
 ): ExerciseMuscleProfile {
   // Suggested groups sometimes put core first (or alone). Day titles encode the real lead focus.
   const dayFocus = deriveFromDayFocusList(exerciseName.toLowerCase());
   if (dayFocus) return dayFocus;
 
-  const slug = normalizeExerciseSlug(exerciseName);
-  const authored = EXERCISE_MUSCLE_PROFILES[slug];
-  if (authored) return authored;
+  const slugCandidates = [
+    exerciseSlug ? normalizeExerciseSlug(exerciseSlug) : '',
+    normalizeExerciseSlug(exerciseName),
+  ].filter(Boolean);
 
-  const catalog = catalogExerciseBySlug(slug);
-  if (catalog && EXERCISE_MUSCLE_PROFILES[catalog.slug]) {
-    return EXERCISE_MUSCLE_PROFILES[catalog.slug];
+  for (const slug of slugCandidates) {
+    const authored = EXERCISE_MUSCLE_PROFILES[slug];
+    if (authored) return authored;
+
+    const catalog = catalogExerciseBySlug(slug);
+    if (catalog && EXERCISE_MUSCLE_PROFILES[catalog.slug]) {
+      return EXERCISE_MUSCLE_PROFILES[catalog.slug];
+    }
   }
 
   const byName = SYSTEM_EXERCISE_CATALOG.find(
@@ -241,13 +248,21 @@ export function resolveExerciseMuscles(
     return EXERCISE_MUSCLE_PROFILES[byName.slug];
   }
 
-  const groups = muscleGroups ?? catalog?.muscleGroups ?? byName?.muscleGroups;
+  // Name patterns beat empty / full_body catalog tags so accessories like DB Kickback
+  // never render as "Full Body" when metadata is missing or wrong.
+  const fromName = deriveFromNamePattern(exerciseName);
+
+  const groups =
+    (muscleGroups && muscleGroups.length > 0 ? muscleGroups : undefined) ??
+    slugCandidates.map((slug) => catalogExerciseBySlug(slug)?.muscleGroups).find((g) => g?.length) ??
+    byName?.muscleGroups;
   if (groups?.length) {
-    const filtered = groups.filter((g) => g !== 'cardiovascular');
-    if (filtered.length > 0) return deriveFromMuscleGroups(filtered);
+    const filtered = groups.filter((g) => g !== 'cardiovascular' && g !== 'full_body' && g !== 'full-body');
+    const fromGroups = filtered.length > 0 ? deriveFromMuscleGroups(filtered) : null;
+    if (fromGroups) return fromGroups;
   }
 
-  return deriveFromNamePattern(exerciseName);
+  return fromName;
 }
 
 export function buildBodyHighlightData(

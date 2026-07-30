@@ -1671,6 +1671,7 @@ export function ActiveWorkoutScreen({
                   <ExerciseMusclePanel
                     exerciseName={currentExercise.exercise?.name ?? 'Exercise'}
                     muscleGroups={currentExercise.exercise?.muscleGroups}
+                    exerciseSlug={currentExercise.exercise?.slug}
                     gender={figureGender}
                     variant="compact"
                   />

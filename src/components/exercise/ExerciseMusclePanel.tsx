@@ -16,6 +16,7 @@ import {
 type ExerciseMusclePanelProps = {
   exerciseName: string;
   muscleGroups?: string[];
+  exerciseSlug?: string | null;
   gender?: 'male' | 'female';
   /** hero = whole workout overview, exercise = per-exercise card, compact = active session */
   variant?: 'hero' | 'compact' | 'inline';
@@ -25,13 +26,14 @@ type ExerciseMusclePanelProps = {
 export function ExerciseMusclePanel({
   exerciseName,
   muscleGroups,
+  exerciseSlug,
   gender = 'male',
   variant = 'hero',
   profile: profileOverride,
 }: ExerciseMusclePanelProps) {
   const profile = useMemo(
-    () => profileOverride ?? resolveExerciseMuscles(exerciseName, muscleGroups),
-    [exerciseName, muscleGroups, profileOverride],
+    () => profileOverride ?? resolveExerciseMuscles(exerciseName, muscleGroups, exerciseSlug),
+    [exerciseName, muscleGroups, exerciseSlug, profileOverride],
   );
   const preferredSide = useMemo(() => resolveBodySide(profile), [profile]);
   const [side, setSide] = useState<'front' | 'back'>(preferredSide);

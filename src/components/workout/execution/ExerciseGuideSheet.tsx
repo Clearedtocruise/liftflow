@@ -37,8 +37,8 @@ export function ExerciseGuideSheet({
   const sections = useMemo(() => resolveExerciseGuideSections(guide), [guide]);
   const difficulty = resolveExerciseDifficulty(exercise, exerciseName);
   const profile = useMemo(
-    () => resolveExerciseMuscles(name, exercise?.muscleGroups),
-    [name, exercise?.muscleGroups],
+    () => resolveExerciseMuscles(name, exercise?.muscleGroups, exercise?.slug),
+    [name, exercise?.muscleGroups, exercise?.slug],
   );
   const [gender, setGender] = useState<'male' | 'female'>(profileFigureGender(user?.sex));
 
@@ -161,6 +161,7 @@ export function ExerciseGuideSheet({
             <ExerciseMusclePanel
               exerciseName={name}
               muscleGroups={exercise?.muscleGroups}
+              exerciseSlug={exercise?.slug}
               gender={gender}
               variant="hero"
             />
