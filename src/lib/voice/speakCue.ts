@@ -1,6 +1,6 @@
 import * as Speech from 'expo-speech';
 
-import { enterVoicePlaybackMode, releaseAudioSession } from '@/lib/voice/audioSession';
+import { enterVoicePlaybackMode, releaseAudioSession, unduckWhileSessionActive } from '@/lib/voice/audioSession';
 
 type SpeakCueOptions = {
   rate?: number;
@@ -27,7 +27,9 @@ export async function speakCue(message: string, options: SpeakCueOptions = {}): 
       if (settled) return;
       settled = true;
       clearTimeout(safetyTimer);
-      void releaseAudioSession().finally(resolve);
+      void unduckWhileSessionActive()
+        .then(() => releaseAudioSession())
+        .finally(resolve);
     };
 
     // If the platform never fires onDone (rare), do not leave music ducked forever.

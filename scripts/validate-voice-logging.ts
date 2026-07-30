@@ -131,6 +131,7 @@ check('the session is never held into the background', audioSession.includes('st
 
 console.log('\nEvery path out of recording releases the session');
 check('stopping releases it', recordAudio.includes('await releaseAudioSession()'), true);
+check('stopping unducks while the recorder still holds the session', recordAudio.includes('unduckWhileSessionActive'), true);
 check('a recorder that fails to open releases it', recordAudio.includes('await releaseAudioSession();\n    throw error;'), true);
 check('spoken replies release it when they finish', coachSpeech.includes('didJustFinish) void releaseAudioSession()'), true);
 check('device Speech fallbacks also release via speakCue', coachSpeech.includes("from '@/lib/voice/speakCue'"), true);

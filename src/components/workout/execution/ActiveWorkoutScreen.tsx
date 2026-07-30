@@ -269,18 +269,16 @@ export function ActiveWorkoutScreen({
   const currentExercise = sortedExercises[currentIndex];
   const planMeta = planExercises[currentIndex];
   const targetSets = planMeta?.sets ?? 3;
-  const coachRecommendedSets = coachPrescription?.targets.sets ?? targetSets;
-  const coachExtraSets = executionModeUsesIntervalTimer(executionMode)
-    ? 0
-    : Math.max(0, coachRecommendedSets - targetSets);
-  // Tabata uses the dialed-in session config (work/rest/rounds). HIIT uses plan sets + bonus.
-  // Coach set-boosts that push beginners toward 5 sets do not apply on interval protocols.
+  // Stick to the plan set count. Coach may *suggest* more volume in the card, but auto-inflating
+  // to 4–5 working sets was too much for everyday lifters — use + Add Set if you want more.
+  const coachSuggestedExtraSets = Math.max(
+    0,
+    (coachPrescription?.targets.sets ?? targetSets) - targetSets,
+  );
   const effectiveTargetSets =
     executionMode === 'tabata'
       ? intervalTimer?.config.rounds ?? tabataSessionConfig.rounds
-      : executionModeUsesIntervalTimer(executionMode)
-        ? targetSets + bonusSets
-        : Math.max(targetSets + bonusSets, coachRecommendedSets);
+      : targetSets + bonusSets;
   const repRange = planMeta?.repRange ?? currentExercise?.suggestedReps ?? '8-10';
   const completedSets = currentExercise?.sets ?? [];
   const completedSetsCountRef = useRef(0);
@@ -293,8 +291,8 @@ export function ActiveWorkoutScreen({
   const transitionActive = circuitTimer != null && circuitTimer.phase !== 'done';
   const allSetsDone = completedSets.length >= effectiveTargetSets;
   const coachSetNotice =
-    coachExtraSets > 0
-      ? `Coach added ${coachExtraSets} set${coachExtraSets > 1 ? 's' : ''} — ${effectiveTargetSets} sets total today.`
+    coachSuggestedExtraSets > 0 && !executionModeUsesIntervalTimer(executionMode)
+      ? `Coach suggests +${coachSuggestedExtraSets} set${coachSuggestedExtraSets > 1 ? 's' : ''} — tap + Add Set if you want ${effectiveTargetSets + coachSuggestedExtraSets} total.`
       : null;
   const isLastExercise = currentIndex >= sortedExercises.length - 1;
   const nextExercise = sortedExercises[currentIndex + 1];
@@ -821,20 +819,13 @@ export function ActiveWorkoutScreen({
   ]);
 
   useEffect(() => {
-    if (coachExtraSets <= 0) return;
+    // Coach no longer auto-inflates set count — leftover bonusSets from an older session
+    // prescription must not reopen the exercise after the planned sets are done.
     if (executionModeUsesIntervalTimer(executionMode)) return;
-    // A coach prescription that arrives after the planned sets are logged must not reopen the
-    // exercise, which left the screen asking for a set the user had already finished.
-    if (completedSetsCountRef.current >= targetSets) return;
-    setBonusSets((current) => (current >= coachExtraSets ? current : coachExtraSets));
-    setShowComplete(false);
-    pendingExerciseAdvanceAfterRestRef.current = false;
-    pendingAdvanceRef.current = null;
-    if (autoAdvanceTimeoutRef.current) {
-      clearTimeout(autoAdvanceTimeoutRef.current);
-      autoAdvanceTimeoutRef.current = null;
+    if (completedSetsCountRef.current >= targetSets && bonusSets > 0) {
+      setBonusSets(0);
     }
-  }, [coachExtraSets, currentExercise?.id, targetSets, executionMode]);
+  }, [currentExercise?.id, targetSets, executionMode, bonusSets]);
 
   useEffect(() => {
     // Interval modes own their own completion signal; a set count must not override it.

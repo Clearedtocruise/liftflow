@@ -2,7 +2,7 @@ import { Audio } from 'expo-av';
 import { File } from 'expo-file-system';
 import { Platform } from 'react-native';
 
-import { enterVoiceCaptureMode, releaseAudioSession } from '@/lib/voice/audioSession';
+import { enterVoiceCaptureMode, releaseAudioSession, unduckWhileSessionActive } from '@/lib/voice/audioSession';
 
 /**
  * HIGH_QUALITY rather than LOW_QUALITY because the low preset writes `.caf` on iOS and `.3gp` on
@@ -47,9 +47,13 @@ function contentTypeForUri(uri: string): string {
 /**
  * Always releases the audio session, even when reading the file fails, so a failed attempt cannot
  * leave playback routed to the earpiece for the rest of the session.
+ *
+ * Unduck *before* stopAndUnloadAsync: after unload, expo-av treats the session as Inactive and
+ * silently skips applying MixWithOthers — which left music muted until the app restarted.
  */
 export async function stopRecording(recording: Audio.Recording): Promise<RecordedAudio | null> {
   try {
+    await unduckWhileSessionActive();
     await recording.stopAndUnloadAsync();
   } finally {
     await releaseAudioSession();
@@ -72,6 +76,7 @@ export async function stopRecording(recording: Audio.Recording): Promise<Recorde
 /** Best effort — a discarded recording that cannot be unloaded must not surface as an error. */
 export async function cancelRecording(recording: Audio.Recording): Promise<void> {
   try {
+    await unduckWhileSessionActive();
     await recording.stopAndUnloadAsync();
   } catch {
     // already unloaded

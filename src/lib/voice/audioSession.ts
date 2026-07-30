@@ -14,7 +14,22 @@ import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av';
  *
  * Every call passes a complete mode rather than a patch, because `setAudioModeAsync` merges with
  * whatever was set last and two callers patching different fields is how this drifted.
+ *
+ * Important: expo-av only applies category changes while it considers the session active. Calling
+ * MixWithOthers *after* `stopAndUnloadAsync` (session demoted to Inactive) stores the flag but
+ * does not unduck on the hardware session — music stays quiet / HFP-routed until the app restarts.
+ * Call `unduckWhileSessionActive` before unloading the recorder, then `releaseAudioSession`.
  */
+
+const PLAYBACK_HANDOFF = {
+  allowsRecordingIOS: false,
+  playsInSilentModeIOS: true,
+  staysActiveInBackground: false,
+  interruptionModeIOS: InterruptionModeIOS.MixWithOthers,
+  interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
+  shouldDuckAndroid: false,
+  playThroughEarpieceAndroid: false,
+} as const;
 
 /** Mic open: duck other audio rather than stopping it. */
 export async function enterVoiceCaptureMode(): Promise<void> {
@@ -44,17 +59,28 @@ export async function enterVoicePlaybackMode(): Promise<void> {
 }
 
 /**
- * Hands the session back. `allowsRecordingIOS: false` also restores playback to the speaker, which
- * otherwise stays routed to the earpiece for the rest of the session.
+ * Leave DuckOthers / PlayAndRecord while the recorder (or a just-finished cue) still keeps the
+ * expo-av session Active so the native category actually updates.
+ */
+export async function unduckWhileSessionActive(): Promise<void> {
+  await Audio.setAudioModeAsync(PLAYBACK_HANDOFF).catch(() => undefined);
+}
+
+/**
+ * Hands the session back to other apps. Prefer calling {@link unduckWhileSessionActive} first
+ * while a recorder/sound is still loaded; this is the idle cleanup pass.
  */
 export async function releaseAudioSession(): Promise<void> {
-  await Audio.setAudioModeAsync({
-    allowsRecordingIOS: false,
-    playsInSilentModeIOS: false,
-    staysActiveInBackground: false,
-    interruptionModeIOS: InterruptionModeIOS.MixWithOthers,
-    interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
-    shouldDuckAndroid: false,
-    playThroughEarpieceAndroid: false,
-  }).catch(() => undefined);
+  await Audio.setAudioModeAsync(PLAYBACK_HANDOFF).catch(() => undefined);
+
+  // expo-av skips native category updates when it thinks the session is Inactive. Briefly
+  // enabling then disabling the AV subsystem forces a re-apply so music is not left ducked /
+  // stuck on the Bluetooth HFP route after the mic closes.
+  try {
+    await Audio.setIsEnabledAsync(false);
+    await Audio.setIsEnabledAsync(true);
+    await Audio.setAudioModeAsync(PLAYBACK_HANDOFF);
+  } catch {
+    // best effort — never fail the log/speak path over session cleanup
+  }
 }

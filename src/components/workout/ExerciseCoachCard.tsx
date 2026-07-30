@@ -4,6 +4,7 @@ import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 import { Card } from '@/components/layout/Card';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
+import { useSubscription } from '@/hooks/useSubscription';
 import { useUnits } from '@/hooks/useUnits';
 import { formatCoachTargetLine } from '@/lib/activeWorkoutMetrics';
 import { coachAdjustmentColor, coachAdjustmentLabel } from '@/lib/coachAdjustmentLabels';
@@ -65,7 +66,9 @@ export function ExerciseCoachCard({
   onApplyTarget,
 }: ExerciseCoachCardProps) {
   const units = useUnits();
-  const [initialLoading, setInitialLoading] = useState(true);
+  const { isPremium, isBetaTester } = useSubscription();
+  const coachUnlocked = isPremium || isBetaTester;
+  const [initialLoading, setInitialLoading] = useState(coachUnlocked);
   const [fetchError, setFetchError] = useState(false);
   const [expanded, setExpanded] = useState(variant === 'default');
   const [prescription, setPrescription] = useState<ExerciseCoachPrescription | null>(null);
@@ -74,6 +77,14 @@ export function ExerciseCoachCard({
 
   const fetchPrescription = useCallback(
     async (options?: { showSpinner?: boolean }) => {
+      if (!coachUnlocked) {
+        setPrescription(null);
+        onPrescription?.(null);
+        setFetchError(false);
+        setInitialLoading(false);
+        return;
+      }
+
       const showSpinner = options?.showSpinner ?? prescriptionRef.current == null;
       if (showSpinner) setInitialLoading(true);
       setFetchError(false);
@@ -85,26 +96,65 @@ export function ExerciseCoachCard({
         currentSessionSets,
       });
 
-      const next = result.success ? result.data : null;
-      setPrescription(next);
-      onPrescription?.(next);
-      if (!result.success) setFetchError(true);
+      if (result.success) {
+        setPrescription(result.data);
+        onPrescription?.(result.data);
+      } else {
+        // Keep the last good prescription on a soft refetch failure so a blip mid-set does not
+        // wipe coach targets and leave "Coach unavailable" over a working session.
+        setFetchError(true);
+        if (prescriptionRef.current == null) {
+          setPrescription(null);
+          onPrescription?.(null);
+        }
+      }
       setInitialLoading(false);
     },
-    [userId, exerciseId, plan, sessionId, loggingMode, currentSessionSets, onPrescription],
+    [coachUnlocked, userId, exerciseId, plan, sessionId, loggingMode, currentSessionSets, onPrescription],
   );
 
   useEffect(() => {
     void fetchPrescription({ showSpinner: true });
-  }, [userId, exerciseId, sessionId, loggingMode, plan?.plannedReps, plan?.plannedSets, plan?.plannedRestSeconds]);
+  }, [userId, exerciseId, sessionId, loggingMode, plan?.plannedReps, plan?.plannedSets, plan?.plannedRestSeconds, coachUnlocked]);
 
   useEffect(() => {
-    if (prescriptionRef.current == null) return;
+    if (!coachUnlocked || prescriptionRef.current == null) return;
     const timer = setTimeout(() => {
       void fetchPrescription({ showSpinner: false });
     }, 800);
     return () => clearTimeout(timer);
-  }, [currentSessionSets, fetchPrescription]);
+  }, [currentSessionSets, fetchPrescription, coachUnlocked]);
+
+  if (!coachUnlocked) {
+    const fallbackLine = planFallbackLine(
+      plan,
+      loggingMode,
+      (kg) => kgToDisplayWeight(kg, units.preferredWeightUnit),
+      units.weightLabel,
+    );
+    const locked = (
+      <>
+        <AppText variant="label" color="accent">
+          {titleLabel}{setNumber ? ` · Set ${setNumber}` : ''}
+        </AppText>
+        <AppText variant="footnote" color="textSecondary">
+          Pro unlocks live coach targets — using your plan for now.
+        </AppText>
+        <AppText variant="bodyBold">{fallbackLine}</AppText>
+      </>
+    );
+    if (variant === 'inline') return <View style={styles.inline}>{locked}</View>;
+    if (variant === 'compact') {
+      return (
+        <View style={styles.compact}>
+          <AppText variant="footnote" color="textSecondary">
+            Plan target · {fallbackLine}
+          </AppText>
+        </View>
+      );
+    }
+    return <Card style={styles.card}>{locked}</Card>;
+  }
 
   if (initialLoading && !prescription) {
     return (

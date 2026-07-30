@@ -18,14 +18,14 @@ assert.equal(formatExercisePrescriptionSummary(hiit), '45 sec work · 15 sec res
 const strength = prescribeExerciseExecution({ name: 'Bench Press', mode: 'strength' });
 assert.equal(strength.scheme, 'set_rep');
 if (strength.scheme === 'set_rep') {
-  assert.equal(strength.sets, 5);
+  assert.equal(strength.sets, 3);
   assert.equal(strength.repRange, '3-5');
 }
 
 const hypertrophy = prescribeExerciseExecution({ name: 'Bench Press', mode: 'hypertrophy' });
 assert.equal(hypertrophy.scheme, 'set_rep');
 if (hypertrophy.scheme === 'set_rep') {
-  assert.equal(hypertrophy.sets, 4);
+  assert.equal(hypertrophy.sets, 3);
   assert.equal(hypertrophy.repRange, '8-12');
 }
 
