@@ -97,24 +97,25 @@ export function LogMeasurementForm({
           value={weight}
           onChangeText={setWeight}
           accessibilityLabel={`Weight in ${units.weightLabel}`}
+          autoFocus
         />
         <TextInput
           style={styles.input}
-          placeholder={`Waist (${units.measurementLabel})`}
+          placeholder={`Waist (${units.measurementLabel}) — optional`}
           placeholderTextColor={LiftFlowColors.textTertiary}
           keyboardType="numeric"
           value={waist}
           onChangeText={setWaist}
-          accessibilityLabel={`Waist in ${units.measurementLabel}`}
+          accessibilityLabel={`Waist in ${units.measurementLabel}, optional`}
         />
         <TextInput
           style={styles.input}
-          placeholder="Body fat %"
+          placeholder="Body fat % — optional"
           placeholderTextColor={LiftFlowColors.textTertiary}
           keyboardType="numeric"
           value={bodyFat}
           onChangeText={setBodyFat}
-          accessibilityLabel="Body fat percentage"
+          accessibilityLabel="Body fat percentage, optional"
         />
       </View>
 
@@ -125,7 +126,7 @@ export function LogMeasurementForm({
         disabled={!hasInput || saving}
       />
       <AppText variant="caption" color="textTertiary">
-        Body fat % keeps your timeline and milestones accurate.
+        Weight alone is enough — your timeline carries body fat forward from your last reading.
       </AppText>
     </Card>
   );

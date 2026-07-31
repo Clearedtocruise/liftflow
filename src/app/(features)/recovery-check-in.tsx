@@ -69,7 +69,8 @@ export default function RecoveryCheckInScreen() {
       {showMeasurement ? (
         <LogMeasurementForm
           userId={user.id}
-          subtitle="Weigh in while you check in — this drives your transformation timeline."
+          subtitle="Daily weigh-in — waist and body fat are optional."
+          saveLabel="Save weigh-in"
           onSaved={() => {
             setMeasurementSaved(true);
             setShowMeasurement(false);
