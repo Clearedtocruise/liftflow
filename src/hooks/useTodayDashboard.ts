@@ -26,6 +26,10 @@ export type UpcomingWorkout = {
 
 type TodayDashboardState = {
   todaysWorkout: PlannedWorkout | null;
+  /** Every planned workout in the current week — needed to move/swap days from home. */
+  weekWorkouts: PlannedWorkout[];
+  /** Optimistic write-back so a move/swap shows immediately before the API returns. */
+  setWeekWorkouts: (workouts: PlannedWorkout[]) => void;
   /**
    * Today's scheduled session when it is already finished. Distinct from `todaysWorkout` so the
    * home hero can congratulate instead of collapsing into a recovery day.
@@ -84,6 +88,7 @@ export function useTodayDashboard(): TodayDashboardState {
   const { plannedWorkout, exercises, isDirty, setPlannedWorkout, setSessionPlan, markSaved } =
     useWorkoutPlanDraft();
 
+  const [weekWorkouts, setWeekWorkouts] = useState<PlannedWorkout[]>([]);
   const [todaysWorkout, setTodaysWorkout] = useState<PlannedWorkout | null>(null);
   const [completedTodaysWorkout, setCompletedTodaysWorkout] = useState<PlannedWorkout | null>(null);
   const [inProgressTodaysWorkout, setInProgressTodaysWorkout] = useState<PlannedWorkout | null>(null);
@@ -96,6 +101,7 @@ export function useTodayDashboard(): TodayDashboardState {
 
   const refresh = useCallback(async () => {
     if (!user) {
+      setWeekWorkouts([]);
       setTodaysWorkout(null);
       setCompletedTodaysWorkout(null);
       setInProgressTodaysWorkout(null);
@@ -115,6 +121,7 @@ export function useTodayDashboard(): TodayDashboardState {
         // A failed fetch used to render identically to a rest day, telling the user they had
         // nothing scheduled when the request simply never came back.
         setError(true);
+        setWeekWorkouts([]);
         setTodaysWorkout(null);
         setCompletedTodaysWorkout(null);
         setInProgressTodaysWorkout(null);
@@ -122,6 +129,7 @@ export function useTodayDashboard(): TodayDashboardState {
         return;
       }
       setError(false);
+      setWeekWorkouts(result.data);
       setHasProgram(result.data.length > 0);
       const active = resolveActiveTrainingDay(result.data, {
         date: today,
@@ -227,6 +235,8 @@ export function useTodayDashboard(): TodayDashboardState {
 
   return {
     todaysWorkout,
+    weekWorkouts,
+    setWeekWorkouts,
     completedTodaysWorkout,
     inProgressTodaysWorkout,
     upcomingWorkout,

@@ -37,6 +37,9 @@ type TodayHeroCardProps = {
   onRetry: () => void;
   onOpenRecovery: () => void;
   onManageWorkout?: () => void;
+  /** Move or swap this day with another day in the week. */
+  onManageDay?: () => void;
+  manageDayBusy?: boolean;
   onContinueWorkout?: () => void;
   onViewHistory?: () => void;
 };
@@ -52,6 +55,8 @@ export function TodayHeroCard({
   onRetry,
   onOpenRecovery,
   onManageWorkout,
+  onManageDay,
+  manageDayBusy,
   onContinueWorkout,
   onViewHistory,
 }: TodayHeroCardProps) {
@@ -163,6 +168,15 @@ export function TodayHeroCard({
             size="large"
             icon="✨"
           />
+          {onManageDay ? (
+            <PrimaryButton
+              label="Move or Swap Day"
+              variant="secondary"
+              onPress={onManageDay}
+              loading={manageDayBusy}
+              disabled={busy || manageDayBusy}
+            />
+          ) : null}
           <PrimaryButton label="Focus on Recovery" variant="secondary" onPress={onOpenRecovery} />
         </>
       ) : state.kind === 'in-progress' ? (
@@ -222,6 +236,15 @@ export function TodayHeroCard({
             disabled={busy}
             size="large"
           />
+          {onManageDay ? (
+            <PrimaryButton
+              label="Move or Swap Day"
+              variant="secondary"
+              onPress={onManageDay}
+              loading={manageDayBusy}
+              disabled={busy || manageDayBusy}
+            />
+          ) : null}
           {onManageWorkout ? (
             <PrimaryButton
               label="Replace Exercises"

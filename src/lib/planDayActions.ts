@@ -7,6 +7,12 @@ import { planDataCache } from '@/lib/planDataCache';
 import { invalidateWeekPlanPrefetch } from '@/lib/planDataPrefetch';
 import { logPlanDayContext, type PlanDayMoveTarget } from '@/lib/planDayDebug';
 import {
+    buildEditDayMenuContent,
+    buildHomeManageDayMenuContent,
+    type ManageDayMenuContent,
+    type MenuBuildInput,
+} from '@/lib/planDayMenu';
+import {
     buildWeeklyPlanEntries,
     dedupePlannedWorkoutsByDate,
     getWeekRange,
@@ -266,43 +272,26 @@ function formatWeekSchedule(weeklyPlan: WeeklyPlanEntry[]): string {
   return weeklyPlan.map((entry) => (entry.isRestDay ? `${entry.day}: Rest` : `${entry.day}: ${entry.title}`)).join('\n');
 }
 
-export type ManageDayAction = {
-  id: string;
-  label: string;
-  destructive?: boolean;
-  /** Opens an inline picker in ManageDayModal instead of a follow-up alert. */
-  picker?: 'swap' | 'move' | 'rest' | 'do-today';
-  onPress: () => void;
-};
-
-export type ManageDayPickerOption = {
-  id: string;
-  label: string;
-};
-
-export type ManageDayMenuContent = {
-  weeklyPlan: WeeklyPlanEntry[];
-  /** Calendar date this menu applies to. */
-  focusDate: string;
-  todayLabel: string;
-  focusWorkoutId: string | null;
-  actions: ManageDayAction[];
-  swapTargets: ManageDayPickerOption[];
-  moveTargets: ManageDayPickerOption[];
-  restDayTargets: ManageDayPickerOption[];
-  doTodayTargets: ManageDayPickerOption[];
-  onScheduleChange: (change: ScheduleChange) => void;
-  title?: string;
-  showWeekList?: boolean;
-  /** @deprecated use focusDate */
-  todayDate?: string;
-  /** @deprecated use focusWorkoutId */
-  todayWorkoutId?: string | null;
-};
+export type {
+  ManageDayAction,
+  ManageDayMenuContent,
+  ManageDayPickerOption,
+} from '@/lib/planDayMenu';
 
 /** Run a schedule adaptation from Manage Day or the weekly planner. */
 export function runScheduleAdaptation(deps: PlanDayActionDeps, change: ScheduleChange): void {
   void executeAdapt(deps, change);
+}
+
+function menuInput(deps: PlanDayActionDeps, options?: EditDayMenuOptions): MenuBuildInput {
+  return {
+    workouts: deps.workouts,
+    timeZone: deps.timeZone,
+    onScheduleChange: (change) => runScheduleAdaptation(deps, change),
+    onConfirmSkip: (workout) => confirmSkip(deps, workout),
+    onStartWorkout: options?.onStartWorkout,
+    onEditExercises: options?.onEditExercises,
+  };
 }
 
 /** Home screen — structured Manage Day menu content. */
@@ -310,91 +299,7 @@ export function buildHomeManageDayMenu(
   deps: PlanDayActionDeps,
   today = localDateString(),
 ): ManageDayMenuContent | null {
-  const normalized = normalizeWorkouts(deps);
-  const weeklyPlan = weeklyPlanFor(deps);
-  const availableMoveTargets = moveTargetsForDate(weeklyPlan, today);
-  logBeforeModal('manage-day', today, deps, availableMoveTargets);
-
-  const todayWorkout = plannedWorkoutOnDate(normalized, today, deps.timeZone);
-  const tomorrow = addDays(today, 1);
-  const hasOtherWorkouts = weeklyPlan.some((entry) => entry.date !== today && entry.workoutId);
-  const actions: ManageDayAction[] = [];
-
-  const swapTargets: ManageDayPickerOption[] = weeklyPlan
-    .filter((entry) => entry.date !== today && entry.workoutId && entry.workoutId !== todayWorkout?.id)
-    .map((entry) => ({ id: entry.workoutId!, label: entryLabel(entry) }));
-
-  const moveTargets: ManageDayPickerOption[] = availableMoveTargets.map((target) => ({
-    id: target.date,
-    label: target.workoutId ? `${target.day} · ${target.title} (swap)` : `${target.day} · Rest`,
-  }));
-
-  const restDayTargets: ManageDayPickerOption[] = weeklyPlan
-    .filter((entry) => entry.date !== today && entry.isRestDay)
-    .map((entry) => ({ id: entry.date, label: entryLabel(entry) }));
-
-  const doTodayTargets: ManageDayPickerOption[] = weeklyPlan
-    .filter((entry) => entry.date !== today && entry.workoutId)
-    .map((entry) => ({ id: entry.workoutId!, label: entryLabel(entry) }));
-
-  const onScheduleChange = (change: ScheduleChange) => runScheduleAdaptation(deps, change);
-
-  if (!todayWorkout && hasOtherWorkouts) {
-    actions.push({ id: 'do-today', label: 'Do Today', picker: 'do-today', onPress: () => {} });
-  }
-
-  if (todayWorkout) {
-    actions.push({
-      id: 'move-tomorrow',
-      label: 'Move To Tomorrow',
-      onPress: () => onScheduleChange({ type: 'move', workoutId: todayWorkout.id, toDate: tomorrow }),
-    });
-    actions.push({
-      id: 'move-day',
-      label: 'Move To Another Day',
-      picker: 'move',
-      onPress: () => {},
-    });
-    actions.push({
-      id: 'swap-workout',
-      label: 'Swap With Another Workout',
-      picker: 'swap',
-      onPress: () => {},
-    });
-    actions.push({
-      id: 'swap-rest',
-      label: 'Swap With Rest Day',
-      picker: 'rest',
-      onPress: () => {},
-    });
-    actions.push({
-      id: 'make-rest',
-      label: 'Make Today Rest Day',
-      destructive: true,
-      onPress: () => confirmSkip(deps, todayWorkout),
-    });
-  } else if (hasOtherWorkouts) {
-    actions.push({ id: 'swap-rest', label: 'Swap With Rest Day', picker: 'do-today', onPress: () => {} });
-  }
-
-  if (actions.length === 0) return null;
-
-  const todayLabel = todayWorkout ? `Today: ${todayWorkout.name}` : 'Today is a rest day';
-
-  return {
-    weeklyPlan,
-    focusDate: today,
-    todayLabel,
-    focusWorkoutId: todayWorkout?.id ?? null,
-    actions,
-    swapTargets,
-    moveTargets,
-    restDayTargets,
-    doTodayTargets,
-    onScheduleChange,
-    title: 'Manage Day',
-    showWeekList: true,
-  };
+  return buildHomeManageDayMenuContent(menuInput(deps), today);
 }
 
 export type EditDayMenuOptions = {
@@ -408,105 +313,7 @@ export function buildEditDayMenu(
   date: string,
   options?: EditDayMenuOptions,
 ): ManageDayMenuContent | null {
-  const normalized = normalizeWorkouts(deps);
-  const weeklyPlan = weeklyPlanFor(deps);
-  const availableMoveTargets = moveTargetsForDate(weeklyPlan, date);
-  logBeforeModal('edit-day', date, deps, availableMoveTargets);
-
-  const dayWorkout = plannedWorkoutOnDate(normalized, date, deps.timeZone);
-  const hasOtherWorkouts = weeklyPlan.some((entry) => entry.date !== date && entry.workoutId);
-  const actions: ManageDayAction[] = [];
-
-  const swapTargets: ManageDayPickerOption[] = weeklyPlan
-    .filter((entry) => entry.date !== date && entry.workoutId && entry.workoutId !== dayWorkout?.id)
-    .map((entry) => ({ id: entry.workoutId!, label: entryLabel(entry) }));
-
-  const moveTargets: ManageDayPickerOption[] = availableMoveTargets.map((target) => ({
-    id: target.date,
-    label: target.workoutId ? `${target.day} · ${target.title} (swap)` : `${target.day} · Rest`,
-  }));
-
-  const restDayTargets: ManageDayPickerOption[] = weeklyPlan
-    .filter((entry) => entry.date !== date && entry.isRestDay)
-    .map((entry) => ({ id: entry.date, label: entryLabel(entry) }));
-
-  const doTodayTargets: ManageDayPickerOption[] = weeklyPlan
-    .filter((entry) => entry.date !== date && entry.workoutId)
-    .map((entry) => ({ id: entry.workoutId!, label: entryLabel(entry) }));
-
-  const onScheduleChange = (change: ScheduleChange) => runScheduleAdaptation(deps, change);
-
-  if (dayWorkout && options?.onEditExercises) {
-    actions.push({
-      id: 'edit-exercises',
-      label: 'Edit Exercises',
-      onPress: options.onEditExercises,
-    });
-  }
-
-  if (!dayWorkout && hasOtherWorkouts) {
-    actions.push({ id: 'do-today', label: 'Move Workout Here', picker: 'do-today', onPress: () => {} });
-  }
-
-  if (dayWorkout) {
-    actions.push({
-      id: 'move-day',
-      label: 'Move',
-      picker: 'move',
-      onPress: () => {},
-    });
-    actions.push({
-      id: 'swap-workout',
-      label: 'Swap',
-      picker: 'swap',
-      onPress: () => {},
-    });
-    actions.push({
-      id: 'swap-rest',
-      label: 'Swap With Rest Day',
-      picker: 'rest',
-      onPress: () => {},
-    });
-    actions.push({
-      id: 'make-rest',
-      label: 'Make Rest Day',
-      destructive: true,
-      onPress: () => confirmSkip(deps, dayWorkout),
-    });
-    if (options?.onStartWorkout) {
-      actions.push({
-        id: 'start-workout',
-        label: 'Start Workout',
-        onPress: options.onStartWorkout,
-      });
-    }
-  } else if (hasOtherWorkouts) {
-    actions.push({ id: 'move-here', label: 'Move Workout Here', picker: 'do-today', onPress: () => {} });
-  }
-
-  if (actions.length === 0) return null;
-
-  const dayEntry = weeklyPlan.find((entry) => entry.date === date);
-  const dayLabel = dayEntry
-    ? dayEntry.isRestDay
-      ? `${dayEntry.day}: Rest`
-      : `${dayEntry.day}: ${dayEntry.title}`
-    : date;
-
-  return {
-    weeklyPlan,
-    focusDate: date,
-    todayLabel: dayLabel,
-    focusWorkoutId: dayWorkout?.id ?? null,
-    actions,
-    swapTargets,
-    moveTargets,
-    restDayTargets,
-    doTodayTargets,
-    onScheduleChange,
-    title: 'Edit Day',
-    showWeekList: false,
-  };
+  return buildEditDayMenuContent(menuInput(deps, options), date);
 }
 
 /** Home screen — legacy alert-based Manage Day menu. */

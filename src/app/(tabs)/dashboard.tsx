@@ -1,21 +1,26 @@
 import { router } from 'expo-router';
-import { useEffect, useMemo } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Alert, StyleSheet, View } from 'react-native';
 
 import { CoachInsightCard } from '@/components/dashboard/CoachInsightCard';
 import { HomeHeader } from '@/components/dashboard/HomeHeader';
+import { ManageDayModal } from '@/components/dashboard/ManageDayModal';
 import { StatTile } from '@/components/dashboard/StatTile';
 import { TodayHeroCard, type HeroState } from '@/components/dashboard/TodayHeroCard';
 import { UpNextCard } from '@/components/dashboard/UpNextCard';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { AppText } from '@/components/ui/AppText';
 import { Spacing } from '@/constants/theme';
+import { usePlanAdjustment } from '@/contexts/PlanAdjustmentContext';
 import { useAuth } from '@/hooks/useAuth';
 import { useHomeMetrics } from '@/hooks/useHomeMetrics';
+import { useLocalCalendarDay } from '@/hooks/useLocalCalendarDay';
 import { useTodayDashboard } from '@/hooks/useTodayDashboard';
 import { describeProteinBudget } from '@/lib/calorieBudget';
 import { resolveExerciseMuscles } from '@/lib/exerciseMuscleMap';
+import { buildHomeManageDayMenu, type ManageDayMenuContent } from '@/lib/planDayActions';
 import { exercisesFromPlannedWorkout } from '@/lib/workoutPlan';
+import type { PlannedWorkout } from '@/types';
 
 function formatSleep(hours?: number): string | undefined {
   if (hours == null) return undefined;
@@ -28,6 +33,8 @@ export default function DashboardScreen() {
   const { user, isProfileHydrated } = useAuth();
   const {
     todaysWorkout,
+    weekWorkouts,
+    setWeekWorkouts,
     completedTodaysWorkout,
     inProgressTodaysWorkout,
     upcomingWorkout,
@@ -41,6 +48,36 @@ export default function DashboardScreen() {
     generateWorkout,
   } = useTodayDashboard();
   const metrics = useHomeMetrics();
+  const { setFromAdaptation } = usePlanAdjustment();
+  const today = useLocalCalendarDay(user?.timezone);
+  const [manageDayMenu, setManageDayMenu] = useState<ManageDayMenuContent | null>(null);
+  const [manageDayOpen, setManageDayOpen] = useState(false);
+  const [adaptingPlan, setAdaptingPlan] = useState(false);
+
+  const handleManageDay = useCallback(() => {
+    if (!user?.id) return;
+
+    const menu = buildHomeManageDayMenu(
+      {
+        userId: user.id,
+        workouts: weekWorkouts,
+        setFromAdaptation,
+        onWorkoutsUpdated: (workouts: PlannedWorkout[]) => setWeekWorkouts(workouts),
+        onComplete: () => void refresh(),
+        onBusyChange: setAdaptingPlan,
+        timeZone: user.timezone,
+      },
+      today,
+    );
+
+    if (!menu) {
+      Alert.alert('Manage Day', 'No planned workouts this week to move or swap.');
+      return;
+    }
+
+    setManageDayMenu(menu);
+    setManageDayOpen(true);
+  }, [user?.id, user?.timezone, weekWorkouts, setWeekWorkouts, setFromAdaptation, refresh, today]);
 
   // Waits for the real profile: the optimistic stub reports onboarding as complete, so acting on
   // it here would let a new user briefly land on a dashboard they should not see yet.
@@ -129,6 +166,8 @@ export default function DashboardScreen() {
             params: { id: todaysWorkout.id },
           });
         }}
+        onManageDay={hasProgram ? handleManageDay : undefined}
+        manageDayBusy={adaptingPlan}
       />
 
       <View style={styles.tiles}>
@@ -211,6 +250,28 @@ export default function DashboardScreen() {
             }
           />
         </View>
+      ) : null}
+
+      {manageDayMenu ? (
+        <ManageDayModal
+          visible={manageDayOpen}
+          title={manageDayMenu.title}
+          showWeekList={manageDayMenu.showWeekList}
+          weeklyPlan={manageDayMenu.weeklyPlan}
+          focusDate={manageDayMenu.focusDate}
+          todayLabel={manageDayMenu.todayLabel}
+          focusWorkoutId={manageDayMenu.focusWorkoutId}
+          actions={manageDayMenu.actions}
+          swapTargets={manageDayMenu.swapTargets}
+          moveTargets={manageDayMenu.moveTargets}
+          restDayTargets={manageDayMenu.restDayTargets}
+          doTodayTargets={manageDayMenu.doTodayTargets}
+          onScheduleChange={manageDayMenu.onScheduleChange}
+          onClose={() => {
+            setManageDayOpen(false);
+            setManageDayMenu(null);
+          }}
+        />
       ) : null}
     </ScreenContainer>
   );
