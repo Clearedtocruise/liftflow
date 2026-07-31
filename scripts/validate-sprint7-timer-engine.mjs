@@ -48,6 +48,14 @@ record('Interval rounds capped', engine.includes('INTERVAL_ROUNDS_MAX = 12'));
 record('Tabata prep exposes work/rest/rounds', overlay.includes('prepIntervalConfig') && active.includes('onPrepIntervalConfigChange'));
 record('Tabata starts from dialed session config', active.includes('workSeconds: tabataSessionConfig.workSeconds'));
 record('Tabata prep runs on every exercise change', active.includes('beginNextTabataExercise'));
+// The screen and the set logger each worked out "sets done" separately; when they disagreed an
+// exercise could read as finished with sets remaining and the auto-advance skipped it.
+record(
+  'Screen and logger share one set-target resolver',
+  active.includes('resolveEffectiveTargetSets') &&
+    active.match(/resolveEffectiveTargetSets\(/g)?.length >= 2 &&
+    !active.includes("executionMode === 'tabata'\n      ? intervalTimer?.config.rounds"),
+);
 record(
   'Paused Tabata allows weight changes',
   active.includes("intervalTimer.phase !== 'done' && intervalTimer.running") &&

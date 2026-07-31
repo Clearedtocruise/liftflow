@@ -73,6 +73,7 @@ import { matchSpokenExercise } from '@/lib/voice/matchSpokenExercise';
 import { pickWorkoutChallenge } from '@/lib/workoutChallengeFlow';
 import { normalizeExecutionMode } from '@/lib/workoutExecutionMode';
 import { alignPlanExercisesToSession, parseTargetReps } from '@/lib/workoutPlan';
+import { resolveEffectiveTargetSets } from '@/lib/workoutSetTarget';
 import { resolveExerciseSeedWeightKg } from '@/lib/activeWorkoutWeightSeed';
 import { logWorkoutProgressionDecision } from '@/lib/workoutProgressionDebug';
 import { resolveBetweenExerciseUpNext, resolveTabataPrepUpNext, resolveWorkoutUpNext } from '@/lib/workoutUpNext';
@@ -278,10 +279,12 @@ export function ActiveWorkoutScreen({
     0,
     (coachPrescription?.targets.sets ?? targetSets) - targetSets,
   );
-  const effectiveTargetSets =
-    executionMode === 'tabata'
-      ? intervalTimer?.config.rounds ?? tabataSessionConfig.rounds
-      : targetSets + bonusSets;
+  const effectiveTargetSets = resolveEffectiveTargetSets({
+    executionMode,
+    planSets: planMeta?.sets,
+    bonusSets,
+    intervalRounds: intervalTimer?.config.rounds,
+  });
   const repRange = planMeta?.repRange ?? currentExercise?.suggestedReps ?? '8-10';
   const completedSets = currentExercise?.sets ?? [];
   const completedSetsCountRef = useRef(0);
@@ -1192,8 +1195,14 @@ export function ActiveWorkoutScreen({
     }
     const logCompletedSets = logExercise.sets ?? [];
     const logPlanMeta = planExercises[logIndex];
-    // Match on-screen set target — coach suggestions must not inflate the hard log ceiling.
-    const logTargetSets = (logPlanMeta?.sets ?? 3) + bonusSets;
+    // The same resolver the screen uses. Coach suggestions must not inflate the hard log ceiling,
+    // and the logger must not disagree with what the lifter can see.
+    const logTargetSets = resolveEffectiveTargetSets({
+      executionMode,
+      planSets: logPlanMeta?.sets,
+      bonusSets,
+      intervalRounds: intervalTimer?.config.rounds,
+    });
     if (logCompletedSets.length >= logTargetSets) {
       return { ok: false, error: 'All planned sets are already logged.' };
     }
@@ -1317,6 +1326,7 @@ export function ActiveWorkoutScreen({
     durationSeconds,
     executionMode,
     intervalBlocksLogging,
+    intervalTimer?.config.rounds,
     isPaused,
     logSet,
     logging,
