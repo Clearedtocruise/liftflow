@@ -253,7 +253,7 @@ export const nutritionService: INutritionService = {
     }
   },
 
-  async logFood(userId, food: { name: string; mealType: MealType; calories?: number; proteinG?: number; carbsG?: number; fatG?: number; date?: string; instructions?: string; clientKey?: string }) {
+  async logFood(userId, food: { name: string; mealType: MealType; calories?: number; proteinG?: number; carbsG?: number; fatG?: number; date?: string; instructions?: string; clientKey?: string; consumedAt?: string }) {
     try {
       const macrosProvided =
         food.calories != null || food.proteinG != null || food.carbsG != null || food.fatG != null;
@@ -272,7 +272,7 @@ export const nutritionService: INutritionService = {
           instructions: food.instructions,
           status: 'completed',
           origin: 'log',
-          consumed_at: new Date().toISOString(),
+          consumed_at: food.consumedAt ?? new Date().toISOString(),
           client_key: food.clientKey ?? newClientKey(),
           macros_provided: macrosProvided,
         })
@@ -358,7 +358,14 @@ export const nutritionService: INutritionService = {
     }
   },
 
-  async markMealStatus(mealId: string, name: string, instructions: string | undefined, status: MealStatus) {
+  async markMealStatus(
+    mealId: string,
+    name: string,
+    instructions: string | undefined,
+    status: MealStatus,
+    /** When the meal was actually eaten. Defaults to now for "just ate it". */
+    consumedAt?: string,
+  ) {
     try {
       const meta = enrichMealMeta(name, instructions);
       meta.status = status;
@@ -368,7 +375,7 @@ export const nutritionService: INutritionService = {
         .from('meals')
         .update({
           status,
-          consumed_at: consumed ? new Date().toISOString() : null,
+          consumed_at: consumed ? consumedAt ?? new Date().toISOString() : null,
           instructions: serializeMealMeta(meta),
         })
         .eq('id', mealId)

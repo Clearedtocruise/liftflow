@@ -231,6 +231,7 @@ export interface INutritionService {
       date?: string;
       instructions?: string;
       clientKey?: string;
+      consumedAt?: string;
     },
   ): Promise<ServiceResult<import('@/types').Meal>>;
   getMealsForDate(userId: string, date: string): Promise<ServiceResult<import('@/types').Meal[]>>;
@@ -266,6 +267,7 @@ export interface INutritionService {
     name: string,
     instructions: string | undefined,
     status: import('@/types').MealStatus,
+    consumedAt?: string,
   ): Promise<ServiceResult<import('@/types').Meal>>;
   removePlannedMealsForWeek(userId: string, weekStart: string): Promise<ServiceResult<number>>;
   logHydration(userId: string, amountMl: number): Promise<ServiceResult<HydrationLog>>;

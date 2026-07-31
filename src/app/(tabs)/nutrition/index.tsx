@@ -35,6 +35,7 @@ import { resolveActiveTrainingDay } from '@/lib/activeTrainingDay';
 import { aggregateWeeklyGroceries, groupGroceriesByCategory } from '@/lib/groceryAggregation';
 import { resolveTimeZone } from '@/lib/localDate';
 import { aggregateDailyMeals, aggregateWeeklyMeals, buildDailySummaryFromMeals, mealsForCalendarDay } from '@/lib/mealAggregation';
+import { resolveUsualMeals, usualMealSuggestion, type MealDefault } from '@/lib/mealDefaults';
 import {
     enrichMealMeta,
     mealNameFromIngredients,
@@ -341,6 +342,9 @@ export default function NutritionScreen() {
     [todayMeals, schedule, hasWorkoutToday],
   );
 
+  // What this user actually keeps eating in each slot, learned from logged history.
+  const usualMeals = useMemo(() => resolveUsualMeals(weekMeals), [weekMeals]);
+
   const mealAggregation = useMemo(
     () => aggregateDailyMeals(mealsForCalendarDay(weekMeals, today)),
     [weekMeals, today],
@@ -522,7 +526,11 @@ export default function NutritionScreen() {
     }
   }
 
-  async function handleMarkMeal(meal: Meal, status: 'completed' | 'modified' | 'skipped') {
+  async function handleMarkMeal(
+    meal: Meal,
+    status: 'completed' | 'modified' | 'skipped',
+    consumedAt?: string,
+  ) {
     // Fire-and-forget meant a second tap logged the same meal twice against the day's calories.
     if (markingMealId) return;
     setMarkingMealId(meal.id);
@@ -532,6 +540,7 @@ export default function NutritionScreen() {
         meal.name,
         meal.instructions,
         status,
+        consumedAt,
       );
       if (!result.success) {
         Alert.alert('Could not update meal', friendlyMealError(result.error));
@@ -547,6 +556,36 @@ export default function NutritionScreen() {
       await load();
     } finally {
       setMarkingMealId(null);
+    }
+  }
+
+  /** Swaps a planned slot to the meal this user keeps logging there. */
+  async function handleUseUsualMeal(meal: Meal, usual: MealDefault) {
+    if (replacingMealId) return;
+    setReplacingMealId(meal.id);
+    try {
+      const meta = enrichMealMeta(usual.name, usual.instructions ?? meal.instructions);
+      // Choosing the usual sets the plan; it still has to be marked eaten.
+      meta.status = 'planned';
+
+      const result = await nutritionService.updateMeal(meal.id, {
+        name: usual.name,
+        calories: usual.calories,
+        proteinG: usual.proteinG,
+        carbsG: usual.carbsG,
+        fatG: usual.fatG,
+        status: 'planned',
+        instructions: serializeMealMeta(meta),
+      });
+      if (!result.success) {
+        Alert.alert('Could not update meal', friendlyMealError(result.error));
+        return;
+      }
+      AccessibilityInfo.announceForAccessibility(`${usual.name} set as your usual`);
+      void syncGroceriesAfterReplace();
+      await applySavedMeals([result.data]);
+    } finally {
+      setReplacingMealId(null);
     }
   }
 
@@ -782,7 +821,9 @@ export default function NutritionScreen() {
                 key={meal.id}
                 meal={meal}
                 scheduledTime={todayTimes[index]}
-                onMarkComplete={(status) => handleMarkMeal(meal, status)}
+                usual={usualMealSuggestion(meal, usualMeals)}
+                onUseUsual={(usual) => void handleUseUsualMeal(meal, usual)}
+                onMarkComplete={(status, consumedAt) => handleMarkMeal(meal, status, consumedAt)}
                 onReplace={() => {
                   setReplaceMeal(meal);
                   setReplaceMode('meal');
