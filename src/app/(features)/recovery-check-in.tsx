@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { Pressable, StyleSheet } from 'react-native';
 
+import { LogMeasurementForm } from '@/components/body/LogMeasurementForm';
 import { RecoveryCheckInForm } from '@/components/coaching/RecoveryCheckInForm';
 import { RecoveryScoreCard } from '@/components/coaching/RecoveryScoreCard';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
@@ -15,6 +16,8 @@ export default function RecoveryCheckInScreen() {
   const { user } = useAuth();
   const [checkIn, setCheckIn] = useState<DailyRecoveryCheckIn | null>(null);
   const [trend, setTrend] = useState<RecoveryTrendPoint[]>([]);
+  const [showMeasurement, setShowMeasurement] = useState(false);
+  const [measurementSaved, setMeasurementSaved] = useState(false);
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -53,10 +56,38 @@ export default function RecoveryCheckInScreen() {
           router.replace('/(tabs)/dashboard');
         }}
       />
+
+      <Pressable
+        onPress={() => setShowMeasurement((value) => !value)}
+        accessibilityRole="button"
+        style={styles.measurementToggle}>
+        <AppText variant="label" color="accent">
+          {showMeasurement ? 'Hide measurement' : 'Log measurement'}
+        </AppText>
+      </Pressable>
+
+      {showMeasurement ? (
+        <LogMeasurementForm
+          userId={user.id}
+          subtitle="Weigh in while you check in — this drives your transformation timeline."
+          onSaved={() => {
+            setMeasurementSaved(true);
+            setShowMeasurement(false);
+          }}
+        />
+      ) : null}
+
+      {measurementSaved ? (
+        <AppText variant="caption" color="success" style={styles.savedNote}>
+          Measurement saved — your Progress timeline is updated.
+        </AppText>
+      ) : null}
     </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
   title: { marginTop: Spacing.lg, marginBottom: Spacing.xxl },
+  measurementToggle: { marginTop: Spacing.lg },
+  savedNote: { marginTop: Spacing.sm },
 });

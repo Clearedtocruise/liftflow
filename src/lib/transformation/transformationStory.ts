@@ -72,6 +72,55 @@ function formatDisplayDate(iso: string): string {
   return date.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' });
 }
 
+/**
+ * The projection row freezes a snapshot at the moment it was run, so a measurement logged
+ * afterwards left the hero showing an old weight and body fat. Prefer the newest measurement
+ * whenever it post-dates the stored run.
+ */
+export function resolveCurrentSnapshot(
+  projectionCurrent: BodyCompositionSnapshot,
+  measurements: BodyCompositionRecord[],
+  projectionCreatedAt?: string,
+): BodyCompositionSnapshot {
+  const usable = [...measurements]
+    .filter((m) => m.weightKg != null && m.bodyFatPct != null)
+    .sort((a, b) => new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime());
+
+  const latest = usable[0];
+  if (!latest?.weightKg || latest.bodyFatPct == null) return projectionCurrent;
+
+  if (projectionCreatedAt) {
+    const runTime = new Date(projectionCreatedAt).getTime();
+    const measuredTime = new Date(latest.recordedAt).getTime();
+    if (Number.isFinite(runTime) && Number.isFinite(measuredTime) && measuredTime <= runTime) {
+      return projectionCurrent;
+    }
+  }
+
+  return (
+    normalizeBodyCompositionSnapshot({
+      weightKg: latest.weightKg,
+      bodyFatPct: latest.bodyFatPct,
+      leanMassKg: latest.leanMassKg ?? undefined,
+    }) ?? projectionCurrent
+  );
+}
+
+/** Goal weight holds lean mass constant — mirrors the backend's projectToTargetBodyFat. */
+export function projectGoalSnapshot(
+  current: BodyCompositionSnapshot,
+  targetBodyFatPct: number,
+): BodyCompositionSnapshot {
+  const weightKg = round1(current.leanMassKg / (1 - targetBodyFatPct / 100));
+  const fatMassKg = round1(weightKg * (targetBodyFatPct / 100));
+  return {
+    weightKg,
+    bodyFatPct: round1(targetBodyFatPct),
+    fatMassKg,
+    leanMassKg: round1(weightKg - fatMassKg),
+  };
+}
+
 export function resolveStartSnapshot(
   measurements: BodyCompositionRecord[],
   current: BodyCompositionSnapshot,
@@ -114,8 +163,12 @@ export function estimateMilestoneDate(
   if (currentBf <= milestoneBf + 0.1) return undefined;
   if (!paceKgPerWeek || paceKgPerWeek <= 0) return undefined;
 
+  // Losing fat lowers body weight, so holding weight constant understated the fat to lose and
+  // dated the final milestone before the completion date it is supposed to match.
   const currentFatKg = currentWeightKg * (currentBf / 100);
-  const targetFatKg = currentWeightKg * (milestoneBf / 100);
+  const leanMassKg = currentWeightKg - currentFatKg;
+  const targetWeightKg = leanMassKg / (1 - milestoneBf / 100);
+  const targetFatKg = targetWeightKg * (milestoneBf / 100);
   const fatToLose = Math.max(0, currentFatKg - targetFatKg);
   const weeks = fatToLose / paceKgPerWeek;
   if (!Number.isFinite(weeks) || weeks <= 0) return undefined;
@@ -144,6 +197,33 @@ export function computePaceKgPerWeek(
   const weeks = ms / (7 * 24 * 60 * 60 * 1000);
   if (weeks < 0.5) return undefined;
   return round1(fatDelta / weeks);
+}
+
+/**
+ * One timeline drives every date on screen.
+ *
+ * The stored projection models a body-fat *percentage* drop from adherence, while milestones use
+ * measured fat-loss pace. Showing both let the hero claim a finish ~47 weeks after the milestone
+ * that reaches the same body fat. Measured pace wins whenever it exists; the stored plan is the
+ * fallback and stays the baseline that "ahead / behind schedule" compares against.
+ */
+export function resolveTimelineWeeks(params: {
+  requiredFatLossKg: number;
+  paceKgPerWeek?: number;
+  projectedWeeks?: number;
+}): { weeks?: number; source: 'pace' | 'plan' | 'none' } {
+  const { requiredFatLossKg, paceKgPerWeek, projectedWeeks } = params;
+
+  if (paceKgPerWeek != null && paceKgPerWeek > 0 && requiredFatLossKg > 0) {
+    const weeks = requiredFatLossKg / paceKgPerWeek;
+    if (Number.isFinite(weeks) && weeks > 0) return { weeks, source: 'pace' };
+  }
+
+  if (projectedWeeks != null && projectedWeeks > 0) {
+    return { weeks: projectedWeeks, source: 'plan' };
+  }
+
+  return { source: 'none' };
 }
 
 export function resolveScheduleStatus(params: {
@@ -217,11 +297,19 @@ export function buildTransformationStory(
   measurements: BodyCompositionRecord[],
   now = new Date(),
 ): TransformationStory {
-  const current = normalizeBodyCompositionSnapshot(projection.current);
-  const goal = normalizeBodyCompositionSnapshot(projection.projected);
-  if (!current || !goal) {
+  const storedCurrent = normalizeBodyCompositionSnapshot(projection.current);
+  const storedGoal = normalizeBodyCompositionSnapshot(projection.projected);
+  if (!storedCurrent || !storedGoal) {
     throw new Error('Invalid transformation projection snapshot');
   }
+
+  const current = resolveCurrentSnapshot(storedCurrent, measurements, projection.createdAt);
+  // Lean mass moves with each measurement, so the goal weight has to follow it rather than stay
+  // pinned to whatever the last projection run computed.
+  const goal =
+    current === storedCurrent
+      ? storedGoal
+      : projectGoalSnapshot(current, projection.targetBodyFatPct);
 
   const start = resolveStartSnapshot(measurements, current);
 
@@ -238,15 +326,16 @@ export function buildTransformationStory(
     currentPaceKgPerWeek = round1(requiredFatLossKg / projectedWeeks);
   }
 
+  const timeline = resolveTimelineWeeks({
+    requiredFatLossKg,
+    paceKgPerWeek: currentPaceKgPerWeek,
+    projectedWeeks,
+  });
+
   let daysRemaining: number | undefined;
   let estimatedCompletionDate: string | undefined;
-
-  if (projectedWeeks != null && projectedWeeks > 0) {
-    daysRemaining = Math.round(projectedWeeks * 7);
-    estimatedCompletionDate = formatIsoDate(addDays(now, daysRemaining));
-  } else if (currentPaceKgPerWeek && currentPaceKgPerWeek > 0) {
-    const weeks = requiredFatLossKg / currentPaceKgPerWeek;
-    daysRemaining = Math.round(weeks * 7);
+  if (timeline.weeks != null) {
+    daysRemaining = Math.round(timeline.weeks * 7);
     estimatedCompletionDate = formatIsoDate(addDays(now, daysRemaining));
   }
 
