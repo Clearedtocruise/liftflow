@@ -1,6 +1,8 @@
-import { Pressable, StyleSheet, View } from 'react-native';
+import { useState } from 'react';
+import { Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { PhotoComparisonSlider } from '@/components/body/PhotoComparisonSlider';
+import { PhotoZoomViewer, type PhotoZoomSource } from '@/components/body/PhotoZoomViewer';
 import { Card } from '@/components/layout/Card';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { AppText } from '@/components/ui/AppText';
@@ -49,6 +51,11 @@ function beforePhotoForAngle(photos: ProgressPhoto[], angle: PhotoAngle): Progre
   );
 }
 
+function photoDate(photo?: ProgressPhoto): string | undefined {
+  if (!photo) return undefined;
+  return new Date(photo.takenAt).toLocaleDateString();
+}
+
 export function PhotoProgressGuide({
   photos,
   uploadAngle,
@@ -57,6 +64,35 @@ export function PhotoProgressGuide({
 }: PhotoProgressGuideProps) {
   const before = beforePhotoForAngle(photos, uploadAngle);
   const current = photoForComparison(photos, uploadAngle);
+
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [viewerIndex, setViewerIndex] = useState(0);
+
+  // Every shot for this angle, oldest first, so the viewer can page through the whole story.
+  const anglePhotos = classifyPhotos(photos).filter((p) =>
+    uploadAngle === 'side_left'
+      ? p.angle === 'side_left' || p.angle === 'side_right'
+      : p.angle === uploadAngle,
+  );
+
+  const viewerPhotos: PhotoZoomSource[] = anglePhotos
+    .filter((p) => Boolean(p.photoUrl))
+    .map((p) => ({
+      uri: p.photoUrl,
+      label: p.id === before?.id ? 'Before' : p.id === current?.id ? 'Current' : 'Progress',
+      caption: photoDate(p),
+    }));
+
+  function openViewerAt(photoId?: string) {
+    if (viewerPhotos.length === 0) return;
+    const index = anglePhotos.findIndex((p) => p.id === photoId);
+    setViewerIndex(index >= 0 ? index : 0);
+    setViewerOpen(true);
+  }
+
+  function openViewer(which: 'left' | 'right') {
+    openViewerAt(which === 'right' ? current?.id : before?.id);
+  }
 
   return (
     <Card style={styles.card}>
@@ -92,9 +128,40 @@ export function PhotoProgressGuide({
         rightLabel="Current"
         leftUri={before?.photoUrl}
         rightUri={current?.photoUrl}
+        onExpand={viewerPhotos.length > 0 ? openViewer : undefined}
       />
 
+      {anglePhotos.length > 0 ? (
+        <View style={styles.thumbBlock}>
+          <AppText variant="caption" color="textTertiary">
+            Tap a photo to zoom
+          </AppText>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.thumbRow}>
+            {anglePhotos.map((photo) => (
+              <Pressable
+                key={photo.id}
+                style={styles.thumb}
+                accessibilityRole="button"
+                accessibilityLabel={`Zoom photo from ${photoDate(photo) ?? 'this session'}`}
+                onPress={() => openViewerAt(photo.id)}>
+                <Image source={{ uri: photo.photoUrl }} style={styles.thumbImage} />
+                <AppText variant="caption" color="textTertiary">
+                  {photoDate(photo)}
+                </AppText>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+      ) : null}
+
       <PrimaryButton label="Add progress photo" onPress={onUpload} variant="secondary" />
+
+      <PhotoZoomViewer
+        visible={viewerOpen}
+        photos={viewerPhotos}
+        initialIndex={viewerIndex}
+        onClose={() => setViewerOpen(false)}
+      />
     </Card>
   );
 }
@@ -114,5 +181,14 @@ const styles = StyleSheet.create({
   guideChipActive: {
     borderColor: LiftFlowColors.accent,
     backgroundColor: LiftFlowColors.accentGlow,
+  },
+  thumbBlock: { gap: Spacing.xs },
+  thumbRow: { gap: Spacing.sm, paddingVertical: Spacing.xs },
+  thumb: { gap: Spacing.xs, alignItems: 'center' },
+  thumbImage: {
+    width: 64,
+    height: 84,
+    borderRadius: Radius.sm,
+    backgroundColor: LiftFlowColors.surface,
   },
 });
