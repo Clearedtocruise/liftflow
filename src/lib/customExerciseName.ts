@@ -7,7 +7,8 @@
  */
 
 export const MAX_CUSTOM_EXERCISE_NAME = 60;
-const MIN_CUSTOM_EXERCISE_NAME = 2;
+/** Three keeps "Row", "Dip" and "Fly" while a half-typed search like "Conc" stays a search. */
+const MIN_CUSTOM_EXERCISE_NAME = 3;
 
 /** Collapses whitespace so "  Hack   Squat " and "Hack Squat" cannot become two rows. */
 export function normalizeCustomExerciseName(raw: string): string {

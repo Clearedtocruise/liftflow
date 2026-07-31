@@ -21,12 +21,23 @@ test('a usable name is accepted', () => {
   assert.equal(check.name, 'Reverse Hyper');
 });
 
-test('an empty or one-character name is refused with a reason', () => {
+test('an empty or too-short name is refused with a reason', () => {
   const empty = validateCustomExerciseName('   ');
   assert.equal(empty.valid, false);
   assert.match((empty as { reason: string }).reason, /name/i);
 
   assert.equal(validateCustomExerciseName('x').valid, false);
+});
+
+test('short real exercise names are still allowed', () => {
+  for (const name of ['Row', 'Dip', 'Fly']) {
+    assert.equal(validateCustomExerciseName(name).valid, true, name);
+  }
+});
+
+test('a half-typed search is not offered as a new exercise', () => {
+  // Typing towards "Concentration Curl" should not invite creating "Co".
+  assert.equal(shouldOfferCustomExercise('Co', [{ name: 'Band Concentration Curl' }]), false);
 });
 
 test('a stray weight typed into the search box is not an exercise', () => {

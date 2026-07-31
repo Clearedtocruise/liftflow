@@ -18,9 +18,17 @@ type ExercisePickerModalProps = {
   onClose: () => void;
   onSelect: (exercise: Exercise) => void;
   title?: string;
+  /** The exercise being replaced. Kept out of the title so Close cannot be pushed off screen. */
+  subtitle?: string;
 };
 
-export function ExercisePickerModal({ visible, onClose, onSelect, title = 'Select Exercise' }: ExercisePickerModalProps) {
+export function ExercisePickerModal({
+  visible,
+  onClose,
+  onSelect,
+  title = 'Select Exercise',
+  subtitle,
+}: ExercisePickerModalProps) {
   const { user } = useAuth();
   const [query, setQuery] = useState('');
   const [exercises, setExercises] = useState<Exercise[]>([]);
@@ -75,8 +83,17 @@ export function ExercisePickerModal({ visible, onClose, onSelect, title = 'Selec
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={styles.header}>
-          <AppText variant="title">{title}</AppText>
-          <Pressable onPress={onClose} hitSlop={12}>
+          <View style={styles.headerText}>
+            <AppText variant="title" numberOfLines={2}>
+              {title}
+            </AppText>
+            {subtitle ? (
+              <AppText variant="caption" color="textSecondary" numberOfLines={1}>
+                {subtitle}
+              </AppText>
+            ) : null}
+          </View>
+          <Pressable onPress={onClose} hitSlop={12} style={styles.closeButton}>
             <AppText variant="bodyBold" color="accent">
               Close
             </AppText>
@@ -119,7 +136,13 @@ export function ExercisePickerModal({ visible, onClose, onSelect, title = 'Selec
           </AppText>
         ) : null}
 
-        <ScrollView contentContainerStyle={styles.list}>
+        {/* Without this the first tap only dismisses the keyboard, so choosing an exercise while
+            typing silently did nothing. */}
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.list}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag">
           {loading ? (
             <AppText variant="body" color="textSecondary">
               Loading exercises…
@@ -191,8 +214,23 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
+    gap: Spacing.md,
     marginTop: Spacing.md,
+  },
+  headerText: {
+    flex: 1,
+    gap: 2,
+  },
+  closeButton: {
+    // A long exercise name used to wrap the title and shove Close past the right edge.
+    flexShrink: 0,
+    paddingVertical: Spacing.xs,
+  },
+  scroll: {
+    // Lets the list take the space between the search box and Cancel, so Cancel stays reachable
+    // instead of being pushed under the keyboard.
+    flex: 1,
   },
   search: {
     backgroundColor: LiftFlowColors.surface,

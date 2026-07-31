@@ -2137,10 +2137,11 @@ export function ActiveWorkoutScreen({
         visible={exercisePickerVisible}
         onClose={() => setExercisePickerVisible(false)}
         onSelect={exercisePickerMode === 'swap' ? handleSwapExercise : handleAddExercise}
-        title={
+        title={exercisePickerMode === 'swap' ? 'Swap Exercise' : 'Add Exercise'}
+        subtitle={
           exercisePickerMode === 'swap'
-            ? `Swap ${currentExercise.exercise?.name ?? 'Exercise'}`
-            : 'Add Exercise'
+            ? `Replacing ${currentExercise.exercise?.name ?? 'this exercise'}`
+            : undefined
         }
       />
 
