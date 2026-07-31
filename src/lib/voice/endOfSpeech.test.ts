@@ -38,6 +38,27 @@ test('stops if nobody speaks before no-speech timeout', () => {
   assert.equal(done.reason, 'no_speech');
 });
 
+test('a recorder that never reports metering still ends the capture', () => {
+  // Devices have been seen delivering status updates with no `metering` field at all. Without a
+  // stop here the mic stays open, nothing transcribes and the music never comes back.
+  let state = createEndOfSpeechState(0);
+  const early = reduceEndOfSpeech(state, undefined, 1000, cfg);
+  assert.equal(early.shouldStop, false);
+
+  const done = reduceEndOfSpeech(early.state, undefined, cfg.noSpeechTimeoutMs + 1, cfg);
+  assert.equal(done.shouldStop, true);
+  assert.equal(done.reason, 'no_speech');
+});
+
+test('non-finite metering is treated as no reading rather than as speech', () => {
+  const state = createEndOfSpeechState(0);
+  const nan = reduceEndOfSpeech(state, Number.NaN, 1000, cfg);
+  assert.equal(nan.state.speechHeard, false);
+
+  const done = reduceEndOfSpeech(nan.state, Number.NaN, cfg.noSpeechTimeoutMs + 1, cfg);
+  assert.equal(done.shouldStop, true);
+});
+
 test('loud frames reset the silence clock', () => {
   let state = createEndOfSpeechState(0);
   state = reduceEndOfSpeech(state, -20, 200, cfg).state;

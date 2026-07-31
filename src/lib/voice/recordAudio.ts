@@ -17,8 +17,11 @@ import {
  */
 const RECORDING_OPTIONS = Audio.RecordingOptionsPresets.HIGH_QUALITY;
 
-/** Guards against a stuck recorder holding the mic (and the audio session) open indefinitely. */
-export const MAX_RECORDING_MS = 30_000;
+/**
+ * Last-resort cap if both end-of-speech paths go quiet. A spoken set is a few seconds, so 30s of
+ * open mic just reads as broken and keeps the music ducked that whole time.
+ */
+export const MAX_RECORDING_MS = 15_000;
 
 /** How often we poll metering while listening for the end of an utterance. */
 export const METERING_POLL_MS = 100;
@@ -45,31 +48,55 @@ export async function startRecording(options?: {
   try {
     let eosState: EndOfSpeechState = createEndOfSpeechState(Date.now());
     let stopped = false;
+    let poll: ReturnType<typeof setInterval> | null = null;
+
+    const clearPoll = () => {
+      if (poll) {
+        clearInterval(poll);
+        poll = null;
+      }
+    };
+
+    const evaluate = (metering: number | undefined, isRecording: boolean) => {
+      if (stopped || !options?.onEndOfSpeech || !isRecording) return;
+      const decision = reduceEndOfSpeech(eosState, metering, Date.now(), DEFAULT_END_OF_SPEECH);
+      eosState = decision.state;
+      if (!decision.shouldStop) return;
+      stopped = true;
+      clearPoll();
+      options.onEndOfSpeech();
+    };
 
     const { recording } = await Audio.Recording.createAsync(
       RECORDING_OPTIONS,
-      (status) => {
-        if (stopped || !options?.onEndOfSpeech) return;
-        if (!status.isRecording) return;
-        const decision = reduceEndOfSpeech(
-          eosState,
-          status.metering,
-          Date.now(),
-          DEFAULT_END_OF_SPEECH,
-        );
-        eosState = decision.state;
-        if (decision.shouldStop) {
-          stopped = true;
-          options.onEndOfSpeech();
-        }
-      },
+      (status) => evaluate(status.metering, status.isRecording),
       METERING_POLL_MS,
     );
+
+    /**
+     * The status callback is not delivered reliably on device — when it goes quiet nothing ever
+     * ends the capture, so the mic stays open, the transcript never arrives, no set is logged and
+     * the audio session stays ducked with the music off. Poll the recorder directly as well; both
+     * paths feed the same reducer, so whichever fires first ends the utterance.
+     */
+    if (options?.onEndOfSpeech) {
+      poll = setInterval(() => {
+        if (stopped) return;
+        void recording
+          .getStatusAsync()
+          .then((status) => evaluate(status.metering, status.isRecording))
+          .catch(() => {
+            // The recorder is already gone; stop polling rather than looping on a dead handle.
+            clearPoll();
+          });
+      }, METERING_POLL_MS);
+    }
 
     return {
       recording,
       dispose: () => {
         stopped = true;
+        clearPoll();
         recording.setOnRecordingStatusUpdate(null);
       },
     };

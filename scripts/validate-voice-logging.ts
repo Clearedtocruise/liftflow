@@ -142,6 +142,10 @@ const endOfSpeech = source('src/lib/voice/endOfSpeech.ts');
 const voiceHook = source('src/hooks/useVoiceRecognition.ts');
 check('end-of-speech reducer exists', endOfSpeech.includes('reduceEndOfSpeech'), true);
 check('recorder watches metering for end of speech', recordAudio.includes('onEndOfSpeech') && recordAudio.includes('status.metering'), true);
+// The status callback has been seen going silent on device, which left the mic open, the set
+// unlogged and the music ducked for the rest of the workout.
+check('recorder also polls the recorder directly', recordAudio.includes('getStatusAsync'), true);
+check('a stuck capture is capped in seconds, not half a minute', recordAudio.includes('MAX_RECORDING_MS = 15_000'), true);
 check('hook auto-stops via end-of-speech callback', voiceHook.includes('onEndOfSpeech'), true);
 check('hook no longer tells users to hold the button', voiceHook.includes('Hold the button'), false);
 
