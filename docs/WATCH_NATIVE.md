@@ -93,6 +93,21 @@ or with the phone in a pocket.
 - It logs through `WorkoutSessionContext.logSet`, so the session refresh and rest timer behave
   exactly as they do on the phone, and the updated state is pushed straight back to the watch.
 
+## Owning the wrist
+
+On watchOS the app with a running `HKWorkoutSession` is the one shown on wrist raise. If ours is
+not running, the raise goes to whatever else claims a workout — in practice the Fitness app, which
+looks like ONE MORE being taken over the moment the wrist drops.
+
+`WorkoutSessionManager.start()` therefore resolves HealthKit authorization *before* creating the
+session; creating it while the permission prompt is still outstanding fails and leaves the app with
+no session at all. The request is intent-tracked (`wantsSession`) so a workout that ends mid-prompt
+does not start a stray session, and `ContentView` re-asserts on `scenePhase == .active`, so a
+session lost to another app is reclaimed on the next raise rather than for the rest of the workout.
+
+Denied Health access surfaces as an error on the watch — without the entitlement the session
+cannot run and the takeover is expected.
+
 ## Known follow-ups
 
 - Watch-side motion rep counting (see item 1 above) remains unimplemented — `MotionCapture.swift`

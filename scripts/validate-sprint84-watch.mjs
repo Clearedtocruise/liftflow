@@ -129,6 +129,21 @@ record(
 );
 record('Watch set resolver exists', exists('src/lib/watchLogSet.ts'));
 
+// Whichever app owns a running HKWorkoutSession owns the wrist. Creating the session before the
+// Health prompt resolves fails silently, and watchOS then hands the raise to the Fitness app.
+const sessionManager = read('targets/watch/WorkoutSessionManager.swift');
+const watchView = read('targets/watch/content.swift');
+record(
+  'Workout session starts only after Health authorization resolves',
+  sessionManager.includes('requestAuthorization(toShare: shareTypes, read: readTypes) { [weak self] granted') &&
+    sessionManager.includes('beginSession()'),
+);
+record('Workout session start is intent-tracked', sessionManager.includes('wantsSession'));
+record(
+  'Wrist raise reclaims a lost workout session',
+  watchView.includes('scenePhase') && watchView.includes('!workoutSession.isRunning'),
+);
+
 console.log('\n--- Documentation ---');
 record('Watch architecture doc', exists('docs/WATCH_ARCHITECTURE.md'));
 record('HealthKit requirements doc', exists('docs/HEALTHKIT_REQUIREMENTS.md'));

@@ -22,6 +22,9 @@ final class WorkoutSessionManager: NSObject, ObservableObject {
   private var session: HKWorkoutSession?
   private var builder: HKLiveWorkoutBuilder?
   private var delayedEndWorkItem: DispatchWorkItem?
+  /// A workout is in progress on the phone, so the session should be running or being started.
+  private var wantsSession = false
+  private var isStarting = false
 
   private var shareTypes: Set<HKSampleType> {
     var types: Set<HKSampleType> = [HKObjectType.workoutType()]
@@ -47,13 +50,44 @@ final class WorkoutSessionManager: NSObject, ObservableObject {
     store.requestAuthorization(toShare: shareTypes, read: readTypes) { _, _ in }
   }
 
-  /// Idempotent: calling this while a session is already running is a no-op, so repeated phone
-  /// pushes cannot restart — and thereby split — the workout.
+  /**
+   * Idempotent: calling this while a session is already running is a no-op, so repeated phone
+   * pushes cannot restart — and thereby split — the workout.
+   *
+   * Authorization is resolved *before* the session is created. Creating an `HKWorkoutSession`
+   * while the HealthKit prompt is still outstanding fails, and a workout app with no running
+   * session does not own the wrist: watchOS hands the raise to whichever app does, which is how
+   * the Fitness app ended up taking over as soon as the wrist went down.
+   */
   func start() {
     delayedEndWorkItem?.cancel()
     delayedEndWorkItem = nil
-    guard HKHealthStore.isHealthDataAvailable(), session == nil else { return }
+    wantsSession = true
 
+    guard HKHealthStore.isHealthDataAvailable(), session == nil, !isStarting else { return }
+    isStarting = true
+
+    store.requestAuthorization(toShare: shareTypes, read: readTypes) { [weak self] granted, error in
+      DispatchQueue.main.async {
+        guard let self else { return }
+        self.isStarting = false
+
+        if let error {
+          self.lastError = error.localizedDescription
+          return
+        }
+        guard granted else {
+          self.lastError = "Allow Health access so the workout can stay on your wrist."
+          return
+        }
+        // The workout may have ended while the prompt was up.
+        guard self.wantsSession, self.session == nil else { return }
+        self.beginSession()
+      }
+    }
+  }
+
+  private func beginSession() {
     let configuration = HKWorkoutConfiguration()
     configuration.activityType = .traditionalStrengthTraining
     configuration.locationType = .indoor
@@ -86,6 +120,7 @@ final class WorkoutSessionManager: NSObject, ObservableObject {
   /// Ends the workout and saves it to Health, so the user keeps credit for the time trained.
   /// Used for both completion and wrist-side cancellation.
   func end() {
+    wantsSession = false
     guard session != nil else { return }
     delayedEndWorkItem?.cancel()
 
@@ -121,6 +156,7 @@ final class WorkoutSessionManager: NSObject, ObservableObject {
   private func teardown() {
     delayedEndWorkItem?.cancel()
     delayedEndWorkItem = nil
+    isStarting = false
     session?.delegate = nil
     builder?.delegate = nil
     session = nil
