@@ -114,6 +114,21 @@ record('Watch start workout button', read('targets/watch/content.swift').include
 record('Phone start_workout bridge', bridge.includes('start_workout'));
 record('watchCompanionService.startTodaysWorkoutFromWatch', companion.includes('startTodaysWorkoutFromWatch'));
 
+// Wrist logging used to work only while ActiveWorkoutScreen was mounted; the app-level fallback
+// is what makes a wrist tap work with the phone in a pocket.
+const watchBridge = read('src/state/WatchPhoneBridge.ts');
+const companionSync = read('src/hooks/useWatchCompanionSync.ts');
+record('Log set falls back beyond the workout screen', watchBridge.includes('fallbackLogSetHandler'));
+record(
+  'logCurrentSet prefers the screen handler then falls back',
+  watchBridge.includes('logSetHandler ?? fallbackLogSetHandler'),
+);
+record(
+  'App-level sync registers the fallback',
+  companionSync.includes('setFallbackLogSetHandler') && companionSync.includes('resolveWatchSetPayload'),
+);
+record('Watch set resolver exists', exists('src/lib/watchLogSet.ts'));
+
 console.log('\n--- Documentation ---');
 record('Watch architecture doc', exists('docs/WATCH_ARCHITECTURE.md'));
 record('HealthKit requirements doc', exists('docs/HEALTHKIT_REQUIREMENTS.md'));

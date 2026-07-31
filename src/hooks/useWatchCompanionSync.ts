@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { AppState } from 'react-native';
 
+import { resolveWatchSetPayload } from '@/lib/watchLogSet';
 import { productAnalyticsService } from '@/services/productAnalyticsService';
 import { watchCompanionService } from '@/services/watchCompanionService';
 import { watchPhoneBridge } from '@/state/WatchPhoneBridge';
@@ -23,12 +24,18 @@ export function useWatchCompanionSync(userId: string | undefined) {
     skipRestTimer,
     refreshSession,
     cancelSession,
+    logSet,
     setWatchDraftReps,
     setWatchDraftWeightKg,
   } = useWorkoutSession();
   const watchSyncTracked = useRef(false);
   const exerciseIndexRef = useRef(activeExerciseIndex);
   const restSecondsRef = useRef(restSecondsRemaining);
+  // The fallback is registered once for the app session, so it must read live state through refs.
+  const sessionRef = useRef(activeSession);
+  const loggingRef = useRef(false);
+
+  sessionRef.current = activeSession;
   const pushedRestRef = useRef<{ sessionId: string | null; seconds: number | null }>({
     sessionId: null,
     seconds: null,
@@ -70,6 +77,49 @@ export function useWatchCompanionSync(userId: string | undefined) {
       watchPhoneBridge.setWeightKgHandler(null);
     };
   }, [userId, skipRestTimer, cancelSession, setWatchDraftReps, setWatchDraftWeightKg]);
+
+  /**
+   * Logging from the wrist while the phone sits on any other screen. ActiveWorkoutScreen's own
+   * handler takes precedence whenever it is mounted.
+   */
+  useEffect(() => {
+    if (!userId) {
+      watchPhoneBridge.setFallbackLogSetHandler(null);
+      return;
+    }
+
+    watchPhoneBridge.setFallbackLogSetHandler(async () => {
+      // A second wrist tap during the round trip would log the same set twice.
+      if (loggingRef.current) {
+        return { ok: false as const, error: 'A set is already being logged.' };
+      }
+
+      const resolution = resolveWatchSetPayload({
+        session: sessionRef.current,
+        activeExerciseIndex: exerciseIndexRef.current,
+        draftReps: watchPhoneBridge.getPendingWatchReps(),
+        draftWeightKg: watchPhoneBridge.getPendingWatchWeightKg(),
+      });
+      if (!resolution.ok) return { ok: false as const, error: resolution.error };
+
+      loggingRef.current = true;
+      try {
+        const saved = await logSet(resolution.payload);
+        if (!saved) return { ok: false as const, error: 'Could not log that set.' };
+
+        // The drafts have been spent; leaving them would repeat on the next wrist tap.
+        watchPhoneBridge.clearPendingWatchReps();
+        watchPhoneBridge.clearPendingWatchWeightKg();
+        setWatchDraftReps(null);
+        setWatchDraftWeightKg(null);
+        return { ok: true as const };
+      } finally {
+        loggingRef.current = false;
+      }
+    });
+
+    return () => watchPhoneBridge.setFallbackLogSetHandler(null);
+  }, [userId, logSet, setWatchDraftReps, setWatchDraftWeightKg]);
 
   const pushFullState = () => {
     if (!userId) return;
