@@ -1,8 +1,14 @@
 import { catalogExerciseBySlug } from '@/constants/exerciseDatabase';
 import type { ExerciseClassificationInput, ExerciseType } from '@/types/exerciseClassification';
 
+/**
+ * Holds are logged in seconds, not reps.
+ *
+ * Plurals must be included: `\bplank\b` does not match "Side Planks", so a plural name fell
+ * through to weighted logging and asked for a weight and a rep count for a hold.
+ */
 const TIMED_NAME_PATTERN =
-  /\b(plank|wall\s*sit|dead\s*hang|hollow\s*hold|l[\s-]?sit|side\s*plank|superman\s*hold|iso\s*hold|static\s*hold|stretch|carry)\b/i;
+  /\b(planks?|wall[\s-]*sits?|dead[\s-]*hangs?|hollow[\s-]*holds?|l[\s-]?sits?|superman[\s-]*holds?|iso[\s-]*holds?|static[\s-]*holds?|stretch(?:es)?|carr(?:y|ies))\b/i;
 
 const BODYWEIGHT_NAME_PATTERN =
   /\b(pull[\s-]?up|chin[\s-]?up|push[\s-]?up|dip|burpee|air\s*squat|bodyweight|inverted\s*row|muscle[\s-]?up|pistol\s*squat|walking\s*lunge)\b/i;

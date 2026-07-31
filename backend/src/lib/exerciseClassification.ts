@@ -54,7 +54,9 @@ const CATALOG: Record<string, ExerciseType> = {
 };
 
 const TIMED_NAME_PATTERN =
-  /\b(plank|wall\s*sit|dead\s*hang|hollow\s*hold|l[\s-]?sit|side\s*plank|superman\s*hold|iso\s*hold|static\s*hold|stretch|carry)\b/i;
+  // Mirrors the client pattern. Plurals matter: `\bplank\b` misses "Side Planks", which then
+  // classified as strength and asked for weight and reps on a hold.
+  /\b(planks?|wall[\s-]*sits?|dead[\s-]*hangs?|hollow[\s-]*holds?|l[\s-]?sits?|superman[\s-]*holds?|iso[\s-]*holds?|static[\s-]*holds?|stretch(?:es)?|carr(?:y|ies))\b/i;
 
 const BODYWEIGHT_NAME_PATTERN =
   /\b(pull[\s-]?up|chin[\s-]?up|push[\s-]?up|dip|burpee|air\s*squat|bodyweight|inverted\s*row|muscle[\s-]?up|pistol\s*squat|walking\s*lunge)\b/i;

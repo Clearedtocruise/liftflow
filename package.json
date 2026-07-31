@@ -56,7 +56,7 @@
     "eslint": "^9.39.4",
     "eslint-config-expo": "~10.0.0",
     "pg": "^8.21.0",
-    "tsx": "4.19.0",
+    "tsx": "4.22.3",
     "typescript": "~5.9.2"
   },
   "scripts": {
@@ -154,5 +154,8 @@
     "build:android:apk": "eas build --platform android --profile production-apk --non-interactive",
     "build:android:aab": "eas build --platform android --profile production --non-interactive"
   },
-  "private": true
+  "private": true,
+  "overrides": {
+    "esbuild": "0.28.0"
+  }
 }
