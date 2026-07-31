@@ -56,10 +56,12 @@
     "eslint": "^9.39.4",
     "eslint-config-expo": "~10.0.0",
     "pg": "^8.21.0",
+    "tsx": "4.19.0",
     "typescript": "~5.9.2"
   },
   "scripts": {
     "typecheck": "node ./node_modules/typescript/bin/tsc --noEmit",
+    "test": "tsx --test src/lib/*.test.ts src/lib/voice/*.test.ts src/lib/transformation/*.test.ts src/state/*.test.ts",
     "start": "node ./node_modules/expo/bin/cli start",
     "start:expo-go": "EXPO_USE_METRO_STUBS=1 EXPO_DISABLE_ERROR_OVERLAY=1 node ./node_modules/expo/bin/cli start",
     "start:web": "EXPO_USE_METRO_STUBS=1 EXPO_DISABLE_ERROR_OVERLAY=1 node ./node_modules/expo/bin/cli start --web",

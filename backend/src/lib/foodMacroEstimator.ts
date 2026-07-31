@@ -304,11 +304,13 @@ export function reconcileFoodMacroEstimate(estimate: FoodMacroEstimate): FoodMac
     /(\d+(?:\.\d+)?)\s*calories?(?![^.]*\b(?:total|combined|results?)\b)[^.]*?(\d+(?:\.\d+)?)\s*g(?:rams)?\s*(?:of\s*)?protein(?:[^.]*?(\d+(?:\.\d+)?)\s*g(?:rams)?\s*(?:of\s*)?carbs?)?(?:[^.]*?(\d+(?:\.\d+)?)\s*g(?:rams)?\s*(?:of\s*)?fat)?/gi;
   const totalSentence = /\b(?:combined|total|results?\s+in\s+a\s+total|altogether|overall)\b/i;
 
-  function sentenceAt(index: number): string {
+  // Declared as a const arrow so the `reasoning` narrowing above survives into the closure; a
+  // hoisted function declaration could be called before the guard, so TS widens it back.
+  const sentenceAt = (index: number): string => {
     const start = Math.max(0, reasoning.lastIndexOf('.', index - 1) + 1);
     const end = reasoning.indexOf('.', index);
     return reasoning.slice(start, end === -1 ? reasoning.length : end + 1).trim();
-  }
+  };
 
   const components: FoodMacroEstimate[] = [];
   for (const match of reasoning.matchAll(fullPattern)) {

@@ -45,7 +45,7 @@ jobs:
         run: npm test
 
   client:
-    name: Client (typecheck)
+    name: Client (typecheck + tests)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -59,15 +59,21 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # The client unit tests ran only on developer machines, so every guarantee they encode could
+      # regress on main without anything going red.
+      - name: Test
+        run: npm test
+
       # The app has a large backlog of pre-existing type errors, so a plain `tsc --noEmit` gate
       # would be red on every run and tell us nothing. Instead we ratchet: the build fails only
       # when the error count grows. Lower the baseline as errors are paid down; the goal is 0,
       # at which point this step becomes a plain `npm run typecheck`.
       # Tightened from 84, which was 26 errors looser than reality and left that much room for a
-      # regression to land green, then from 58 to the measured count once #18 landed.
+      # regression to land green, then from 58 to the measured count once #18 landed, then to 44
+      # after the duplicate-status-key fix removed two.
       - name: Typecheck (no new errors vs. baseline)
         env:
-          BASELINE: '45'
+          BASELINE: '44'
         run: |
           set +e
           npm run typecheck > typecheck.log 2>&1
