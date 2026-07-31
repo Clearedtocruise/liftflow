@@ -106,8 +106,6 @@
     "validate:sprint11-transformation": "node scripts/validate-sprint11-transformation.mjs",
     "validate:sprint11-smart-nutrition": "node scripts/validate-sprint11-smart-nutrition.mjs",
     "validate:sprint1-exercise-classification": "node scripts/validate-sprint1-exercise-classification.mjs",
-    "validate:exercise-education": "node scripts/validate-exercise-education.mjs",
-    "validate:exercise-education-spotlight": "npx tsx scripts/validate-exercise-education-spotlight.ts",
     "generate:migration-026": "npx tsx scripts/generate-exercise-metadata-migration.ts",
     "migrate:026": "node scripts/apply-migration-026.mjs",
     "audit:exercise-database": "node scripts/audit-exercise-database.mjs",

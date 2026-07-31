@@ -115,11 +115,10 @@ jobs:
       # Each `validate:*` script below was written to lock a specific bug shut, but nothing ran them
       # after the PR that added them, so they only protected the branch they arrived on.
       #
-      # This list is an allowlist rather than every `validate:*` script, because several of the older
-      # ones assert against aspirational state and currently exit non-zero (`critical-paths`,
-      # `sprint5-active-workout`, `sprint1-exercise-classification`, `exercise-education`). Adding
-      # those here would make this job permanently red and worth ignoring, which is how the client
-      # typecheck ended up with a baseline instead of a gate. They belong here once they pass.
+      # This list is an allowlist rather than every `validate:*` script. The four that used to be
+      # excluded for asserting aspirational state have been repointed at where their behaviour
+      # actually lives and now pass, so they are gated here too; `exercise-education` referenced a
+      # script that no longer exists and has been removed rather than left to crash.
       #
       # A script that is not defined on this ref is skipped, so the job does not depend on the order
       # the open PRs land in.
@@ -143,6 +142,9 @@ jobs:
             validate:protein-meal-replace
             validate:voice-rate-limit
             validate:superset-overpairing
+            validate:critical-paths
+            validate:sprint5-active-workout
+            validate:sprint1-exercise-classification
           "
           failed=0
           for guard in $guards; do
