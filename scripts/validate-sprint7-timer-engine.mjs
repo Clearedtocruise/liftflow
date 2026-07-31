@@ -48,7 +48,12 @@ record('Interval rounds capped', engine.includes('INTERVAL_ROUNDS_MAX = 12'));
 record('Tabata prep exposes work/rest/rounds', overlay.includes('prepIntervalConfig') && active.includes('onPrepIntervalConfigChange'));
 record('Tabata starts from dialed session config', active.includes('workSeconds: tabataSessionConfig.workSeconds'));
 record('Tabata prep runs on every exercise change', active.includes('beginNextTabataExercise'));
-record('Paused Tabata allows weight changes', active.includes("intervalTimer.phase !== 'done' && intervalTimer.running"));
+record(
+  'Paused Tabata allows weight changes',
+  active.includes("intervalTimer.phase !== 'done' && intervalTimer.running") &&
+    active.includes('pausedWeightEdit') &&
+    overlay.includes('Paused — set your weight'),
+);
 record('Interval tick machine', engine.includes('tickIntervalTimer'));
 record('Circuit transition timer', engine.includes('tickCircuitTimer') && engine.includes('circuit_transition'));
 record('Unified timer hook', hook.includes('useWorkoutTimerEngine'));

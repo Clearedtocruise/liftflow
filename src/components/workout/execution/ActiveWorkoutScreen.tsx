@@ -1856,8 +1856,9 @@ export function ActiveWorkoutScreen({
                     onChangeReps={setReps}
                     onChangeDuration={setDurationSeconds}
                     onChangeDistance={setDistanceKm}
+                    // Weight stays editable while paused (session or Tabata timer) so load can
+                    // change mid-block. Logging/voice still require an active, unblocked window.
                     disabled={
-                      isPaused ||
                       logging ||
                       restActive ||
                       intervalBlocksLogging ||
@@ -2054,6 +2055,20 @@ export function ActiveWorkoutScreen({
         intervalExerciseName={currentExercise.exercise?.name ?? 'Exercise'}
         intervalNextExerciseName={nextExercise?.exercise?.name}
         onIntervalDismiss={() => setIntervalOverlayOpen(false)}
+        pausedWeightEdit={
+          executionModeUsesIntervalTimer(executionMode) &&
+          intervalTimer != null &&
+          !intervalTimer.running &&
+          intervalTimer.phase !== 'done' &&
+          loggingMode === 'weighted'
+            ? {
+                weightKg,
+                onChangeWeight: setWeightKg,
+                preferredWeightUnit: units.preferredWeightUnit,
+                weightLabel: units.weightLabel,
+              }
+            : null
+        }
         onIntervalToggle={toggleIntervalTimer}
         onIntervalSkip={skipIntervalPhase}
         onIntervalSkipRound={skipIntervalRound}

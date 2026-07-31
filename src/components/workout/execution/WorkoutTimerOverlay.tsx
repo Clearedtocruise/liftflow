@@ -15,7 +15,9 @@ import {
     type IntervalTimerConfig,
     type IntervalTimerState,
 } from '@/lib/timerEngine';
+import { adjustWeightKg, formatWorkoutWeightForInput, weightStepDisplay } from '@/lib/unitConversion';
 import { formatIntervalRoundProgress, type WorkoutPositionLabels } from '@/lib/workoutUpNext';
+import type { WeightUnit } from '@/types/common';
 
 type WorkoutTimerOverlayProps = {
   visible: boolean;
@@ -42,6 +44,13 @@ type WorkoutTimerOverlayProps = {
   intervalSecondBounds?: { min: number; max: number; step: number };
   intervalExerciseName?: string | null;
   intervalNextExerciseName?: string | null;
+  /** Shown while the Tabata/HIIT timer is paused so load can change without closing the modal. */
+  pausedWeightEdit?: {
+    weightKg: number;
+    onChangeWeight: (weightKg: number) => void;
+    preferredWeightUnit: WeightUnit;
+    weightLabel: string;
+  } | null;
   onIntervalDismiss?: () => void;
   betweenExerciseRestSeconds?: number;
   onBetweenExerciseRestChange?: (seconds: number) => void;
@@ -137,6 +146,7 @@ export function WorkoutTimerOverlay({
   intervalSecondBounds,
   intervalExerciseName,
   intervalNextExerciseName,
+  pausedWeightEdit,
   onIntervalDismiss,
   betweenExerciseRestSeconds,
   onBetweenExerciseRestChange,
@@ -257,9 +267,46 @@ export function WorkoutTimerOverlay({
                 Work and rest · {intervalMin}–{intervalMax}s · up to {INTERVAL_ROUNDS_MAX} rounds
               </AppText>
               {!interval.running && interval.phase !== 'done' ? (
-                <AppText variant="footnote" color="accent" align="center">
-                  Paused — change weight below, then resume
-                </AppText>
+                <>
+                  <AppText variant="footnote" color="accent" align="center">
+                    Paused — set your weight, then Resume
+                  </AppText>
+                  {pausedWeightEdit ? (
+                    <>
+                      <ConfigStepper
+                        label={`Weight (${pausedWeightEdit.weightLabel})`}
+                        value={Number(
+                          formatWorkoutWeightForInput(
+                            pausedWeightEdit.weightKg,
+                            pausedWeightEdit.preferredWeightUnit,
+                          ),
+                        )}
+                        onDecrease={() =>
+                          pausedWeightEdit.onChangeWeight(
+                            adjustWeightKg(
+                              pausedWeightEdit.weightKg,
+                              pausedWeightEdit.preferredWeightUnit,
+                              -1,
+                            ),
+                          )
+                        }
+                        onIncrease={() =>
+                          pausedWeightEdit.onChangeWeight(
+                            adjustWeightKg(
+                              pausedWeightEdit.weightKg,
+                              pausedWeightEdit.preferredWeightUnit,
+                              1,
+                            ),
+                          )
+                        }
+                      />
+                      <AppText variant="caption" color="textTertiary" align="center">
+                        ±{weightStepDisplay(pausedWeightEdit.preferredWeightUnit)}{' '}
+                        {pausedWeightEdit.weightLabel} per tap
+                      </AppText>
+                    </>
+                  ) : null}
+                </>
               ) : (
                 <AppText variant="footnote" color="textSecondary" align="center">
                   Pause anytime to change weight · prep is only between exercises
@@ -279,7 +326,11 @@ export function WorkoutTimerOverlay({
               </View>
               <PrimaryButton label="Reset" onPress={onIntervalReset} variant="secondary" />
               {onIntervalDismiss ? (
-                <PrimaryButton label="Continue to workout" onPress={onIntervalDismiss} variant="ghost" />
+                <PrimaryButton
+                  label={!interval.running && interval.phase !== 'done' ? 'Minimize timer' : 'Continue to workout'}
+                  onPress={onIntervalDismiss}
+                  variant="ghost"
+                />
               ) : null}
             </>
           ) : null}
