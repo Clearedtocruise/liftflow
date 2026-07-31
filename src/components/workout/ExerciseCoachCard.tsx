@@ -8,6 +8,7 @@ import { useSubscription } from '@/hooks/useSubscription';
 import { useUnits } from '@/hooks/useUnits';
 import { formatCoachTargetLine } from '@/lib/activeWorkoutMetrics';
 import { coachAdjustmentColor, coachAdjustmentLabel } from '@/lib/coachAdjustmentLabels';
+import { canRetryCoach, classifyCoachFailure, type CoachFailureKind } from '@/lib/coachFailure';
 import type { ExerciseLoggingMode } from '@/lib/exerciseModality';
 import { defaultTimedDurationSeconds } from '@/lib/exerciseModality';
 import { kgToDisplayWeight } from '@/lib/smartProgressionEngine';
@@ -69,7 +70,8 @@ export function ExerciseCoachCard({
   const { isPremium, isBetaTester } = useSubscription();
   const coachUnlocked = isPremium || isBetaTester;
   const [initialLoading, setInitialLoading] = useState(coachUnlocked);
-  const [fetchError, setFetchError] = useState(false);
+  // A paywall refusal and an outage need different copy: only one of them is worth retrying.
+  const [fetchError, setFetchError] = useState<CoachFailureKind>('none');
   const [expanded, setExpanded] = useState(variant === 'default');
   const [minimized, setMinimized] = useState(false);
   const [prescription, setPrescription] = useState<ExerciseCoachPrescription | null>(null);
@@ -81,14 +83,14 @@ export function ExerciseCoachCard({
       if (!coachUnlocked) {
         setPrescription(null);
         onPrescription?.(null);
-        setFetchError(false);
+        setFetchError('none');
         setInitialLoading(false);
         return;
       }
 
       const showSpinner = options?.showSpinner ?? prescriptionRef.current == null;
       if (showSpinner) setInitialLoading(true);
-      setFetchError(false);
+      setFetchError('none');
 
       const result = await exerciseCoachService.getPrescription(userId, exerciseId, {
         ...plan,
@@ -103,7 +105,7 @@ export function ExerciseCoachCard({
       } else {
         // Keep the last good prescription on a soft refetch failure so a blip mid-set does not
         // wipe coach targets and leave "Coach unavailable" over a working session.
-        setFetchError(true);
+        setFetchError(classifyCoachFailure(result));
         if (prescriptionRef.current == null) {
           setPrescription(null);
           onPrescription?.(null);
@@ -184,13 +186,20 @@ export function ExerciseCoachCard({
           {titleLabel}{setNumber ? ` · Set ${setNumber}` : ''}
         </AppText>
         <AppText variant="footnote" color="textSecondary">
-          {fetchError
-            ? 'Coach unavailable — using plan targets.'
-            : 'Using plan targets while coach syncs.'}
+          {fetchError === 'entitlement'
+            ? 'Live coach needs Pro — using your plan targets.'
+            : fetchError === 'transient'
+              ? "Coach didn't respond — using plan targets."
+              : 'Using plan targets while coach syncs.'}
         </AppText>
         <AppText variant="bodyBold">{fallbackLine}</AppText>
-        {fetchError ? (
-          <Pressable onPress={() => void fetchPrescription({ showSpinner: true })}>
+        {/* Retrying a paywall just fails again, so only a transient failure offers it. */}
+        {canRetryCoach(fetchError) ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Retry coach"
+            hitSlop={8}
+            onPress={() => void fetchPrescription({ showSpinner: true })}>
             <AppText variant="caption" color="accent">
               Retry coach
             </AppText>
@@ -286,6 +295,19 @@ export function ExerciseCoachCard({
       <AppText variant="footnote" color="textSecondary">
         {prescription.reason}
       </AppText>
+      {/* A refetch failed but the last good prescription is still on screen — say so rather than
+          silently showing stale targets. */}
+      {canRetryCoach(fetchError) ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Retry coach"
+          hitSlop={8}
+          onPress={() => void fetchPrescription({ showSpinner: true })}>
+          <AppText variant="caption" color="accent">
+            Showing last update · Retry coach
+          </AppText>
+        </Pressable>
+      ) : null}
 
       {expanded ? (
         <>

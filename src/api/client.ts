@@ -13,6 +13,33 @@ type RequestOptions = {
   token?: string;
 };
 
+/**
+ * Carries the HTTP status and the backend's error code alongside the message.
+ *
+ * Throwing a bare Error discarded both, so callers could not tell a refusal that retrying will
+ * never fix (403 PRO_REQUIRED) from a transient failure that it will — which is how the coach
+ * card ended up offering "Retry coach" against a paywall.
+ */
+export class ApiError extends Error {
+  readonly status: number;
+  readonly code?: string;
+
+  constructor(message: string, status: number, code?: string) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.code = code;
+  }
+}
+
+/** True when the request failed because the account lacks Pro — retrying cannot help. */
+export function isEntitlementError(error: unknown): boolean {
+  if (error instanceof ApiError) {
+    return error.status === 403 || error.code === 'PRO_REQUIRED';
+  }
+  return false;
+}
+
 class ApiClient {
   private baseUrl: string;
 
@@ -35,7 +62,7 @@ class ApiClient {
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({ message: response.statusText }));
-      throw new Error(error.message ?? `API error ${response.status}`);
+      throw new ApiError(error.message ?? `API error ${response.status}`, response.status, error.code);
     }
 
     return response.json() as Promise<T>;
@@ -74,7 +101,7 @@ class ApiClient {
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({ message: response.statusText }));
-      throw new Error(error.message ?? `API error ${response.status}`);
+      throw new ApiError(error.message ?? `API error ${response.status}`, response.status, error.code);
     }
 
     return response.json() as Promise<T>;
