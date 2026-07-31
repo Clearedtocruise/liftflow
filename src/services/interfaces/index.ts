@@ -90,6 +90,17 @@ export interface IWorkoutService {
   ): Promise<ServiceResult<WorkoutSession>>;
   getActiveSession(userId: string): Promise<ServiceResult<WorkoutSession | null>>;
   endSession(sessionId: string): Promise<ServiceResult<WorkoutSession>>;
+  /** Catalog + this user's own exercises. */
+  searchExercises(
+    query: string,
+    userId: string,
+    limit?: number,
+  ): Promise<ServiceResult<import('@/types').Exercise[]>>;
+  /** Adds an exercise the catalog does not have, or returns the existing row with that name. */
+  createCustomExercise(
+    name: string,
+    userId: string,
+  ): Promise<ServiceResult<import('@/types').Exercise>>;
   /** MVP: Log a set */
   logSet(payload: CreateSetPayload): Promise<ServiceResult<import('@/types').WorkoutSet>>;
   updateSet(setId: string, payload: import('@/types').UpdateSetPayload): Promise<ServiceResult<import('@/types').WorkoutSet>>;

@@ -980,11 +980,50 @@ export const workoutService: IWorkoutService = {
     }
   },
 
+  /**
+   * Adds an exercise the catalog does not have, so a gym-specific machine or a coach variation can
+   * still be trained and swapped in. Reuses the find-or-create path the voice logger uses, so a
+   * name that already exists resolves to that row instead of creating a near-duplicate.
+   */
+  async createCustomExercise(name: string, userId: string) {
+    try {
+      const normalized = name.trim().replace(/\s+/g, ' ');
+      if (!normalized) return fail('Enter an exercise name.');
+
+      const exerciseId = await findOrCreateExerciseByNameInternal(normalized, userId);
+      if (!exerciseId) return fail('Could not add that exercise.');
+
+      const { data, error } = await supabase
+        .from('exercises')
+        .select('id, name, slug, category, exercise_type, equipment, muscle_groups, is_system, created_by, created_at')
+        .eq('id', exerciseId)
+        .single();
+
+      if (error || !data) return fail(error?.message ?? 'Could not load the new exercise.');
+
+      const exercise: Exercise = {
+        id: data.id,
+        name: data.name,
+        slug: data.slug ?? undefined,
+        category: data.category as Exercise['category'],
+        exerciseType: (data.exercise_type ?? 'strength') as Exercise['exerciseType'],
+        equipment: data.equipment,
+        muscleGroups: data.muscle_groups ?? [],
+        isSystem: data.is_system ?? false,
+        createdBy: data.created_by ?? undefined,
+        createdAt: data.created_at,
+      };
+      return ok(exercise);
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
   async searchExercises(query: string, userId: string, limit = 50) {
     try {
       let request = supabase
         .from('exercises')
-        .select('id, name, slug, category, equipment, muscle_groups, is_system, created_by, created_at')
+        .select('id, name, slug, category, exercise_type, equipment, muscle_groups, is_system, created_by, created_at')
         .or(`is_system.eq.true,created_by.eq.${userId}`)
         .order('name')
         .limit(limit);
@@ -1001,6 +1040,7 @@ export const workoutService: IWorkoutService = {
         name: row.name,
         slug: row.slug ?? undefined,
         category: row.category as Exercise['category'],
+        exerciseType: (row.exercise_type ?? 'strength') as Exercise['exerciseType'],
         equipment: row.equipment,
         muscleGroups: row.muscle_groups ?? [],
         isSystem: row.is_system ?? false,

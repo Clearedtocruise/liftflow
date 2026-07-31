@@ -6,6 +6,10 @@ import { AppText } from '@/components/ui/AppText';
 import { ExerciseGuideSheet } from '@/components/workout/execution/ExerciseGuideSheet';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
+import {
+    shouldOfferCustomExercise,
+    validateCustomExerciseName,
+} from '@/lib/customExerciseName';
 import { workoutService } from '@/services/workoutService';
 import type { Exercise } from '@/types';
 
@@ -22,6 +26,32 @@ export function ExercisePickerModal({ visible, onClose, onSelect, title = 'Selec
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [loading, setLoading] = useState(false);
   const [preview, setPreview] = useState<Exercise | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+
+  const canCreate = !loading && shouldOfferCustomExercise(query, exercises);
+
+  async function handleCreateCustom() {
+    if (!user || creating) return;
+    const check = validateCustomExerciseName(query);
+    if (!check.valid) {
+      setCreateError(check.reason);
+      return;
+    }
+
+    setCreating(true);
+    setCreateError(null);
+    const result = await workoutService.createCustomExercise(check.name, user.id);
+    setCreating(false);
+
+    if (!result.success) {
+      setCreateError(result.error);
+      return;
+    }
+    onSelect(result.data);
+    setQuery('');
+    onClose();
+  }
 
   useEffect(() => {
     if (!visible || !user) return;
@@ -55,13 +85,39 @@ export function ExercisePickerModal({ visible, onClose, onSelect, title = 'Selec
 
         <TextInput
           style={styles.search}
-          placeholder="Search exercises"
+          placeholder="Search or name a new exercise"
           placeholderTextColor={LiftFlowColors.textTertiary}
           value={query}
-          onChangeText={setQuery}
+          onChangeText={(text) => {
+            setQuery(text);
+            setCreateError(null);
+          }}
           autoCapitalize="words"
           autoCorrect={false}
         />
+
+        {/* The catalog is never complete — gym machines and coach variations are always missing. */}
+        {canCreate ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Add ${query.trim()} as a new exercise`}
+            style={({ pressed }) => [styles.createRow, pressed && styles.rowPressed]}
+            disabled={creating}
+            onPress={() => void handleCreateCustom()}>
+            <AppText variant="bodyBold" color="accent">
+              {creating ? 'Adding…' : `Add "${query.trim()}"`}
+            </AppText>
+            <AppText variant="caption" color="textSecondary">
+              Not in the catalog — save it to your own exercises
+            </AppText>
+          </Pressable>
+        ) : null}
+
+        {createError ? (
+          <AppText variant="caption" color="error">
+            {createError}
+          </AppText>
+        ) : null}
 
         <ScrollView contentContainerStyle={styles.list}>
           {loading ? (
@@ -70,7 +126,9 @@ export function ExercisePickerModal({ visible, onClose, onSelect, title = 'Selec
             </AppText>
           ) : exercises.length === 0 ? (
             <AppText variant="body" color="textSecondary">
-              No exercises found.
+              {query.trim()
+                ? `No match for "${query.trim()}" — add it above to use it anyway.`
+                : 'No exercises found.'}
             </AppText>
           ) : (
             exercises.map((exercise) => (
@@ -174,5 +232,13 @@ const styles = StyleSheet.create({
   },
   rowPressed: {
     backgroundColor: LiftFlowColors.surfaceHighlight,
+  },
+  createRow: {
+    padding: Spacing.md,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: LiftFlowColors.accent,
+    backgroundColor: LiftFlowColors.surface,
+    gap: Spacing.xs,
   },
 });
