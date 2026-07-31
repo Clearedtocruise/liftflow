@@ -70,10 +70,11 @@ jobs:
       # at which point this step becomes a plain `npm run typecheck`.
       # Tightened from 84, which was 26 errors looser than reality and left that much room for a
       # regression to land green, then from 58 to the measured count once #18 landed, then to 44
-      # after the duplicate-status-key fix removed two.
+      # after the duplicate-status-key fix removed two, then to 41 once the exercise mappers and
+      # IWorkoutService picked up their missing members.
       - name: Typecheck (no new errors vs. baseline)
         env:
-          BASELINE: '44'
+          BASELINE: '41'
         run: |
           set +e
           npm run typecheck > typecheck.log 2>&1
