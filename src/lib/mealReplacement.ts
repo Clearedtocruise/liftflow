@@ -96,12 +96,12 @@ export function buildSmartIngredientReplacementUpdate(
 
   return {
     name: nextName,
+    // Swapping an ingredient changes the plan; the macros only count once it is marked eaten.
     status: 'planned',
     calories: Math.max(0, Math.round(nextMacros.calories)),
     proteinG: Math.max(0, nextMacros.proteinG),
     carbsG: Math.max(0, nextMacros.carbsG),
     fatG: Math.max(0, nextMacros.fatG),
-    status: 'modified',
     instructions: serializeMealMeta(meta),
   };
 }
@@ -122,7 +122,6 @@ export function buildSmartMealReplacementUpdate(
     proteinG: replacement.macros.proteinG,
     carbsG: replacement.macros.carbsG,
     fatG: replacement.macros.fatG,
-    status: 'modified',
     instructions: serializeMealMeta(meta),
   };
 }

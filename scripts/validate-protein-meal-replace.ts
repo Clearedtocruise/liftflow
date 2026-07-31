@@ -1,8 +1,14 @@
 /**
- * Guards the bug where replacing a meal left home protein at "—" with a goal.
+ * Guards how a replaced meal counts toward home protein.
  *
- * Replacements wrote status=modified into instructions JSON only; the meals.status
- * column stayed planned, so isConsumedMeal ignored the food and home showed Goal 194g.
+ * Originally replacing a meal wrote status=modified into instructions JSON only, so
+ * isConsumedMeal ignored the food and home showed a bare goal. That was fixed by writing the
+ * status column too — but counting a *replacement* as eaten inflated the day before the user
+ * had eaten anything, so replace now leaves the meal planned and only "Ate as planned" /
+ * "Modified" count it.
+ *
+ * Both rules still matter: legacy rows whose status lives in instructions must keep counting,
+ * and a fresh replace must not.
  *
  * Usage: npx tsx scripts/validate-protein-meal-replace.ts
  */
@@ -65,30 +71,45 @@ check(
   true,
 );
 
-console.log('\nReplacement updates write the status column, not just instructions');
+console.log('\nReplacing a meal edits the plan and does not count until it is eaten');
 const smart = buildSmartMealReplacementUpdate(planned, {
   foodName: 'optimim whey protein and half a banana',
   servingSize: '1 serving',
   macros: { calories: 150, proteinG: 25, carbsG: 15, fatG: 2 },
 });
-check('smart meal replace sets status modified', smart.status, 'modified');
+check('smart meal replace leaves the meal planned', smart.status, 'planned');
 check('smart meal replace keeps protein', smart.proteinG, 25);
+check(
+  'a replaced-but-uneaten meal is not consumed',
+  isConsumedMeal({ ...planned, ...smart } as Meal),
+  false,
+);
+check(
+  'the same meal counts once it is marked eaten',
+  isConsumedMeal({ ...planned, ...smart, status: 'completed' } as Meal),
+  true,
+);
 
 const nutrition = source('src/app/(tabs)/nutrition/index.tsx');
 const replacement = source('src/lib/mealReplacement.ts');
 const aggregation = source('src/lib/mealAggregation.ts');
 check(
-  'handleReplaceMeal updates the status column',
-  nutrition.includes("status: 'modified'") && nutrition.includes('handleReplaceMeal'),
+  'handleReplaceMeal writes the status column',
+  /handleReplaceMeal[\s\S]*?status: 'planned'/.test(nutrition),
   true,
 );
 check(
-  'ingredient replace updates the status column',
+  'ingredient replace writes the status column',
   nutrition.includes('handleReplaceIngredient') &&
-    /handleReplaceIngredient[\s\S]*?status: 'modified'/.test(nutrition),
+    /handleReplaceIngredient[\s\S]*?status: 'planned'/.test(nutrition),
   true,
 );
-check('smart builders include status', replacement.includes("status: 'modified'"), true);
+check('smart builders set a single status', replacement.includes("status: 'planned'"), true);
+check(
+  'smart builders no longer carry a duplicate status key',
+  /status: 'planned',[\s\S]{0,400}?status: 'modified',/.test(replacement),
+  false,
+);
 check(
   'isConsumedMeal honors instructions metadata',
   aggregation.includes('enrichMealMeta(meal.name, meal.instructions)'),
