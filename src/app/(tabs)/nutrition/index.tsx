@@ -36,6 +36,7 @@ import { aggregateWeeklyGroceries, groupGroceriesByCategory } from '@/lib/grocer
 import { resolveTimeZone } from '@/lib/localDate';
 import { aggregateDailyMeals, aggregateWeeklyMeals, buildDailySummaryFromMeals, mealsForCalendarDay } from '@/lib/mealAggregation';
 import { resolveUsualMeals, usualMealSuggestion, type MealDefault } from '@/lib/mealDefaults';
+import { friendlyMealError, isStaleMealError } from '@/lib/mealErrors';
 import {
     enrichMealMeta,
     mealNameFromIngredients,
@@ -61,15 +62,6 @@ import type { DailyNutritionSummary, GroceryList, GroceryListItem, Meal, Nutriti
 import type { MealType } from '@/types/common';
 
 /** Service errors surface raw transport strings like "API error 500"; users need plain language. */
-function friendlyMealError(raw: string): string {
-  if (/network|fetch|timeout|timed out/i.test(raw)) {
-    return "We couldn't reach your meal plan. Check your connection and try again.";
-  }
-  if (/^API error|\b(4\d\d|5\d\d)\b/.test(raw)) {
-    return 'Something went wrong on our end. Please try again in a moment.';
-  }
-  return raw;
-}
 
 function formatGroceryQuantity(item: GroceryListItem): string {
   if (item.quantity == null) return item.unit ?? '';
@@ -417,6 +409,16 @@ export default function NutritionScreen() {
     }
   }
 
+  /**
+   * A meal write that matched no row means the plan moved on under us — day sync and duplicate
+   * pruning both delete and reinsert rows. Reload so the stale meal disappears instead of leaving
+   * the user tapping a button that can only fail.
+   */
+  function reportMealFailure(title: string, result: { error: string; code?: string }) {
+    Alert.alert(title, friendlyMealError(result.error, result.code));
+    if (isStaleMealError(result)) void load();
+  }
+
   async function syncGroceriesAfterReplace() {
     if (!user) return;
     const { from, to } = getWeekRange(new Date(), user.timezone);
@@ -480,7 +482,7 @@ export default function NutritionScreen() {
     if (!user) return;
     const result = await nutritionService.generateGroceryList(user.id);
     if (!result.success) {
-      Alert.alert('Could not update meal', friendlyMealError(result.error));
+      reportMealFailure('Could not update meal', result);
       return;
     }
     setGroceryList(result.data);
@@ -543,7 +545,7 @@ export default function NutritionScreen() {
         consumedAt,
       );
       if (!result.success) {
-        Alert.alert('Could not update meal', friendlyMealError(result.error));
+        reportMealFailure('Could not update meal', result);
         return;
       }
       AccessibilityInfo.announceForAccessibility(
@@ -578,7 +580,7 @@ export default function NutritionScreen() {
         instructions: serializeMealMeta(meta),
       });
       if (!result.success) {
-        Alert.alert('Could not update meal', friendlyMealError(result.error));
+        reportMealFailure('Could not update meal', result);
         return;
       }
       AccessibilityInfo.announceForAccessibility(`${usual.name} set as your usual`);
@@ -608,7 +610,7 @@ export default function NutritionScreen() {
         instructions: serializeMealMeta(meta),
       });
       if (!result.success) {
-        Alert.alert('Could not update meal', friendlyMealError(result.error));
+        reportMealFailure('Could not update meal', result);
         return;
       }
       void syncGroceriesAfterReplace();
@@ -642,7 +644,7 @@ export default function NutritionScreen() {
         instructions,
       });
       if (!result.success) {
-        Alert.alert('Could not update meal', friendlyMealError(result.error));
+        reportMealFailure('Could not update meal', result);
         return;
       }
       void syncGroceriesAfterReplace();
@@ -688,7 +690,7 @@ export default function NutritionScreen() {
 
       const failure = results.find((result) => !result.success);
       if (failure && !failure.success) {
-        Alert.alert('Could not update meal', friendlyMealError(failure.error));
+        reportMealFailure('Could not update meal', failure);
         return;
       }
 

@@ -5,6 +5,7 @@ import { localDateString, resolveTimeZone } from '@/lib/localDate';
 import { mealSlotKey, remapApiMealsToClientWeek, type ApiPlanMeal } from '@/lib/mealPlanWeekAlign';
 import { aggregateDailyMeals, mealsForCalendarDay } from '@/lib/mealAggregation';
 import { isReplaceablePlannedMeal, pickMealsToKeep, weekEndDate } from '@/lib/mealCleanup';
+import { MEAL_NOT_FOUND } from '@/lib/mealErrors';
 import { enrichMealMeta, correctedMacrosIfInflated, serializeMealMeta } from '@/lib/mealIngredients';
 import { isInvertedBodyWeightKg, normalizeBodyWeightKg } from '@/lib/bodyWeightKg';
 import { fail, fromError, ok } from '@/lib/serviceResult';
@@ -350,8 +351,17 @@ export const nutritionService: INutritionService = {
         payload.macros_provided = true;
       }
 
-      const { data, error } = await supabase.from('meals').update(payload).eq('id', mealId).select(MEAL_COLUMNS).single();
-      if (error) return fail(error.message);
+      // `.single()` turns "no such meal" into a raw PostgREST coercion error. Day sync and
+      // duplicate pruning both delete and reinsert plan rows, so a screen can legitimately hold an
+      // id that no longer exists — that is a refresh, not a database fault.
+      const { data, error } = await supabase
+        .from('meals')
+        .update(payload)
+        .eq('id', mealId)
+        .select(MEAL_COLUMNS)
+        .maybeSingle();
+      if (error) return fail(error.message, error.code);
+      if (!data) return fail('That meal no longer exists.', MEAL_NOT_FOUND);
       return ok(mapMeal(data));
     } catch (e) {
       return fromError(e);
@@ -380,9 +390,10 @@ export const nutritionService: INutritionService = {
         })
         .eq('id', mealId)
         .select(MEAL_COLUMNS)
-        .single();
+        .maybeSingle();
 
-      if (error) return fail(error.message);
+      if (error) return fail(error.message, error.code);
+      if (!data) return fail('That meal no longer exists.', MEAL_NOT_FOUND);
       return ok(mapMeal(data));
     } catch (e) {
       return fromError(e);
