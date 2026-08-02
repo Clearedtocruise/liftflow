@@ -88,11 +88,12 @@ export function ExerciseGuideSheet({
           {guide?.isGeneral ? (
             <View style={styles.generalNotice}>
               <AppText variant="caption" color="textSecondary">
-                GENERAL GUIDANCE
+                {guide.familyLabel ? 'MOVEMENT PATTERN GUIDANCE' : 'GENERAL GUIDANCE'}
               </AppText>
               <AppText variant="footnote" color="textTertiary">
-                Based on this exercise&apos;s movement category. An exercise-specific reviewed guide
-                is not available yet.
+                {guide.familyLabel
+                  ? `Form principles for ${guide.familyLabel}, which this exercise uses. A reviewed guide for this specific exercise is not available yet.`
+                  : "Based on this exercise's movement category. An exercise-specific reviewed guide is not available yet."}
               </AppText>
             </View>
           ) : null}

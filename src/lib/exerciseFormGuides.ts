@@ -1,3 +1,5 @@
+import { FAMILY_GUIDES, MOVEMENT_FAMILY_LABELS } from '@/lib/exerciseFamilyGuides';
+import { resolveMovementFamily } from '@/lib/exerciseMovementFamily';
 import { month1GuideFromEncyclopedia } from '@/lib/liftingReference/month1ExerciseEncyclopedia';
 import type { Exercise } from '@/types';
 import type { MovementCategory } from '@/types/common';
@@ -5,10 +7,12 @@ import type { MovementCategory } from '@/types/common';
 export type ExerciseFormGuide = {
   steps: string[];
   tips?: string[];
-  /** Lets the UI distinguish reviewed/specific content from a category fallback. */
-  source?: 'authored' | 'instructions' | 'encyclopedia' | 'category';
-  /** Category guidance is useful, but must not be presented as exercise-specific expertise. */
+  /** Lets the UI distinguish reviewed/specific content from pattern or category guidance. */
+  source?: 'authored' | 'instructions' | 'encyclopedia' | 'family' | 'category';
+  /** Pattern and category guidance are useful, but must not be presented as exercise-specific expertise. */
   isGeneral?: boolean;
+  /** Names the movement pattern behind `family` guidance, e.g. "triceps isolation". */
+  familyLabel?: string;
 };
 
 const REP_RANGE_PATTERN = /^\d+(-\d+)?$/;
@@ -646,6 +650,28 @@ export function resolveExerciseFormGuide(
       ].filter(Boolean),
       source: 'encyclopedia',
     }, category);
+  }
+
+  // Pattern guidance is accurate for every exercise that genuinely belongs to the family, and it
+  // is far more useful than broad category text. The family is derived from the exercise name
+  // rather than the stored metadata, which mislabels kickbacks and burpees.
+  const family = resolveMovementFamily({
+    name,
+    slug,
+    category,
+    equipment: exercise?.equipment,
+    muscleGroups: exercise?.muscleGroups,
+  });
+  if (family) {
+    return enrichGuide(
+      {
+        ...FAMILY_GUIDES[family],
+        source: 'family',
+        isGeneral: true,
+        familyLabel: MOVEMENT_FAMILY_LABELS[family],
+      },
+      category,
+    );
   }
 
   const fallback = GENERIC_BY_CATEGORY[category] ?? GENERIC_BY_CATEGORY.other;

@@ -7,6 +7,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { resolveExerciseDifficulty } from '@/lib/exerciseDifficulty';
+import { FAMILY_GUIDES } from '@/lib/exerciseFamilyGuides';
 import { resolveExerciseFormGuide } from '@/lib/exerciseFormGuides';
 import { resolveExerciseGuideSections } from '@/lib/exerciseGuideSections';
 import type { Exercise } from '@/types';
@@ -63,8 +64,10 @@ console.log('\nPhases are named from the movement, and only movement steps becom
 const pullUp = sectionsFor('Pull Up', 'bodyweight', 'pull-up');
 check('Pull Up phase labels', pullUp.phases.map((phase) => phase.label), ['Setup', 'Depress', 'Pull', 'Lower']);
 
+// Hammer Row has no reviewed guide of its own, so it is coached with rowing pattern guidance
+// rather than the broad `pull` category text it used to fall back to.
 const hammerRow = sectionsFor('Hammer Row', 'machine');
-check('Hammer Row phase labels', hammerRow.phases.map((phase) => phase.label), ['Setup', 'Initiate', 'Squeeze', 'Lower']);
+check('Hammer Row phase labels', hammerRow.phases.map((phase) => phase.label), ['Setup', 'Begin', 'Pull', 'Squeeze']);
 
 const guided = [
   'Bench Press',
@@ -140,6 +143,38 @@ check('Custom guide has breathing', Boolean(customSections.breathing), true);
 check('Custom guide has common mistakes', customSections.avoid.length > 0, true);
 check('Custom guide has easier option', customSections.easier.length > 0, true);
 check('Custom guide has harder option', customSections.harder.length > 0, true);
+
+console.log('\nExercises without a reviewed guide are coached by movement pattern');
+const kickback = exercise('DB Kickback', 'dumbbell', 'db-kickback', 'push');
+const kickbackGuide = resolveExerciseFormGuide(kickback, kickback.name);
+const chestPress = exercise('Hammer Chest Press', 'machine', 'hammer-chest-press', 'push');
+const chestPressGuide = resolveExerciseFormGuide(chestPress, chestPress.name);
+
+check('Kickback is coached as triceps isolation', kickbackGuide?.familyLabel, 'triceps isolation');
+check('Chest press is coached as horizontal pressing', chestPressGuide?.familyLabel, 'horizontal pressing');
+check(
+  'Two push exercises are not given identical guidance',
+  JSON.stringify(kickbackGuide?.steps) === JSON.stringify(chestPressGuide?.steps),
+  false,
+);
+check('Pattern guidance is still labelled as non-specific', kickbackGuide?.isGeneral, true);
+
+// A burpee is stored as `carry` and neck flexion as `squat`, so trusting the imported category
+// would coach them as loaded carries and squats.
+for (const [name, category] of [['Burpee', 'carry'], ['Neck Flexion', 'squat']] as const) {
+  const guide = resolveExerciseFormGuide(exercise(name, 'bodyweight', undefined, category), name);
+  check(`${name} is not given a wrong movement pattern`, guide?.source, 'category');
+}
+
+console.log('\nEvery movement pattern renders a complete, named walkthrough');
+for (const [family, guide] of Object.entries(FAMILY_GUIDES)) {
+  const sections = resolveExerciseGuideSections(guide);
+  check(`${family} names every phase`, sections.phases.every((phase) => !/^Phase \d+$/.test(phase.label)), true);
+  check(`${family} has breathing, mistakes and scaling`,
+    Boolean(sections.breathing) && sections.avoid.length > 0 && sections.easier.length > 0 && sections.harder.length > 0,
+    true,
+  );
+}
 
 console.log(`\n${failures === 0 ? 'Exercise guide: PASS' : `Exercise guide: ${failures} FAILURE(S)`}`);
 process.exit(failures === 0 ? 0 : 1);
