@@ -1,71 +1,50 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Radius, Spacing, TouchTarget } from '@/constants/theme';
 import type { MovementPhase } from '@/lib/exerciseGuideSections';
 
-const SPEED_OPTIONS = [
-  { label: '0.5x', multiplier: 0.5 },
-  { label: '1x', multiplier: 1 },
-  { label: '1.5x', multiplier: 1.5 },
-  { label: '2x', multiplier: 2 },
-] as const;
-
-const BASE_PHASE_MS = 3600;
-
 type ExerciseMovementPhasesProps = {
   phases: MovementPhase[];
-  /** Resets the walkthrough when the sheet is reopened on a different exercise. */
+  /** Resets the guide when the sheet is reopened on a different exercise. */
   resetKey?: string;
 };
 
 /**
- * Walks the lifter through one phase of the movement at a time, with autoplay so the cues can be
- * followed without holding the phone.
+ * Written form instructions, one step at a time.
+ *
+ * This used to autoplay text behind playback and speed controls. Those are video affordances,
+ * so the UI implied media that did not exist. Keep written guidance honest and only show a video
+ * action from ExerciseGuideSheet when the exercise has a real tutorial URL.
  */
 export function ExerciseMovementPhases({ phases, resetKey }: ExerciseMovementPhasesProps) {
   const [index, setIndex] = useState(0);
-  const [playing, setPlaying] = useState(false);
-  const [speed, setSpeed] = useState(1);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     setIndex(0);
-    setPlaying(false);
   }, [resetKey, phases.length]);
-
-  useEffect(() => {
-    if (!playing || phases.length < 2) return;
-
-    timerRef.current = setInterval(() => {
-      setIndex((current) => (current + 1) % phases.length);
-    }, BASE_PHASE_MS / speed);
-
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-      timerRef.current = null;
-    };
-  }, [playing, speed, phases.length]);
 
   if (phases.length === 0) return null;
 
   const phase = phases[Math.min(index, phases.length - 1)]!;
-  const step = (direction: 1 | -1) => {
-    setPlaying(false);
-    setIndex((current) => (current + direction + phases.length) % phases.length);
-  };
+  const hasPrevious = index > 0;
+  const hasNext = index < phases.length - 1;
 
   return (
     <View style={styles.card}>
       <View style={styles.headerRow}>
         <AppText variant="label" color="accent">
-          MOVEMENT WALKTHROUGH
+          WRITTEN FORM GUIDE
         </AppText>
         <AppText variant="caption" color="textTertiary">
-          {index + 1} of {phases.length}
+          Step {index + 1} of {phases.length}
         </AppText>
       </View>
+
+      <AppText variant="caption" color="textTertiary">
+        Step-by-step instructions · video appears only when available
+      </AppText>
 
       <View style={styles.phaseRow}>
         {phases.map((item, phaseIndex) => (
@@ -74,10 +53,7 @@ export function ExerciseMovementPhases({ phases, resetKey }: ExerciseMovementPha
             accessibilityRole="button"
             accessibilityLabel={`Phase ${phaseIndex + 1}: ${item.label}`}
             accessibilityState={{ selected: phaseIndex === index }}
-            onPress={() => {
-              setPlaying(false);
-              setIndex(phaseIndex);
-            }}
+            onPress={() => setIndex(phaseIndex)}
             style={[styles.phaseChip, phaseIndex === index && styles.phaseChipActive]}>
             <AppText
               variant="caption"
@@ -90,67 +66,60 @@ export function ExerciseMovementPhases({ phases, resetKey }: ExerciseMovementPha
       </View>
 
       <View style={styles.detail}>
-        <AppText variant="bodyBold">{phase.label.toUpperCase()}</AppText>
+        <View style={styles.stepHeading}>
+          <View style={styles.stepNumber}>
+            <AppText variant="caption" color="background">
+              {index + 1}
+            </AppText>
+          </View>
+          <AppText variant="bodyBold">{phase.label.toUpperCase()}</AppText>
+        </View>
         <AppText variant="body" color="textSecondary">
           {phase.detail}
         </AppText>
       </View>
 
       <View style={styles.controls}>
-        <ControlButton label="‹" accessibilityLabel="Previous phase" onPress={() => step(-1)} />
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={playing ? 'Pause walkthrough' : 'Play walkthrough'}
-          onPress={() => setPlaying((current) => !current)}
-          style={[styles.playButton, playing && styles.playButtonActive]}>
-          <AppText variant="bodyBold" color={playing ? 'accent' : 'textPrimary'}>
-            {playing ? 'Pause' : 'Play'}
-          </AppText>
-        </Pressable>
-        <ControlButton label="›" accessibilityLabel="Next phase" onPress={() => step(1)} />
-      </View>
-
-      <View style={styles.speedRow}>
-        <AppText variant="caption" color="textTertiary">
-          SPEED
-        </AppText>
-        {SPEED_OPTIONS.map((option) => (
-          <Pressable
-            key={option.label}
-            accessibilityRole="button"
-            accessibilityLabel={`Walkthrough speed ${option.label}`}
-            accessibilityState={{ selected: speed === option.multiplier }}
-            onPress={() => setSpeed(option.multiplier)}
-            style={[styles.speedChip, speed === option.multiplier && styles.speedChipActive]}>
-            <AppText
-              variant="caption"
-              color={speed === option.multiplier ? 'accent' : 'textSecondary'}>
-              {option.label}
-            </AppText>
-          </Pressable>
-        ))}
+        <StepButton
+          label="Previous"
+          accessibilityLabel="Previous form step"
+          disabled={!hasPrevious}
+          onPress={() => setIndex((current) => Math.max(0, current - 1))}
+        />
+        <StepButton
+          label={hasNext ? 'Next step' : 'Review setup'}
+          accessibilityLabel={hasNext ? 'Next form step' : 'Return to first form step'}
+          onPress={() => setIndex((current) => (hasNext ? current + 1 : 0))}
+        />
       </View>
     </View>
   );
 }
 
-function ControlButton({
+function StepButton({
   label,
   accessibilityLabel,
   onPress,
+  disabled = false,
 }: {
   label: string;
   accessibilityLabel: string;
   onPress: () => void;
+  disabled?: boolean;
 }) {
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
+      accessibilityState={{ disabled }}
+      disabled={disabled}
       onPress={onPress}
-      hitSlop={8}
-      style={styles.controlButton}>
-      <AppText variant="headline" color="textSecondary">
+      style={({ pressed }) => [
+        styles.stepButton,
+        disabled && styles.stepButtonDisabled,
+        pressed && !disabled && styles.stepButtonPressed,
+      ]}>
+      <AppText variant="bodyBold" color={disabled ? 'textTertiary' : 'textPrimary'}>
         {label}
       </AppText>
     </Pressable>
@@ -190,48 +159,43 @@ const styles = StyleSheet.create({
   detail: {
     gap: Spacing.xs,
     minHeight: 76,
+    padding: Spacing.md,
+    borderRadius: Radius.md,
+    backgroundColor: LiftFlowColors.backgroundSecondary,
   },
-  controls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.lg,
-  },
-  controlButton: {
-    minWidth: TouchTarget.min,
-    minHeight: TouchTarget.min,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: Radius.full,
-    backgroundColor: LiftFlowColors.surfaceElevated,
-  },
-  playButton: {
-    paddingHorizontal: Spacing.xl,
-    minHeight: TouchTarget.min,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: Radius.full,
-    borderWidth: 1,
-    borderColor: LiftFlowColors.border,
-    backgroundColor: LiftFlowColors.surfaceElevated,
-  },
-  playButtonActive: {
-    borderColor: LiftFlowColors.accent,
-    backgroundColor: LiftFlowColors.accentGlow,
-  },
-  speedRow: {
+  stepHeading: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.sm,
   },
-  speedChip: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs,
+  stepNumber: {
+    width: 24,
+    height: 24,
     borderRadius: Radius.full,
+    backgroundColor: LiftFlowColors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  controls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  stepButton: {
+    flex: 1,
+    minHeight: TouchTarget.min,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.md,
+    borderRadius: Radius.md,
     borderWidth: 1,
     borderColor: LiftFlowColors.border,
+    backgroundColor: LiftFlowColors.surfaceElevated,
   },
-  speedChipActive: {
+  stepButtonDisabled: {
+    opacity: 0.4,
+  },
+  stepButtonPressed: {
     borderColor: LiftFlowColors.accent,
     backgroundColor: LiftFlowColors.accentGlow,
   },

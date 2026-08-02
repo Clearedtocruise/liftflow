@@ -31,8 +31,15 @@ export function getMonth1EncyclopediaEntry(exerciseName: string): Month1Encyclop
   return null;
 }
 
-export function month1GuideFromEncyclopedia(exerciseName: string) {
-  const entry = getMonth1EncyclopediaEntry(exerciseName);
+export function month1GuideFromEncyclopedia(
+  exerciseName: string,
+  options?: { exactOnly?: boolean },
+) {
+  // Substring matching is useful for search, but unsafe for exercise instructions: a variation
+  // can inherit a different movement merely because one name contains the other.
+  const entry = options?.exactOnly
+    ? byName.get(normalizeName(exerciseName)) ?? null
+    : getMonth1EncyclopediaEntry(exerciseName);
   if (!entry) return null;
 
   const howTo = entry.howTo.trim();

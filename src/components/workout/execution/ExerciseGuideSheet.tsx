@@ -12,6 +12,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { resolveExerciseDifficulty } from '@/lib/exerciseDifficulty';
 import { resolveExerciseFormGuide } from '@/lib/exerciseFormGuides';
 import { resolveExerciseGuideSections } from '@/lib/exerciseGuideSections';
+import { isUsableTutorialUrl } from '@/lib/exerciseGuideMedia';
 import { profileFigureGender, resolveExerciseMuscles } from '@/lib/exerciseMuscleMap';
 import type { Exercise } from '@/types';
 
@@ -45,6 +46,7 @@ export function ExerciseGuideSheet({
   const equipmentLabel = exercise?.equipment ? exercise.equipment.replace(/_/g, ' ') : null;
   const primaryMuscles = profile.primary.map(muscleLabel);
   const summary = [equipmentLabel, difficulty, exercise?.category].filter(Boolean).join(' · ');
+  const tutorialUrl = isUsableTutorialUrl(exercise?.tutorialUrl) ? exercise!.tutorialUrl! : null;
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
@@ -81,6 +83,18 @@ export function ExerciseGuideSheet({
             <AppText variant="footnote" color="textSecondary" style={styles.summary}>
               {summary}
             </AppText>
+          ) : null}
+
+          {guide?.isGeneral ? (
+            <View style={styles.generalNotice}>
+              <AppText variant="caption" color="textSecondary">
+                GENERAL GUIDANCE
+              </AppText>
+              <AppText variant="footnote" color="textTertiary">
+                Based on this exercise&apos;s movement category. An exercise-specific reviewed guide
+                is not available yet.
+              </AppText>
+            </View>
           ) : null}
 
           {sections.phases.length === 0 ? (
@@ -171,15 +185,15 @@ export function ExerciseGuideSheet({
             ) : null}
           </View>
 
-          {exercise?.tutorialUrl ? (
+          {tutorialUrl ? (
             <Pressable
               accessibilityRole="link"
               style={styles.tutorialLink}
               onPress={() => {
-                void Linking.openURL(exercise.tutorialUrl!);
+                void Linking.openURL(tutorialUrl);
               }}>
               <AppText variant="footnote" color="accent">
-                Watch tutorial
+                Watch video demo
               </AppText>
             </Pressable>
           ) : null}
@@ -306,6 +320,14 @@ const styles = StyleSheet.create({
   },
   summary: {
     textTransform: 'capitalize',
+  },
+  generalNotice: {
+    gap: Spacing.xs,
+    padding: Spacing.md,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: LiftFlowColors.border,
+    backgroundColor: LiftFlowColors.backgroundSecondary,
   },
   card: {
     backgroundColor: LiftFlowColors.surface,

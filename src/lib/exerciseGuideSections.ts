@@ -21,7 +21,7 @@ export type ExerciseGuideSections = {
  * common mistakes and regressions, so each line is routed to the section it belongs to rather than
  * being labelled as a phase it is not.
  */
-const BREATHING_PATTERN = /\b(inhale|exhale|breathe|breathing)\b/i;
+const BREATHING_PATTERN = /\b(inhale|exhale|breathe|breathing|breaths?)\b/i;
 const AVOID_PATTERN = /^(avoid|do\s*not|don'?t|never)\b/i;
 const EASIER_PATTERN = /^(regress|make\s*it\s*easier|easier)\b/i;
 const HARDER_PATTERN = /^(progress|make\s*it\s*harder|harder)\b/i;
@@ -193,6 +193,18 @@ export function resolveExerciseGuideSections(
 
     if (AVOID_PATTERN.test(trimmed)) {
       if (!avoid.some((item) => normalizeForCompare(item) === key)) avoid.push(trimmed);
+      continue;
+    }
+    if (EASIER_PATTERN.test(trimmed)) {
+      if (!easier.some((item) => normalizeForCompare(item) === key)) easier.push(trimmed);
+      continue;
+    }
+    if (HARDER_PATTERN.test(trimmed)) {
+      if (!harder.some((item) => normalizeForCompare(item) === key)) harder.push(trimmed);
+      continue;
+    }
+    if (breathing == null && BREATHING_PATTERN.test(trimmed)) {
+      breathing = trimmed;
       continue;
     }
     cues.push(trimmed);

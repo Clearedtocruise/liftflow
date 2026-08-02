@@ -3,6 +3,9 @@
  *
  * Usage: npm run validate:exercise-guide
  */
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { resolveExerciseDifficulty } from '@/lib/exerciseDifficulty';
 import { resolveExerciseFormGuide } from '@/lib/exerciseFormGuides';
 import { resolveExerciseGuideSections } from '@/lib/exerciseGuideSections';
@@ -10,6 +13,7 @@ import type { Exercise } from '@/types';
 import type { MovementCategory } from '@/types/common';
 
 let failures = 0;
+const source = (path: string) => readFileSync(join(process.cwd(), path), 'utf8');
 
 function check(label: string, actual: unknown, expected: unknown): void {
   const pass = JSON.stringify(actual) === JSON.stringify(expected);
@@ -60,7 +64,7 @@ const pullUp = sectionsFor('Pull Up', 'bodyweight', 'pull-up');
 check('Pull Up phase labels', pullUp.phases.map((phase) => phase.label), ['Setup', 'Depress', 'Pull', 'Lower']);
 
 const hammerRow = sectionsFor('Hammer Row', 'machine');
-check('Hammer Row phase labels', hammerRow.phases.map((phase) => phase.label), ['Setup', 'Pull', 'Squeeze', 'Lower']);
+check('Hammer Row phase labels', hammerRow.phases.map((phase) => phase.label), ['Setup', 'Initiate', 'Squeeze', 'Lower']);
 
 const guided = [
   'Bench Press',
@@ -110,6 +114,32 @@ console.log('\nBreathing guidance gets its own section');
 const bench = sectionsFor('Bench Press', 'barbell', 'bench-press');
 check('Bench Press breathing captured', /inhale|exhale/i.test(bench.breathing ?? ''), true);
 check('Bench Press breathing is not a phase', bench.phases.some((phase) => phase.detail === bench.breathing), false);
+
+console.log('\nWritten guidance never pretends to be video');
+const movementUi = source('src/components/exercise/ExerciseMovementPhases.tsx');
+const guideSheet = source('src/components/workout/execution/ExerciseGuideSheet.tsx');
+const guideResolver = source('src/lib/exerciseFormGuides.ts');
+check('Written guide is labelled honestly', movementUi.includes('WRITTEN FORM GUIDE'), true);
+check('No Play/Pause control without media', /Play walkthrough|Pause walkthrough/.test(movementUi), false);
+check('No faux playback speeds', movementUi.includes('SPEED_OPTIONS') || movementUi.includes('0.5x'), false);
+check('Written steps never autoplay', movementUi.includes('setInterval'), false);
+check('Video action requires a validated URL', guideSheet.includes('isUsableTutorialUrl'), true);
+check(
+  'Unreviewed generated drafts are not user-facing',
+  guideResolver.includes('GENERATED_EXERCISE_FORM_GUIDES'),
+  false,
+);
+
+console.log('\nUncovered exercises still get complete, honest fallback guidance');
+const custom = exercise('My Garage Belt Machine', 'other', undefined, 'other');
+const customGuide = resolveExerciseFormGuide(custom, custom.name);
+const customSections = resolveExerciseGuideSections(customGuide);
+check('Custom guide is marked general', customGuide?.isGeneral, true);
+check('Custom guide has movement steps', customSections.phases.length > 0, true);
+check('Custom guide has breathing', Boolean(customSections.breathing), true);
+check('Custom guide has common mistakes', customSections.avoid.length > 0, true);
+check('Custom guide has easier option', customSections.easier.length > 0, true);
+check('Custom guide has harder option', customSections.harder.length > 0, true);
 
 console.log(`\n${failures === 0 ? 'Exercise guide: PASS' : `Exercise guide: ${failures} FAILURE(S)`}`);
 process.exit(failures === 0 ? 0 : 1);

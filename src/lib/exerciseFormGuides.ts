@@ -1,5 +1,3 @@
-import { catalogExerciseBySlug } from '@/constants/exerciseDatabase';
-import { GENERATED_EXERCISE_FORM_GUIDES } from '@/lib/generatedExerciseFormGuides';
 import { month1GuideFromEncyclopedia } from '@/lib/liftingReference/month1ExerciseEncyclopedia';
 import type { Exercise } from '@/types';
 import type { MovementCategory } from '@/types/common';
@@ -7,6 +5,10 @@ import type { MovementCategory } from '@/types/common';
 export type ExerciseFormGuide = {
   steps: string[];
   tips?: string[];
+  /** Lets the UI distinguish reviewed/specific content from a category fallback. */
+  source?: 'authored' | 'instructions' | 'encyclopedia' | 'category';
+  /** Category guidance is useful, but must not be presented as exercise-specific expertise. */
+  isGeneral?: boolean;
 };
 
 const REP_RANGE_PATTERN = /^\d+(-\d+)?$/;
@@ -528,34 +530,77 @@ const GENERIC_BY_CATEGORY: Partial<Record<MovementCategory, ExerciseFormGuide>> 
   },
 };
 
-function lookupBySlug(slug: string | undefined): ExerciseFormGuide | null {
-  if (!slug) return null;
-  return GUIDES_BY_SLUG[slug] ?? GENERATED_EXERCISE_FORM_GUIDES[slug] ?? null;
-}
+const SUPPORT_BY_CATEGORY: Record<
+  MovementCategory,
+  { breathing: string; avoid: string; easier: string; harder: string }
+> = {
+  push: {
+    breathing: 'Inhale during the controlled return; exhale as you press through the effort.',
+    avoid: 'Avoid flaring or shrugging the shoulders, bouncing the load, or losing your brace.',
+    easier: 'Easier: reduce the load or range of motion until every rep stays controlled.',
+    harder: 'Harder: add load only after you can repeat the full range without changing position.',
+  },
+  pull: {
+    breathing: 'Inhale as the arms lengthen; exhale as you pull and squeeze the target muscles.',
+    avoid: 'Avoid jerking the load, shrugging, or turning the pull into a lower-back swing.',
+    easier: 'Easier: reduce the load and use a supported position.',
+    harder: 'Harder: add load or a brief squeeze only while the torso remains stable.',
+  },
+  squat: {
+    breathing: 'Inhale and brace before descending; exhale after you drive through the hardest point.',
+    avoid: 'Avoid heels lifting, knees collapsing inward, or losing a neutral, braced torso.',
+    easier: 'Easier: reduce depth or load and use support until balance and control improve.',
+    harder: 'Harder: add depth or load gradually without changing knee or torso position.',
+  },
+  hinge: {
+    breathing: 'Inhale and brace before the hinge; exhale as the hips drive back to standing.',
+    avoid: 'Avoid rounding the back, squatting the hinge, or letting the load drift away from you.',
+    easier: 'Easier: shorten the range and reduce load until the hips move without spinal motion.',
+    harder: 'Harder: add load or range only while the back stays neutral and the load stays close.',
+  },
+  core: {
+    breathing: 'Breathe behind the brace—use slow exhales without letting the trunk lose position.',
+    avoid: 'Avoid rushing, holding your breath for the whole set, or continuing after posture breaks.',
+    easier: 'Easier: shorten the lever, reduce the range, or use a supported variation.',
+    harder: 'Harder: lengthen the lever or add time before adding external load.',
+  },
+  cardio: {
+    breathing: 'Use steady breathing matched to the effort; you should recover as intensity drops.',
+    avoid: 'Avoid jumping straight to maximal effort or letting posture collapse as fatigue rises.',
+    easier: 'Easier: reduce pace, resistance, incline, or work interval.',
+    harder: 'Harder: increase one variable at a time—pace, resistance, incline, or duration.',
+  },
+  carry: {
+    breathing: 'Breathe in short, controlled cycles behind a firm brace while keeping ribs stacked over the pelvis.',
+    avoid: 'Avoid leaning, rushing the steps, shrugging, or letting the load pull you out of position.',
+    easier: 'Easier: reduce the load or distance and carry with two hands.',
+    harder: 'Harder: add distance or load while keeping the same posture and walking speed.',
+  },
+  other: {
+    breathing: 'Exhale through the effort and inhale during the controlled return without losing your brace.',
+    avoid: 'Avoid momentum, painful range, and any rep that changes your setup or joint position.',
+    easier: 'Easier: reduce the load, range, speed, or balance demand.',
+    harder: 'Harder: progress only one variable at a time after the movement is repeatable.',
+  },
+};
 
-function lookupGeneratedByName(name: string | undefined): ExerciseFormGuide | null {
-  const key = normalizeKey(name);
-  if (!key) return null;
-  if (GENERATED_EXERCISE_FORM_GUIDES[key]) return GENERATED_EXERCISE_FORM_GUIDES[key];
-  const prefix = Object.keys(GENERATED_EXERCISE_FORM_GUIDES).find(
-    (slug) => slug.startsWith(`${key}-`) || slug.startsWith(`${key}_`),
-  );
-  return prefix ? GENERATED_EXERCISE_FORM_GUIDES[prefix] ?? null : null;
-}
+function enrichGuide(
+  guide: ExerciseFormGuide,
+  category: MovementCategory,
+): ExerciseFormGuide {
+  const support = SUPPORT_BY_CATEGORY[category] ?? SUPPORT_BY_CATEGORY.other;
+  const all = [...guide.steps, ...(guide.tips ?? [])];
+  const has = (pattern: RegExp) => all.some((line) => pattern.test(line));
 
-function lookupByName(name: string | undefined): ExerciseFormGuide | null {
-  const key = normalizeKey(name);
-  if (!key) return null;
-  if (GUIDES_BY_SLUG[key]) return GUIDES_BY_SLUG[key];
-  if (GENERATED_EXERCISE_FORM_GUIDES[key]) return GENERATED_EXERCISE_FORM_GUIDES[key];
+  const steps = [...guide.steps];
+  const tips = [...(guide.tips ?? [])];
 
-  const generated = lookupGeneratedByName(name);
-  if (generated) return generated;
+  if (!has(/\b(inhale|exhale|breathe|breathing)\b/i)) steps.push(support.breathing);
+  if (!has(/^(avoid|do\s*not|don't|never)\b/i)) tips.push(support.avoid);
+  if (!has(/^(easier|regress|make\s*it\s*easier)\b/i)) tips.push(support.easier);
+  if (!has(/^(harder|progress|make\s*it\s*harder)\b/i)) tips.push(support.harder);
 
-  const catalog = catalogExerciseBySlug(key);
-  if (catalog) return GUIDES_BY_SLUG[catalog.slug] ?? null;
-
-  return null;
+  return { ...guide, steps, tips };
 }
 
 export function resolveExerciseFormGuide(
@@ -564,29 +609,50 @@ export function resolveExerciseFormGuide(
 ): ExerciseFormGuide | null {
   const name = exercise?.name ?? nameFallback;
   const slug = exercise?.slug ?? normalizeKey(name);
+  const category = exercise?.category ?? 'other';
 
   if (exercise?.instructions) {
     const fromDb = guideFromInstructions(exercise.instructions);
-    if (fromDb) return fromDb;
+    if (fromDb) {
+      return enrichGuide(
+        { ...fromDb, source: 'instructions' },
+        category,
+      );
+    }
   }
 
-  const month1Guide = month1GuideFromEncyclopedia(name ?? '');
+  // A hand-authored exact guide is the most specific content in the app. It must beat a broad
+  // encyclopedia entry whose keyword fallback can return generic core/push/pull instructions.
+  const authored =
+    (slug ? GUIDES_BY_SLUG[slug] : undefined) ??
+    GUIDES_BY_SLUG[normalizeKey(name)];
+  if (authored) {
+    return enrichGuide({ ...authored, source: 'authored' }, category);
+  }
+
+  const month1Guide = month1GuideFromEncyclopedia(name ?? '', { exactOnly: true });
   if (month1Guide?.execution?.length) {
-    return {
-      steps: [...(month1Guide.setup ?? []), ...month1Guide.execution],
+    return enrichGuide({
+      steps: [
+        ...(month1Guide.setup ?? []),
+        ...month1Guide.execution,
+        ...(month1Guide.breathing ? [month1Guide.breathing] : []),
+      ],
       tips: [
         ...(month1Guide.cues ?? []),
         ...(month1Guide.commonMistakes ?? []),
+        ...(month1Guide.regressions ?? []),
+        ...(month1Guide.progressions ?? []),
       ].filter(Boolean),
-    };
+      source: 'encyclopedia',
+    }, category);
   }
 
-  return (
-    lookupBySlug(slug) ??
-    lookupByName(name) ??
-    GENERIC_BY_CATEGORY[exercise?.category ?? 'other'] ??
-    GENERIC_BY_CATEGORY.other ??
-    null
+  const fallback = GENERIC_BY_CATEGORY[category] ?? GENERIC_BY_CATEGORY.other;
+  if (!fallback) return null;
+  return enrichGuide(
+    { ...fallback, source: 'category', isGeneral: true },
+    category,
   );
 }
 
