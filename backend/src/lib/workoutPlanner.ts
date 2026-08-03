@@ -1,4 +1,4 @@
-import { expandEquipmentRequirements } from './equipmentCatalog.js';
+import { expandEquipmentRequirements, requiresSuspensionTrainer } from './equipmentCatalog.js';
 import { isCatalogVariantSlug } from './exerciseCatalogDedup.js';
 import { capSetsForExperience, resolveExperienceVolume } from './experienceVolume.js';
 import {
@@ -336,6 +336,12 @@ const EQUIPMENT_FIELD_REQUIREMENTS: Record<string, string[]> = {
 export function resolveExerciseRequirements(exercise: ExerciseRecord): string[] {
   const field = EQUIPMENT_FIELD_REQUIREMENTS[exercise.equipment];
   const meta = exercise.metadata?.requires ?? [];
+
+  // Every TRX and ring movement is stored as `bodyweight`, which let a suspension trainer be
+  // programmed for anyone with a body. The name is what identifies them reliably.
+  if (meta.includes('suspension') || requiresSuspensionTrainer(exercise.name, exercise.slug)) {
+    return ['suspension'];
+  }
 
   // Specialty implements (landmine / T-bar station) are not implied by a plain barbell.
   if (meta.includes('landmine')) {

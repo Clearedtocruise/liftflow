@@ -223,6 +223,63 @@ test('t-bar row requires landmine — barbell + rack alone is not enough', () =>
   assert.equal(exerciseMeetsEquipment(tBarRow, withLandmine), true);
 });
 
+test('TRX and ring work requires a suspension trainer, not just a body', () => {
+  // The catalog stores all 27 of these as equipment 'bodyweight' with requires ['bodyweight'], so
+  // they passed the filter for everyone. A suspension trainer is a separate purchase.
+  const trxRow: ExerciseRecord = {
+    id: 'trx-row',
+    name: 'TRX Reverse Lunge Row',
+    slug: 'il-reverse-lunge-row',
+    category: 'squat',
+    equipment: 'bodyweight',
+    muscle_groups: ['back'],
+    metadata: { movement_family: 'lunge_pattern', requires: ['bodyweight'] },
+  };
+  const ringDip: ExerciseRecord = {
+    id: 'ring-dip',
+    name: 'Ring Dip',
+    slug: 'ring-dip',
+    category: 'push',
+    equipment: 'bodyweight',
+    muscle_groups: ['triceps'],
+    metadata: { requires: ['bodyweight'] },
+  };
+  const pushUp: ExerciseRecord = {
+    id: 'push-up',
+    name: 'Push-Up',
+    slug: 'push-up',
+    category: 'push',
+    equipment: 'bodyweight',
+    muscle_groups: ['chest'],
+    metadata: { requires: ['bodyweight'] },
+  };
+
+  const commercialGym = expandAvailableEquipment(['barbell', 'dumbbells', 'cable_station', 'pull_up_bar']);
+  const withSuspension = expandAvailableEquipment(['bodyweight', 'suspension_trainer']);
+
+  assert.deepEqual(resolveExerciseRequirements(trxRow), ['suspension']);
+  assert.deepEqual(resolveExerciseRequirements(ringDip), ['suspension']);
+  assert.equal(exerciseMeetsEquipment(trxRow, commercialGym), false);
+  assert.equal(exerciseMeetsEquipment(ringDip, commercialGym), false);
+  assert.equal(exerciseMeetsEquipment(trxRow, withSuspension), true);
+
+  // Real bodyweight work must stay available everywhere.
+  assert.equal(exerciseMeetsEquipment(pushUp, commercialGym), true);
+});
+
+test('a full gym does not silently include specialty implements, but explicit picks still count', () => {
+  const fullGym = expandAvailableEquipment(['full_gym']);
+  assert.equal(fullGym.has('suspension'), false);
+  assert.equal(fullGym.has('barbell'), true);
+  assert.equal(fullGym.has('machines'), true);
+
+  // Selecting full gym used to discard every other choice, so a user who owned a suspension
+  // trainer could never enable it.
+  const fullGymPlusTrx = expandAvailableEquipment(['full_gym', 'suspension_trainer']);
+  assert.equal(fullGymPlusTrx.has('suspension'), true);
+  assert.equal(fullGymPlusTrx.has('barbell'), true);
+});
+
 test('bodyweight core names do not receive external load targets when metadata is wrong', () => {
   const windshieldWiper: ExerciseRecord = {
     id: 'windshield-wiper',
