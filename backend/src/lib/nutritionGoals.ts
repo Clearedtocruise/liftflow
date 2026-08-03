@@ -84,3 +84,34 @@ export function nutritionGoalsNeedUpdate(existing: StoredNutritionGoals, next: M
     Math.round(existing.protein_g) !== next.proteinG
   );
 }
+
+/** Minimal shape of the Supabase client used here, so this stays unit-testable. */
+type GoalsDb = {
+  from: (table: string) => any;
+};
+
+/**
+ * Closes the current goal row and opens a new one.
+ *
+ * `nutrition_goals` is an effective-dated history rather than a mutable row, so a change has to
+ * deactivate the old record and insert a new one. Anything that changes a user's targets must go
+ * through here, otherwise the Nutrition tab keeps reading the superseded row.
+ */
+export async function persistNutritionGoals(
+  db: GoalsDb,
+  userId: string,
+  targets: MacroSplit,
+  effectiveFrom?: string,
+): Promise<void> {
+  await db.from('nutrition_goals').update({ is_active: false }).eq('user_id', userId).eq('is_active', true);
+  await db.from('nutrition_goals').insert({
+    user_id: userId,
+    daily_calories: targets.calories,
+    protein_g: targets.proteinG,
+    carbs_g: targets.carbsG,
+    fat_g: targets.fatG,
+    water_ml: 3000,
+    is_active: true,
+    effective_from: effectiveFrom ?? new Date().toISOString().slice(0, 10),
+  });
+}

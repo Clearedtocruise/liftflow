@@ -283,6 +283,10 @@ export interface INutritionService {
   removePlannedMealsForWeek(userId: string, weekStart: string): Promise<ServiceResult<number>>;
   logHydration(userId: string, amountMl: number): Promise<ServiceResult<HydrationLog>>;
   getAdaptiveTargets(userId: string): Promise<ServiceResult<import('@/types/coaching').AdaptiveMacroTargets>>;
+  /** Recompute and persist macro targets from the user's current training goal. */
+  recalculateGoals(userId: string): Promise<
+    ServiceResult<{ calories: number; proteinG: number; carbsG: number; fatG: number; goal: string; changed: boolean }>
+  >;
   generateDailyPlan(userId: string, dietaryStyle?: string): Promise<ServiceResult<import('@/types/coaching').DailyMealPlan>>;
   getRecommendations(userId: string): Promise<ServiceResult<NutritionRecommendation[]>>;
 }

@@ -5,6 +5,7 @@ import { localDateString, resolveTimeZone } from '@/lib/localDate';
 import { mealSlotKey, remapApiMealsToClientWeek, type ApiPlanMeal } from '@/lib/mealPlanWeekAlign';
 import { aggregateDailyMeals, mealsForCalendarDay } from '@/lib/mealAggregation';
 import { isReplaceablePlannedMeal, pickMealsToKeep, weekEndDate } from '@/lib/mealCleanup';
+import { planDataCache } from '@/lib/planDataCache';
 import { MEAL_NOT_FOUND } from '@/lib/mealErrors';
 import { enrichMealMeta, correctedMacrosIfInflated, serializeMealMeta } from '@/lib/mealIngredients';
 import { isInvertedBodyWeightKg, normalizeBodyWeightKg } from '@/lib/bodyWeightKg';
@@ -730,6 +731,28 @@ export const nutritionService: INutritionService = {
     try {
       const token = await getAccessToken();
       const targets = await api.getAdaptiveMacroTargets(userId, token);
+      return ok(targets);
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
+  /**
+   * Recompute macro targets from the current training goal and save them.
+   *
+   * Changing a goal previously updated the profile only, leaving the active `nutrition_goals` row —
+   * and the cached copy the Nutrition tab paints first — describing the goal the user just left.
+   */
+  async recalculateGoals(userId: string) {
+    try {
+      const token = await getAccessToken();
+      const targets = await api.recalculateNutritionGoals(userId, token);
+
+      const refreshed = await nutritionService.getGoals(userId);
+      if (refreshed.success && refreshed.data) {
+        await planDataCache.writeGoals(userId, refreshed.data);
+      }
+
       return ok(targets);
     } catch (e) {
       return fromError(e);

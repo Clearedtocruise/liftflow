@@ -4,8 +4,31 @@ import test from 'node:test';
 import {
   deriveMacroSplit,
   nutritionGoalsNeedUpdate,
+  persistNutritionGoals,
   resolvePlanMacroTargets,
 } from './nutritionGoals.js';
+
+/** Records the calls a Supabase query chain receives so the write order can be asserted. */
+function fakeGoalsDb() {
+  const calls: Array<{ op: string; payload: unknown }> = [];
+  const chain = (op: string, payload: unknown) => {
+    calls.push({ op, payload });
+    const self: any = {
+      eq: () => self,
+      then: (resolve: (v: unknown) => unknown) => Promise.resolve(resolve({ data: null, error: null })),
+    };
+    return self;
+  };
+  return {
+    calls,
+    db: {
+      from: (table: string) => ({
+        update: (payload: unknown) => chain(`${table}.update`, payload),
+        insert: (payload: unknown) => chain(`${table}.insert`, payload),
+      }),
+    },
+  };
+}
 
 test('a user with no saved goal still gets one from the plan defaults', () => {
   // The reported gap: generating a plan produced meals sized for 180g with nothing recording it.
@@ -109,4 +132,29 @@ test('the derived split is consistent with the calorie total', () => {
   // Protein is prescribed independently, so the split need not sum exactly — but it must be in the
   // same ballpark rather than describing a different diet.
   assert.ok(Math.abs(fromMacros - 2400) < 700, `macro split implies ${fromMacros} kcal`);
+});
+
+test('saving new targets closes the old goal row before opening the new one', async () => {
+  // `nutrition_goals` is an effective-dated history, so leaving the previous row active would let
+  // the Nutrition tab keep reading the superseded target.
+  const { calls, db } = fakeGoalsDb();
+
+  await persistNutritionGoals(db, 'user-1', deriveMacroSplit(2100, 165), '2026-08-03');
+
+  assert.deepEqual(calls.map((call) => call.op), ['nutrition_goals.update', 'nutrition_goals.insert']);
+  assert.deepEqual(calls[0]!.payload, { is_active: false });
+
+  const inserted = calls[1]!.payload as Record<string, unknown>;
+  assert.equal(inserted.user_id, 'user-1');
+  assert.equal(inserted.daily_calories, 2100);
+  assert.equal(inserted.protein_g, 165);
+  assert.equal(inserted.is_active, true);
+  assert.equal(inserted.effective_from, '2026-08-03');
+});
+
+test('a goal change is only written when the numbers actually move', () => {
+  // Switching from muscle gain to fat loss changes calories, so this must report a change.
+  const current = { daily_calories: 2800, protein_g: 180 };
+  assert.equal(nutritionGoalsNeedUpdate(current, deriveMacroSplit(2200, 190)), true);
+  assert.equal(nutritionGoalsNeedUpdate(current, deriveMacroSplit(2800, 180)), false);
 });

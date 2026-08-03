@@ -204,6 +204,16 @@ export const api = {
       { userId },
       token,
     ),
+  /** Recompute and save macro targets from the user's current training goal. */
+  recalculateNutritionGoals: (userId: string, token?: string) =>
+    apiClient.post<{
+      calories: number;
+      proteinG: number;
+      carbsG: number;
+      fatG: number;
+      goal: string;
+      changed: boolean;
+    }>('/api/nutrition/goals/recalculate', { userId }, token),
   generateDailyMealPlan: (
     body: { userId: string; date?: string; dietaryStyle?: string },
     token?: string,

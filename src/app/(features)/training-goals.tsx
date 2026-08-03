@@ -11,6 +11,7 @@ import { Spacing } from '@/constants/theme';
 import { summarizeGoals, type TrainingGoalId } from '@/constants/trainingGoals';
 import { useAuth } from '@/hooks/useAuth';
 import { buildGoalsProfilePayload } from '@/lib/trainingGoalsProfile';
+import { nutritionService } from '@/services/nutritionService';
 import { userService } from '@/services/userService';
 
 export default function TrainingGoalsScreen() {
@@ -35,15 +36,35 @@ export default function TrainingGoalsScreen() {
 
     setSaving(true);
     const result = await userService.updateProfile(user.id, buildGoalsProfilePayload(rankedGoals));
-    setSaving(false);
 
     if (!result.success) {
+      setSaving(false);
       Alert.alert('Could not save', result.error);
       return;
     }
 
+    // The top goal drives macros, so nutrition has to be recomputed here. Without this the profile
+    // said "fat loss" while the Nutrition tab kept serving the surplus from the previous goal.
+    const nutrition = await nutritionService.recalculateGoals(user.id);
+    setSaving(false);
+
     await refreshProfile();
-    Alert.alert('Saved', 'Training goals updated.');
+
+    if (!nutrition.success) {
+      Alert.alert(
+        'Goals saved',
+        'Your training goals are updated, but nutrition targets could not be refreshed. Pull to refresh the Nutrition tab to try again.',
+      );
+      router.back();
+      return;
+    }
+
+    Alert.alert(
+      'Saved',
+      nutrition.data.changed
+        ? `Training goals updated. Nutrition is now ${nutrition.data.calories} cal and ${nutrition.data.proteinG}g protein a day.`
+        : 'Training goals updated. Your nutrition targets stay the same.',
+    );
     router.back();
   }, [user, rankedGoals, refreshProfile]);
 

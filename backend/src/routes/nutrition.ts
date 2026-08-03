@@ -7,6 +7,7 @@ import { loadNutritionIntelligence } from '../lib/loadNutritionIntelligence.js';
 import { syncNutritionForDates } from '../lib/nutritionDaySync.js';
 import {
     nutritionGoalsNeedUpdate,
+    persistNutritionGoals,
     resolvePlanMacroTargets,
     type MacroSplit,
 } from '../lib/nutritionGoals.js';
@@ -157,17 +158,7 @@ nutritionRouter.post('/meal-plan/generate', async (req, res) => {
 
     if (nutritionGoalsNeedUpdate(goals, resolvedTargets)) {
       try {
-        await db.from('nutrition_goals').update({ is_active: false }).eq('user_id', userId).eq('is_active', true);
-        await db.from('nutrition_goals').insert({
-          user_id: userId,
-          daily_calories: resolvedTargets.calories,
-          protein_g: resolvedTargets.proteinG,
-          carbs_g: resolvedTargets.carbsG,
-          fat_g: resolvedTargets.fatG,
-          water_ml: 3000,
-          is_active: true,
-          effective_from: today ?? new Date().toISOString().slice(0, 10),
-        });
+        await persistNutritionGoals(db, userId, resolvedTargets, today ?? undefined);
       } catch {
         // A plan the user can eat is worth more than a goal row; never fail generation on this.
       }
@@ -188,6 +179,53 @@ nutritionRouter.post('/meal-plan/generate', async (req, res) => {
     res.json(plan);
   } catch (error) {
     res.status(500).json({ message: error instanceof Error ? error.message : 'Meal plan generation failed' });
+  }
+});
+
+/**
+ * Recompute and save macro targets from the user's current training goal.
+ *
+ * Training goals and nutrition targets were only ever connected during onboarding. Changing a goal
+ * afterwards updated `profiles` while `nutrition_goals` kept the old row, so someone who switched
+ * from muscle gain to fat loss carried a surplus around indefinitely. The goals screen calls this
+ * as soon as a new goal is saved.
+ */
+nutritionRouter.post('/goals/recalculate', async (req, res) => {
+  try {
+    const userId = authedUserId(req);
+    const db = requireAdmin();
+
+    const [ctx, macroInputs] = await Promise.all([loadCoachContext(userId), loadDailyMacroInputs(userId)]);
+
+    const { data: existing } = await db
+      .from('nutrition_goals')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('is_active', true)
+      .limit(1)
+      .maybeSingle();
+
+    const macroContext = macroContextFrom(macroInputs, {
+      recoveryScore: ctx.recovery.score,
+      recoveryModeActive: ctx.recovery.recoveryModeActive,
+    });
+    const targets = calculateMacroTargets(macroContext);
+
+    const resolved: MacroSplit = {
+      calories: Math.round(targets.calories),
+      proteinG: Math.round(targets.proteinG),
+      carbsG: Math.round(targets.carbsG),
+      fatG: Math.round(targets.fatG),
+    };
+
+    const changed = nutritionGoalsNeedUpdate(existing, resolved);
+    if (changed) {
+      await persistNutritionGoals(db, userId, resolved);
+    }
+
+    res.json({ ...resolved, goal: macroInputs.goal, changed });
+  } catch (error) {
+    res.status(500).json({ message: error instanceof Error ? error.message : 'Could not update nutrition targets' });
   }
 });
 
