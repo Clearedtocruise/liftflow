@@ -23,6 +23,7 @@ import type {
 type ProfileRow = {
   id: string;
   email: string;
+  strength_baselines?: unknown;
   display_name: string | null;
   avatar_url: string | null;
   date_of_birth: string | null;
@@ -77,6 +78,7 @@ export function mapProfile(row: ProfileRow): UserProfile {
     primaryGymName: row.primary_gym_name ?? undefined,
     availableEquipment: (row.available_equipment ?? undefined) as UserProfile['availableEquipment'],
     primaryTrainingGoal: (row.primary_training_goal as UserProfile['primaryTrainingGoal']) ?? undefined,
+    strengthBaselines: (row.strength_baselines as UserProfile['strengthBaselines']) ?? undefined,
     onboardingCompleted: row.onboarding_completed,
     isBetaTester: row.is_beta_tester ?? undefined,
     metadata: (row.metadata as UserProfile['metadata']) ?? undefined,

@@ -1,5 +1,14 @@
 import { expandEquipmentRequirements, requiresSuspensionTrainer } from './equipmentCatalog.js';
 import { resolveMovementFamily, resolveTrainingDayBucket, type TrainingDayBucket } from './movementFamily.js';
+import { sanitizeBaselines, seedWeightLbsFromBaselines, type StrengthBaselines } from './strengthBaseline.js';
+
+/** The top of each goal's rep range — what a working set is prescribed against. */
+const GOAL_TOP_REPS: Record<TrainingGoal, number> = {
+  strength: 6,
+  fat_loss: 15,
+  muscle_gain: 12,
+  general_fitness: 12,
+};
 import { isCatalogVariantSlug } from './exerciseCatalogDedup.js';
 import { capSetsForExperience, resolveExperienceVolume } from './experienceVolume.js';
 import {
@@ -59,6 +68,8 @@ export type UserTrainingProfile = {
   fitnessGoals: string[];
   trainingExperience?: string | null;
   weightKg?: number | null;
+  /** Compound lifts the athlete reported, used to seed loads before any history exists. */
+  strengthBaselines?: StrengthBaselines | null;
 };
 
 const ALL_EQUIPMENT = [
@@ -571,7 +582,9 @@ export async function loadUserTrainingProfile(userId: string): Promise<UserTrain
   const db = requireAdmin();
   const { data } = await db
     .from('profiles')
-    .select('training_location, available_equipment, primary_training_goal, fitness_goals, training_experience, weight_kg')
+    .select(
+      'training_location, available_equipment, primary_training_goal, fitness_goals, training_experience, weight_kg, strength_baselines',
+    )
     .eq('id', userId)
     .maybeSingle();
 
@@ -584,6 +597,7 @@ export async function loadUserTrainingProfile(userId: string): Promise<UserTrain
     fitnessGoals: ranked,
     trainingExperience: data?.training_experience,
     weightKg: data?.weight_kg,
+    strengthBaselines: sanitizeBaselines(data?.strength_baselines),
   };
 }
 
@@ -810,6 +824,7 @@ export function suggestWeightLbs(
   goal: TrainingGoal,
   history: SetHistory | undefined,
   bodyWeightKg?: number | null,
+  baselines?: StrengthBaselines | null,
 ): number | undefined {
   if (
     exercise.equipment === 'bodyweight' ||
@@ -820,16 +835,31 @@ export function suggestWeightLbs(
   }
 
   if (history) {
-    const topRep = goal === 'strength' ? 6 : goal === 'fat_loss' ? 15 : 12;
+    const topRep = GOAL_TOP_REPS[goal];
     if (history.reps >= topRep) {
       return Math.round((history.weight + 5) * 10) / 10;
     }
     return history.weight;
   }
 
+  const isolation = exerciseLooksLikeLightIsolation(exercise);
+
+  /**
+   * With no history, a load reported at onboarding beats a fraction of bodyweight — that guess is
+   * the same number for a decade-long lifter and a beginner of equal weight.
+   */
+  const seeded = seedWeightLbsFromBaselines({
+    exerciseName: exercise.name,
+    exerciseSlug: exercise.slug,
+    baselines,
+    targetReps: GOAL_TOP_REPS[goal],
+  });
+  if (seeded != null) {
+    return isolation ? Math.min(seeded, isolationStartingCapLbs(exercise)) : seeded;
+  }
+
   const bw = normalizeBodyWeightKg(bodyWeightKg);
   const base = bw * 2.20462;
-  const isolation = exerciseLooksLikeLightIsolation(exercise);
   const family = exercise.metadata?.movement_family ?? '';
   const factor = isolation
     ? 0.08
@@ -1291,7 +1321,13 @@ export async function buildAdaptiveWorkoutPlan(
 
   let exercises: PlannerWorkoutExercise[] = picked.map((exercise) => {
     const history = performance.get(exercise.slug);
-    let weightLbs = suggestWeightLbs(exercise, profile.primaryTrainingGoal, history, profile.weightKg);
+    let weightLbs = suggestWeightLbs(
+      exercise,
+      profile.primaryTrainingGoal,
+      history,
+      profile.weightKg,
+      profile.strengthBaselines,
+    );
     if (weightLbs && recoveryMods.intensityMultiplier < 1) {
       weightLbs = Math.round(weightLbs * recoveryMods.intensityMultiplier / 5) * 5;
     }

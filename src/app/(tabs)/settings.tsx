@@ -429,6 +429,18 @@ export default function SettingsScreen() {
           onPress={() => router.push('/(features)/training-goals')}
         />
         <SettingsRow
+          label="Current strength"
+          value={
+            user?.strengthBaselines && Object.keys(user.strengthBaselines).length > 0
+              ? `${Object.keys(user.strengthBaselines).length} lifts recorded`
+              : 'Set starting weights'
+          }
+          icon={
+            <AppSymbol name="scalemass" fallback="🏋️" size={20} tintColor={LiftFlowColors.textSecondary} />
+          }
+          onPress={() => router.push('/(features)/strength-baseline')}
+        />
+        <SettingsRow
           label="Units"
           value={user ? summarizeUnitPreferences(resolveUnitPreferences(user)) : 'Not set'}
           icon={
