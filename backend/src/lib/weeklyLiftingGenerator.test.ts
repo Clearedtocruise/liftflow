@@ -38,15 +38,10 @@ const hypertrophySplit = inferWeeklyLiftingSplit({
 });
 assert.equal(hypertrophySplit, 'push_pull_legs');
 
-// SKIPPED — documents intended behaviour that is currently unreachable, not a test defect.
-// inferProgramType (programSelection.ts:22) returns 'body_part_split' for any days 4-7 before
-// reaching the `fat_loss -> upper_lower` rule on the next line, and days <= 3 return earlier
-// still, so 'upper_lower' can never be produced. Re-ordering those branches changes the
-// generated program for every fat-loss user, so it is left to the owner of the programming
-// rules rather than fixed here. Re-enable this assertion with that change.
-//
-// const fatLossSplit = inferWeeklyLiftingSplit({ primaryGoal: 'fat_loss', daysPerWeek: 4 });
-// assert.equal(fatLossSplit, 'upper_lower');
+// Previously unreachable: every branch fell through to `body_part_split` before the fat-loss rule
+// could be reached. The goal branches are now ordered by priority, so this holds.
+const fatLossSplit = inferWeeklyLiftingSplit({ primaryGoal: 'fat_loss', daysPerWeek: 4 });
+assert.equal(fatLossSplit, 'upper_lower');
 
 const plan = buildWeeklyLiftingPlan({
   programType: 'push_pull_legs',

@@ -621,7 +621,13 @@ export async function regenerateActiveProgram(
 
     const input: CreateProgramInput = {
       userId,
-      programType: profileInput.programType,
+      /**
+       * Keep the split the athlete is already running. Regeneration used to re-infer it from the
+       * current goals, so adding "strength" anywhere in a goal list silently turned a Push/Pull/Legs
+       * week into Squat/Bench/Deadlift days — and the Monday rebuild applied it without asking.
+       * Changing split stays an explicit action, exactly as the program clock is preserved above.
+       */
+      programType: meta.programType ?? profileInput.programType,
       frequency: profileInput.frequency,
       goal: profileInput.goal ?? meta.goal,
       experience: profileInput.experience ?? meta.experience,

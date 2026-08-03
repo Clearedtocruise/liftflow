@@ -13,14 +13,19 @@ export function inferProgramType(input: ProgramSelectionInput): ProgramType {
   const primary = input.primaryGoal ?? goals[0] ?? 'general_fitness';
   const days = input.daysPerWeek ?? 4;
 
-  if (primary === 'strength' || goals.includes('strength')) return 'strength';
+  /**
+   * Only the top goal decides the split. Listing "strength" anywhere used to hand a lifter the
+   * powerlifting week (Squat / Bench / Deadlift days) even when it was their fourth priority.
+   */
+  if (primary === 'strength') return 'strength';
+
   if (days <= 3) return 'body_part_split';
-  if (primary === 'muscle_gain' || primary === 'hypertrophy' || goals.includes('muscle_gain')) {
-    return 'body_part_split';
-  }
-  if (goals.length >= 2) return 'body_part_split';
-  if (days >= 4 && days <= 7) return 'body_part_split';
+  if (primary === 'muscle_gain' || primary === 'hypertrophy') return 'body_part_split';
   if (primary === 'fat_loss' || primary === 'weight_loss') return 'upper_lower';
+
+  // Push/Pull/Legs is the sensible default for four or more days a week. Every branch used to fall
+  // through to a body part split, so this was unreachable and nobody was ever given one.
+  if (days >= 4) return 'push_pull_legs';
 
   return 'body_part_split';
 }
