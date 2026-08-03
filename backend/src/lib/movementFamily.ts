@@ -1,16 +1,16 @@
 /**
- * Groups an exercise into the movement family that determines how it is coached.
+ * Groups an exercise into the movement family that decides which training day it belongs on and
+ * how it is coached. Mirrors src/lib/exerciseMovementFamily.ts.
  *
- * The catalog's stored `movement_family` is not trustworthy: the bulk import tagged 200 exercises
- * as `horizontal_press`, including triceps kickbacks and lateral raises, which is what produced
- * bench-press loads on a kickback. The exercise name is the most reliable signal available at
- * runtime, so it is matched first, then muscle groups, then the broad movement category.
+ * None of the stored classification columns can be trusted. The bulk import tagged 200 exercises
+ * as `horizontal_press` including triceps kickbacks; it files calf raises under category `pull`;
+ * and it lists `lats` as the primary muscle of the Goblet Squat, which is why 16 of 22 squats were
+ * being excluded from leg day and offered on back day instead. The exercise name is the one signal
+ * that survives contact with the data, so it is matched first.
  *
- * Families exist to make written guidance specific. Anything that cannot be identified confidently
- * stays `null` so the caller falls back to honest category guidance rather than guessing.
+ * Anything that cannot be identified confidently stays `null`, so callers fall back rather than
+ * guessing.
  */
-
-import type { MovementCategory } from '@/types/common';
 
 export type MovementFamily =
   | 'horizontal_press'
@@ -39,7 +39,7 @@ export type MovementFamily =
 export type MovementFamilyInput = {
   name?: string | null;
   slug?: string | null;
-  category?: MovementCategory | null;
+  category?: string | null;
   equipment?: string | null;
   muscleGroups?: string[] | null;
 };
@@ -122,4 +122,52 @@ export function resolveMovementFamily(input: MovementFamilyInput): MovementFamil
    * than coaching a burpee like a loaded carry.
    */
   return null;
+}
+
+/** The training day a movement belongs to in a push/pull/legs split. */
+export type TrainingDayBucket = 'push' | 'pull' | 'legs' | 'core' | 'conditioning';
+
+const FAMILY_BUCKETS: Record<MovementFamily, TrainingDayBucket> = {
+  horizontal_press: 'push',
+  vertical_press: 'push',
+  chest_isolation: 'push',
+  triceps_isolation: 'push',
+  lateral_raise: 'push',
+
+  vertical_pull: 'pull',
+  horizontal_pull: 'pull',
+  biceps_isolation: 'pull',
+  rear_delt: 'pull',
+
+  squat_pattern: 'legs',
+  lunge_pattern: 'legs',
+  hinge_pattern: 'legs',
+  glute_isolation: 'legs',
+  quad_isolation: 'legs',
+  hamstring_isolation: 'legs',
+  calf_isolation: 'legs',
+
+  core_anti_extension: 'core',
+  core_anti_lateral: 'core',
+  core_flexion: 'core',
+  core_rotation: 'core',
+
+  carry: 'conditioning',
+  cardio: 'conditioning',
+};
+
+export function bucketForFamily(family: MovementFamily): TrainingDayBucket {
+  return FAMILY_BUCKETS[family];
+}
+
+/**
+ * Which day an exercise belongs on, decided by its name.
+ *
+ * Returns null when the movement cannot be identified — a burpee, a battle rope wave, a neck
+ * isometric. Those are legitimate conditioning work but they are not push, pull or leg training,
+ * and guessing is what put calf raises on a push day.
+ */
+export function resolveTrainingDayBucket(input: MovementFamilyInput): TrainingDayBucket | null {
+  const family = resolveMovementFamily(input);
+  return family ? FAMILY_BUCKETS[family] : null;
 }

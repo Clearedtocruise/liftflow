@@ -14,6 +14,9 @@ test('kickbacks are separated by the muscle they actually train', () => {
   assert.equal(family('Cable Triceps Kickback'), 'triceps_isolation');
   assert.equal(family('Glute Kickback'), 'glute_isolation');
   assert.equal(family('Donkey Kick'), 'glute_isolation');
+  // Migration 034 settled this one: a bare "cable kickback" is the glute version, and the triceps
+  // variant is named for the triceps.
+  assert.equal(family('Cable Kickback'), 'glute_isolation');
 });
 
 test('a curl is only a biceps curl when it is one', () => {

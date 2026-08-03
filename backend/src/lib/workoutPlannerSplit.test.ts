@@ -334,3 +334,78 @@ test('DB Kickback never inherits compound press starting loads', () => {
 });
 
 console.log('workoutPlannerSplit.test.ts — all assertions passed');
+
+test('a Push day is recognised and filters to pushing work', () => {
+  // The generated week labels days "Push", "Pull" and "Legs". Only "Legs" matched a plan, so push
+  // and pull days had no focus filtering at all — which put calf raises on push day.
+  const push = resolveDayFocusPlan('Push');
+  const pull = resolveDayFocusPlan('Pull');
+  assert.ok(push, 'Push must resolve to a day focus plan');
+  assert.ok(pull, 'Pull must resolve to a day focus plan');
+  assert.equal(push!.dayBucket, 'push');
+  assert.equal(pull!.dayBucket, 'pull');
+
+  const calfRaise: ExerciseRecord = {
+    id: 'calf', name: 'Band Calf Raise', slug: 'band-calf-raise',
+    // The catalog really does file calf raises under `pull`.
+    category: 'pull', equipment: 'bands', muscle_groups: ['calves'], metadata: {},
+  };
+  const benchPress: ExerciseRecord = {
+    id: 'bench', name: 'Bench Press', slug: 'bench-press',
+    category: 'push', equipment: 'barbell', muscle_groups: ['chest'], metadata: {},
+  };
+  const barbellRow: ExerciseRecord = {
+    id: 'row', name: 'Barbell Row', slug: 'barbell-row',
+    category: 'pull', equipment: 'barbell', muscle_groups: ['back'], metadata: {},
+  };
+
+  assert.equal(isAllowedOnDayFocus(calfRaise, push!), false);
+  assert.equal(isAllowedOnDayFocus(calfRaise, pull!), false);
+  assert.equal(isAllowedOnDayFocus(benchPress, push!), true);
+  assert.equal(isAllowedOnDayFocus(benchPress, pull!), false);
+  assert.equal(isAllowedOnDayFocus(barbellRow, pull!), true);
+  assert.equal(isAllowedOnDayFocus(barbellRow, push!), false);
+});
+
+test('the day is decided by the name, not the catalog muscle tags', () => {
+  // The import lists `lats` as the primary muscle of the Goblet Squat, so 16 of 22 squats were
+  // excluded from leg day and offered on back day instead.
+  const gobletSquat: ExerciseRecord = {
+    id: 'goblet', name: 'Goblet Squat', slug: 'goblet-squat',
+    category: 'squat', equipment: 'dumbbell', muscle_groups: ['lats'], metadata: {},
+  };
+
+  assert.equal(isAllowedOnDayFocus(gobletSquat, BODY_PART_DAY_PLANS.legs_core!), true);
+  assert.equal(isAllowedOnDayFocus(gobletSquat, BODY_PART_DAY_PLANS.back_biceps_core!), false);
+  assert.equal(isAllowedOnDayFocus(gobletSquat, BODY_PART_DAY_PLANS.push!), false);
+});
+
+test('conditioning and unidentified movements stay off focused strength days', () => {
+  const make = (name: string, muscles: string[], category = 'carry'): ExerciseRecord => ({
+    id: name, name, slug: name.toLowerCase().replace(/\s+/g, '-'),
+    category, equipment: 'bodyweight', muscle_groups: muscles, metadata: {},
+  });
+
+  // Stored as `carry`, `squat` and `hinge` respectively by the import.
+  assert.equal(isAllowedOnDayFocus(make('Burpee', ['full_body']), BODY_PART_DAY_PLANS.push!), false);
+  assert.equal(isAllowedOnDayFocus(make('Rowing', ['cardiovascular']), BODY_PART_DAY_PLANS.legs_core!), false);
+  assert.equal(isAllowedOnDayFocus(make('Farmer Carry', ['forearms']), BODY_PART_DAY_PLANS.push!), false);
+  assert.equal(isAllowedOnDayFocus(make('Neck Isometric Hold Press', ['neck']), BODY_PART_DAY_PLANS.push!), false);
+});
+
+test('core is allowed on a push day but cannot take it over', () => {
+  const pushPlan = BODY_PART_DAY_PLANS.push!;
+  const plank: ExerciseRecord = {
+    id: 'plank', name: 'Plank', slug: 'plank',
+    category: 'core', equipment: 'bodyweight', muscle_groups: ['core'], metadata: {},
+  };
+  assert.equal(isAllowedOnDayFocus(plank, pushPlan), true);
+
+  // A pool of nothing but core work must still not fill ten slots with it.
+  const corePool: ExerciseRecord[] = Array.from({ length: 12 }, (_, i) => ({
+    id: `core-${i}`, name: `Cable Crunch ${i}`, slug: `cable-crunch-${i}`,
+    category: 'core', equipment: 'cable', muscle_groups: ['core'], metadata: {},
+  }));
+  const picked = selectFocusedSplitExercises(corePool, pushPlan, new Map(), 10, 0);
+  assert.ok(picked.length <= 2, `core should be capped, got ${picked.length}`);
+});
