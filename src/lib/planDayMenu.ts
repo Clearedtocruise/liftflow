@@ -105,15 +105,19 @@ function buildParts(input: MenuBuildInput, focusDate: string, source: string): M
   const weeklyPlan = buildWeeklyPlanEntries(input.workouts, reference, input.timeZone);
   const availableMoveTargets = moveTargetsForDate(weeklyPlan, focusDate);
 
+  // The reference has to reach these too. Without it they fall back to the real clock, so the day
+  // being inspected was resolved against a different week than the one the menu was built from.
   const resolved = resolveActiveTrainingDay(input.workouts, {
     date: focusDate,
     timeZone: input.timeZone,
+    reference,
   });
   logPlanDayContext(source, focusDate, weeklyPlan, availableMoveTargets, resolved);
 
   const focusWorkout = resolveActiveTrainingDay(normalized, {
     date: focusDate,
     timeZone: input.timeZone,
+    reference,
   }).workout ?? undefined;
 
   return {

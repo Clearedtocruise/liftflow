@@ -95,3 +95,30 @@ test('a week with only one workout can still move it to an empty day', () => {
   assert.equal(menu!.swapTargets.length, 0);
   assert.ok(menu!.moveTargets.length > 0, 'moving to an empty day must stay possible');
 });
+
+test('the menu uses the reference week it was given, not the real clock', () => {
+  // buildParts resolved the focus workout without passing its reference through, so it consulted
+  // today's date instead. Any week other than the current one then looked empty and lost its
+  // move/swap actions — which is exactly how these tests started failing a week after being written.
+  const pastReference = new Date('2020-03-02T12:00:00');
+  const { dates: pastDates } = getWeekRange(pastReference);
+  const [pastDay0, , pastDay2] = pastDates;
+
+  const menu = buildHomeManageDayMenuContent(
+    {
+      workouts: [
+        plannedWorkout('w-past', pastDay0!, 'Push Day'),
+        plannedWorkout('w-past-2', pastDay2!, 'Leg Day'),
+      ],
+      reference: pastReference,
+      onScheduleChange: () => undefined,
+      onConfirmSkip: () => undefined,
+    },
+    pastDay0!,
+  );
+
+  assert.ok(menu, 'a workout in the referenced week must still build a menu');
+  assert.equal(menu!.focusWorkoutId, 'w-past');
+  assert.ok(menu!.actions.some((action) => action.id === 'move-day'));
+  assert.ok(menu!.actions.some((action) => action.id === 'swap-workout'));
+});
