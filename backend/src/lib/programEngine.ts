@@ -68,9 +68,10 @@ type StoredProgramMetadata = {
   schedule?: Array<{ label?: string; isRest?: boolean }>;
 };
 
+/** Noon UTC on both ends, so a DST boundary cannot shorten the span below a whole day. */
 function daysBetween(fromDate: string, toDate: string): number {
-  const from = new Date(fromDate + 'T12:00:00').getTime();
-  const to = new Date(toDate + 'T12:00:00').getTime();
+  const from = new Date(fromDate + 'T12:00:00.000Z').getTime();
+  const to = new Date(toDate + 'T12:00:00.000Z').getTime();
   return Math.floor((to - from) / (1000 * 60 * 60 * 24));
 }
 
