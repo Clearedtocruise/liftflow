@@ -113,6 +113,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # `validate:sprint1-exercise-classification` runs the backend's own unit tests through the
+      # backend's tsx. Without this the guard reported "tsx not installed in backend" and failed
+      # only in CI, where it passes locally on any machine that has already installed them.
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
       # Each `validate:*` script below was written to lock a specific bug shut, but nothing ran them
       # after the PR that added them, so they only protected the branch they arrived on.
       #
