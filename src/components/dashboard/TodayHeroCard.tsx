@@ -40,6 +40,8 @@ type TodayHeroCardProps = {
   /** Move or swap this day with another day in the week. */
   onManageDay?: () => void;
   manageDayBusy?: boolean;
+  /** Open the full exercise list for today's workout. */
+  onPreviewWorkout?: () => void;
   onContinueWorkout?: () => void;
   onViewHistory?: () => void;
 };
@@ -57,6 +59,7 @@ export function TodayHeroCard({
   onManageWorkout,
   onManageDay,
   manageDayBusy,
+  onPreviewWorkout,
   onContinueWorkout,
   onViewHistory,
 }: TodayHeroCardProps) {
@@ -181,24 +184,13 @@ export function TodayHeroCard({
         </>
       ) : state.kind === 'in-progress' ? (
         <>
-          <AppText variant="title">{state.name}</AppText>
-          <AppText variant="footnote" color="textSecondary">
-            Session in progress — pick up where you left off.
-          </AppText>
-          {state.exercises.length > 0 ? (
-            <View style={styles.preview}>
-              {state.exercises.map((name, index) => (
-                <AppText key={`${name}-${index}`} variant="footnote" color="textSecondary">
-                  {index + 1}. {name}
-                </AppText>
-              ))}
-              {state.extraCount > 0 ? (
-                <AppText variant="caption" color="textTertiary">
-                  +{state.extraCount} more
-                </AppText>
-              ) : null}
-            </View>
-          ) : null}
+          <WorkoutOverview
+            name={state.name}
+            exercises={state.exercises}
+            extraCount={state.extraCount}
+            onPreview={onPreviewWorkout}
+            subtitle="Session in progress — pick up where you left off."
+          />
           <PrimaryButton
             label="Continue Workout"
             onPress={onContinueWorkout ?? onStart}
@@ -209,21 +201,12 @@ export function TodayHeroCard({
         </>
       ) : (
         <>
-          <AppText variant="title">{state.name}</AppText>
-          {state.exercises.length > 0 ? (
-            <View style={styles.preview}>
-              {state.exercises.map((name, index) => (
-                <AppText key={`${name}-${index}`} variant="footnote" color="textSecondary">
-                  {index + 1}. {name}
-                </AppText>
-              ))}
-              {state.extraCount > 0 ? (
-                <AppText variant="caption" color="textTertiary">
-                  +{state.extraCount} more
-                </AppText>
-              ) : null}
-            </View>
-          ) : null}
+          <WorkoutOverview
+            name={state.name}
+            exercises={state.exercises}
+            extraCount={state.extraCount}
+            onPreview={onPreviewWorkout}
+          />
           <RecoveryBlock
             percent={recoveryPercent}
             label={recoveryLabel}
@@ -256,6 +239,80 @@ export function TodayHeroCard({
         </>
       )}
     </LinearGradient>
+  );
+}
+
+/**
+ * Workout name and the first few exercises.
+ *
+ * The card has room for four exercises, so the rest of the session used to be reachable only by
+ * starting it. When a preview handler is supplied the whole block opens the full list.
+ */
+function WorkoutOverview({
+  name,
+  exercises,
+  extraCount,
+  subtitle,
+  onPreview,
+}: {
+  name: string;
+  exercises: string[];
+  extraCount: number;
+  subtitle?: string;
+  onPreview?: () => void;
+}) {
+  const total = exercises.length + extraCount;
+
+  const body = (
+    <>
+      <View style={styles.headingRow}>
+        <AppText variant="title" style={styles.headingText}>
+          {name}
+        </AppText>
+        {onPreview ? (
+          <AppText variant="title" color="textSecondary">
+            ›
+          </AppText>
+        ) : null}
+      </View>
+      {subtitle ? (
+        <AppText variant="footnote" color="textSecondary">
+          {subtitle}
+        </AppText>
+      ) : null}
+      {exercises.length > 0 ? (
+        <View style={styles.preview}>
+          {exercises.map((exerciseName, index) => (
+            <AppText key={`${exerciseName}-${index}`} variant="footnote" color="textSecondary">
+              {index + 1}. {exerciseName}
+            </AppText>
+          ))}
+          {onPreview && total > exercises.length ? (
+            <AppText variant="caption" color="accent">
+              View all {total} exercises
+            </AppText>
+          ) : extraCount > 0 ? (
+            <AppText variant="caption" color="textTertiary">
+              +{extraCount} more
+            </AppText>
+          ) : null}
+        </View>
+      ) : null}
+    </>
+  );
+
+  if (!onPreview) return <View style={styles.overview}>{body}</View>;
+
+  return (
+    <Pressable
+      onPress={onPreview}
+      style={styles.overview}
+      accessibilityRole="button"
+      accessibilityLabel={`${name}. View all ${total} exercises`}
+      accessibilityHint="Opens the full exercise list for this workout"
+    >
+      {body}
+    </Pressable>
   );
 }
 
@@ -362,6 +419,17 @@ const styles = StyleSheet.create({
   },
   preview: {
     gap: 2,
+  },
+  overview: {
+    gap: Spacing.xs,
+  },
+  headingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  headingText: {
+    flex: 1,
   },
   recoveryRow: {
     flexDirection: 'row',

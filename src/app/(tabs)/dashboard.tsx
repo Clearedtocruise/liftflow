@@ -7,6 +7,7 @@ import { HomeHeader } from '@/components/dashboard/HomeHeader';
 import { ManageDayModal } from '@/components/dashboard/ManageDayModal';
 import { StatTile } from '@/components/dashboard/StatTile';
 import { TodayHeroCard, type HeroState } from '@/components/dashboard/TodayHeroCard';
+import { WorkoutPreviewModal } from '@/components/dashboard/WorkoutPreviewModal';
 import { UpNextCard } from '@/components/dashboard/UpNextCard';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { AppText } from '@/components/ui/AppText';
@@ -52,6 +53,7 @@ export default function DashboardScreen() {
   const today = useLocalCalendarDay(user?.timezone);
   const [manageDayMenu, setManageDayMenu] = useState<ManageDayMenuContent | null>(null);
   const [manageDayOpen, setManageDayOpen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [adaptingPlan, setAdaptingPlan] = useState(false);
 
   const handleManageDay = useCallback(() => {
@@ -115,6 +117,13 @@ export default function DashboardScreen() {
     return { kind: 'rest' };
   }, [loading, error, todaysWorkout, completedTodaysWorkout, inProgressTodaysWorkout, hasProgram]);
 
+  // The hero card can only show four exercises, so the preview needs the whole planned session.
+  const previewWorkout = inProgressTodaysWorkout ?? todaysWorkout;
+  const previewExercises = useMemo(
+    () => exercisesFromPlannedWorkout(previewWorkout),
+    [previewWorkout],
+  );
+
   const upNextMuscles = useMemo(
     () =>
       upcomingWorkout
@@ -168,6 +177,7 @@ export default function DashboardScreen() {
         }}
         onManageDay={hasProgram ? handleManageDay : undefined}
         manageDayBusy={adaptingPlan}
+        onPreviewWorkout={previewExercises.length > 0 ? () => setPreviewOpen(true) : undefined}
       />
 
       <View style={styles.tiles}>
@@ -273,6 +283,27 @@ export default function DashboardScreen() {
           }}
         />
       ) : null}
+
+      <WorkoutPreviewModal
+        visible={previewOpen}
+        workoutName={previewWorkout?.name ?? 'Today'}
+        exercises={previewExercises}
+        onClose={() => setPreviewOpen(false)}
+        onStart={
+          inProgressTodaysWorkout
+            ? () => {
+                setPreviewOpen(false);
+                router.push('/(tabs)/workout');
+              }
+            : () => {
+                setPreviewOpen(false);
+                void startWorkout().then((ok) => {
+                  if (ok) router.push('/(tabs)/workout');
+                });
+              }
+        }
+        startDisabled={starting || generating}
+      />
     </ScreenContainer>
   );
 }
