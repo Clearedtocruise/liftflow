@@ -529,9 +529,6 @@ export const nutritionService: INutritionService = {
       const clientWeekEnd = weekEndDate(clientWeekStart);
       const apiWeekStart = plan.weekStartDate ?? clientWeekStart;
 
-      await this.removePlannedMealsForWeek(userId, clientWeekStart);
-      await this.pruneDuplicateMeals(userId, { from: clientWeekStart, to: clientWeekEnd });
-
       const { data: existingMeals } = await supabase
         .from('meals')
         .select(MEAL_COLUMNS)
@@ -539,9 +536,19 @@ export const nutritionService: INutritionService = {
         .gte('scheduled_date', clientWeekStart)
         .lte('scheduled_date', clientWeekEnd);
 
+      const existing = (existingMeals ?? []).map(mapMeal);
+
+      /**
+       * The meals this plan would replace, identified now but not deleted until the new week is
+       * safely saved. This used to delete first, and every failure after that point — an empty
+       * response from the API, a rejected insert, a dropped connection — returned an error with
+       * the week's meals already gone and nothing to restore them.
+       */
+      const staleMealIds = existing.filter(isReplaceablePlannedMeal).map((meal) => meal.id);
+
+      // Only meals that are being kept can block a slot; the replaceable ones are on their way out.
       const occupiedSlots = new Set(
-        (existingMeals ?? [])
-          .map(mapMeal)
+        existing
           .filter((meal) => meal.scheduledDate != null && !isReplaceablePlannedMeal(meal))
           .map((meal) => mealSlotKey(meal.scheduledDate as string, meal.mealType)),
       );
@@ -604,6 +611,12 @@ export const nutritionService: INutritionService = {
         await supabase.from('meal_plans').delete().eq('id', saved.id);
         return fail('Meals could not be saved to your account.');
       }
+
+      // The new week exists, so the meals it replaces can go.
+      if (staleMealIds.length > 0) {
+        await supabase.from('meals').delete().in('id', staleMealIds);
+      }
+      await this.pruneDuplicateMeals(userId, { from: clientWeekStart, to: clientWeekEnd });
 
       const weekMeals = await this.getMealsForWeek(userId, clientWeekStart, clientWeekEnd);
       if (!weekMeals.success || weekMeals.data.length === 0) {

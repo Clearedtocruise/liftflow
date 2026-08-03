@@ -116,5 +116,30 @@ check(
   true,
 );
 
+/**
+ * Generating a week must never destroy the week it is replacing before the replacement exists.
+ * The original order deleted first, so an empty API response, a rejected insert or a dropped
+ * connection left the user with no meals at all and nothing to restore them.
+ */
+const nutritionService = source('src/services/nutritionService.ts');
+const generateWeek = /async generateWeeklyMealPlan[\s\S]*?\n  },\n/.exec(nutritionService)?.[0] ?? '';
+
+check('generateWeeklyMealPlan was found', generateWeek.length > 0, true);
+
+const insertIndex = generateWeek.indexOf(".from('meals')\n        .insert(");
+const deleteIndex = generateWeek.indexOf(".from('meals').delete()");
+
+check('the new week is inserted before anything is deleted', insertIndex > 0 && insertIndex < deleteIndex, true);
+check(
+  'the meals it replaces are still cleaned up afterwards',
+  generateWeek.includes('staleMealIds') && deleteIndex > 0,
+  true,
+);
+check(
+  'the pre-emptive week wipe is gone',
+  /await this\.removePlannedMealsForWeek\(userId, clientWeekStart\);[\s\S]{0,200}?const apiMeals/.test(generateWeek),
+  false,
+);
+
 console.log(`\nProtein meal replace: ${failures === 0 ? 'PASS' : `FAIL (${failures})`}`);
 process.exit(failures === 0 ? 0 : 1);
