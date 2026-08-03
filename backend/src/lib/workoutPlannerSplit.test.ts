@@ -342,8 +342,8 @@ test('a Push day is recognised and filters to pushing work', () => {
   const pull = resolveDayFocusPlan('Pull');
   assert.ok(push, 'Push must resolve to a day focus plan');
   assert.ok(pull, 'Pull must resolve to a day focus plan');
-  assert.equal(push!.dayBucket, 'push');
-  assert.equal(pull!.dayBucket, 'pull');
+  assert.deepEqual(push!.dayBuckets, ['push']);
+  assert.deepEqual(pull!.dayBuckets, ['pull']);
 
   const calfRaise: ExerciseRecord = {
     id: 'calf', name: 'Band Calf Raise', slug: 'band-calf-raise',
@@ -408,4 +408,43 @@ test('core is allowed on a push day but cannot take it over', () => {
   }));
   const picked = selectFocusedSplitExercises(corePool, pushPlan, new Map(), 10, 0);
   assert.ok(picked.length <= 2, `core should be capped, got ${picked.length}`);
+});
+
+test('every day label the week generator produces resolves to a focus plan', () => {
+  // A label with no plan means no muscle filtering at all, which is how calf raises reached a
+  // push day. Full Body is the one label that legitimately trains everything.
+  const labels = [
+    'Push', 'Pull', 'Legs',
+    'Upper', 'Lower',
+    'Squat Day', 'Bench Day', 'Deadlift Day', 'Press Day',
+    'Back, Biceps & Core', 'Chest, Shoulders & Triceps', 'Legs & Core',
+  ];
+  for (const label of labels) {
+    assert.ok(resolveDayFocusPlan(label), `"${label}" must resolve to a day focus plan`);
+  }
+  assert.equal(resolveDayFocusPlan('Full Body'), null);
+});
+
+test('strength and upper/lower days train the right movements', () => {
+  const make = (name: string, slug: string): ExerciseRecord => ({
+    id: slug, name, slug, category: 'push', equipment: 'barbell', muscle_groups: [], metadata: {},
+  });
+  const squat = make('Back Squat', 'back-squat');
+  const bench = make('Bench Press', 'bench-press');
+  const row = make('Barbell Row', 'barbell-row');
+  const calf = make('Standing Calf Raise', 'standing-calf-raise');
+
+  const squatDay = resolveDayFocusPlan('Squat Day')!;
+  const benchDay = resolveDayFocusPlan('Bench Day')!;
+  const upper = resolveDayFocusPlan('Upper')!;
+
+  assert.equal(isAllowedOnDayFocus(squat, squatDay), true);
+  assert.equal(isAllowedOnDayFocus(bench, squatDay), false);
+  assert.equal(isAllowedOnDayFocus(bench, benchDay), true);
+  assert.equal(isAllowedOnDayFocus(calf, benchDay), false);
+
+  // An upper day is the one split that trains both pushing and pulling.
+  assert.equal(isAllowedOnDayFocus(bench, upper), true);
+  assert.equal(isAllowedOnDayFocus(row, upper), true);
+  assert.equal(isAllowedOnDayFocus(squat, upper), false);
 });

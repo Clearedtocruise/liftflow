@@ -93,14 +93,14 @@ export type DayFocusPlan = {
   key: string;
   quotas: Array<{ muscles: string[]; min: number }>;
   excludePrimaryMuscles: string[];
-  /** The movement bucket this day trains. Decided from exercise names, not stored metadata. */
-  dayBucket: TrainingDayBucket;
+  /** The movement buckets this day trains. Decided from exercise names, not stored metadata. */
+  dayBuckets: TrainingDayBucket[];
 };
 
 export const BODY_PART_DAY_PLANS: Record<string, DayFocusPlan> = {
   back_biceps_core: {
     key: 'back_biceps_core',
-    dayBucket: 'pull',
+    dayBuckets: ['pull'],
     quotas: [
       { muscles: ['back'], min: 4 },
       { muscles: ['biceps'], min: 3 },
@@ -110,7 +110,7 @@ export const BODY_PART_DAY_PLANS: Record<string, DayFocusPlan> = {
   },
   chest_shoulders_triceps: {
     key: 'chest_shoulders_triceps',
-    dayBucket: 'push',
+    dayBuckets: ['push'],
     quotas: [
       { muscles: ['chest'], min: 3 },
       { muscles: ['shoulders'], min: 3 },
@@ -120,7 +120,7 @@ export const BODY_PART_DAY_PLANS: Record<string, DayFocusPlan> = {
   },
   legs_core: {
     key: 'legs_core',
-    dayBucket: 'legs',
+    dayBuckets: ['legs'],
     quotas: [
       { muscles: ['quads'], min: 3 },
       { muscles: ['hamstrings'], min: 3 },
@@ -135,7 +135,7 @@ export const BODY_PART_DAY_PLANS: Record<string, DayFocusPlan> = {
   // up on a push day.
   push: {
     key: 'push',
-    dayBucket: 'push',
+    dayBuckets: ['push'],
     quotas: [
       { muscles: ['chest'], min: 3 },
       { muscles: ['shoulders'], min: 2 },
@@ -146,7 +146,7 @@ export const BODY_PART_DAY_PLANS: Record<string, DayFocusPlan> = {
   },
   pull: {
     key: 'pull',
-    dayBucket: 'pull',
+    dayBuckets: ['pull'],
     quotas: [
       { muscles: ['back'], min: 4 },
       { muscles: ['biceps'], min: 2 },
@@ -154,16 +154,60 @@ export const BODY_PART_DAY_PLANS: Record<string, DayFocusPlan> = {
     ],
     excludePrimaryMuscles: ['chest', 'triceps', 'shoulders', 'quads', 'hamstrings', 'glutes', 'calves'],
   },
+  // An upper day trains both sides of the torso, so it is the one split that spans two buckets.
+  upper: {
+    key: 'upper',
+    dayBuckets: ['push', 'pull'],
+    quotas: [
+      { muscles: ['chest'], min: 2 },
+      { muscles: ['back'], min: 2 },
+      { muscles: ['shoulders'], min: 1 },
+      { muscles: ['biceps'], min: 1 },
+      { muscles: ['triceps'], min: 1 },
+      { muscles: ['core'], min: 1 },
+    ],
+    excludePrimaryMuscles: ['quads', 'hamstrings', 'glutes', 'calves'],
+  },
+  lower: {
+    key: 'lower',
+    dayBuckets: ['legs'],
+    quotas: [
+      { muscles: ['quads'], min: 3 },
+      { muscles: ['hamstrings'], min: 2 },
+      { muscles: ['glutes'], min: 2 },
+      { muscles: ['calves'], min: 1 },
+      { muscles: ['core'], min: 2 },
+    ],
+    excludePrimaryMuscles: ['chest', 'back', 'shoulders', 'biceps', 'triceps'],
+  },
 };
 
+/**
+ * Every label the week generator can produce needs a plan here.
+ *
+ * Only three shapes were recognised, so Push, Pull and the whole strength and upper/lower splits
+ * fell through to "no plan" — which means no muscle filtering at all, and calf raises on a push
+ * day. A full-body day is the one case that legitimately has no focus.
+ */
 export function resolveDayFocusPlan(slotLabel: string): DayFocusPlan | null {
   const key = slotLabel.toLowerCase();
+
+  if (key.includes('full body')) return null;
+
+  // Compound body-part labels first, so "Chest, Shoulders & Triceps" keeps its specific plan.
   if (key.includes('back') && key.includes('biceps')) return BODY_PART_DAY_PLANS.back_biceps_core;
   if (key.includes('chest') && key.includes('shoulder')) return BODY_PART_DAY_PLANS.chest_shoulders_triceps;
   if (key.includes('leg')) return BODY_PART_DAY_PLANS.legs_core;
-  // Checked after the compound labels above so "Chest & Shoulders" keeps its more specific plan.
+
   if (/\bpush\b/.test(key)) return BODY_PART_DAY_PLANS.push;
   if (/\bpull\b/.test(key)) return BODY_PART_DAY_PLANS.pull;
+  if (/\bupper\b/.test(key)) return BODY_PART_DAY_PLANS.upper;
+  if (/\blower\b/.test(key)) return BODY_PART_DAY_PLANS.lower;
+
+  // Strength split: "Squat Day", "Bench Day", "Deadlift Day", "Press Day".
+  if (/\bsquat\b|\bdead\s*lift\b/.test(key)) return BODY_PART_DAY_PLANS.lower;
+  if (/\bbench\b|\bpress\b/.test(key)) return BODY_PART_DAY_PLANS.push;
+
   return null;
 }
 
@@ -178,7 +222,7 @@ function bucketFitsDayFocus(bucket: TrainingDayBucket, plan: DayFocusPlan): bool
     return plan.quotas.some((quota) => quota.muscles.includes('core'));
   }
   if (bucket === 'conditioning') return false;
-  return bucket === plan.dayBucket;
+  return plan.dayBuckets.includes(bucket);
 }
 
 function exerciseHitsMuscle(exercise: ExerciseRecord, muscle: string): boolean {
