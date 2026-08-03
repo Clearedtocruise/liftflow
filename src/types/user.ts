@@ -1,4 +1,5 @@
 import type { EquipmentId } from '@/constants/equipmentCatalog';
+import type { BaselineLiftId } from '@/constants/strengthBaseline';
 import type { CoachProfileMetadata } from '@/constants/onboardingCoach';
 import type { NutritionGoal, TrainingGoalId } from '@/constants/trainingGoals';
 import type { TrainingLocationId } from '@/constants/trainingProfile';
@@ -55,6 +56,11 @@ export type UserProfile = BaseEntity & {
   availableEquipment?: EquipmentId[];
   /** Nutrition driver — synced from fitnessGoals[0] */
   primaryTrainingGoal?: TrainingGoal;
+  /**
+   * Compound lifts the athlete reported, as the set they performed rather than a tested max.
+   * Used to seed starting loads before any logged history exists.
+   */
+  strengthBaselines?: Partial<Record<BaselineLiftId, { weightLbs: number; reps: number }>>;
   onboardingCompleted: boolean;
   /** Grants Pro access when true (see accessOverride.ts) */
   isBetaTester?: boolean;

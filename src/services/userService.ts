@@ -68,6 +68,7 @@ export const userService: IUserService = {
       if (updates.primaryGymName !== undefined) payload.primary_gym_name = updates.primaryGymName;
       if (updates.availableEquipment !== undefined) payload.available_equipment = updates.availableEquipment;
       if (updates.primaryTrainingGoal !== undefined) payload.primary_training_goal = updates.primaryTrainingGoal;
+      if (updates.strengthBaselines !== undefined) payload.strength_baselines = updates.strengthBaselines;
       if (updates.onboardingCompleted !== undefined) payload.onboarding_completed = updates.onboardingCompleted;
       if (updates.metadata !== undefined) payload.metadata = updates.metadata;
 
