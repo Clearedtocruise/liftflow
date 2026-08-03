@@ -247,3 +247,10 @@ export function executionModeUsesTraditionalRest(mode: WorkoutExecutionMode): bo
     mode === 'superset'
   );
 }
+
+/** Soft ceiling so a rounds stepper cannot keep a Tabata/HIIT block going forever. */
+export const INTERVAL_ROUNDS_MAX = 12;
+
+export function clampIntervalRounds(rounds: number): number {
+  return Math.min(INTERVAL_ROUNDS_MAX, Math.max(1, Math.round(rounds)));
+}

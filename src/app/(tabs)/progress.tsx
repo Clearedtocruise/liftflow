@@ -1,10 +1,11 @@
 import * as ImagePicker from 'expo-image-picker';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from 'react-native';
 
 import { BodyCompositionSummary } from '@/components/body/BodyCompositionSummary';
 import { CoachInsightsPanel } from '@/components/body/CoachInsightsPanel';
 import { CoachProjectionCard } from '@/components/body/CoachProjectionCard';
+import { LogMeasurementForm } from '@/components/body/LogMeasurementForm';
 import { PhotoProgressGuide } from '@/components/body/PhotoProgressGuide';
 import { TransformationMilestones } from '@/components/body/TransformationMilestones';
 import { TransformationProgressTimeline } from '@/components/body/TransformationProgressTimeline';
@@ -44,9 +45,6 @@ export default function ProgressScreen() {
   const [loading, setLoading] = useState(true);
   const [runningTransform, setRunningTransform] = useState(false);
   const [showLogForm, setShowLogForm] = useState(false);
-  const [weight, setWeight] = useState('');
-  const [waist, setWaist] = useState('');
-  const [bodyFat, setBodyFat] = useState('');
   const [targetBf, setTargetBf] = useState('12');
   const [uploadAngle, setUploadAngle] = useState<PhotoAngle>('front');
   const loadGenerationRef = useRef(0);
@@ -152,36 +150,20 @@ export default function ProgressScreen() {
     }
   }
 
-  async function handleSaveMeasurement() {
-    if (!user) return;
-    const weightKg = units.parseWeight(weight);
-    const waistCm = units.parseMeasurement(waist);
-    const bf = bodyFat ? parseFloat(bodyFat) : undefined;
-    const leanMassKg =
-      weightKg && bf != null ? Math.round(weightKg * (1 - bf / 100) * 100) / 100 : undefined;
-    const result = await bodyService.recordComposition(user.id, {
-      userId: user.id,
-      recordedAt: new Date().toISOString(),
-      weightKg,
-      waistCm,
-      bodyFatPct: bf,
-      leanMassKg,
-      estimationMethod: 'manual',
-    });
-    if (result.success) {
-      setWeight('');
-      setWaist('');
-      setBodyFat('');
-      setShowLogForm(false);
-      load();
-    } else {
-      Alert.alert('Error', result.error);
-    }
+  /**
+   * A new measurement changes the numbers the projection was built from, so refresh the stored
+   * projection too — otherwise the hero kept showing the weight and timeline from the last run.
+   */
+  async function handleMeasurementSaved() {
+    await load();
+    if (!user || !transformationAllowed) return;
+    const result = await bodyService.runTransformation(user.id, parseFloat(targetBf) || 12, {});
+    if (result.success) setTransformation(result.data);
   }
 
   async function handleRunTransformation() {
     if (!user) return;
-    if (measurements.length === 0 && !bodyFat) {
+    if (measurements.length === 0) {
       Alert.alert('Log your stats', 'Add weight and body fat % so your coach can project your timeline.');
       setShowLogForm(true);
       return;
@@ -303,33 +285,13 @@ export default function ProgressScreen() {
       </Pressable>
 
       {showLogForm ? (
-        <Card style={styles.form}>
-          <TextInput
-            style={styles.input}
-            placeholder={`Weight (${units.weightLabel})`}
-            placeholderTextColor={LiftFlowColors.textTertiary}
-            keyboardType="numeric"
-            value={weight}
-            onChangeText={setWeight}
-          />
-          <TextInput
-            style={styles.input}
-            placeholder={`Waist (${units.measurementLabel})`}
-            placeholderTextColor={LiftFlowColors.textTertiary}
-            keyboardType="numeric"
-            value={waist}
-            onChangeText={setWaist}
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="Body fat %"
-            placeholderTextColor={LiftFlowColors.textTertiary}
-            keyboardType="numeric"
-            value={bodyFat}
-            onChangeText={setBodyFat}
-          />
-          <PrimaryButton label="Save measurement" onPress={handleSaveMeasurement} />
-        </Card>
+        <LogMeasurementForm
+          userId={user!.id}
+          onSaved={() => {
+            setShowLogForm(false);
+            void handleMeasurementSaved();
+          }}
+        />
       ) : null}
 
       <AppText variant="caption" color="textTertiary" style={styles.disclaimer}>
@@ -365,15 +327,6 @@ const styles = StyleSheet.create({
     backgroundColor: LiftFlowColors.accentGlow,
   },
   refreshLink: { marginBottom: Spacing.lg, textAlign: 'center' },
-  form: { gap: Spacing.md, marginTop: Spacing.md, marginBottom: Spacing.lg },
-  input: {
-    backgroundColor: LiftFlowColors.background,
-    borderRadius: 8,
-    padding: Spacing.md,
-    color: LiftFlowColors.textPrimary,
-    borderWidth: 1,
-    borderColor: LiftFlowColors.border,
-  },
   disclaimer: {
     marginBottom: Spacing.xxxl,
   },

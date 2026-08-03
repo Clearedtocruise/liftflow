@@ -85,10 +85,13 @@ export async function loadRolloverValidationState(
     mealPlans[0] ??
     null;
 
-  const trainingWeekNumber = dashboardRes.success ? dashboardRes.data.currentWeek : null;
+  // getDashboard resolves to `ProgramDashboard | null`, so a successful call still carries no
+  // dashboard for a user without an active program. Reading through it threw and took the whole
+  // Settings screen's validation panel with it.
+  const dashboard = dashboardRes.success ? dashboardRes.data : null;
+  const trainingWeekNumber = dashboard?.currentWeek ?? null;
   const activeWorkoutPlanId =
-    (activeProgramRes.data?.id as string | undefined) ??
-    (dashboardRes.success ? dashboardRes.data.program.id : null);
+    (activeProgramRes.data?.id as string | undefined) ?? dashboard?.program.id ?? null;
 
   return {
     ...timestamps,

@@ -78,15 +78,42 @@ Watch face complications for rest timer / active workout are not yet implemented
 - Start a phone workout → **Sync active workout**
 - Enter a rep count manually to drive the same logging pipeline
 
+## Wrist logging without the workout screen
+
+`useWatchCompanionSync` runs from `AppProviders`, so it registers a **fallback log-set handler**
+for the whole app session. A wrist tap now logs against the active session from any phone screen —
+or with the phone in a pocket.
+
+- `ActiveWorkoutScreen` still registers the **rich** handler while it is mounted (supersets, rest
+  flow, progression, PR detection). `watchPhoneBridge.logCurrentSet()` prefers it and falls back
+  automatically when the screen unmounts.
+- The fallback resolves what to log in `src/lib/watchLogSet.ts`: dictated reps/weight first, then
+  the last set on that exercise, then the plan. It refuses with a spoken reason when the workout is
+  paused, finished, or absent.
+- It logs through `WorkoutSessionContext.logSet`, so the session refresh and rest timer behave
+  exactly as they do on the phone, and the updated state is pushed straight back to the watch.
+
+## Owning the wrist
+
+On watchOS the app with a running `HKWorkoutSession` is the one shown on wrist raise. If ours is
+not running, the raise goes to whatever else claims a workout — in practice the Fitness app, which
+looks like ONE MORE being taken over the moment the wrist drops.
+
+`WorkoutSessionManager.start()` therefore resolves HealthKit authorization *before* creating the
+session; creating it while the permission prompt is still outstanding fails and leaves the app with
+no session at all. The request is intent-tracked (`wantsSession`) so a workout that ends mid-prompt
+does not start a stray session, and `ContentView` re-asserts on `scenePhase == .active`, so a
+session lost to another app is reclaimed on the next raise rather than for the rest of the workout.
+
+Denied Health access surfaces as an error on the watch — without the entitlement the session
+cannot run and the takeover is expected.
+
 ## Known follow-ups
 
-- **Wrist logging requires the phone's workout screen to be open.** `WatchPhoneBridge` holds its
-  session handlers in a module-level singleton populated by `useWatchCompanionSync`, which only
-  mounts on the workout screen. Commands sent from the wrist while the phone is elsewhere are
-  therefore dropped. Fixing this means hoisting the bridge to an app-level provider (or moving the
-  handlers into a background-capable service) — a larger architectural change, deliberately out of
-  scope for the current pass.
-- Watch-side motion rep counting (see item 1 above) remains unimplemented.
+- Watch-side motion rep counting (see item 1 above) remains unimplemented — `MotionCapture.swift`
+  is not instantiated by `ContentView`.
+- Watch heart rate is read locally for calorie estimates but never sent to the phone.
+- The recovery score arrives in `WorkoutConnectivity` but is not rendered in the watch UI.
 
 ## Backend API (optional direct Watch → API)
 

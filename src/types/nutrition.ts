@@ -83,6 +83,8 @@ export type DailyNutritionSummary = {
   caloriesConsumed: number;
   caloriesTarget?: number;
   proteinG: number;
+  /** From the active nutrition goal; absent when the user has not set one. */
+  proteinTargetG?: number;
   carbsG: number;
   fatG: number;
   waterMl: number;

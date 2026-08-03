@@ -16,9 +16,13 @@ function run() {
   assert.equal(deloadSets.sets, 3);
   assert.ok(deloadSets.setsDelta < 0);
 
-  const boostSets = resolveTargetSets(3, 90, 85, 'accumulation', 1, 'train');
-  assert.equal(boostSets.sets, 4);
+  const boostSets = resolveTargetSets(2, 90, 85, 'accumulation', 1, 'train');
+  assert.equal(boostSets.sets, 3);
   assert.equal(boostSets.setsDelta, 1);
+
+  const noBoostPastThree = resolveTargetSets(3, 90, 85, 'accumulation', 1, 'train');
+  assert.equal(noBoostPastThree.sets, 3);
+  assert.equal(noBoostPastThree.setsDelta, 0);
 
   const noBoostWhenLight = resolveTargetSets(3, 90, 85, 'accumulation', 1, 'train_light');
   assert.equal(noBoostWhenLight.sets, 3);

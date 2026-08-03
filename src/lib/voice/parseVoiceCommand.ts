@@ -206,6 +206,21 @@ const CONTROL_PATTERNS: PatternDef[] = [
     }),
   },
   {
+    // "95 pounds at 12 reps" / "95 at 12" — common mid-set shorthand without naming the lift.
+    pattern:
+      /^(?<weight>\d+(?:\.\d+)?)\s*(?<unit>lbs?|pounds?|kg|kilos?)?\s+at\s+(?<reps>\d+)(?:\s*reps?)?\.?$/i,
+    build: (m, raw, ctx) => ({
+      intent: 'log_set',
+      exercise: ctx.activeExerciseName,
+      weight: parseFloat(m.groups!.weight!),
+      reps: parseInt(m.groups!.reps!, 10),
+      weightUnit: detectWeightUnit(m.groups!.unit ?? raw) ?? detectWeightUnit(raw),
+      usesContextExercise: true,
+      rawText: raw,
+      confidence: ctx.activeExerciseName ? 0.9 : 0.7,
+    }),
+  },
+  {
     pattern:
       /^(?<reps>\d+)\s*reps?\s*(?:at|@)\s*(?<weight>\d+(?:\.\d+)?)\s*(?<unit>lbs?|pounds?|kg|kilos?)?\.?$/i,
     build: (m, raw, ctx) => ({

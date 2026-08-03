@@ -8,6 +8,11 @@ export type FoodMacroEstimate = {
   reasoning?: string;
 };
 
+export type FoodMacroComponent = FoodMacroEstimate & {
+  name: string;
+  amount?: string;
+};
+
 /** Per-oz estimates for common whole foods (scaled by the serving parser). */
 const FOOD_PER_OZ: Record<string, FoodMacroEstimate> = {
   'chicken breast': { calories: 47, proteinG: 8.8, carbsG: 0, fatG: 1 },
@@ -34,12 +39,20 @@ const FOOD_PER_OZ: Record<string, FoodMacroEstimate> = {
   'banana': { calories: 25, proteinG: 0.3, carbsG: 6.4, fatG: 0.1 },
   'apple': { calories: 15, proteinG: 0.1, carbsG: 4, fatG: 0.1 },
   'berries': { calories: 17, proteinG: 0.2, carbsG: 4.2, fatG: 0.1 },
+  'blueberries': { calories: 16, proteinG: 0.2, carbsG: 4.1, fatG: 0.1 },
   'broccoli': { calories: 10, proteinG: 0.8, carbsG: 2, fatG: 0.1 },
   'asparagus': { calories: 6, proteinG: 0.6, carbsG: 1.1, fatG: 0.1 },
   'spinach': { calories: 7, proteinG: 0.9, carbsG: 1.1, fatG: 0.1 },
   'mixed greens': { calories: 5, proteinG: 0.5, carbsG: 1, fatG: 0.1 },
   'mixed vegetables': { calories: 12, proteinG: 0.7, carbsG: 2.4, fatG: 0.1 },
   'almond milk': { calories: 4, proteinG: 0.1, carbsG: 0.2, fatG: 0.3 },
+};
+
+/** Fixed per-serving estimates when the food is typically logged as a container/unit. */
+const FOOD_PER_SERVING: Record<string, FoodMacroEstimate> = {
+  'oikos triple zero': { calories: 100, proteinG: 15, carbsG: 6, fatG: 0 },
+  'triple zero greek yogurt': { calories: 100, proteinG: 15, carbsG: 6, fatG: 0 },
+  'greek yogurt': { calories: 100, proteinG: 17, carbsG: 6, fatG: 0 },
 };
 
 type ServingUnit =
@@ -94,6 +107,7 @@ const FOOD_UNIT_OZ: Record<string, Partial<Record<ServingUnit, number>>> = {
   'broccoli': { cup: 3.1 },
   'asparagus': { cup: 4.7 },
   'berries': { cup: 5 },
+  'blueberries': { cup: 5.2 },
   'mixed vegetables': { cup: 5 },
   'banana': { medium: 4.2, small: 3.3, large: 5.4 },
   'apple': { medium: 6.4, small: 5, large: 8 },
@@ -120,7 +134,26 @@ const UNIT_PATTERNS: [ServingUnit, RegExp][] = [
 ];
 
 function normalizeFood(name: string): string {
-  return name.trim().toLowerCase().replace(/\s+/g, ' ');
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/\bwhole\s+eggs?\b/g, 'egg')
+    .replace(/\beggs\b/g, 'egg')
+    .replace(/\s+/g, ' ');
+}
+
+const EGG_COUNT_RE = /^((?:\d+\s+\d+\/\d+|\d+\/\d+|\d+(?:\.\d+)?))\s+(?:whole\s+)?eggs?\b(.*)$/i;
+
+function extractEggCountServing(foodName: string): { food: string; serving: string } | null {
+  const eggCount = foodName.trim().match(EGG_COUNT_RE);
+  if (!eggCount) return null;
+  const rest = eggCount[2].trim();
+  if (!rest || /^(large|medium|small)\b/i.test(rest)) {
+    const size = rest.match(/^(large|medium|small)\b/i)?.[1] ?? 'piece';
+    return { serving: `${eggCount[1]} ${size}`, food: 'egg' };
+  }
+  return null;
 }
 
 /** Handles decimals, simple fractions and mixed numbers ("1 1/2"). */
@@ -151,14 +184,24 @@ function parseUnit(servingSize: string): ServingUnit | null {
   return null;
 }
 
-function scaleMacros(base: FoodMacroEstimate, multiplier: number): FoodMacroEstimate {
+function roundMacros(base: FoodMacroEstimate): FoodMacroEstimate {
   return {
-    calories: Math.round(base.calories * multiplier),
-    proteinG: Math.round(base.proteinG * multiplier * 10) / 10,
-    carbsG: Math.round(base.carbsG * multiplier * 10) / 10,
-    fatG: Math.round(base.fatG * multiplier * 10) / 10,
+    calories: Math.round(base.calories),
+    proteinG: Math.round(base.proteinG * 10) / 10,
+    carbsG: Math.round(base.carbsG * 10) / 10,
+    fatG: Math.round(base.fatG * 10) / 10,
     reasoning: base.reasoning,
   };
+}
+
+function scaleMacros(base: FoodMacroEstimate, multiplier: number): FoodMacroEstimate {
+  return roundMacros({
+    calories: base.calories * multiplier,
+    proteinG: base.proteinG * multiplier,
+    carbsG: base.carbsG * multiplier,
+    fatG: base.fatG * multiplier,
+    reasoning: base.reasoning,
+  });
 }
 
 function lookupFoodKey(foodName: string): string | null {
@@ -168,6 +211,13 @@ function lookupFoodKey(foodName: string): string | null {
   // Longest match first so "lean ground beef" wins over "ground beef".
   const patterns = Object.keys(FOOD_PER_OZ).sort((a, b) => b.length - a.length);
   return patterns.find((pattern) => key.includes(pattern)) ?? null;
+}
+
+function lookupServingFood(foodName: string): FoodMacroEstimate | null {
+  const key = normalizeFood(foodName);
+  const patterns = Object.keys(FOOD_PER_SERVING).sort((a, b) => b.length - a.length);
+  const match = patterns.find((pattern) => key.includes(pattern));
+  return match ? FOOD_PER_SERVING[match] : null;
 }
 
 /** Ounces described by a serving string, using per-food unit weights where known. */
@@ -182,12 +232,225 @@ function servingSizeInOunces(foodKey: string | null, servingSize: string): numbe
   return amount * (perFood ?? OZ_PER_UNIT[unit]);
 }
 
-export function estimateFoodMacrosLocal(foodName: string, servingSize: string): FoodMacroEstimate {
-  const key = lookupFoodKey(foodName);
-  const base = key ? FOOD_PER_OZ[key] : { calories: 50, proteinG: 5, carbsG: 3, fatG: 2 };
-  const ounces = servingSizeInOunces(key, servingSize);
-  return scaleMacros(base, ounces ?? OZ_PER_UNIT.serving);
+function parentheticalCalories(chunk: string): number | null {
+  const match = chunk.match(/\((\d+)\s*cal(?:ories)?\)/i);
+  return match ? Number(match[1]) : null;
 }
+
+/** Split "yogurt, blueberries, and peanut butter" into individual foods. */
+export function splitFoodItems(foodName: string): string[] {
+  const normalized = foodName.trim();
+  if (!normalized) return [];
+
+  const byComma = normalized
+    .split(/\s*,\s*/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  const parts = (byComma.length > 1 ? byComma : [normalized]).flatMap((part) => {
+    const withParts = part
+      .split(/\s+with\s+/i)
+      .map((item) => item.trim())
+      .filter(Boolean);
+    const afterWith = withParts.length > 1 ? withParts : [part];
+    return afterWith.flatMap((item) => {
+      const connected = item
+        .split(/\s*(?:\+|\&|\band\b)\s*/i)
+        .map((piece) => piece.trim())
+        .filter(Boolean);
+      return connected.length > 1 ? connected : [item];
+    });
+  });
+
+  return parts.length > 1 ? parts : [normalized];
+}
+
+export function sumMacroComponents(components: FoodMacroComponent[]): FoodMacroEstimate {
+  return roundMacros(
+    components.reduce(
+      (acc, part) => ({
+        calories: acc.calories + part.calories,
+        proteinG: acc.proteinG + part.proteinG,
+        carbsG: acc.carbsG + part.carbsG,
+        fatG: acc.fatG + part.fatG,
+      }),
+      { calories: 0, proteinG: 0, carbsG: 0, fatG: 0 },
+    ),
+  );
+}
+
+export function formatMacroReasoning(components: FoodMacroComponent[], totals: FoodMacroEstimate): string {
+  const lines = components.map((part) => {
+    const amount = part.amount ? ` (${part.amount})` : '';
+    return `${part.name}${amount}: ${part.calories} cal, ${part.proteinG}g protein, ${part.carbsG}g carbs, ${part.fatG}g fat.`;
+  });
+  lines.push(
+    `Total: ${totals.calories} calories, ${totals.proteinG}g protein, ${totals.carbsG}g carbs, and ${totals.fatG}g fat.`,
+  );
+  return lines.join(' ');
+}
+
+/**
+ * If the model narrated per-food macros that do not add up to the headline totals,
+ * trust the component math and rewrite the closing total so the UI cannot disagree with itself.
+ */
+export function reconcileFoodMacroEstimate(estimate: FoodMacroEstimate): FoodMacroEstimate {
+  const reasoning = estimate.reasoning?.trim();
+  if (!reasoning) return roundMacros(estimate);
+
+  const fullPattern =
+    /(\d+(?:\.\d+)?)\s*calories?,\s*(\d+(?:\.\d+)?)\s*g(?:rams)?\s*(?:of\s*)?protein,\s*(\d+(?:\.\d+)?)\s*g(?:rams)?\s*(?:of\s*)?carbs?,\s*(?:and\s*)?(\d+(?:\.\d+)?)\s*g(?:rams)?\s*(?:of\s*)?fat/gi;
+  const partialPattern =
+    /(\d+(?:\.\d+)?)\s*calories?(?![^.]*\b(?:total|combined|results?)\b)[^.]*?(\d+(?:\.\d+)?)\s*g(?:rams)?\s*(?:of\s*)?protein(?:[^.]*?(\d+(?:\.\d+)?)\s*g(?:rams)?\s*(?:of\s*)?carbs?)?(?:[^.]*?(\d+(?:\.\d+)?)\s*g(?:rams)?\s*(?:of\s*)?fat)?/gi;
+  const totalSentence = /\b(?:combined|total|results?\s+in\s+a\s+total|altogether|overall)\b/i;
+
+  // Declared as a const arrow so the `reasoning` narrowing above survives into the closure; a
+  // hoisted function declaration could be called before the guard, so TS widens it back.
+  const sentenceAt = (index: number): string => {
+    const start = Math.max(0, reasoning.lastIndexOf('.', index - 1) + 1);
+    const end = reasoning.indexOf('.', index);
+    return reasoning.slice(start, end === -1 ? reasoning.length : end + 1).trim();
+  };
+
+  const components: FoodMacroEstimate[] = [];
+  for (const match of reasoning.matchAll(fullPattern)) {
+    if (totalSentence.test(sentenceAt(match.index ?? 0))) continue;
+    components.push({
+      calories: Number(match[1]),
+      proteinG: Number(match[2]),
+      carbsG: Number(match[3]),
+      fatG: Number(match[4]),
+    });
+  }
+  for (const match of reasoning.matchAll(partialPattern)) {
+    if (totalSentence.test(sentenceAt(match.index ?? 0))) continue;
+    const calories = Number(match[1]);
+    const proteinG = Number(match[2]);
+    if (components.some((part) => Math.abs(part.calories - calories) < 1 && Math.abs(part.proteinG - proteinG) < 0.2)) {
+      continue;
+    }
+    components.push({
+      calories,
+      proteinG,
+      carbsG: match[3] != null ? Number(match[3]) : 0,
+      fatG: match[4] != null ? Number(match[4]) : 0,
+    });
+  }
+
+  if (components.length < 2) return roundMacros(estimate);
+
+  const summed = roundMacros(
+    components.reduce(
+      (acc, part) => ({
+        calories: acc.calories + part.calories,
+        proteinG: acc.proteinG + part.proteinG,
+        carbsG: acc.carbsG + part.carbsG,
+        fatG: acc.fatG + part.fatG,
+      }),
+      { calories: 0, proteinG: 0, carbsG: 0, fatG: 0 },
+    ),
+  );
+
+  const cleaned = reasoning
+    .replace(
+      /Combined(?:\,?\s*this)?\s+results?\s+in\s+a\s+total\s+of\s+(?:approximately\s+)?[^.]*\./i,
+      `Combined, this results in a total of approximately ${summed.calories} calories, ${summed.proteinG}g of protein, ${summed.carbsG}g of carbs, and ${summed.fatG}g of fat.`,
+    )
+    .replace(
+      /Combining these estimates gives a total of approximately[^.]*\./i,
+      `Combining these estimates gives a total of approximately ${summed.calories} calories, ${summed.proteinG}g of protein, ${summed.carbsG}g of carbs, and ${summed.fatG}g of fat.`,
+    )
+    .replace(
+      /Total:\s*[^.]*\./i,
+      `Total: ${summed.calories} calories, ${summed.proteinG}g protein, ${summed.carbsG}g carbs, and ${summed.fatG}g fat.`,
+    );
+
+  return { ...summed, reasoning: cleaned };
+}
+
+export function estimateFoodMacrosLocal(foodName: string, servingSize: string): FoodMacroEstimate {
+  const items = splitFoodItems(foodName);
+  if (items.length > 1) {
+    const components = items.map((item) => {
+      const estimated = estimateSingleFoodLocal(item, inferItemServing(item, servingSize));
+      return { name: item, amount: inferItemServing(item, servingSize), ...estimated };
+    });
+    const totals = sumMacroComponents(components);
+    return { ...totals, reasoning: formatMacroReasoning(components, totals) };
+  }
+
+  return estimateSingleFoodLocal(foodName, servingSize);
+}
+
+function inferItemServing(item: string, fallbackServing: string): string {
+  const eggCount = extractEggCountServing(item);
+  if (eggCount) return eggCount.serving;
+  if (/\b(cup|tbsp|tsp|oz|g|scoop|slice|serving)s?\b/i.test(item)) return item;
+  if (parentheticalCalories(item) != null) return '1 serving';
+  if (/peanut(?:\s+butter)?/i.test(item) || /almond butter/i.test(item)) return '2 tbsp';
+  if (/whey\s+protein|protein\s+powder|protein\s+shake/i.test(item)) return '1 scoop';
+  if (/olive\s+oil|honey/i.test(item)) return '1 tbsp';
+  if (/blueberr|berr/i.test(item)) return '1 cup';
+  if (/yogurt/i.test(item)) return '1 serving';
+  return fallbackServing;
+}
+
+function estimateSingleFoodLocal(foodName: string, servingSize: string): FoodMacroEstimate {
+  const eggCount = extractEggCountServing(foodName);
+  const effectiveName = eggCount?.food ?? foodName;
+  let effectiveServing = eggCount?.serving ?? servingSize;
+
+  // Bare "1" / "serving" for dense powders and oils must not become a 4 oz generic serving.
+  const keyEarly = lookupFoodKey(effectiveName);
+  if (
+    keyEarly &&
+    (keyEarly === 'whey protein' ||
+      keyEarly === 'peanut butter' ||
+      keyEarly === 'almond butter' ||
+      keyEarly === 'honey' ||
+      keyEarly === 'olive oil') &&
+    (!effectiveServing.trim() ||
+      /^(1|1x|x1|serving|1 serving|1 servings)$/i.test(effectiveServing.trim()))
+  ) {
+    effectiveServing =
+      keyEarly === 'whey protein'
+        ? '1 scoop'
+        : keyEarly === 'honey' || keyEarly === 'olive oil'
+          ? '1 tbsp'
+          : '2 tbsp';
+  }
+
+  const hintedCalories = parentheticalCalories(foodName);
+  const perServing = lookupServingFood(effectiveName);
+  if (perServing) {
+    const amount = parseAmount(effectiveServing) ?? 1;
+    const scaled = scaleMacros(perServing, amount);
+    if (hintedCalories != null && amount === 1) {
+      return { ...scaled, calories: hintedCalories };
+    }
+    return scaled;
+  }
+
+  const key = lookupFoodKey(effectiveName);
+  const base = key ? FOOD_PER_OZ[key] : { calories: 50, proteinG: 5, carbsG: 3, fatG: 2 };
+  const ounces = servingSizeInOunces(key, effectiveServing);
+  const scaled = scaleMacros(base, ounces ?? OZ_PER_UNIT.serving);
+  if (hintedCalories != null && (parseAmount(effectiveServing) ?? 1) === 1 && !parseUnit(effectiveServing)) {
+    return { ...scaled, calories: hintedCalories };
+  }
+  return scaled;
+}
+
+type AiFoodMacroResponse = FoodMacroEstimate & {
+  components?: Array<{
+    name?: string;
+    amount?: string;
+    calories?: number;
+    proteinG?: number;
+    carbsG?: number;
+    fatG?: number;
+  }>;
+};
 
 async function callOpenAiFoodMacros(foodName: string, servingSize: string): Promise<FoodMacroEstimate | null> {
   const openai = getOpenAI();
@@ -195,13 +458,15 @@ async function callOpenAiFoodMacros(foodName: string, servingSize: string): Prom
 
   const completion = await openai.chat.completions.create({
     model: 'gpt-4o-mini',
-    temperature: 0.2,
+    temperature: 0,
     response_format: { type: 'json_object' },
     messages: [
       {
         role: 'system',
         content:
-          'You are a nutrition estimator. Return JSON only: { calories, proteinG, carbsG, fatG, reasoning }. Estimate macros for the exact food and serving. Round calories to integer, macros to 1 decimal.',
+          'You are a nutrition estimator. Return JSON only: { components: [{ name, amount, calories, proteinG, carbsG, fatG }], calories, proteinG, carbsG, fatG, reasoning }. ' +
+          'Split multi-food inputs into components. calories/proteinG/carbsG/fatG MUST equal the exact arithmetic sum of components (round calories to integer, macros to 1 decimal). ' +
+          'reasoning must list each component then restate that same summed total — never invent a different total.',
       },
       {
         role: 'user',
@@ -212,15 +477,37 @@ async function callOpenAiFoodMacros(foodName: string, servingSize: string): Prom
 
   const content = completion.choices[0]?.message?.content;
   if (!content) return null;
-  const parsed = JSON.parse(content) as FoodMacroEstimate;
+  const parsed = JSON.parse(content) as AiFoodMacroResponse;
+
+  const components: FoodMacroComponent[] = [];
+  for (const part of parsed.components ?? []) {
+    if (part.calories == null || part.proteinG == null) continue;
+    components.push({
+      name: part.name?.trim() || 'Item',
+      amount: part.amount,
+      calories: Math.round(part.calories),
+      proteinG: Math.round((part.proteinG ?? 0) * 10) / 10,
+      carbsG: Math.round((part.carbsG ?? 0) * 10) / 10,
+      fatG: Math.round((part.fatG ?? 0) * 10) / 10,
+    });
+  }
+
+  if (components.length > 0) {
+    const totals = sumMacroComponents(components);
+    return {
+      ...totals,
+      reasoning: formatMacroReasoning(components, totals),
+    };
+  }
+
   if (parsed.calories == null || parsed.proteinG == null) return null;
-  return {
+  return reconcileFoodMacroEstimate({
     calories: Math.round(parsed.calories),
     proteinG: Math.round(parsed.proteinG * 10) / 10,
     carbsG: Math.round((parsed.carbsG ?? 0) * 10) / 10,
     fatG: Math.round((parsed.fatG ?? 0) * 10) / 10,
     reasoning: parsed.reasoning,
-  };
+  });
 }
 
 export async function estimateFoodMacros(
@@ -229,15 +516,15 @@ export async function estimateFoodMacros(
 ): Promise<FoodMacroEstimate> {
   const ai = await callOpenAiFoodMacros(foodName, servingSize);
   if (ai) {
-    return {
+    return reconcileFoodMacroEstimate({
       ...ai,
       reasoning: ai.reasoning ?? `Estimated macros for ${foodName} (${servingSize}).`,
-    };
+    });
   }
 
   const local = estimateFoodMacrosLocal(foodName, servingSize);
   return {
     ...local,
-    reasoning: `Rule-based estimate for ${foodName} (${servingSize}). Review before saving.`,
+    reasoning: local.reasoning ?? `Rule-based estimate for ${foodName} (${servingSize}). Review before saving.`,
   };
 }

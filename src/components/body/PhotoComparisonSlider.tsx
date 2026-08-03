@@ -1,8 +1,9 @@
-import { useRef, useState } from 'react';
-import { Image, PanResponder, StyleSheet, View } from 'react-native';
+import { useCallback, useRef, useState } from 'react';
+import { Image, PanResponder, Pressable, StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/ui/AppText';
-import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
+import { LiftFlowColors, Radius, Spacing, TouchTarget } from '@/constants/theme';
+import { splitFromTouch } from '@/lib/photoCompare';
 
 type PhotoComparisonSliderProps = {
   leftLabel: string;
@@ -10,6 +11,8 @@ type PhotoComparisonSliderProps = {
   leftUri?: string;
   rightUri?: string;
   height?: number;
+  /** Opens the fullscreen zoom viewer. */
+  onExpand?: (which: 'left' | 'right') => void;
 };
 
 export function PhotoComparisonSlider({
@@ -18,21 +21,43 @@ export function PhotoComparisonSlider({
   leftUri,
   rightUri,
   height = 220,
+  onExpand,
 }: PhotoComparisonSliderProps) {
   const [width, setWidth] = useState(0);
   const [split, setSplit] = useState(0.5);
-  const splitRef = useRef(0.5);
+  const [dragging, setDragging] = useState(false);
+
+  // The PanResponder is created once, so it must read layout through refs. Reading the `width`
+  // state directly captured 0 forever and every drag bailed out before moving the handle.
+  const widthRef = useRef(0);
+  const frameXRef = useRef(0);
+  const frameRef = useRef<View>(null);
+
+  const measureFrame = useCallback(() => {
+    frameRef.current?.measureInWindow((x, _y, measuredWidth) => {
+      frameXRef.current = x;
+      if (measuredWidth > 0) {
+        widthRef.current = measuredWidth;
+        setWidth(measuredWidth);
+      }
+    });
+  }, []);
 
   const pan = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
-      onPanResponderMove: (_, gesture) => {
-        if (width <= 0) return;
-        const next = Math.min(0.95, Math.max(0.05, gesture.moveX / width));
-        splitRef.current = next;
-        setSplit(next);
+      onPanResponderGrant: (event) => {
+        setDragging(true);
+        // pageX is absolute; the frame is inset by the card padding, so subtract its origin.
+        setSplit(splitFromTouch(event.nativeEvent.pageX, frameXRef.current, widthRef.current));
       },
+      onPanResponderMove: (event, gesture) => {
+        const touchX = event.nativeEvent.pageX || gesture.moveX;
+        setSplit(splitFromTouch(touchX, frameXRef.current, widthRef.current));
+      },
+      onPanResponderRelease: () => setDragging(false),
+      onPanResponderTerminate: () => setDragging(false),
     }),
   ).current;
 
@@ -46,6 +71,8 @@ export function PhotoComparisonSlider({
     );
   }
 
+  const hasBoth = Boolean(leftUri && rightUri);
+
   return (
     <View style={styles.wrap}>
       <View style={styles.labels}>
@@ -57,8 +84,13 @@ export function PhotoComparisonSlider({
         </AppText>
       </View>
       <View
+        ref={frameRef}
         style={[styles.frame, { height }]}
-        onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
+        onLayout={(e) => {
+          widthRef.current = e.nativeEvent.layout.width;
+          setWidth(e.nativeEvent.layout.width);
+          measureFrame();
+        }}
         {...pan.panHandlers}>
         {rightUri ? <Image source={{ uri: rightUri }} style={styles.fullImage} /> : null}
         {leftUri ? (
@@ -66,13 +98,49 @@ export function PhotoComparisonSlider({
             <Image source={{ uri: leftUri }} style={[styles.fullImage, { width }]} />
           </View>
         ) : null}
-        <View style={[styles.handle, { left: `${split * 100}%` }]}>
-          <View style={styles.handleBar} />
-        </View>
+        {hasBoth ? (
+          <View style={[styles.handle, { left: `${split * 100}%` }]} pointerEvents="none">
+            <View style={styles.handleBar} />
+            <View style={[styles.handleKnob, dragging && styles.handleKnobActive]}>
+              <AppText variant="caption" color="background">
+                ‹ ›
+              </AppText>
+            </View>
+          </View>
+        ) : null}
       </View>
-      <AppText variant="caption" color="textTertiary">
-        Drag to compare
-      </AppText>
+
+      <View style={styles.footer}>
+        <AppText variant="caption" color="textTertiary">
+          {hasBoth ? 'Drag to compare' : 'Add a second photo to compare'}
+        </AppText>
+        {onExpand ? (
+          <View style={styles.expandRow}>
+            {leftUri ? (
+              <Pressable
+                style={styles.expandButton}
+                accessibilityRole="button"
+                accessibilityLabel={`Zoom ${leftLabel} photo`}
+                onPress={() => onExpand('left')}>
+                <AppText variant="caption" color="accent">
+                  Zoom {leftLabel}
+                </AppText>
+              </Pressable>
+            ) : null}
+            {rightUri ? (
+              <Pressable
+                style={styles.expandButton}
+                accessibilityRole="button"
+                accessibilityLabel={`Zoom ${rightLabel} photo`}
+                onPress={() => onExpand('right')}>
+                <AppText variant="caption" color="accent">
+                  Zoom {rightLabel}
+                </AppText>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -101,6 +169,35 @@ const styles = StyleSheet.create({
     height: '100%',
     backgroundColor: LiftFlowColors.accent,
     borderRadius: 2,
+  },
+  handleKnob: {
+    position: 'absolute',
+    width: 40,
+    height: 40,
+    borderRadius: Radius.full,
+    backgroundColor: LiftFlowColors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  handleKnobActive: {
+    transform: [{ scale: 1.12 }],
+  },
+  footer: {
+    gap: Spacing.xs,
+  },
+  expandRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  expandButton: {
+    flex: 1,
+    minHeight: TouchTarget.min,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: LiftFlowColors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   empty: {
     borderRadius: Radius.md,

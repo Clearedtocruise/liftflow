@@ -137,14 +137,19 @@ async function loadPlannedExercises(plannedWorkoutId: string): Promise<PlannedEx
 }
 
 async function findOrCreateExerciseByNameInternal(name: string, userId: string): Promise<string | null> {
-  const normalized = name.trim();
-  const { data: found } = await supabase
+  const normalized = name.trim().replace(/\s+/g, ' ');
+  // Ordered the same way the `seed_session_exercises_from_plan` trigger orders it, so the client and
+  // the database resolve a name to the same row. Preferring the system entry also stops a custom row
+  // that shadows a catalog exercise — "Reverse Fly" existed twice — from being picked up and spread.
+  const { data: matches } = await supabase
     .from('exercises')
-    .select('id')
+    .select('id, is_system, created_at')
     .ilike('name', normalized)
-    .limit(1)
-    .maybeSingle();
+    .order('is_system', { ascending: false })
+    .order('created_at', { ascending: true })
+    .limit(1);
 
+  const found = matches?.[0];
   if (found?.id) return found.id;
 
   const slug = normalized.toLowerCase().replace(/[^a-z0-9]+/g, '-');
@@ -171,35 +176,23 @@ async function preloadSessionExercises(
   userId: string,
   exercises: PlannedExerciseTemplate[],
 ): Promise<void> {
+  // A session started from a planned workout is seeded twice: the `trg_seed_session_exercises_from_plan`
+  // trigger fires inside the session INSERT, and then this runs. The trigger skips when the client
+  // got there first, but this had no matching check, so it inserted a second copy of every exercise
+  // — the duplicated lists and split set counts users saw. Read what is already there and add only
+  // what is missing.
+  const { data: existingRows } = await supabase
+    .from('workout_exercises')
+    .select('exercise_id')
+    .eq('session_id', sessionId);
+  const alreadySeeded = new Set((existingRows ?? []).map((row) => row.exercise_id as string));
+
   for (let i = 0; i < exercises.length; i++) {
     const template = exercises[i];
-    const normalized = template.name.trim();
-    const { data: found } = await supabase
-      .from('exercises')
-      .select('id')
-      .ilike('name', normalized)
-      .limit(1)
-      .maybeSingle();
-
-    let exerciseId = found?.id;
-    if (!exerciseId) {
-      const slug = normalized.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-      const { data: created } = await supabase
-        .from('exercises')
-        .insert({
-          name: normalized,
-          slug,
-          category: 'custom',
-          equipment: 'other',
-          muscle_groups: [],
-          is_system: false,
-          created_by: userId,
-        })
-        .select('id')
-        .single();
-      exerciseId = created?.id;
-    }
+    const exerciseId = await findOrCreateExerciseByNameInternal(template.name, userId);
     if (!exerciseId) continue;
+    if (alreadySeeded.has(exerciseId)) continue;
+    alreadySeeded.add(exerciseId);
 
     await supabase.from('workout_exercises').insert({
       session_id: sessionId,
@@ -267,47 +260,87 @@ async function applySessionExercisePlanInternal(
     let session = await loadSession(sessionId);
     if (!session) return fail('Session not found');
 
+    // Applying a plan twice used to append a second row per exercise, inflating the session's
+    // exercise count. Only empty duplicates are dropped, so logged work is never the row that goes.
+    const duplicateGroups = new Map<string, typeof session.exercises>();
+    for (const current of session.exercises) {
+      if (!current.exerciseId) continue;
+      const group = duplicateGroups.get(current.exerciseId) ?? [];
+      group.push(current);
+      duplicateGroups.set(current.exerciseId, group);
+    }
+    for (const group of duplicateGroups.values()) {
+      if (group.length < 2) continue;
+      const keep = group.find((item) => item.sets.length > 0) ?? group[0]!;
+      for (const duplicate of group) {
+        if (duplicate.id === keep.id || duplicate.sets.length > 0) continue;
+        await supabase.from('workout_exercises').delete().eq('id', duplicate.id);
+      }
+    }
+
     const desiredNames = exercises.map((exercise) => exercise.name.trim().toLowerCase());
     for (const current of session.exercises) {
       const name = current.exercise?.name?.trim().toLowerCase() ?? '';
-      if (!desiredNames.includes(name)) {
-        await supabase.from('workout_sets').delete().eq('workout_exercise_id', current.id);
-        await supabase.from('workout_exercises').delete().eq('id', current.id);
-      }
+      if (desiredNames.includes(name)) continue;
+      // Logged sets are work the user actually did, so an exercise they added or swapped in
+      // mid-session survives a plan re-apply instead of being deleted along with its sets.
+      if (current.sets.length > 0) continue;
+      await supabase.from('workout_sets').delete().eq('workout_exercise_id', current.id);
+      await supabase.from('workout_exercises').delete().eq('id', current.id);
     }
 
     session = await loadSession(sessionId);
     if (!session) return fail('Session not found');
 
+    const claimed = new Set<string>();
     for (let index = 0; index < exercises.length; index += 1) {
       const template = exercises[index];
       const normalized = template.name.trim();
+      const suggested = {
+        sort_order: index,
+        suggested_reps: template.repRange ?? undefined,
+        suggested_weight: template.weightLbs ? template.weightLbs / 2.2046226218 : undefined,
+      };
       const existing = session.exercises.find(
-        (exercise) => exercise.exercise?.name?.trim().toLowerCase() === normalized.toLowerCase(),
+        (exercise) =>
+          !claimed.has(exercise.id) &&
+          exercise.exercise?.name?.trim().toLowerCase() === normalized.toLowerCase(),
       );
 
       if (existing) {
-        await supabase
-          .from('workout_exercises')
-          .update({
-            sort_order: index,
-            suggested_reps: template.repRange ?? undefined,
-            suggested_weight: template.weightLbs ? template.weightLbs / 2.2046226218 : undefined,
-          })
-          .eq('id', existing.id);
+        claimed.add(existing.id);
+        await supabase.from('workout_exercises').update(suggested).eq('id', existing.id);
         continue;
       }
 
       const exerciseIdResult = await findOrCreateExerciseByNameInternal(normalized, userId);
       if (!exerciseIdResult) continue;
 
+      // The catalog can resolve a plan name to a row already in the session under a different
+      // spelling, which is how the same exercise ended up listed twice.
+      const sameExercise = session.exercises.find(
+        (exercise) => !claimed.has(exercise.id) && exercise.exerciseId === exerciseIdResult,
+      );
+      if (sameExercise) {
+        claimed.add(sameExercise.id);
+        await supabase.from('workout_exercises').update(suggested).eq('id', sameExercise.id);
+        continue;
+      }
+
       await supabase.from('workout_exercises').insert({
         session_id: sessionId,
         exercise_id: exerciseIdResult,
-        sort_order: index,
-        suggested_reps: template.repRange ?? undefined,
-        suggested_weight: template.weightLbs ? template.weightLbs / 2.2046226218 : undefined,
+        ...suggested,
       });
+    }
+
+    // Kept exercises the plan does not describe move after the planned ones, so plan order holds
+    // and sort_order stays unique.
+    let tailOrder = exercises.length;
+    for (const current of [...session.exercises].sort((a, b) => a.sortOrder - b.sortOrder)) {
+      if (claimed.has(current.id)) continue;
+      await supabase.from('workout_exercises').update({ sort_order: tailOrder }).eq('id', current.id);
+      tailOrder += 1;
     }
 
     const updated = await loadSession(sessionId);
@@ -415,6 +448,13 @@ export const workoutService: IWorkoutService = {
 
       if (session.plannedWorkoutId) {
         await syncPlannedWorkoutStatus(session.plannedWorkoutId, 'completed');
+      }
+
+      try {
+        const { notificationService } = await import('@/services/notificationService');
+        await notificationService.rescheduleAfterWorkoutCompleted(18, 0);
+      } catch {
+        // Local reminders are best-effort — completion must still succeed.
       }
 
       const updated = await loadSession(sessionId);
@@ -688,12 +728,25 @@ export const workoutService: IWorkoutService = {
     try {
       const { data: existing } = await supabase
         .from('workout_exercises')
-        .select('sort_order')
+        .select('id, sort_order')
         .eq('session_id', sessionId)
-        .order('sort_order', { ascending: false })
-        .limit(1);
+        .order('sort_order', { ascending: true });
 
-      const order = sortOrder ?? ((existing?.[0]?.sort_order ?? -1) + 1);
+      const highest = existing?.length ? (existing[existing.length - 1]!.sort_order ?? existing.length - 1) : -1;
+      const order = sortOrder ?? highest + 1;
+
+      // Inserting mid-workout has to push the later exercises back, or two of them share a
+      // sort_order and the workout order becomes ambiguous.
+      if (sortOrder != null) {
+        const shifted = (existing ?? []).filter((row) => (row.sort_order ?? 0) >= order);
+        for (let index = shifted.length - 1; index >= 0; index -= 1) {
+          const row = shifted[index]!;
+          await supabase
+            .from('workout_exercises')
+            .update({ sort_order: (row.sort_order ?? 0) + 1 })
+            .eq('id', row.id);
+        }
+      }
 
       const { data, error } = await supabase
         .from('workout_exercises')
@@ -722,6 +775,45 @@ export const workoutService: IWorkoutService = {
       const exerciseId = await findOrCreateExerciseByNameInternal(name, userId);
       if (!exerciseId) return fail('Could not create exercise');
       return ok(exerciseId);
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
+  async replaceExercise(workoutExerciseId: string, exerciseId: string) {
+    try {
+      const { data: row, error: rowError } = await supabase
+        .from('workout_exercises')
+        .select('id, session_id, sort_order')
+        .eq('id', workoutExerciseId)
+        .maybeSingle();
+
+      if (rowError) return fail(rowError.message);
+      if (!row) return fail('That exercise is no longer part of this workout');
+
+      const { count } = await supabase
+        .from('workout_sets')
+        .select('id', { count: 'exact', head: true })
+        .eq('workout_exercise_id', workoutExerciseId);
+
+      // Swapping an exercise that already has logged sets keeps those sets on the original entry and
+      // slots the replacement in directly after it, so completed work is never reattributed.
+      if ((count ?? 0) > 0) {
+        return this.addExercise(row.session_id, exerciseId, (row.sort_order ?? 0) + 1);
+      }
+
+      const { error } = await supabase
+        .from('workout_exercises')
+        .update({ exercise_id: exerciseId, suggested_weight: null })
+        .eq('id', workoutExerciseId);
+
+      if (error) return fail(error.message);
+
+      const session = await loadSession(row.session_id);
+      if (!session) return fail('Session not found');
+      const exercise = session.exercises.find((item) => item.id === workoutExerciseId);
+      if (!exercise) return fail('Exercise not found');
+      return ok(exercise);
     } catch (e) {
       return fromError(e);
     }
@@ -888,11 +980,50 @@ export const workoutService: IWorkoutService = {
     }
   },
 
+  /**
+   * Adds an exercise the catalog does not have, so a gym-specific machine or a coach variation can
+   * still be trained and swapped in. Reuses the find-or-create path the voice logger uses, so a
+   * name that already exists resolves to that row instead of creating a near-duplicate.
+   */
+  async createCustomExercise(name: string, userId: string) {
+    try {
+      const normalized = name.trim().replace(/\s+/g, ' ');
+      if (!normalized) return fail('Enter an exercise name.');
+
+      const exerciseId = await findOrCreateExerciseByNameInternal(normalized, userId);
+      if (!exerciseId) return fail('Could not add that exercise.');
+
+      const { data, error } = await supabase
+        .from('exercises')
+        .select('id, name, slug, category, exercise_type, equipment, muscle_groups, is_system, created_by, created_at')
+        .eq('id', exerciseId)
+        .single();
+
+      if (error || !data) return fail(error?.message ?? 'Could not load the new exercise.');
+
+      const exercise: Exercise = {
+        id: data.id,
+        name: data.name,
+        slug: data.slug ?? undefined,
+        category: data.category as Exercise['category'],
+        exerciseType: (data.exercise_type ?? 'strength') as Exercise['exerciseType'],
+        equipment: data.equipment,
+        muscleGroups: data.muscle_groups ?? [],
+        isSystem: data.is_system ?? false,
+        createdBy: data.created_by ?? undefined,
+        createdAt: data.created_at,
+      };
+      return ok(exercise);
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
   async searchExercises(query: string, userId: string, limit = 50) {
     try {
       let request = supabase
         .from('exercises')
-        .select('id, name, slug, category, equipment, muscle_groups, is_system, created_by, created_at')
+        .select('id, name, slug, category, exercise_type, equipment, muscle_groups, is_system, created_by, created_at')
         .or(`is_system.eq.true,created_by.eq.${userId}`)
         .order('name')
         .limit(limit);
@@ -909,6 +1040,7 @@ export const workoutService: IWorkoutService = {
         name: row.name,
         slug: row.slug ?? undefined,
         category: row.category as Exercise['category'],
+        exerciseType: (row.exercise_type ?? 'strength') as Exercise['exerciseType'],
         equipment: row.equipment,
         muscleGroups: row.muscle_groups ?? [],
         isSystem: row.is_system ?? false,

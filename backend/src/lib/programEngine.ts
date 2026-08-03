@@ -68,9 +68,10 @@ type StoredProgramMetadata = {
   schedule?: Array<{ label?: string; isRest?: boolean }>;
 };
 
+/** Noon UTC on both ends, so a DST boundary cannot shorten the span below a whole day. */
 function daysBetween(fromDate: string, toDate: string): number {
-  const from = new Date(fromDate + 'T12:00:00').getTime();
-  const to = new Date(toDate + 'T12:00:00').getTime();
+  const from = new Date(fromDate + 'T12:00:00.000Z').getTime();
+  const to = new Date(toDate + 'T12:00:00.000Z').getTime();
   return Math.floor((to - from) / (1000 * 60 * 60 * 24));
 }
 
@@ -381,13 +382,14 @@ export async function generateTrainingProgram(input: CreateProgramInput) {
               rotationSeed,
               splitOccurrenceIndex,
               slotLabel: slot.label,
+              weekNumber: week,
             },
           ));
 
         let exercises = referencePlan
           ? plan.exercises
           : scaleExercises(plan.exercises, phaseSpec.volumeMultiplier, phaseSpec.repRangeAdjust);
-        if (equipment?.length && !referencePlan) {
+        if (equipment?.length) {
           const exercisePool = await loadAvailableExercises(input.userId, equipment);
           const swapped = applyEquipmentSubstitutionsToExercises(exercises, equipment, exercisePool);
           exercises = swapped.exercises;
@@ -619,7 +621,13 @@ export async function regenerateActiveProgram(
 
     const input: CreateProgramInput = {
       userId,
-      programType: profileInput.programType,
+      /**
+       * Keep the split the athlete is already running. Regeneration used to re-infer it from the
+       * current goals, so adding "strength" anywhere in a goal list silently turned a Push/Pull/Legs
+       * week into Squat/Bench/Deadlift days — and the Monday rebuild applied it without asking.
+       * Changing split stays an explicit action, exactly as the program clock is preserved above.
+       */
+      programType: meta.programType ?? profileInput.programType,
       frequency: profileInput.frequency,
       goal: profileInput.goal ?? meta.goal,
       experience: profileInput.experience ?? meta.experience,

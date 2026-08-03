@@ -20,7 +20,21 @@ function run() {
   });
   assert.match(pref.name.toLowerCase(), /chicken/);
 
-  console.log('nutritionPreferenceEngine.test.ts — 3/3 PASS');
+  const beefPref = adaptMealName('Lean salmon stir-fry with rice', 'dinner', {
+    dietaryRestrictions: [],
+    foodPreferences: ['Lean beef'],
+  });
+  assert.match(beefPref.name.toLowerCase(), /lean beef/);
+  assert.doesNotMatch(beefPref.name.toLowerCase(), /lean lean beef/);
+
+  // Already-adapted names must stay stable if adaptMealName runs twice.
+  const twice = adaptMealName(beefPref.name, 'dinner', {
+    dietaryRestrictions: [],
+    foodPreferences: ['Lean beef'],
+  });
+  assert.equal(twice.name, beefPref.name);
+
+  console.log('nutritionPreferenceEngine.test.ts — 5/5 PASS');
 }
 
 run();

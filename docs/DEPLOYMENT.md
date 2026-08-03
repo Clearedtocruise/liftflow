@@ -80,6 +80,8 @@ npm run build:android:apk
 ## One-Command Deploy
 
 ```bash
-export RENDER_API_KEY=... EXPO_TOKEN=...
+export RENDER_API_KEY=... EXPO_TOKEN1=...
 node scripts/deploy-production.mjs
 ```
+
+`EXPO_TOKEN1` must be a **liftflow1** Expo access token. Do not use `EXPO_TOKEN` (immadoer).

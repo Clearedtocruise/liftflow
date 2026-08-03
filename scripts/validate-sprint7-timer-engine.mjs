@@ -38,10 +38,30 @@ const modes = read('src/constants/workoutExecutionModes.ts');
 const cardio = read('src/constants/cardioActivities.ts');
 
 record('Traditional default 90s', engine.includes('DEFAULT_REST_SECONDS') || modes.includes('restSeconds: 90'));
-record('Tabata defaults 20/10/8 (canonical protocol)', modes.includes('tabata: { workSeconds: 20, restSeconds: 10, rounds: 8 }'));
+record('Tabata defaults 20/10/3 (strength-session protocol)', modes.includes('tabata: { workSeconds: 20, restSeconds: 10, rounds: 3 }'));
 record('Interval skip round', engine.includes('skipIntervalRound') && overlay.includes('Skip round'));
 record('Interval phase cues', fs.existsSync(path.join(root, 'src/lib/intervalTimerFeedback.ts')));
-record('Tabata auto-start in active workout', active.includes('startIntervalTimer(undefined, executionMode === \'tabata\')'));
+record('Tabata auto-start uses plan rounds', active.includes('rounds: planMeta?.intervalRounds ?? effectiveTargetSets'));
+record('Tabata prep is a log window', active.includes('Prep between exercises — log load'));
+record('Interval countdown cues', read('src/lib/intervalTimerFeedback.ts').includes('cueIntervalCountdown'));
+record('Interval rounds capped', engine.includes('INTERVAL_ROUNDS_MAX = 12'));
+record('Tabata prep exposes work/rest/rounds', overlay.includes('prepIntervalConfig') && active.includes('onPrepIntervalConfigChange'));
+record('Tabata starts from dialed session config', active.includes('workSeconds: tabataSessionConfig.workSeconds'));
+record('Tabata prep runs on every exercise change', active.includes('beginNextTabataExercise'));
+// The screen and the set logger each worked out "sets done" separately; when they disagreed an
+// exercise could read as finished with sets remaining and the auto-advance skipped it.
+record(
+  'Screen and logger share one set-target resolver',
+  active.includes('resolveEffectiveTargetSets') &&
+    active.match(/resolveEffectiveTargetSets\(/g)?.length >= 2 &&
+    !active.includes("executionMode === 'tabata'\n      ? intervalTimer?.config.rounds"),
+);
+record(
+  'Paused Tabata allows weight changes',
+  active.includes("intervalTimer.phase !== 'done' && intervalTimer.running") &&
+    active.includes('pausedWeightEdit') &&
+    overlay.includes('Paused — set your weight'),
+);
 record('Interval tick machine', engine.includes('tickIntervalTimer'));
 record('Circuit transition timer', engine.includes('tickCircuitTimer') && engine.includes('circuit_transition'));
 record('Unified timer hook', hook.includes('useWorkoutTimerEngine'));
@@ -52,6 +72,14 @@ record('Active workout uses timer engine', active.includes('useWorkoutTimerEngin
 record('Active workout passes execution mode', read('src/app/(tabs)/workout/index.tsx').includes('executionMode'));
 record('Cardio tabata 8 rounds', cardio.includes('rounds: 8'));
 record('Interval panel uses timer engine', read('src/components/cardio/IntervalTimerPanel.tsx').includes('timerEngine'));
+// The rest timer used to wait behind an "Open timer" tap, which is the one interaction a lifter
+// cannot make with a bar in their hands.
+record('Rest timer opens itself after a set', active.includes('setRestOverlayOpen(restActive);'));
+// Still suppressed behind the exercise-complete card and challenge modal, or it would cover them.
+record(
+  'Auto-open respects complete and challenge states',
+  active.includes('!showComplete &&\n          !activeChallenge &&'),
+);
 
 console.log('\nTimer architecture: timerEngine → useWorkoutTimerEngine → WorkoutTimerOverlay');
 console.log('Modes: traditional rest · HIIT/tabata intervals · circuit transitions');

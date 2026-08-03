@@ -1,8 +1,9 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, StyleSheet, View } from 'react-native';
 
+import { ManageDayModal } from '@/components/dashboard/ManageDayModal';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { ErrorStateCard } from '@/components/layout/StateCard';
 import { ActiveWorkoutScreen } from '@/components/workout/execution/ActiveWorkoutScreen';
@@ -22,7 +23,7 @@ import { INTERVAL_MODE_DEFAULTS } from '@/constants/workoutExecutionModes';
 import { localDateString } from '@/lib/localDate';
 import { planDataCache } from '@/lib/planDataCache';
 import { warmWeekPlanData } from '@/lib/planDataPrefetch';
-import { showWeeklyEditDayMenu } from '@/lib/planDayActions';
+import { buildEditDayMenu, type ManageDayMenuContent } from '@/lib/planDayActions';
 import { logStartup } from '@/lib/startupLogger';
 import { enrichWithSupersetGroups, inferExecutionModeFromPlan } from '@/lib/supersetFlow';
 import {
@@ -54,13 +55,17 @@ export default function WorkoutScreen() {
   const [loadingPlan, setLoadingPlan] = useState(true);
   const [refreshingPlan, setRefreshingPlan] = useState(false);
   const [adaptingPlan, setAdaptingPlan] = useState(false);
+  const [editDayOpen, setEditDayOpen] = useState(false);
+  const [editDayMenu, setEditDayMenu] = useState<ManageDayMenuContent | null>(null);
   const [challengeRecords, setChallengeRecords] = useState<WorkoutChallengeRecord[]>([]);
   const [planError, setPlanError] = useState(false);
   const [finishing, setFinishing] = useState(false);
+  const [cleaningInvalidSession, setCleaningInvalidSession] = useState(false);
   const finishingRef = useRef(false);
   const loadGenerationRef = useRef(0);
   const hydratedFromCacheRef = useRef(false);
   const skipFocusLoadRef = useRef(true);
+  const cleanedInvalidSessionRef = useRef<string | null>(null);
 
   const loadWeekPlan = useCallback(
     async (options?: { silent?: boolean }) => {
@@ -168,12 +173,33 @@ export default function WorkoutScreen() {
     if (session) void refreshSession();
   });
 
+  const invalidPlannedSession = Boolean(session?.plannedWorkoutId) && (session?.exercises.length ?? 0) === 0;
+
+  useEffect(() => {
+    if (!session || !invalidPlannedSession) {
+      setCleaningInvalidSession(false);
+      return;
+    }
+    if (cleanedInvalidSessionRef.current === session.id) return;
+    cleanedInvalidSessionRef.current = session.id;
+    setCleaningInvalidSession(true);
+    void (async () => {
+      await cancelSession();
+      await refreshSession();
+      await loadWeekPlan({ silent: true });
+      setCleaningInvalidSession(false);
+    })();
+  }, [session, invalidPlannedSession, cancelSession, refreshSession, loadWeekPlan]);
+
   useEffect(() => {
     if (revision > 0 && user?.id) void loadWeekPlan({ silent: true });
   }, [revision, user?.id, loadWeekPlan]);
 
   const weekWorkouts = useMemo(
-    () => weekDays.map((day) => day.workout).filter(Boolean) as PlannedWorkout[],
+    () =>
+      weekDays
+        .map((day) => day.scheduledWorkout ?? day.workout)
+        .filter((workout): workout is PlannedWorkout => workout != null),
     [weekDays],
   );
 
@@ -227,20 +253,46 @@ export default function WorkoutScreen() {
   const handleEditDay = useCallback(
     (day: WeekDayPlan) => {
       if (!user?.id) return;
-      showWeeklyEditDayMenu(
-        {
-          userId: user.id,
-          workouts: weekWorkouts,
-          setFromAdaptation,
-          onComplete: () => void loadWeekPlan({ silent: true }),
-          onBusyChange: setAdaptingPlan,
-          timeZone: user.timezone,
+
+      const planDeps = {
+        userId: user.id,
+        workouts: weekWorkouts,
+        setFromAdaptation,
+        onWorkoutsUpdated: (workouts: PlannedWorkout[]) => {
+          setWeekDays(buildWeekPlan(workouts, new Date(), user.timezone));
         },
-        day.date,
-        day.hasScheduledWorkout ? () => handleSelectDay(day) : undefined,
-      );
+        onComplete: () => void loadWeekPlan({ silent: true }),
+        onBusyChange: setAdaptingPlan,
+        timeZone: user.timezone,
+      };
+
+      const menu = buildEditDayMenu(planDeps, day.date, {
+        onEditExercises: day.workout
+          ? () => {
+              setEditDayOpen(false);
+              setEditDayMenu(null);
+              setPlannedWorkout(day.workout!);
+              router.push({ pathname: '/(tabs)/workout/day', params: { id: day.workout!.id } });
+            }
+          : undefined,
+        onStartWorkout: day.workout
+          ? () => {
+              setEditDayOpen(false);
+              setEditDayMenu(null);
+              handleSelectDay(day);
+            }
+          : undefined,
+      });
+
+      if (!menu) {
+        Alert.alert('Edit Day', 'No workouts available to adjust this week.');
+        return;
+      }
+
+      setEditDayMenu(menu);
+      setEditDayOpen(true);
     },
-    [user?.id, weekWorkouts, setFromAdaptation, loadWeekPlan, handleSelectDay],
+    [user?.id, user?.timezone, weekWorkouts, setFromAdaptation, loadWeekPlan, handleSelectDay, setPlannedWorkout],
   );
 
   const handleFinishWorkout = useCallback(async () => {
@@ -281,6 +333,14 @@ export default function WorkoutScreen() {
   }, []);
 
   if (loading && !session && weekDays.length === 0) {
+    return (
+      <View style={styles.loading}>
+        <ActivityIndicator size="large" color={LiftFlowColors.accent} />
+      </View>
+    );
+  }
+
+  if (cleaningInvalidSession || invalidPlannedSession) {
     return (
       <View style={styles.loading}>
         <ActivityIndicator size="large" color={LiftFlowColors.accent} />
@@ -366,6 +426,28 @@ export default function WorkoutScreen() {
         onEditDay={handleEditDay}
         onManualLog={() => router.push('/(tabs)/workout/manual-log')}
       />
+
+      {editDayMenu ? (
+        <ManageDayModal
+          visible={editDayOpen}
+          title={editDayMenu.title}
+          showWeekList={editDayMenu.showWeekList}
+          weeklyPlan={editDayMenu.weeklyPlan}
+          focusDate={editDayMenu.focusDate}
+          todayLabel={editDayMenu.todayLabel}
+          focusWorkoutId={editDayMenu.focusWorkoutId}
+          actions={editDayMenu.actions}
+          swapTargets={editDayMenu.swapTargets}
+          moveTargets={editDayMenu.moveTargets}
+          restDayTargets={editDayMenu.restDayTargets}
+          doTodayTargets={editDayMenu.doTodayTargets}
+          onScheduleChange={editDayMenu.onScheduleChange}
+          onClose={() => {
+            setEditDayOpen(false);
+            setEditDayMenu(null);
+          }}
+        />
+      ) : null}
     </ScreenContainer>
   );
 }

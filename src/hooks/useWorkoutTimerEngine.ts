@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 
-import { cueIntervalPhase } from '@/lib/intervalTimerFeedback';
+import { cueIntervalCountdown, cueIntervalPhase } from '@/lib/intervalTimerFeedback';
 import {
     skipIntervalRound as advanceIntervalRound,
     advanceCircuitTimerToNow,
     advanceIntervalPhase,
     advanceIntervalTimerToNow,
+    clampIntervalRounds,
     createCircuitTimerState,
     createIntervalTimerState,
     type CircuitPhase,
@@ -30,6 +31,7 @@ export function useWorkoutTimerEngine(executionMode: WorkoutExecutionMode) {
   const [intervalTimer, setIntervalTimer] = useState<IntervalTimerState | null>(null);
   const [circuitTimer, setCircuitTimer] = useState<CircuitTimerState | null>(null);
   const lastIntervalPhaseRef = useRef<IntervalPhase | null>(null);
+  const lastCountdownSecondRef = useRef<number | null>(null);
   const intervalDeadlineRef = useRef<number | null>(null);
   const circuitDeadlineRef = useRef<number | null>(null);
   const intervalPausedBySessionRef = useRef(false);
@@ -56,6 +58,7 @@ export function useWorkoutTimerEngine(executionMode: WorkoutExecutionMode) {
       const deadline = intervalDeadlineRef.current;
       if (deadline == null) return current;
 
+      const previousPhase = current.phase;
       const advanced = advanceIntervalTimerToNow(current, deadline, Date.now());
       intervalDeadlineRef.current = advanced.state.phase === 'done' ? null : advanced.deadlineMs;
       const next = advanced.state;
@@ -65,6 +68,12 @@ export function useWorkoutTimerEngine(executionMode: WorkoutExecutionMode) {
         next.secondsRemaining === current.secondsRemaining
       ) {
         return current;
+      }
+      // Background catch-up can skip rest→work; always cue the phase we landed on.
+      if (next.phase !== previousPhase && next.phase !== 'done') {
+        cueIntervalPhase(next.phase);
+        lastIntervalPhaseRef.current = next.phase;
+        lastCountdownSecondRef.current = null;
       }
       return next;
     });
@@ -127,6 +136,7 @@ export function useWorkoutTimerEngine(executionMode: WorkoutExecutionMode) {
   useEffect(() => {
     if (!intervalTimer) {
       lastIntervalPhaseRef.current = null;
+      lastCountdownSecondRef.current = null;
       return;
     }
     if (lastIntervalPhaseRef.current === intervalTimer.phase) return;
@@ -134,16 +144,31 @@ export function useWorkoutTimerEngine(executionMode: WorkoutExecutionMode) {
     if (!intervalTimer.running && intervalTimer.phase !== 'done') return;
     cueIntervalPhase(intervalTimer.phase);
     lastIntervalPhaseRef.current = intervalTimer.phase;
+    lastCountdownSecondRef.current = null;
   }, [intervalTimer?.phase, intervalTimer]);
+
+  useEffect(() => {
+    if (!intervalTimer?.running || intervalTimer.phase === 'done') return;
+    const remaining = intervalTimer.secondsRemaining;
+    if (remaining < 1 || remaining > 3) return;
+    if (lastCountdownSecondRef.current === remaining) return;
+    lastCountdownSecondRef.current = remaining;
+    cueIntervalCountdown(remaining);
+  }, [intervalTimer?.running, intervalTimer?.phase, intervalTimer?.secondsRemaining]);
 
   const startIntervalTimer = useCallback(
     (overrides?: Partial<IntervalTimerConfig>, autoStart = false) => {
       if (executionMode !== 'hiit' && executionMode !== 'tabata') return;
-      const state = createIntervalTimerState(executionMode, overrides);
+      const capped =
+        overrides?.rounds != null
+          ? { ...overrides, rounds: clampIntervalRounds(overrides.rounds) }
+          : overrides;
+      const state = createIntervalTimerState(executionMode, capped);
       if (autoStart) syncIntervalDeadline(state.secondsRemaining);
       else intervalDeadlineRef.current = null;
       setIntervalTimer({ ...state, running: autoStart });
       lastIntervalPhaseRef.current = null;
+      lastCountdownSecondRef.current = null;
     },
     [executionMode, syncIntervalDeadline],
   );
@@ -185,7 +210,11 @@ export function useWorkoutTimerEngine(executionMode: WorkoutExecutionMode) {
     (patch: Partial<IntervalTimerConfig>) => {
       setIntervalTimer((current) => {
         if (!current) return current;
-        const config = { ...current.config, ...patch };
+        const nextPatch =
+          patch.rounds != null
+            ? { ...patch, rounds: clampIntervalRounds(patch.rounds) }
+            : patch;
+        const config = { ...current.config, ...nextPatch };
         if (current.phase === 'done') return { ...current, config };
 
         // Retuning the length mid-phase must not restart the phase the user is already inside.

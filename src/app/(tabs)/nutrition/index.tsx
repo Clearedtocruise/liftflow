@@ -35,9 +35,12 @@ import { resolveActiveTrainingDay } from '@/lib/activeTrainingDay';
 import { aggregateWeeklyGroceries, groupGroceriesByCategory } from '@/lib/groceryAggregation';
 import { resolveTimeZone } from '@/lib/localDate';
 import { aggregateDailyMeals, aggregateWeeklyMeals, buildDailySummaryFromMeals, mealsForCalendarDay } from '@/lib/mealAggregation';
+import { resolveUsualMeals, usualMealSuggestion, type MealDefault } from '@/lib/mealDefaults';
+import { friendlyMealError, isStaleMealError } from '@/lib/mealErrors';
 import {
     enrichMealMeta,
     mealNameFromIngredients,
+    resolveMealMacros,
     resolveMealMacrosFromIngredients,
     serializeMealMeta,
 } from '@/lib/mealIngredients';
@@ -59,15 +62,6 @@ import type { DailyNutritionSummary, GroceryList, GroceryListItem, Meal, Nutriti
 import type { MealType } from '@/types/common';
 
 /** Service errors surface raw transport strings like "API error 500"; users need plain language. */
-function friendlyMealError(raw: string): string {
-  if (/network|fetch|timeout|timed out/i.test(raw)) {
-    return "We couldn't reach your meal plan. Check your connection and try again.";
-  }
-  if (/^API error|\b(4\d\d|5\d\d)\b/.test(raw)) {
-    return 'Something went wrong on our end. Please try again in a moment.';
-  }
-  return raw;
-}
 
 function formatGroceryQuantity(item: GroceryListItem): string {
   if (item.quantity == null) return item.unit ?? '';
@@ -340,6 +334,9 @@ export default function NutritionScreen() {
     [todayMeals, schedule, hasWorkoutToday],
   );
 
+  // What this user actually keeps eating in each slot, learned from logged history.
+  const usualMeals = useMemo(() => resolveUsualMeals(weekMeals), [weekMeals]);
+
   const mealAggregation = useMemo(
     () => aggregateDailyMeals(mealsForCalendarDay(weekMeals, today)),
     [weekMeals, today],
@@ -412,6 +409,16 @@ export default function NutritionScreen() {
     }
   }
 
+  /**
+   * A meal write that matched no row means the plan moved on under us — day sync and duplicate
+   * pruning both delete and reinsert rows. Reload so the stale meal disappears instead of leaving
+   * the user tapping a button that can only fail.
+   */
+  function reportMealFailure(title: string, result: { error: string; code?: string }) {
+    Alert.alert(title, friendlyMealError(result.error, result.code));
+    if (isStaleMealError(result)) void load();
+  }
+
   async function syncGroceriesAfterReplace() {
     if (!user) return;
     const { from, to } = getWeekRange(new Date(), user.timezone);
@@ -449,7 +456,14 @@ export default function NutritionScreen() {
 
       loadGenerationRef.current += 1;
       setWeekMeals(meals);
-      setSummary((prev) => buildDailySummaryFromMeals(meals, today, goals, prev?.waterMl ?? 0));
+
+      // Generation writes the macro targets the plan was built around, so the local copy is stale
+      // the moment it returns. Without this the screen shows the new meals against the old goal.
+      const refreshedGoals = await nutritionService.getGoals(user.id);
+      const activeGoals = refreshedGoals.success && refreshedGoals.data ? refreshedGoals.data : goals;
+      if (refreshedGoals.success && refreshedGoals.data) setGoals(refreshedGoals.data);
+
+      setSummary((prev) => buildDailySummaryFromMeals(meals, today, activeGoals, prev?.waterMl ?? 0));
       void planDataCache.writeMeals(user.id, from, to, meals);
       setLoadError(null);
       setSection('today');
@@ -468,7 +482,7 @@ export default function NutritionScreen() {
     if (!user) return;
     const result = await nutritionService.generateGroceryList(user.id);
     if (!result.success) {
-      Alert.alert('Could not update meal', friendlyMealError(result.error));
+      reportMealFailure('Could not update meal', result);
       return;
     }
     setGroceryList(result.data);
@@ -514,7 +528,11 @@ export default function NutritionScreen() {
     }
   }
 
-  async function handleMarkMeal(meal: Meal, status: 'completed' | 'modified' | 'skipped') {
+  async function handleMarkMeal(
+    meal: Meal,
+    status: 'completed' | 'modified' | 'skipped',
+    consumedAt?: string,
+  ) {
     // Fire-and-forget meant a second tap logged the same meal twice against the day's calories.
     if (markingMealId) return;
     setMarkingMealId(meal.id);
@@ -524,9 +542,10 @@ export default function NutritionScreen() {
         meal.name,
         meal.instructions,
         status,
+        consumedAt,
       );
       if (!result.success) {
-        Alert.alert('Could not update meal', friendlyMealError(result.error));
+        reportMealFailure('Could not update meal', result);
         return;
       }
       AccessibilityInfo.announceForAccessibility(
@@ -542,13 +561,44 @@ export default function NutritionScreen() {
     }
   }
 
+  /** Swaps a planned slot to the meal this user keeps logging there. */
+  async function handleUseUsualMeal(meal: Meal, usual: MealDefault) {
+    if (replacingMealId) return;
+    setReplacingMealId(meal.id);
+    try {
+      const meta = enrichMealMeta(usual.name, usual.instructions ?? meal.instructions);
+      // Choosing the usual sets the plan; it still has to be marked eaten.
+      meta.status = 'planned';
+
+      const result = await nutritionService.updateMeal(meal.id, {
+        name: usual.name,
+        calories: usual.calories,
+        proteinG: usual.proteinG,
+        carbsG: usual.carbsG,
+        fatG: usual.fatG,
+        status: 'planned',
+        instructions: serializeMealMeta(meta),
+      });
+      if (!result.success) {
+        reportMealFailure('Could not update meal', result);
+        return;
+      }
+      AccessibilityInfo.announceForAccessibility(`${usual.name} set as your usual`);
+      void syncGroceriesAfterReplace();
+      await applySavedMeals([result.data]);
+    } finally {
+      setReplacingMealId(null);
+    }
+  }
+
   async function handleReplaceMeal(meal: Meal, option: MealAlternativeOption) {
     if (replacingMealId) return;
     setReplacingMealId(meal.id);
     setReplaceMeal(null);
     try {
       const meta = enrichMealMeta(meal.name, meal.instructions);
-      meta.status = 'modified';
+      // Replace changes what is planned; Home protein counts on Ate as planned.
+      meta.status = 'planned';
       meta.ingredients = option.ingredients;
       const result = await nutritionService.updateMeal(meal.id, {
         name: option.name,
@@ -556,10 +606,11 @@ export default function NutritionScreen() {
         proteinG: option.proteinG,
         carbsG: option.carbsG,
         fatG: option.fatG,
+        status: 'planned',
         instructions: serializeMealMeta(meta),
       });
       if (!result.success) {
-        Alert.alert('Could not update meal', friendlyMealError(result.error));
+        reportMealFailure('Could not update meal', result);
         return;
       }
       void syncGroceriesAfterReplace();
@@ -579,7 +630,7 @@ export default function NutritionScreen() {
       meta.ingredients = (meta.ingredients ?? []).map((item) =>
         item.name === ingredientName ? { name: replacement, serving: item.serving } : item,
       );
-      meta.status = 'modified';
+      meta.status = 'planned';
       const instructions = serializeMealMeta(meta);
       const nextName = mealNameFromIngredients(meta.ingredients ?? []) ?? meal.name;
       const nextMacros = resolveMealMacrosFromIngredients(nextName, instructions);
@@ -589,10 +640,11 @@ export default function NutritionScreen() {
         proteinG: nextMacros.proteinG,
         carbsG: nextMacros.carbsG,
         fatG: nextMacros.fatG,
+        status: 'planned',
         instructions,
       });
       if (!result.success) {
-        Alert.alert('Could not update meal', friendlyMealError(result.error));
+        reportMealFailure('Could not update meal', result);
         return;
       }
       void syncGroceriesAfterReplace();
@@ -638,7 +690,7 @@ export default function NutritionScreen() {
 
       const failure = results.find((result) => !result.success);
       if (failure && !failure.success) {
-        Alert.alert('Could not update meal', friendlyMealError(failure.error));
+        reportMealFailure('Could not update meal', failure);
         return;
       }
 
@@ -771,7 +823,9 @@ export default function NutritionScreen() {
                 key={meal.id}
                 meal={meal}
                 scheduledTime={todayTimes[index]}
-                onMarkComplete={(status) => handleMarkMeal(meal, status)}
+                usual={usualMealSuggestion(meal, usualMeals)}
+                onUseUsual={(usual) => void handleUseUsualMeal(meal, usual)}
+                onMarkComplete={(status, consumedAt) => handleMarkMeal(meal, status, consumedAt)}
                 onReplace={() => {
                   setReplaceMeal(meal);
                   setReplaceMode('meal');
@@ -820,6 +874,7 @@ export default function NutritionScreen() {
                         schedule,
                         day.date === today && hasWorkoutToday,
                       );
+                      const macros = resolveMealMacros(meal);
                       return (
                         <View key={meal.id} style={styles.weekMealRow}>
                           <AppText variant="footnote" color="accent">
@@ -827,8 +882,10 @@ export default function NutritionScreen() {
                           </AppText>
                           <AppText variant="body">{meal.name}</AppText>
                           <AppText variant="caption" color="textSecondary">
-                            {meal.calories ?? 0} cal · {Math.round(meal.proteinG ?? 0)}P · {Math.round(meal.carbsG ?? 0)}C ·{' '}
-                            {Math.round(meal.fatG ?? 0)}F
+                            {(() => {
+                              const macros = resolveMealMacros(meal);
+                              return `${macros.calories} cal · ${Math.round(macros.proteinG)}P · ${Math.round(macros.carbsG)}C · ${Math.round(macros.fatG)}F`;
+                            })()}
                           </AppText>
                         </View>
                       );

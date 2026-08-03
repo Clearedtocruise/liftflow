@@ -45,7 +45,7 @@ jobs:
         run: npm test
 
   client:
-    name: Client (typecheck)
+    name: Client (typecheck + tests)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -59,13 +59,22 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # The client unit tests ran only on developer machines, so every guarantee they encode could
+      # regress on main without anything going red.
+      - name: Test
+        run: npm test
+
       # The app has a large backlog of pre-existing type errors, so a plain `tsc --noEmit` gate
       # would be red on every run and tell us nothing. Instead we ratchet: the build fails only
       # when the error count grows. Lower the baseline as errors are paid down; the goal is 0,
       # at which point this step becomes a plain `npm run typecheck`.
+      # Tightened from 84, which was 26 errors looser than reality and left that much room for a
+      # regression to land green, then from 58 to the measured count once #18 landed, then to 44
+      # after the duplicate-status-key fix removed two, then to 41 once the exercise mappers and
+      # IWorkoutService picked up their missing members.
       - name: Typecheck (no new errors vs. baseline)
         env:
-          BASELINE: '84'
+          BASELINE: '41'
         run: |
           set +e
           npm run typecheck > typecheck.log 2>&1
@@ -88,3 +97,76 @@ jobs:
           name: client-typecheck-log
           path: typecheck.log
           if-no-files-found: ignore
+
+  guards:
+    name: Regression guards
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # `validate:sprint1-exercise-classification` runs the backend's own unit tests through the
+      # backend's tsx. Without this the guard reported "tsx not installed in backend" and failed
+      # only in CI, where it passes locally on any machine that has already installed them.
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      # Each `validate:*` script below was written to lock a specific bug shut, but nothing ran them
+      # after the PR that added them, so they only protected the branch they arrived on.
+      #
+      # This list is an allowlist rather than every `validate:*` script. The four that used to be
+      # excluded for asserting aspirational state have been repointed at where their behaviour
+      # actually lives and now pass, so they are gated here too; `exercise-education` referenced a
+      # script that no longer exists and has been removed rather than left to crash.
+      #
+      # A script that is not defined on this ref is skipped, so the job does not depend on the order
+      # the open PRs land in.
+      - name: Run guards
+        run: |
+          set -uo pipefail
+          guards="
+            validate:no-undefined-names
+            validate:exercise-guide
+            validate:voice-logging
+            validate:workout-plan-edit-save
+            validate:active-workout-progression
+            validate:superset-logging
+            validate:sprint6-smart-logging
+            validate:sprint7-timer-engine
+            validate:sprint8-superset-circuit
+            validate:sprint10-exercise-replacement
+            validate:branding
+            validate:home-dashboard
+            validate:hero-backdrop
+            validate:protein-meal-replace
+            validate:voice-rate-limit
+            validate:superset-overpairing
+            validate:critical-paths
+            validate:sprint5-active-workout
+            validate:sprint1-exercise-classification
+          "
+          failed=0
+          for guard in $guards; do
+            if ! node -e "process.exit(require('./package.json').scripts['$guard'] ? 0 : 1)"; then
+              echo "::notice::skipping $guard — not defined on this ref"
+              continue
+            fi
+            echo "::group::$guard"
+            if npm run "$guard"; then
+              echo "PASS $guard"
+            else
+              echo "::error::$guard failed"
+              failed=1
+            fi
+            echo "::endgroup::"
+          done
+          exit $failed

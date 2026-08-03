@@ -23,6 +23,7 @@ const SCREEN_TITLES: Record<string, string> = {
   'program-calendar': 'Program Calendar',
   'program-create': 'New Program',
   program: 'Your Program',
+  'quick-add': 'Add',
   'recovery-analysis': 'Recovery Analysis',
   'recovery-check-in': 'Body Check-In',
   'release-notes': 'Release Notes',

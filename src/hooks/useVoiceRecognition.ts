@@ -3,11 +3,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { api } from '@/api/client';
 import {
-    cancelRecording,
-    hasMicrophonePermission,
-    MAX_RECORDING_MS,
-    startRecording,
-    stopRecording,
+  cancelRecording,
+  hasMicrophonePermission,
+  MAX_RECORDING_MS,
+  startRecording,
+  stopRecording,
 } from '@/lib/voice/recordAudio';
 import { getAccessToken } from '@/supabase/client';
 import type { VoiceInputMode } from '@/types/voice';
@@ -25,12 +25,15 @@ export type VoiceRecognitionOptions = {
 const PERMISSION_DENIED = 'Microphone access is off. Enable it in Settings to log sets by voice.';
 
 export function useVoiceRecognition(options: VoiceRecognitionOptions = {}) {
-  const { enabled = true, inputMode = 'push_to_talk', onFinalTranscript } = options;
+  const { enabled = true, inputMode = 'tap_toggle', onFinalTranscript } = options;
 
   const transcriptRef = useRef('');
   const recordingRef = useRef<Audio.Recording | null>(null);
+  const disposeMonitorRef = useRef<(() => void) | null>(null);
   const autoStopRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stoppingRef = useRef(false);
   const mountedRef = useRef(true);
+  const stopListeningRef = useRef<() => Promise<void>>(async () => undefined);
 
   const [state, setState] = useState<VoiceCaptureState>('idle');
   const [finalTranscript, setFinalTranscript] = useState('');
@@ -43,6 +46,11 @@ export function useVoiceRecognition(options: VoiceRecognitionOptions = {}) {
     }
   }, []);
 
+  const clearMonitor = useCallback(() => {
+    disposeMonitorRef.current?.();
+    disposeMonitorRef.current = null;
+  }, []);
+
   const clearTranscript = useCallback(() => {
     transcriptRef.current = '';
     setFinalTranscript('');
@@ -51,16 +59,19 @@ export function useVoiceRecognition(options: VoiceRecognitionOptions = {}) {
   }, []);
 
   const stopListening = useCallback(async () => {
+    if (stoppingRef.current) return;
     clearAutoStop();
+    clearMonitor();
     const active = recordingRef.current;
     if (!active) return;
+    stoppingRef.current = true;
     recordingRef.current = null;
 
     setState('transcribing');
     try {
       const recorded = await stopRecording(active);
       if (!recorded || recorded.bytes.byteLength === 0) {
-        throw new Error('No audio was recorded. Hold the button while you speak.');
+        throw new Error('No audio was recorded. Tap the mic and speak your set.');
       }
 
       const token = await getAccessToken();
@@ -71,7 +82,7 @@ export function useVoiceRecognition(options: VoiceRecognitionOptions = {}) {
       // Silent audio transcribes successfully to an empty string, which downstream parsing reports
       // as bad phrasing — telling a user who mumbled that their wording was wrong.
       if (!transcript.trim()) {
-        setError("Didn't catch that. Hold the button and speak clearly.");
+        setError("Didn't catch that. Tap the mic and speak clearly.");
         setState('error');
         return;
       }
@@ -82,14 +93,30 @@ export function useVoiceRecognition(options: VoiceRecognitionOptions = {}) {
       onFinalTranscript?.(transcript);
     } catch (e) {
       if (!mountedRef.current) return;
-      // The backend already returns user-facing messages; anything else gets a generic one.
-      setError(e instanceof Error ? e.message : 'Could not transcribe that. Try again.');
+      const raw = e instanceof Error ? e.message : '';
+      const lower = raw.toLowerCase();
+      // Backend rate-limit copy is written for operators; surface a gym-friendly retry instead.
+      if (
+        lower.includes('too many requests') ||
+        lower.includes('rate limit') ||
+        lower.includes('voice is busy') ||
+        lower.includes('ai request limit')
+      ) {
+        setError('Voice is busy — wait a few seconds and try again.');
+      } else {
+        // The backend already returns user-facing messages; anything else gets a generic one.
+        setError(raw || 'Could not transcribe that. Try again.');
+      }
       setState('error');
+    } finally {
+      stoppingRef.current = false;
     }
-  }, [clearAutoStop, onFinalTranscript]);
+  }, [clearAutoStop, clearMonitor, onFinalTranscript]);
+
+  stopListeningRef.current = stopListening;
 
   const startListening = useCallback(async () => {
-    if (!enabled || recordingRef.current) return false;
+    if (!enabled || recordingRef.current || stoppingRef.current) return false;
 
     setError(null);
     try {
@@ -99,40 +126,50 @@ export function useVoiceRecognition(options: VoiceRecognitionOptions = {}) {
         return false;
       }
 
-      const recording = await startRecording();
+      const { recording, dispose } = await startRecording({
+        onEndOfSpeech: () => {
+          void stopListeningRef.current();
+        },
+      });
       if (!mountedRef.current) {
+        dispose();
         void cancelRecording(recording);
         return false;
       }
 
       recordingRef.current = recording;
+      disposeMonitorRef.current = dispose;
       setState('recording');
-      autoStopRef.current = setTimeout(() => void stopListening(), MAX_RECORDING_MS);
+      // Hard cap only — normal stops come from end-of-speech silence detection.
+      autoStopRef.current = setTimeout(() => void stopListeningRef.current(), MAX_RECORDING_MS);
       return true;
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not start recording.');
       setState('error');
       return false;
     }
-  }, [enabled, stopListening]);
+  }, [enabled]);
 
   const abortListening = useCallback(() => {
     clearAutoStop();
+    clearMonitor();
+    stoppingRef.current = false;
     const active = recordingRef.current;
     recordingRef.current = null;
     if (active) void cancelRecording(active);
     setState('idle');
-  }, [clearAutoStop]);
+  }, [clearAutoStop, clearMonitor]);
 
   useEffect(
     () => () => {
       mountedRef.current = false;
       clearAutoStop();
+      clearMonitor();
       const active = recordingRef.current;
       recordingRef.current = null;
       if (active) void cancelRecording(active);
     },
-    [clearAutoStop],
+    [clearAutoStop, clearMonitor],
   );
 
   const handlePressIn = useCallback(async () => {
@@ -145,8 +182,8 @@ export function useVoiceRecognition(options: VoiceRecognitionOptions = {}) {
     void stopListening();
   }, [inputMode, stopListening]);
 
-  // Deliberately mode-independent: screen readers can only fire onPress, so push-to-talk callers
-  // fall back to this tap-toggle rather than being left with a dead microphone.
+  // Tap once to start; silence auto-stops. A second tap still stops early if needed.
+  // Screen readers can only fire onPress, so push-to-talk callers fall back to this path.
   const handleMicPress = useCallback(async () => {
     if (recordingRef.current) {
       await stopListening();

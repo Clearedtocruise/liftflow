@@ -90,6 +90,17 @@ export interface IWorkoutService {
   ): Promise<ServiceResult<WorkoutSession>>;
   getActiveSession(userId: string): Promise<ServiceResult<WorkoutSession | null>>;
   endSession(sessionId: string): Promise<ServiceResult<WorkoutSession>>;
+  /** Catalog + this user's own exercises. */
+  searchExercises(
+    query: string,
+    userId: string,
+    limit?: number,
+  ): Promise<ServiceResult<import('@/types').Exercise[]>>;
+  /** Adds an exercise the catalog does not have, or returns the existing row with that name. */
+  createCustomExercise(
+    name: string,
+    userId: string,
+  ): Promise<ServiceResult<import('@/types').Exercise>>;
   /** MVP: Log a set */
   logSet(payload: CreateSetPayload): Promise<ServiceResult<import('@/types').WorkoutSet>>;
   updateSet(setId: string, payload: import('@/types').UpdateSetPayload): Promise<ServiceResult<import('@/types').WorkoutSet>>;
@@ -103,6 +114,11 @@ export interface IWorkoutService {
   deleteSession(sessionId: string): Promise<ServiceResult<void>>;
   updateSession(sessionId: string, updates: { name?: string; notes?: string }): Promise<ServiceResult<WorkoutSession>>;
   addExercise(sessionId: string, exerciseId: string, sortOrder?: number): Promise<ServiceResult<import('@/types').WorkoutExercise>>;
+  /**
+   * Swap an exercise mid-session. Entries with logged sets keep them and the replacement is inserted
+   * straight after, so the returned exercise is the one the user should move to.
+   */
+  replaceExercise(workoutExerciseId: string, exerciseId: string): Promise<ServiceResult<import('@/types').WorkoutExercise>>;
   findOrCreateExerciseByName(name: string, userId: string): Promise<ServiceResult<string>>;
   /** Rest timers */
   startRestTimer(sessionId: string, setId: string, recommendedSeconds: number): Promise<ServiceResult<RestPeriod>>;
@@ -138,7 +154,15 @@ export interface ITrainingService {
   getPrograms(userId: string): Promise<ServiceResult<TrainingProgram[]>>;
   getActivePhase(userId: string): Promise<ServiceResult<TrainingPhase | null>>;
   getTemplates(userId: string): Promise<ServiceResult<WorkoutTemplate[]>>;
-  getPlannedWorkouts(userId: string, from: string, to: string): Promise<ServiceResult<PlannedWorkout[]>>;
+  /** `timeZone` decides which local day each workout falls on; omitting it uses the device zone. */
+  getPlannedWorkouts(
+    userId: string,
+    from: string,
+    to: string,
+    timeZone?: string | null,
+  ): Promise<ServiceResult<PlannedWorkout[]>>;
+  /** The next scheduled session strictly after `afterDate`, unconstrained by week boundaries. */
+  getNextPlannedWorkout(userId: string, afterDate: string): Promise<ServiceResult<PlannedWorkout | null>>;
   suggestMuscleGroups(userId: string): Promise<ServiceResult<SuggestedMuscleGroups>>;
   assessRecovery(userId: string): Promise<ServiceResult<RecoveryAssessment>>;
   createPlannedWorkout(userId: string, workout: Omit<PlannedWorkout, 'id' | 'createdAt'>): Promise<ServiceResult<PlannedWorkout>>;
@@ -152,6 +176,12 @@ export interface ITrainingService {
     userId: string,
     change: import('@/types/planAdaptation').ScheduleChange,
   ): Promise<ServiceResult<import('@/types/planAdaptation').PlanAdaptationResult>>;
+  /** Persists edits to a single day's exercises into `planned_workouts.metadata`. */
+  updatePlannedWorkoutExercises(
+    plannedWorkoutId: string,
+    exercises: import('@/types/workoutExecution').EditableWorkoutExercise[],
+    existingMetadata?: PlannedWorkout['metadata'],
+  ): Promise<ServiceResult<PlannedWorkout>>;
 }
 
 // =============================================================================
@@ -212,6 +242,7 @@ export interface INutritionService {
       date?: string;
       instructions?: string;
       clientKey?: string;
+      consumedAt?: string;
     },
   ): Promise<ServiceResult<import('@/types').Meal>>;
   getMealsForDate(userId: string, date: string): Promise<ServiceResult<import('@/types').Meal[]>>;
@@ -247,10 +278,15 @@ export interface INutritionService {
     name: string,
     instructions: string | undefined,
     status: import('@/types').MealStatus,
+    consumedAt?: string,
   ): Promise<ServiceResult<import('@/types').Meal>>;
   removePlannedMealsForWeek(userId: string, weekStart: string): Promise<ServiceResult<number>>;
   logHydration(userId: string, amountMl: number): Promise<ServiceResult<HydrationLog>>;
   getAdaptiveTargets(userId: string): Promise<ServiceResult<import('@/types/coaching').AdaptiveMacroTargets>>;
+  /** Recompute and persist macro targets from the user's current training goal. */
+  recalculateGoals(userId: string): Promise<
+    ServiceResult<{ calories: number; proteinG: number; carbsG: number; fatG: number; goal: string; changed: boolean }>
+  >;
   generateDailyPlan(userId: string, dietaryStyle?: string): Promise<ServiceResult<import('@/types/coaching').DailyMealPlan>>;
   getRecommendations(userId: string): Promise<ServiceResult<NutritionRecommendation[]>>;
 }

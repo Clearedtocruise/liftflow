@@ -2,6 +2,7 @@ import { DEFAULT_UNIT_PREFERENCES } from '@/constants/units';
 import { mapAuthError } from '@/lib/authErrors';
 import { getEmailConfirmRedirectUrl, getPasswordResetRedirectUrl } from '@/lib/authRedirects';
 import { mapProfile } from '@/lib/db-mappers';
+import { resolveDisplayName } from '@/lib/resolveDisplayName';
 import { withTimeout } from '@/lib/withTimeout';
 import { isSupabaseConfigured, supabase } from '@/supabase/client';
 import type { PasswordResetPayload, SignInPayload, SignUpPayload, UserProfile } from '@/types/user';
@@ -14,7 +15,9 @@ function stubProfileFromAuth(user: { id: string; email?: string | null; user_met
   return {
     id: user.id,
     email: user.email ?? '',
-    displayName: (user.user_metadata?.display_name as string) ?? undefined,
+    displayName: resolveDisplayName({
+      metadata: user.user_metadata,
+    }),
     preferredUnits: 'imperial',
     ...DEFAULT_UNIT_PREFERENCES,
     confirmationMode: 'smart',
@@ -32,7 +35,7 @@ async function fetchProfile(userId: string, email: string, metadata?: Record<str
     return {
       id: userId,
       email,
-      displayName: (metadata?.display_name as string) ?? undefined,
+      displayName: resolveDisplayName({ metadata }),
       preferredUnits: 'imperial',
       ...DEFAULT_UNIT_PREFERENCES,
       confirmationMode: 'smart',
@@ -41,7 +44,19 @@ async function fetchProfile(userId: string, email: string, metadata?: Record<str
     };
   }
 
-  return mapProfile(data);
+  const profile = mapProfile(data);
+  const resolved = resolveDisplayName({
+    profileName: profile.displayName,
+    metadata,
+  });
+
+  // Signup used to leave profiles.display_name null while the name sat in auth metadata.
+  // Write it back once so Home, Settings, and the next cold start all greet the same person.
+  if (resolved && !profile.displayName) {
+    void supabase.from('profiles').update({ display_name: resolved }).eq('id', userId);
+  }
+
+  return { ...profile, displayName: resolved };
 }
 
 export const authService = {

@@ -1,5 +1,7 @@
-import { expandEquipmentRequirements } from './equipmentCatalog.js';
+import { expandEquipmentRequirements, requiresSuspensionTrainer } from './equipmentCatalog.js';
+import { resolveMovementFamily, resolveTrainingDayBucket, type TrainingDayBucket } from './movementFamily.js';
 import { isCatalogVariantSlug } from './exerciseCatalogDedup.js';
+import { capSetsForExperience, resolveExperienceVolume } from './experienceVolume.js';
 import {
     applySubstitutionsToExercises,
     type LimitationContext,
@@ -8,6 +10,7 @@ import { enrichWithSmartSupersetGroups } from './liftingReference/applyReference
 import { maxPatternUsesForDayFocus, patternExclusionGroupId } from './movementPatternExclusion.js';
 import { requireAdmin } from './supabase.js';
 import { blendWorkoutPreset, resolveRankedGoals, toPlannerGoal } from './trainingGoals.js';
+import { normalizeBodyWeightKg } from './workoutAwareNutrition.js';
 
 export type GeneratedWorkoutExercise = {
   name: string;
@@ -90,11 +93,14 @@ export type DayFocusPlan = {
   key: string;
   quotas: Array<{ muscles: string[]; min: number }>;
   excludePrimaryMuscles: string[];
+  /** The movement buckets this day trains. Decided from exercise names, not stored metadata. */
+  dayBuckets: TrainingDayBucket[];
 };
 
 export const BODY_PART_DAY_PLANS: Record<string, DayFocusPlan> = {
   back_biceps_core: {
     key: 'back_biceps_core',
+    dayBuckets: ['pull'],
     quotas: [
       { muscles: ['back'], min: 4 },
       { muscles: ['biceps'], min: 3 },
@@ -104,6 +110,7 @@ export const BODY_PART_DAY_PLANS: Record<string, DayFocusPlan> = {
   },
   chest_shoulders_triceps: {
     key: 'chest_shoulders_triceps',
+    dayBuckets: ['push'],
     quotas: [
       { muscles: ['chest'], min: 3 },
       { muscles: ['shoulders'], min: 3 },
@@ -113,6 +120,7 @@ export const BODY_PART_DAY_PLANS: Record<string, DayFocusPlan> = {
   },
   legs_core: {
     key: 'legs_core',
+    dayBuckets: ['legs'],
     quotas: [
       { muscles: ['quads'], min: 3 },
       { muscles: ['hamstrings'], min: 3 },
@@ -122,14 +130,99 @@ export const BODY_PART_DAY_PLANS: Record<string, DayFocusPlan> = {
     ],
     excludePrimaryMuscles: ['chest', 'back', 'shoulders', 'biceps', 'triceps'],
   },
+  // The generated week labels its days "Push", "Pull" and "Legs". Only "Legs" matched a plan, so
+  // push and pull days were built with no focus filtering at all — which is how calf raises ended
+  // up on a push day.
+  push: {
+    key: 'push',
+    dayBuckets: ['push'],
+    quotas: [
+      { muscles: ['chest'], min: 3 },
+      { muscles: ['shoulders'], min: 2 },
+      { muscles: ['triceps'], min: 2 },
+      { muscles: ['core'], min: 1 },
+    ],
+    excludePrimaryMuscles: ['back', 'biceps', 'quads', 'hamstrings', 'glutes', 'calves'],
+  },
+  pull: {
+    key: 'pull',
+    dayBuckets: ['pull'],
+    quotas: [
+      { muscles: ['back'], min: 4 },
+      { muscles: ['biceps'], min: 2 },
+      { muscles: ['core'], min: 1 },
+    ],
+    excludePrimaryMuscles: ['chest', 'triceps', 'shoulders', 'quads', 'hamstrings', 'glutes', 'calves'],
+  },
+  // An upper day trains both sides of the torso, so it is the one split that spans two buckets.
+  upper: {
+    key: 'upper',
+    dayBuckets: ['push', 'pull'],
+    quotas: [
+      { muscles: ['chest'], min: 2 },
+      { muscles: ['back'], min: 2 },
+      { muscles: ['shoulders'], min: 1 },
+      { muscles: ['biceps'], min: 1 },
+      { muscles: ['triceps'], min: 1 },
+      { muscles: ['core'], min: 1 },
+    ],
+    excludePrimaryMuscles: ['quads', 'hamstrings', 'glutes', 'calves'],
+  },
+  lower: {
+    key: 'lower',
+    dayBuckets: ['legs'],
+    quotas: [
+      { muscles: ['quads'], min: 3 },
+      { muscles: ['hamstrings'], min: 2 },
+      { muscles: ['glutes'], min: 2 },
+      { muscles: ['calves'], min: 1 },
+      { muscles: ['core'], min: 2 },
+    ],
+    excludePrimaryMuscles: ['chest', 'back', 'shoulders', 'biceps', 'triceps'],
+  },
 };
 
+/**
+ * Every label the week generator can produce needs a plan here.
+ *
+ * Only three shapes were recognised, so Push, Pull and the whole strength and upper/lower splits
+ * fell through to "no plan" — which means no muscle filtering at all, and calf raises on a push
+ * day. A full-body day is the one case that legitimately has no focus.
+ */
 export function resolveDayFocusPlan(slotLabel: string): DayFocusPlan | null {
   const key = slotLabel.toLowerCase();
+
+  if (key.includes('full body')) return null;
+
+  // Compound body-part labels first, so "Chest, Shoulders & Triceps" keeps its specific plan.
   if (key.includes('back') && key.includes('biceps')) return BODY_PART_DAY_PLANS.back_biceps_core;
   if (key.includes('chest') && key.includes('shoulder')) return BODY_PART_DAY_PLANS.chest_shoulders_triceps;
   if (key.includes('leg')) return BODY_PART_DAY_PLANS.legs_core;
+
+  if (/\bpush\b/.test(key)) return BODY_PART_DAY_PLANS.push;
+  if (/\bpull\b/.test(key)) return BODY_PART_DAY_PLANS.pull;
+  if (/\bupper\b/.test(key)) return BODY_PART_DAY_PLANS.upper;
+  if (/\blower\b/.test(key)) return BODY_PART_DAY_PLANS.lower;
+
+  // Strength split: "Squat Day", "Bench Day", "Deadlift Day", "Press Day".
+  if (/\bsquat\b|\bdead\s*lift\b/.test(key)) return BODY_PART_DAY_PLANS.lower;
+  if (/\bbench\b|\bpress\b/.test(key)) return BODY_PART_DAY_PLANS.push;
+
   return null;
+}
+
+/**
+ * Whether a movement belongs on this day.
+ *
+ * Core work is allowed on any day that asks for it. Conditioning — carries, burpees, rope waves —
+ * is not accessory work for a focused strength day and is kept out.
+ */
+function bucketFitsDayFocus(bucket: TrainingDayBucket, plan: DayFocusPlan): boolean {
+  if (bucket === 'core') {
+    return plan.quotas.some((quota) => quota.muscles.includes('core'));
+  }
+  if (bucket === 'conditioning') return false;
+  return plan.dayBuckets.includes(bucket);
 }
 
 function exerciseHitsMuscle(exercise: ExerciseRecord, muscle: string): boolean {
@@ -201,32 +294,59 @@ export function exerciseMatchesQuotaMuscle(exercise: ExerciseRecord, muscle: str
   const primary = primaryMuscleGroup(exercise);
   const family = exercise.metadata?.movement_family ?? '';
 
+  /**
+   * The name-resolved family is checked alongside the stored one. Quotas that relied on
+   * `muscle_groups` could not be filled from the imported catalog — it contains 10 exercises
+   * tagged `quads` in total, while 22 are named "squat".
+   */
+  const resolved =
+    resolveMovementFamily({
+      name: exercise.name,
+      slug: exercise.slug,
+      category: exercise.category,
+      equipment: exercise.equipment,
+      muscleGroups: exercise.muscle_groups,
+    }) ?? '';
+  const inFamily = (...families: string[]) => families.includes(family) || families.includes(resolved);
+
   if (muscle === 'back') {
     return (
       primary === 'back' ||
-      ['horizontal_pull', 'vertical_pull'].includes(family) ||
+      inFamily('horizontal_pull', 'vertical_pull') ||
       (family === 'rear_delt' && (exercise.muscle_groups ?? []).map((g) => g.toLowerCase()).includes('back'))
     );
   }
 
   if (muscle === 'biceps') {
-    return primary === 'biceps' || family === 'biceps';
+    return primary === 'biceps' || inFamily('biceps', 'biceps_isolation');
   }
 
   if (muscle === 'chest') {
-    return primary === 'chest' || family === 'horizontal_press';
+    return primary === 'chest' || inFamily('horizontal_press', 'chest_isolation');
   }
 
   if (muscle === 'shoulders') {
-    return primary === 'shoulders' || ['vertical_press', 'rear_delt'].includes(family);
+    return primary === 'shoulders' || inFamily('vertical_press', 'rear_delt', 'lateral_raise');
   }
 
   if (muscle === 'triceps') {
-    return primary === 'triceps' || family === 'triceps';
+    return primary === 'triceps' || inFamily('triceps', 'triceps_isolation');
   }
 
-  if (['quads', 'glutes', 'hamstrings', 'calves'].includes(muscle)) {
-    return primary === muscle || (muscle === 'quads' && primary === 'legs');
+  if (muscle === 'quads') {
+    return primary === 'quads' || primary === 'legs' || inFamily('squat_pattern', 'lunge_pattern', 'quad_isolation');
+  }
+
+  if (muscle === 'hamstrings') {
+    return primary === 'hamstrings' || inFamily('hinge_pattern', 'hamstring_isolation');
+  }
+
+  if (muscle === 'glutes') {
+    return primary === 'glutes' || inFamily('glute_isolation', 'hinge_pattern');
+  }
+
+  if (muscle === 'calves') {
+    return primary === 'calves' || inFamily('calf_isolation');
   }
 
   return primary === muscle;
@@ -285,6 +405,29 @@ export function isIncompatibleWithDayFocus(exercise: ExerciseRecord, plan: DayFo
 
 export function isAllowedOnDayFocus(exercise: ExerciseRecord, plan: DayFocusPlan): boolean {
   if (isIncompatibleWithDayFocus(exercise, plan)) return false;
+
+  /**
+   * The name decides the day. Both stored classification columns are wrong often enough to be
+   * unusable: calf raises are category `pull`, and `lats` is the primary muscle of the Goblet
+   * Squat, which excluded 16 of 22 squats from leg day while allowing them on back day.
+   */
+  const bucket = resolveTrainingDayBucket({
+    name: exercise.name,
+    slug: exercise.slug,
+    category: exercise.category,
+    equipment: exercise.equipment,
+    muscleGroups: exercise.muscle_groups,
+  });
+  if (bucket) return bucketFitsDayFocus(bucket, plan);
+
+  /**
+   * A movement whose name cannot be identified does not go on a focused day. The stored muscle
+   * groups are not a safe fallback — that path is what let "Neck Isometric Hold Press" onto a push
+   * day. These are conditioning oddities (burpees, rope waves, bear crawls) and there are ample
+   * identified exercises to fill a session without them.
+   */
+  if (!isCoreFocusedExercise(exercise)) return false;
+
   if (isExcludedForDayFocus(exercise, plan.excludePrimaryMuscles)) return false;
 
   const primary = primaryMuscleGroup(exercise);
@@ -334,6 +477,17 @@ const EQUIPMENT_FIELD_REQUIREMENTS: Record<string, string[]> = {
 export function resolveExerciseRequirements(exercise: ExerciseRecord): string[] {
   const field = EQUIPMENT_FIELD_REQUIREMENTS[exercise.equipment];
   const meta = exercise.metadata?.requires ?? [];
+
+  // Every TRX and ring movement is stored as `bodyweight`, which let a suspension trainer be
+  // programmed for anyone with a body. The name is what identifies them reliably.
+  if (meta.includes('suspension') || requiresSuspensionTrainer(exercise.name, exercise.slug)) {
+    return ['suspension'];
+  }
+
+  // Specialty implements (landmine / T-bar station) are not implied by a plain barbell.
+  if (meta.includes('landmine')) {
+    return [...new Set(meta)];
+  }
 
   if (exercise.equipment === 'barbell') {
     const needs = new Set<string>(['barbell']);
@@ -618,6 +772,39 @@ function scoreExercise(
   return score;
 }
 
+/** Light single-joint accessories must never inherit compound press/squat load factors. */
+export function exerciseLooksLikeLightIsolation(exercise: ExerciseRecord): boolean {
+  const family = exercise.metadata?.movement_family ?? '';
+  const key = `${exercise.name} ${exercise.slug}`.toLowerCase();
+  const primary = primaryMuscleGroup(exercise);
+
+  if (['biceps', 'triceps', 'rear_delt', 'glute_pattern'].includes(family)) return true;
+  if (
+    /\bkickback\b|\blateral\s+raise\b|\bfront\s+raise\b|\brear\s+delt\b|\bconcentration\s+curl\b|\btricep(s)?\s+(pushdown|extension|kickback)\b|\bskull\s*crusher\b|\boverhead\s+(db\s+)?extension\b|\bcable\s+fly\b|\bpec\s+deck\b|\bleg\s+extension\b|\bleg\s+curl\b|\bcalf\s+raise\b/.test(
+      key,
+    )
+  ) {
+    return true;
+  }
+  if (
+    ['biceps', 'triceps', 'forearms', 'shoulders', 'glutes', 'calves'].includes(primary) &&
+    ['dumbbell', 'cable', 'bands', 'machine'].includes(exercise.equipment) &&
+    !['horizontal_press', 'vertical_press', 'squat_pattern', 'hinge_pattern', 'horizontal_pull', 'vertical_pull'].includes(
+      family,
+    )
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function isolationStartingCapLbs(exercise: ExerciseRecord): number {
+  const key = `${exercise.name} ${exercise.slug}`.toLowerCase();
+  if (/\bkickback\b|\blateral\s+raise\b|\bfront\s+raise\b/.test(key)) return 35;
+  if (exercise.equipment === 'dumbbell' || exercise.equipment === 'bands') return 45;
+  return 60;
+}
+
 export function suggestWeightLbs(
   exercise: ExerciseRecord,
   goal: TrainingGoal,
@@ -640,19 +827,26 @@ export function suggestWeightLbs(
     return history.weight;
   }
 
-  const bw = bodyWeightKg ?? 75;
+  const bw = normalizeBodyWeightKg(bodyWeightKg);
   const base = bw * 2.20462;
-  const factor =
-    exercise.metadata?.movement_family === 'squat_pattern'
+  const isolation = exerciseLooksLikeLightIsolation(exercise);
+  const family = exercise.metadata?.movement_family ?? '';
+  const factor = isolation
+    ? 0.08
+    : family === 'squat_pattern'
       ? 0.65
-      : exercise.metadata?.movement_family === 'hinge_pattern'
+      : family === 'hinge_pattern'
         ? 0.55
-        : exercise.metadata?.movement_family === 'horizontal_press'
+        : family === 'horizontal_press'
           ? 0.45
-          : exercise.metadata?.movement_family === 'vertical_press'
+          : family === 'vertical_press'
             ? 0.25
             : 0.2;
-  return Math.round((base * factor) / 5) * 5;
+  const raw = Math.round((base * factor) / 5) * 5;
+  if (isolation) {
+    return Math.min(Math.max(raw, 5), isolationStartingCapLbs(exercise));
+  }
+  return raw;
 }
 
 export function selectFocusedSplitExercises(
@@ -676,7 +870,17 @@ export function selectFocusedSplitExercises(
   const usedNormalizedNames = new Set<string>();
   const patternUseCounts = new Map<string, number>();
 
+  /**
+   * Core is welcome on any day but must not crowd out the day's actual focus. A push day was
+   * coming back with four core exercises out of ten, because core survives the focus filter and
+   * then wins the open slots on score. The quota guarantees a floor; this is the ceiling.
+   */
+  const coreQuotaMin = plan.quotas.find((quota) => quota.muscles.includes('core'))?.min ?? 0;
+  const maxCore = coreQuotaMin > 0 ? coreQuotaMin + 1 : 0;
+  let corePicked = 0;
+
   function registerPick(exercise: ExerciseRecord): void {
+    if (isCoreFocusedExercise(exercise)) corePicked += 1;
     selected.push(exercise);
     usedSlugs.add(exercise.slug);
     usedNormalizedNames.add(exercise.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim());
@@ -705,6 +909,7 @@ export function selectFocusedSplitExercises(
 
   function canPick(exercise: ExerciseRecord, allowProgramReuse = false, relaxPatterns = false): boolean {
     if (usedSlugs.has(exercise.slug)) return false;
+    if (corePicked >= maxCore && isCoreFocusedExercise(exercise)) return false;
     const normalizedName = exercise.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
     if (usedNormalizedNames.has(normalizedName)) return false;
     if (!allowProgramReuse && programRecentSlugs?.has(exercise.slug)) return false;
@@ -913,6 +1118,8 @@ export type BuildWorkoutPlanOptions = {
   splitOccurrenceIndex?: number;
   /** Day label from the program schedule (e.g. "Back, Biceps & Core"). */
   slotLabel?: string;
+  /** Program week, so a beginner's volume ramp knows how far into training the user is. */
+  weekNumber?: number;
 };
 
 export function normalizeTargetMuscleGroups(muscles: string[]): string[] {
@@ -987,15 +1194,27 @@ export async function buildAdaptiveWorkoutPlan(
     : undefined;
   const focusPlan = options?.slotLabel ? resolveDayFocusPlan(options.slotLabel) : null;
 
-  const targetCount = Math.max(
-    options?.minimumExercises ?? WORKOUT_MIN_EXERCISES,
-    options?.targetExerciseCount ?? preset.exerciseCount,
+  const volumeProfile = resolveExperienceVolume(profile.trainingExperience, options?.weekNumber ?? 1);
+
+  const targetCount = Math.min(
+    volumeProfile.maxExercisesPerSession,
+    Math.max(
+      options?.minimumExercises ?? WORKOUT_MIN_EXERCISES,
+      options?.targetExerciseCount ?? preset.exerciseCount,
+    ),
   );
-  const minimumSets = Math.max(WORKOUT_MIN_SETS, options?.minimumSets ?? WORKOUT_MIN_SETS);
+  // The experience ceiling outranks the global floor: a beginner's 2 sets must survive it.
+  const minimumSets = Math.min(
+    volumeProfile.maxSetsPerExercise,
+    Math.max(WORKOUT_MIN_SETS, options?.minimumSets ?? WORKOUT_MIN_SETS),
+  );
 
   const adjustedPreset = {
     ...preset,
-    sets: Math.max(minimumSets, Math.round(preset.sets * recoveryMods.volumeMultiplier)),
+    sets: Math.max(
+      minimumSets,
+      Math.round(capSetsForExperience(preset.sets, volumeProfile) * recoveryMods.volumeMultiplier),
+    ),
     exerciseCount: targetCount,
     restSeconds: recoveryMods.recoveryModeActive
       ? Math.round(preset.restSeconds * 1.15)

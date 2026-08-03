@@ -98,9 +98,9 @@ export function WorkoutExerciseDetailList({
             </AppText>
             <View style={styles.content}>
               <Pressable onPress={() => setGuideExerciseName(exercise.name)} hitSlop={8}>
-                <AppText variant="bodyBold">
-                  {stationLabel ? `${stationLabel} · ${exercise.name}` : exercise.name}
-                </AppText>
+                {/* The station already sits in the column to the left; repeating it here read as
+                    an outline heading ("A1 · Bench Press") rather than an exercise name. */}
+                <AppText variant="bodyBold">{exercise.name}</AppText>
                 <AppText variant="caption" color="accent">
                   Tap for form guide
                 </AppText>

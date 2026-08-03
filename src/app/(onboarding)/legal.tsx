@@ -3,53 +3,61 @@ import { router } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
-import { AuthFormContainer } from '@/components/auth/AuthFormContainer';
+import { LiftFlowLogo } from '@/components/brand/LiftFlowLogo';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
+import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { AppText, textStyles } from '@/components/ui/AppText';
-import { LiftFlowColors, Radius, Spacing, TouchTarget } from '@/constants/theme';
+import { Brand, LiftFlowColors, Radius, Spacing, TouchTarget } from '@/constants/theme';
 
 const LEGAL_ITEMS = [
   {
-    icon: '⚖️',
-    title: 'Liability Waiver',
-    body: 'You participate in exercise at your own risk. ONE MORE does not guarantee results.',
+    title: 'Train at your own risk',
+    body: 'Exercise involves risk. ONE MORE does not guarantee results.',
   },
   {
-    icon: '🩺',
-    title: 'Health Disclaimer',
-    body: 'ONE MORE is informational only. Not medical, physical therapy, or nutritional advice.',
+    title: 'Not medical advice',
+    body: 'Guidance is informational — not medical, PT, or clinical nutrition advice.',
   },
   {
-    icon: '🤖',
-    title: 'AI Coaching Disclaimer',
-    body: 'AI recommendations may be inaccurate. Consult a qualified professional before beginning any program.',
+    title: 'AI can be wrong',
+    body: 'Coach suggestions may be inaccurate. Check with a professional when unsure.',
   },
 ] as const;
 
 export default function LegalOnboardingScreen() {
   return (
-    <AuthFormContainer
-      title="Before You Start"
-      subtitle="Review and accept to unlock your personalized plan.">
+    <ScreenContainer>
+      <View style={styles.brand}>
+        <LiftFlowLogo size={48} variant="primary" />
+        <AppText variant="label" style={styles.brandName}>
+          {Brand.name}
+        </AppText>
+        <AppText variant="caption" color="textTertiary">
+          FITNESS
+        </AppText>
+      </View>
+
+      <Animated.View entering={FadeInDown.duration(360)} style={styles.header}>
+        <AppText variant="title">Before we build your plan</AppText>
+        <AppText variant="body" color="textSecondary">
+          Quick legal check — then your coach takes over.
+        </AppText>
+      </Animated.View>
+
       <View style={styles.list}>
         {LEGAL_ITEMS.map((item, i) => (
-          <Animated.View key={item.title} entering={FadeInDown.delay(i * 80).duration(400)}>
+          <Animated.View key={item.title} entering={FadeInDown.delay(80 + i * 70).duration(360)}>
             <View style={styles.cardOuter}>
               <LinearGradient
-                colors={['rgba(31, 107, 255, 0.25)', 'rgba(0, 229, 255, 0.08)']}
+                colors={['rgba(14, 144, 255, 0.22)', 'rgba(0, 229, 255, 0.06)']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={styles.cardBorder}>
                 <View style={styles.card}>
-                  <View style={styles.iconBubble} accessibilityElementsHidden importantForAccessibility="no">
-                    <AppText variant="title">{item.icon}</AppText>
-                  </View>
-                  <View style={styles.cardText}>
-                    <AppText variant="callout">{item.title}</AppText>
-                    <AppText variant="footnote" color="textSecondary">
-                      {item.body}
-                    </AppText>
-                  </View>
+                  <AppText variant="callout">{item.title}</AppText>
+                  <AppText variant="footnote" color="textSecondary">
+                    {item.body}
+                  </AppText>
                 </View>
               </LinearGradient>
             </View>
@@ -57,8 +65,6 @@ export default function LegalOnboardingScreen() {
         ))}
       </View>
 
-      {/* Accepting terms you cannot read is not meaningful consent, so the full documents are
-          reachable from the point of acceptance. */}
       <View style={styles.links}>
         <Pressable
           onPress={() => router.push('/legal/terms')}
@@ -81,15 +87,30 @@ export default function LegalOnboardingScreen() {
       </View>
 
       <PrimaryButton
-        label="I accept — continue"
+        label="I accept — build my plan"
         size="large"
         onPress={() => router.push('/(onboarding)/profile')}
       />
-    </AuthFormContainer>
+    </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
+  brand: {
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: Spacing.xl,
+  },
+  brandName: {
+    color: LiftFlowColors.restTimer,
+    letterSpacing: 2,
+    fontWeight: '700',
+    marginTop: Spacing.sm,
+  },
+  header: {
+    gap: Spacing.sm,
+    marginBottom: Spacing.xl,
+  },
   list: {
     gap: Spacing.md,
     marginBottom: Spacing.xl,
@@ -103,29 +124,16 @@ const styles = StyleSheet.create({
     padding: 1,
   },
   card: {
-    flexDirection: 'row',
-    gap: Spacing.md,
+    gap: Spacing.xs,
     backgroundColor: LiftFlowColors.surface,
     borderRadius: Radius.lg - 1,
     padding: Spacing.lg,
-    alignItems: 'flex-start',
-  },
-  iconBubble: {
-    width: 44,
-    height: 44,
-    borderRadius: Radius.md,
-    backgroundColor: LiftFlowColors.primaryGlow,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cardText: {
-    flex: 1,
-    gap: Spacing.xs,
   },
   links: {
     flexDirection: 'row',
     justifyContent: 'center',
     gap: Spacing.xl,
+    marginBottom: Spacing.lg,
   },
   link: {
     minHeight: TouchTarget.min,

@@ -115,7 +115,8 @@ export function resolveTargetSets(
     trainingRecommendation === 'train' &&
     recoveryScore >= 85 &&
     readinessScore >= 80 &&
-    plannedSets < 5
+    // Keep everyday volume sane — never push past 3 working sets automatically.
+    plannedSets < 3
   ) {
     sets = plannedSets + 1;
     setsDelta = 1;

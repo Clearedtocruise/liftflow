@@ -16,12 +16,14 @@ function check(name, ok, detail = '') {
   else fail += 1;
 }
 
-function read(rel) {
-  return fs.readFileSync(path.join(root, rel), 'utf8');
-}
-
 function exists(rel) {
   return fs.existsSync(path.join(root, rel));
+}
+
+/** A renamed/removed file must fail its own check, not crash the whole preflight. */
+function read(rel) {
+  if (!exists(rel)) return '';
+  return fs.readFileSync(path.join(root, rel), 'utf8');
 }
 
 console.log('=== Workout Day + Muscle Map Hotfix ===\n');
@@ -42,11 +44,19 @@ const planActions = read('src/lib/planDayActions.ts');
 check('Home manage day menu', planActions.includes('showHomeManageDayMenu'));
 check('Weekly edit day menu', planActions.includes('showWeeklyEditDayMenu'));
 
-const home = read('src/components/dashboard/HomeNextUpCard.tsx');
-check('Home Manage Day button', home.includes('Manage Day') && home.includes('onManageDay'));
+// The home hero replaced HomeNextUpCard; move/swap must still have an entry point there.
+const hero = read('src/components/dashboard/TodayHeroCard.tsx');
+const dashboard = read('src/app/(tabs)/dashboard.tsx');
+check(
+  'Home move/swap day entry point',
+  hero.includes('onManageDay') &&
+    hero.includes('Move or Swap Day') &&
+    dashboard.includes('buildHomeManageDayMenu') &&
+    dashboard.includes('ManageDayModal'),
+);
 
 const weekly = read('src/components/workout/execution/WorkoutWeeklyPlanScreen.tsx');
-check('Weekly Edit Day button', weekly.includes('Edit Day'));
+check('Weekly Edit Day button', /label="Edit day"/i.test(weekly) && weekly.includes('onEditDay'));
 check('Loading skeleton (no false rest days)', weekly.includes('Loading weekly plan') && weekly.includes('!loading'));
 
 const muscleMap = read('src/lib/exerciseMuscleMap.ts');

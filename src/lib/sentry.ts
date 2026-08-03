@@ -1,12 +1,23 @@
+import * as Application from 'expo-application';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
 import * as Sentry from '@sentry/react-native';
 
+import { formatSentryRelease, normalizeBuildVersion } from '@/lib/sentryRelease';
+
 let initialized = false;
 
+/** iOS CFBundleVersion — the build number EAS assigns, not the stale value in app config. */
+function buildVersion(): string | undefined {
+  return normalizeBuildVersion(Application.nativeBuildVersion);
+}
+
 function release(): string {
-  return process.env.EXPO_PUBLIC_SENTRY_RELEASE ?? `liftflow@${Constants.expoConfig?.version ?? '1.0.0'}`;
+  const base =
+    process.env.EXPO_PUBLIC_SENTRY_RELEASE ??
+    `liftflow@${Constants.expoConfig?.version ?? '1.0.0'}`;
+  return formatSentryRelease(base, buildVersion());
 }
 
 function environment(): string {
@@ -27,6 +38,9 @@ export function initMobileSentry(): void {
     enableAutoSessionTracking: true,
     enableNative: true,
     enableNativeCrashHandling: true,
+    // Sentry resolves issues against release+dist, so without this a fix shipped in a new build
+    // never marked the old issue resolved.
+    dist: buildVersion(),
   });
 
   initialized = true;
@@ -67,6 +81,7 @@ export function getMobileSentryConfig() {
     ready: isMobileSentryReady(),
     environment: environment(),
     release: release(),
+    dist: buildVersion(),
   };
 }
 

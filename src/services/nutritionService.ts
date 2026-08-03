@@ -5,7 +5,10 @@ import { localDateString, resolveTimeZone } from '@/lib/localDate';
 import { mealSlotKey, remapApiMealsToClientWeek, type ApiPlanMeal } from '@/lib/mealPlanWeekAlign';
 import { aggregateDailyMeals, mealsForCalendarDay } from '@/lib/mealAggregation';
 import { isReplaceablePlannedMeal, pickMealsToKeep, weekEndDate } from '@/lib/mealCleanup';
-import { enrichMealMeta, serializeMealMeta } from '@/lib/mealIngredients';
+import { planDataCache } from '@/lib/planDataCache';
+import { MEAL_NOT_FOUND } from '@/lib/mealErrors';
+import { enrichMealMeta, correctedMacrosIfInflated, serializeMealMeta } from '@/lib/mealIngredients';
+import { isInvertedBodyWeightKg, normalizeBodyWeightKg } from '@/lib/bodyWeightKg';
 import { fail, fromError, ok } from '@/lib/serviceResult';
 import { getWeekRange } from '@/lib/weekPlan';
 import type { INutritionService } from '@/services/interfaces';
@@ -29,6 +32,91 @@ function normalizeGroceryName(name: string): string {
 
 function weekStartDate(timeZone?: string | null): string {
   return getWeekRange(new Date(), resolveTimeZone(timeZone)).from;
+}
+
+/** Fix profiles.weight_kg when it looks like lbs×2.2 (~400 kg). Fire-and-forget safe. */
+async function healInvertedProfileWeight(userId: string): Promise<void> {
+  try {
+    const { data } = await supabase.from('profiles').select('weight_kg').eq('id', userId).maybeSingle();
+    const raw = data?.weight_kg != null ? Number(data.weight_kg) : null;
+    if (!isInvertedBodyWeightKg(raw)) return;
+    await supabase.from('profiles').update({ weight_kg: normalizeBodyWeightKg(raw) }).eq('id', userId);
+  } catch {
+    // Non-fatal — meal heal still runs.
+  }
+}
+
+/**
+ * Persist meal-sized macros for plan rows that still store the old ~11k-day
+ * splits (e.g. Greek yogurt breakfast at 2827). Display-only correction is not
+ * enough when the user regenerates against a backend that rewrites the same bug.
+ */
+async function persistHealedPlanMacros(meals: Meal[]): Promise<Meal[]> {
+  const updates = meals.flatMap((meal) => {
+    if (meal.origin !== 'plan') return [];
+    if (meal.status !== 'planned' && meal.status !== 'skipped') return [];
+    const corrected = correctedMacrosIfInflated(meal);
+    if (!corrected) return [];
+    return [{ meal, corrected }];
+  });
+
+  if (updates.length === 0) return meals;
+
+  await Promise.all(
+    updates.map(({ meal, corrected }) =>
+      supabase
+        .from('meals')
+        .update({
+          calories: corrected.calories,
+          protein_g: corrected.proteinG,
+          carbs_g: corrected.carbsG,
+          fat_g: corrected.fatG,
+          macros_provided: true,
+        })
+        .eq('id', meal.id),
+    ),
+  );
+
+  const byId = new Map(updates.map(({ meal, corrected }) => [meal.id, corrected]));
+  return meals.map((meal) => {
+    const corrected = byId.get(meal.id);
+    if (!corrected) return meal;
+    return {
+      ...meal,
+      calories: corrected.calories,
+      proteinG: corrected.proteinG,
+      carbsG: corrected.carbsG,
+      fatG: corrected.fatG,
+      macrosProvided: true,
+    };
+  });
+}
+
+function sanitizePlanMealForInsert(meal: {
+  name: string;
+  mealType: MealType | string;
+  calories?: number;
+  proteinG?: number;
+  carbsG?: number;
+  fatG?: number;
+}) {
+  const corrected = correctedMacrosIfInflated({
+    name: meal.name,
+    mealType: meal.mealType,
+    calories: meal.calories,
+    proteinG: meal.proteinG,
+    carbsG: meal.carbsG,
+    fatG: meal.fatG,
+    macrosProvided: true,
+  });
+  if (!corrected) return meal;
+  return {
+    ...meal,
+    calories: corrected.calories,
+    proteinG: corrected.proteinG,
+    carbsG: corrected.carbsG,
+    fatG: corrected.fatG,
+  };
 }
 
 async function loadGroceryList(listId: string) {
@@ -167,7 +255,7 @@ export const nutritionService: INutritionService = {
     }
   },
 
-  async logFood(userId, food: { name: string; mealType: MealType; calories?: number; proteinG?: number; carbsG?: number; fatG?: number; date?: string; instructions?: string; clientKey?: string }) {
+  async logFood(userId, food: { name: string; mealType: MealType; calories?: number; proteinG?: number; carbsG?: number; fatG?: number; date?: string; instructions?: string; clientKey?: string; consumedAt?: string }) {
     try {
       const macrosProvided =
         food.calories != null || food.proteinG != null || food.carbsG != null || food.fatG != null;
@@ -186,7 +274,7 @@ export const nutritionService: INutritionService = {
           instructions: food.instructions,
           status: 'completed',
           origin: 'log',
-          consumed_at: new Date().toISOString(),
+          consumed_at: food.consumedAt ?? new Date().toISOString(),
           client_key: food.clientKey ?? newClientKey(),
           macros_provided: macrosProvided,
         })
@@ -223,6 +311,7 @@ export const nutritionService: INutritionService = {
 
   async getMealsForWeek(userId: string, from: string, to: string) {
     try {
+      void healInvertedProfileWeight(userId);
       const { data, error } = await supabase
         .from('meals')
         .select('*')
@@ -233,7 +322,8 @@ export const nutritionService: INutritionService = {
         .order('created_at', { ascending: true });
 
       if (error) return fail(error.message);
-      return ok((data ?? []).map(mapMeal));
+      const meals = await persistHealedPlanMacros((data ?? []).map(mapMeal));
+      return ok(meals);
     } catch (e) {
       return fromError(e);
     }
@@ -249,20 +339,44 @@ export const nutritionService: INutritionService = {
       if (updates.fatG !== undefined) payload.fat_g = updates.fatG;
       if (updates.instructions !== undefined) payload.instructions = updates.instructions;
       if (updates.mealType !== undefined) payload.meal_type = updates.mealType;
-      if (updates.status !== undefined) payload.status = updates.status;
+      if (updates.status !== undefined) {
+        payload.status = updates.status;
+        // Ate confirmation stamps consumed_at; replace/skip clears it.
+        if (updates.status === 'completed' || updates.status === 'modified') {
+          payload.consumed_at = new Date().toISOString();
+        } else if (updates.status === 'planned' || updates.status === 'skipped') {
+          payload.consumed_at = null;
+        }
+      }
       if (updates.calories !== undefined || updates.proteinG !== undefined || updates.carbsG !== undefined || updates.fatG !== undefined) {
         payload.macros_provided = true;
       }
 
-      const { data, error } = await supabase.from('meals').update(payload).eq('id', mealId).select(MEAL_COLUMNS).single();
-      if (error) return fail(error.message);
+      // `.single()` turns "no such meal" into a raw PostgREST coercion error. Day sync and
+      // duplicate pruning both delete and reinsert plan rows, so a screen can legitimately hold an
+      // id that no longer exists — that is a refresh, not a database fault.
+      const { data, error } = await supabase
+        .from('meals')
+        .update(payload)
+        .eq('id', mealId)
+        .select(MEAL_COLUMNS)
+        .maybeSingle();
+      if (error) return fail(error.message, error.code);
+      if (!data) return fail('That meal no longer exists.', MEAL_NOT_FOUND);
       return ok(mapMeal(data));
     } catch (e) {
       return fromError(e);
     }
   },
 
-  async markMealStatus(mealId: string, name: string, instructions: string | undefined, status: MealStatus) {
+  async markMealStatus(
+    mealId: string,
+    name: string,
+    instructions: string | undefined,
+    status: MealStatus,
+    /** When the meal was actually eaten. Defaults to now for "just ate it". */
+    consumedAt?: string,
+  ) {
     try {
       const meta = enrichMealMeta(name, instructions);
       meta.status = status;
@@ -272,14 +386,15 @@ export const nutritionService: INutritionService = {
         .from('meals')
         .update({
           status,
-          consumed_at: consumed ? new Date().toISOString() : null,
+          consumed_at: consumed ? consumedAt ?? new Date().toISOString() : null,
           instructions: serializeMealMeta(meta),
         })
         .eq('id', mealId)
         .select(MEAL_COLUMNS)
-        .single();
+        .maybeSingle();
 
-      if (error) return fail(error.message);
+      if (error) return fail(error.message, error.code);
+      if (!data) return fail('That meal no longer exists.', MEAL_NOT_FOUND);
       return ok(mapMeal(data));
     } catch (e) {
       return fromError(e);
@@ -347,7 +462,8 @@ export const nutritionService: INutritionService = {
         .order('created_at', { ascending: false });
 
       if (error) return fail(error.message);
-      return ok((data ?? []).map(mapMeal));
+      const meals = await persistHealedPlanMacros((data ?? []).map(mapMeal));
+      return ok(meals);
     } catch (e) {
       return fromError(e);
     }
@@ -375,6 +491,7 @@ export const nutritionService: INutritionService = {
         caloriesConsumed: aggregated.caloriesConsumed,
         caloriesTarget: goalsResult.data?.daily_calories ?? undefined,
         proteinG: aggregated.proteinG,
+        proteinTargetG: goalsResult.data?.protein_g ?? undefined,
         carbsG: aggregated.carbsG,
         fatG: aggregated.fatG,
         waterMl: (hydrationResult.data ?? []).reduce((s, h) => s + h.amount_ml, 0),
@@ -404,15 +521,13 @@ export const nutritionService: INutritionService = {
 
   async generateWeeklyMealPlan(userId, timeZone?: string | null, prefs?: { dietaryStyle?: string; dietaryRestrictions?: string[]; foodPreferences?: string[] }) {
     try {
+      await healInvertedProfileWeight(userId);
       const tz = resolveTimeZone(timeZone);
       const token = await getAccessToken();
       const plan = await api.generateMealPlan({ userId, ...prefs }, token);
       const clientWeekStart = weekStartDate(tz);
       const clientWeekEnd = weekEndDate(clientWeekStart);
       const apiWeekStart = plan.weekStartDate ?? clientWeekStart;
-
-      await this.removePlannedMealsForWeek(userId, clientWeekStart);
-      await this.pruneDuplicateMeals(userId, { from: clientWeekStart, to: clientWeekEnd });
 
       const { data: existingMeals } = await supabase
         .from('meals')
@@ -421,9 +536,19 @@ export const nutritionService: INutritionService = {
         .gte('scheduled_date', clientWeekStart)
         .lte('scheduled_date', clientWeekEnd);
 
+      const existing = (existingMeals ?? []).map(mapMeal);
+
+      /**
+       * The meals this plan would replace, identified now but not deleted until the new week is
+       * safely saved. This used to delete first, and every failure after that point — an empty
+       * response from the API, a rejected insert, a dropped connection — returned an error with
+       * the week's meals already gone and nothing to restore them.
+       */
+      const staleMealIds = existing.filter(isReplaceablePlannedMeal).map((meal) => meal.id);
+
+      // Only meals that are being kept can block a slot; the replaceable ones are on their way out.
       const occupiedSlots = new Set(
-        (existingMeals ?? [])
-          .map(mapMeal)
+        existing
           .filter((meal) => meal.scheduledDate != null && !isReplaceablePlannedMeal(meal))
           .map((meal) => mealSlotKey(meal.scheduledDate as string, meal.mealType)),
       );
@@ -434,9 +559,9 @@ export const nutritionService: INutritionService = {
       }
 
       const alignedMeals = remapApiMealsToClientWeek(apiMeals, apiWeekStart, clientWeekStart);
-      const mealsToInsert = alignedMeals.filter(
-        (meal) => !occupiedSlots.has(mealSlotKey(meal.scheduledDate, meal.mealType)),
-      );
+      const mealsToInsert = alignedMeals
+        .filter((meal) => !occupiedSlots.has(mealSlotKey(meal.scheduledDate, meal.mealType)))
+        .map((meal) => sanitizePlanMealForInsert(meal));
 
       if (mealsToInsert.length === 0) {
         return fail('Could not add meals — existing logged meals may be blocking this week.');
@@ -486,6 +611,12 @@ export const nutritionService: INutritionService = {
         await supabase.from('meal_plans').delete().eq('id', saved.id);
         return fail('Meals could not be saved to your account.');
       }
+
+      // The new week exists, so the meals it replaces can go.
+      if (staleMealIds.length > 0) {
+        await supabase.from('meals').delete().in('id', staleMealIds);
+      }
+      await this.pruneDuplicateMeals(userId, { from: clientWeekStart, to: clientWeekEnd });
 
       const weekMeals = await this.getMealsForWeek(userId, clientWeekStart, clientWeekEnd);
       if (!weekMeals.success || weekMeals.data.length === 0) {
@@ -613,6 +744,28 @@ export const nutritionService: INutritionService = {
     try {
       const token = await getAccessToken();
       const targets = await api.getAdaptiveMacroTargets(userId, token);
+      return ok(targets);
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
+  /**
+   * Recompute macro targets from the current training goal and save them.
+   *
+   * Changing a goal previously updated the profile only, leaving the active `nutrition_goals` row —
+   * and the cached copy the Nutrition tab paints first — describing the goal the user just left.
+   */
+  async recalculateGoals(userId: string) {
+    try {
+      const token = await getAccessToken();
+      const targets = await api.recalculateNutritionGoals(userId, token);
+
+      const refreshed = await nutritionService.getGoals(userId);
+      if (refreshed.success && refreshed.data) {
+        await planDataCache.writeGoals(userId, refreshed.data);
+      }
+
       return ok(targets);
     } catch (e) {
       return fromError(e);

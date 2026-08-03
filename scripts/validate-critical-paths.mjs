@@ -73,16 +73,13 @@ const REQUIRED = [
     patterns: ['startTodaysWorkoutFromWatch', 'start_workout'],
   },
   {
-    file: 'src/app/(tabs)/dashboard.tsx',
-    label: 'Dashboard plan load',
-    patterns: [
-      'planDataCache.readWeek',
-      'warmWeekPlanData',
-      'InteractionManager',
-      'regenCheckedRef',
-      'hydratedFromCacheRef.current',
-    ],
-    forbidden: ['weekWorkouts.length]'],
+    // The home screen was simplified to a Today hero; the cached week load it used to guard now
+    // lives on the workout tab, which is the screen that actually renders the week.
+    file: 'src/app/(tabs)/workout/index.tsx',
+    label: 'Week plan loads from cache before the network',
+    // `InteractionManager` / `regenCheckedRef` were dashboard-specific scheduling details that did
+    // not move with the behaviour; the cached read and the hydration flag are what matter here.
+    patterns: ['planDataCache.readWeek', 'warmWeekPlanData', 'hydratedFromCacheRef.current'],
   },
   {
     file: 'src/services/nutritionService.ts',
@@ -97,9 +94,11 @@ const REQUIRED = [
     ],
   },
   {
-    file: 'src/components/dashboard/HomeNextUpCard.tsx',
-    label: 'Home generate prop destructured',
-    patterns: ['onGenerateMealPlan?:', 'onGenerateMealPlan,', 'onPress={onGenerateMealPlan}'],
+    // HomeNextUpCard was removed with the home simplification; generating a meal plan is now
+    // reached from the nutrition tab, which is where the guard belongs.
+    file: 'src/app/(tabs)/nutrition/index.tsx',
+    label: 'Meal plan generation reachable',
+    patterns: ['generateWeeklyMealPlan('],
   },
   {
     file: 'src/components/settings/SettingsGroup.tsx',
@@ -118,9 +117,11 @@ const REQUIRED = [
     forbidden: ['WorkoutPlanDraftProvider'],
   },
   {
+    // The form was reduced to a single food + serving, so there is no longer a results array to
+    // total; what matters is that the estimate shown is the one submitted.
     file: 'src/components/nutrition/SmartMealReplaceForm.tsx',
-    label: 'Smart replace macro totals',
-    patterns: ['sumMealMacros(results.map((item) => item.macros))'],
+    label: 'Smart replace submits the macros it displayed',
+    patterns: ['estimateFoodMacros', 'macros,'],
   },
   {
     file: 'src/state/workout/WorkoutSessionContext.tsx',

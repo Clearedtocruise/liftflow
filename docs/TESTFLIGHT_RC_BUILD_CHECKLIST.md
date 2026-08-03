@@ -28,6 +28,17 @@ Set via `eas secret:create` or Expo dashboard — **never commit to git**:
 | `EXPO_PUBLIC_SENTRY_ENVIRONMENT` | `production` or `testflight` |
 | `EXPO_PUBLIC_SENTRY_RELEASE` | e.g. `liftflow@1.0.0` (match app version) |
 
+### Cursor Cloud Agents secrets
+
+Configure at [cursor.com/dashboard/cloud-agents](https://cursor.com/dashboard/cloud-agents):
+
+| Secret | Required | Notes |
+|--------|----------|-------|
+| `EXPO_TOKEN1` | Yes for cloud TF builds | liftflow1 account — same token as Build 323 |
+| `EXPO_TOKEN` | **Delete** | Wrong account (immadoer) — cannot build `@liftflow1/liftflow` |
+
+After changing secrets, **restart** the cloud agent so they inject.
+
 Verify local `.env` mirrors production API URL:
 
 ```

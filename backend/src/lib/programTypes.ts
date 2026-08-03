@@ -208,23 +208,40 @@ export function phaseForWeek(weekNumber: number, totalWeeks = 12): PhaseSpec {
   return { sprintPhase: 'accumulation', phaseType: 'hypertrophy', volumeMultiplier: 1, intensityMultiplier: 0.95, repRangeAdjust: '8-12' };
 }
 
+/**
+ * These are calendar-date helpers, so every one of them anchors at noon UTC.
+ *
+ * They used to parse `"2026-03-02T12:00:00"` — no zone — which meant local-time arithmetic that was
+ * then serialised back through `toISOString()` in UTC. Two things broke:
+ *
+ * - Across a spring-forward boundary a week is 167 hours, not 168, so `Math.floor(days / 7)` lost a
+ *   week. In US timezones a program started before March reported the wrong week from the DST
+ *   change onward, and never caught up.
+ * - On a server at UTC+13 or later the local-to-UTC conversion moved the date back a day, so
+ *   `weekStartFromDate` returned a Sunday instead of a Monday.
+ *
+ * Noon UTC also keeps the date stable against any sub-12-hour offset applied downstream.
+ */
+const NOON_UTC = 'T12:00:00.000Z';
+
 export function addDays(dateStr: string, days: number): string {
-  const d = new Date(dateStr + 'T12:00:00');
-  d.setDate(d.getDate() + days);
+  const d = new Date(dateStr + NOON_UTC);
+  d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
 }
 
 export function weekStartFromDate(dateStr: string): string {
-  const d = new Date(dateStr + 'T12:00:00');
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  d.setDate(diff);
+  const d = new Date(dateStr + NOON_UTC);
+  const day = d.getUTCDay();
+  // Sunday is the end of the training week, not the start of the next one.
+  const mondayOffset = day === 0 ? -6 : 1 - day;
+  d.setUTCDate(d.getUTCDate() + mondayOffset);
   return d.toISOString().slice(0, 10);
 }
 
 export function currentProgramWeek(startDate: string, today = new Date().toISOString().slice(0, 10)): number {
-  const start = new Date(startDate + 'T12:00:00').getTime();
-  const now = new Date(today + 'T12:00:00').getTime();
+  const start = new Date(startDate + NOON_UTC).getTime();
+  const now = new Date(today + NOON_UTC).getTime();
   const diffDays = Math.floor((now - start) / (1000 * 60 * 60 * 24));
   return Math.max(1, Math.floor(diffDays / 7) + 1);
 }

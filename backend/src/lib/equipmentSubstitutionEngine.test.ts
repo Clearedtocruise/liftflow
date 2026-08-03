@@ -88,3 +88,22 @@ test('band row is not suggested when bands are unavailable', () => {
   assert.ok(swap);
   assert.notEqual(swap!.to.toLowerCase(), 'band row');
 });
+
+const ROW_POOL: ExerciseRecord[] = [
+  mock('T-Bar Row', 't-bar-row', 'barbell', ['landmine'], 'horizontal_pull', ['back']),
+  mock('Barbell Row', 'barbell-row', 'barbell', ['barbell'], 'horizontal_pull', ['back']),
+  mock('Dumbbell Row', 'dumbbell-row', 'dumbbell', ['dumbbells'], 'horizontal_pull', ['back']),
+  mock('Band Row', 'band-row', 'bands', ['bands'], 'horizontal_pull', ['back']),
+];
+
+test('t-bar row swaps off when landmine equipment is missing', () => {
+  const swap = findEquipmentSubstitute('T-Bar Row', ['barbell', 'rack', 'dumbbells'], ROW_POOL);
+  assert.ok(swap);
+  assert.notEqual(swap!.to.toLowerCase(), 't-bar row');
+  assert.match(swap!.to.toLowerCase(), /barbell row|dumbbell row/);
+});
+
+test('t-bar row stays when landmine is available', () => {
+  const swap = findEquipmentSubstitute('T-Bar Row', ['barbell', 'rack', 'landmine'], ROW_POOL);
+  assert.equal(swap, null);
+});

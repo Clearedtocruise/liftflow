@@ -6,7 +6,8 @@ import {
   enrichMealMeta,
   type MealReplacementReason,
 } from '@/lib/mealIngredients';
-import { fromError, ok } from '@/lib/serviceResult';
+import { reconcileFoodMacroEstimate } from '@/lib/reconcileFoodMacroEstimate';
+import { ok } from '@/lib/serviceResult';
 import { getAccessToken } from '@/supabase/client';
 import type { FoodMacroEstimate } from '@/types/nutrition';
 import type { Meal } from '@/types';
@@ -83,7 +84,10 @@ export const nutritionAdvisoryService = {
       );
 
       if (raw.data?.calories != null) {
-        return ok(raw.data);
+        // Trust the model (+ reconcile so itemized lines and the tile agree). The previous
+        // "prefer local when higher" guard fired on unknown foods that fall through to a
+        // 200 kcal generic stub and overrode good AI estimates (salad / tuna / cucumber).
+        return ok(reconcileFoodMacroEstimate(raw.data));
       }
     } catch (e) {
       if (__DEV__) {
@@ -91,9 +95,11 @@ export const nutritionAdvisoryService = {
       }
     }
 
-    return ok({
-      ...estimateFoodMacrosLocal(foodName, servingSize),
-      reasoning: 'On-device macro estimate while coach AI is unavailable.',
-    } satisfies FoodMacroEstimate);
+    return ok(
+      reconcileFoodMacroEstimate({
+        ...estimateFoodMacrosLocal(foodName, servingSize),
+        reasoning: 'On-device macro estimate while coach AI is unavailable.',
+      }),
+    );
   },
 };

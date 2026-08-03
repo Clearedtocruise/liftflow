@@ -3,7 +3,7 @@ import { ActivityIndicator, Pressable, StyleSheet } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 
 import { AppText } from '@/components/ui/AppText';
-import { LiftFlowColors, Radius, Shadows, Spacing, TouchTarget, Typography } from '@/constants/theme';
+import { Gradients, LiftFlowColors, Radius, Shadows, Spacing, TouchTarget, Typography } from '@/constants/theme';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -14,6 +14,9 @@ type PrimaryButtonProps = {
   disabled?: boolean;
   variant?: 'primary' | 'secondary' | 'ghost';
   size?: 'default' | 'large';
+  /** A short glyph set before the label. Decorative, so it stays out of the accessibility label. */
+  icon?: string;
+  testID?: string;
 };
 
 export function PrimaryButton({
@@ -23,6 +26,8 @@ export function PrimaryButton({
   disabled,
   variant = 'primary',
   size = 'default',
+  icon,
+  testID,
 }: PrimaryButtonProps) {
   const scale = useSharedValue(1);
   const animStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
@@ -31,6 +36,7 @@ export function PrimaryButton({
   if (variant === 'primary') {
     return (
       <AnimatedPressable
+        testID={testID}
         onPress={onPress}
         disabled={isDisabled}
         onPressIn={() => {
@@ -41,12 +47,13 @@ export function PrimaryButton({
         }}
         style={[animStyle, isDisabled && styles.disabledWrap]}
         accessibilityRole="button"
+        accessibilityLabel={label}
         accessibilityState={{ disabled: isDisabled }}>
         <LinearGradient
           colors={
             isDisabled
               ? [LiftFlowColors.surfaceHighlight, LiftFlowColors.surfaceElevated]
-              : [LiftFlowColors.primary, LiftFlowColors.primaryMuted]
+              : [...Gradients.action]
           }
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
@@ -55,6 +62,7 @@ export function PrimaryButton({
             <ActivityIndicator color={LiftFlowColors.textPrimary} />
           ) : (
             <AppText variant="bodyBold" color="textPrimary" style={styles.label}>
+              {icon ? `${icon}  ` : ''}
               {label}
             </AppText>
           )}
@@ -65,6 +73,7 @@ export function PrimaryButton({
 
   return (
     <AnimatedPressable
+      testID={testID}
       onPress={onPress}
       disabled={isDisabled}
       onPressIn={() => {

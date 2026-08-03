@@ -51,7 +51,9 @@ export function prescribeExerciseExecution(input: ExercisePrescriptionInput): Ex
       mode,
       workSeconds: defaults.workSeconds,
       restSeconds: defaults.restSeconds,
-      rounds: defaults.rounds,
+      // Prefer the plan's set count when remapping a strength day onto Tabata/HIIT so
+      // beginners stay on 3 rounds instead of drifting to the classic 8-round protocol.
+      rounds: sets ?? defaults.rounds,
     };
   }
 

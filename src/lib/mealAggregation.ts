@@ -1,6 +1,6 @@
 import { isSameCalendarDate, localMinutesSinceMidnight, parseScheduledTimeToMinutes } from '@/lib/localDate';
 import { pickMealsToKeep } from '@/lib/mealCleanup';
-import { resolveMealMacros } from '@/lib/mealIngredients';
+import { enrichMealMeta, resolveMealMacros } from '@/lib/mealIngredients';
 import type { MealType } from '@/types/common';
 import type { DailyNutritionSummary, Meal, NutritionGoals } from '@/types/nutrition';
 
@@ -34,11 +34,15 @@ function mealStatus(meal: Meal) {
 }
 
 /**
- * Counts toward daily consumed macros. Only an explicit completed/modified
- * status counts — a plan slot the user never touched is not food they ate.
+ * Counts toward daily consumed macros. Only an explicit ate confirmation
+ * (`completed` / `modified`) counts — replacing a plan slot does not mean
+ * the user ate it yet. Prefer the status column; fall back to instructions
+ * metadata for older rows.
  */
 export function isConsumedMeal(meal: Meal): boolean {
-  return meal.status === 'completed' || meal.status === 'modified';
+  if (meal.status === 'completed' || meal.status === 'modified') return true;
+  const metaStatus = enrichMealMeta(meal.name, meal.instructions).status;
+  return metaStatus === 'completed' || metaStatus === 'modified';
 }
 
 function isScheduledMeal(meal: Meal): boolean {
@@ -73,10 +77,7 @@ export function aggregateDailyMeals(meals: Meal[]): DailyMealAggregation {
     fatG += macros.fatG;
   }
 
-  const mealsCompleted = dedupedMeals.filter((meal) => {
-    const status = mealStatus(meal);
-    return status === 'completed' || status === 'modified';
-  }).length;
+  const mealsCompleted = dedupedMeals.filter((meal) => isConsumedMeal(meal)).length;
 
   return {
     dedupedMeals,
@@ -207,6 +208,7 @@ export function buildDailySummaryFromMeals(
     caloriesConsumed: aggregated.caloriesConsumed,
     caloriesTarget: goals?.dailyCalories,
     proteinG: aggregated.proteinG,
+    proteinTargetG: goals?.proteinG,
     carbsG: aggregated.carbsG,
     fatG: aggregated.fatG,
     waterMl,

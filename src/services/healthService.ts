@@ -156,8 +156,17 @@ export const healthService = {
       const latestWeight = deviceResult.samples
         .filter((s) => s.dataType === 'weight')
         .sort((a, b) => b.recordedAt.localeCompare(a.recordedAt))[0];
-      if (latestWeight && typeof latestWeight.value.kg === 'number') {
-        await supabase.from('profiles').update({ weight_kg: latestWeight.value.kg }).eq('id', userId);
+  if (latestWeight && typeof latestWeight.value.kg === 'number') {
+        let weightKg = latestWeight.value.kg;
+        // Guard lbs×2.2 writes (~300–550 "kg") before they hit nutrition targets.
+        if (weightKg >= 300 && weightKg <= 550) {
+          weightKg = weightKg / (2.2046226218 * 2.2046226218);
+        } else if (weightKg > 250) {
+          weightKg = weightKg / 2.2046226218;
+        }
+        if (weightKg >= 35 && weightKg <= 250) {
+          await supabase.from('profiles').update({ weight_kg: weightKg }).eq('id', userId);
+        }
       }
 
       await supabase.from('integration_connections').upsert(
@@ -198,12 +207,16 @@ export const healthService = {
     }
   },
 
-  async getDailySummaries(userId: string, days = 14): Promise<ServiceResult<HealthDailySummary[]>> {
+  async getDailySummaries(
+    userId: string,
+    days = 14,
+    timeZone?: string | null,
+  ): Promise<ServiceResult<HealthDailySummary[]>> {
     try {
       const since = new Date();
       since.setDate(since.getDate() - days);
       const rows = await fetchExistingSamples(userId, since);
-      return ok(summarizeHealthByDay(rows));
+      return ok(summarizeHealthByDay(rows, timeZone));
     } catch (e) {
       return fromError(e);
     }

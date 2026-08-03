@@ -6,13 +6,18 @@ import { WorkoutUpNextCard } from '@/components/workout/execution/WorkoutUpNextC
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import {
     circuitPhaseLabel,
+    clampIntervalRounds,
     formatTimerSeconds,
+    INTERVAL_ROUNDS_MAX,
     intervalPhaseLabel,
     TRADITIONAL_REST_PRESETS,
     type CircuitTimerState,
+    type IntervalTimerConfig,
     type IntervalTimerState,
 } from '@/lib/timerEngine';
-import type { WorkoutPositionLabels } from '@/lib/workoutUpNext';
+import { adjustWeightKg, formatWorkoutWeightForInput, weightStepDisplay } from '@/lib/unitConversion';
+import { formatIntervalRoundProgress, type WorkoutPositionLabels } from '@/lib/workoutUpNext';
+import type { WeightUnit } from '@/types/common';
 
 type WorkoutTimerOverlayProps = {
   visible: boolean;
@@ -39,11 +44,21 @@ type WorkoutTimerOverlayProps = {
   intervalSecondBounds?: { min: number; max: number; step: number };
   intervalExerciseName?: string | null;
   intervalNextExerciseName?: string | null;
+  /** Shown while the Tabata/HIIT timer is paused so load can change without closing the modal. */
+  pausedWeightEdit?: {
+    weightKg: number;
+    onChangeWeight: (weightKg: number) => void;
+    preferredWeightUnit: WeightUnit;
+    weightLabel: string;
+  } | null;
   onIntervalDismiss?: () => void;
   betweenExerciseRestSeconds?: number;
   onBetweenExerciseRestChange?: (seconds: number) => void;
   betweenExerciseRestBounds?: { min: number; max: number; step: number };
   circuitTimerMode?: 'prep' | 'between_exercises';
+  /** Tabata prep — dial work/rest/rounds before the first work interval. */
+  prepIntervalConfig?: IntervalTimerConfig | null;
+  onPrepIntervalConfigChange?: (patch: Partial<IntervalTimerConfig>) => void;
   circuit?: CircuitTimerState | null;
   onCircuitSkip?: () => void;
   onCircuitDismiss?: () => void;
@@ -78,6 +93,45 @@ function ConfigStepper({
   );
 }
 
+function IntervalConfigGrid({
+  config,
+  intervalMin,
+  intervalMax,
+  intervalStep,
+  onChange,
+}: {
+  config: IntervalTimerConfig;
+  intervalMin: number;
+  intervalMax: number;
+  intervalStep: number;
+  onChange: (patch: Partial<IntervalTimerConfig>) => void;
+}) {
+  const clampSeconds = (value: number) => Math.min(intervalMax, Math.max(intervalMin, value));
+
+  return (
+    <View style={styles.configGrid}>
+      <ConfigStepper
+        label="Work (sec)"
+        value={config.workSeconds}
+        onDecrease={() => onChange({ workSeconds: clampSeconds(config.workSeconds - intervalStep) })}
+        onIncrease={() => onChange({ workSeconds: clampSeconds(config.workSeconds + intervalStep) })}
+      />
+      <ConfigStepper
+        label="Rest (sec)"
+        value={config.restSeconds}
+        onDecrease={() => onChange({ restSeconds: clampSeconds(config.restSeconds - intervalStep) })}
+        onIncrease={() => onChange({ restSeconds: clampSeconds(config.restSeconds + intervalStep) })}
+      />
+      <ConfigStepper
+        label="Rounds"
+        value={config.rounds}
+        onDecrease={() => onChange({ rounds: clampIntervalRounds(config.rounds - 1) })}
+        onIncrease={() => onChange({ rounds: clampIntervalRounds(config.rounds + 1) })}
+      />
+    </View>
+  );
+}
+
 export function WorkoutTimerOverlay({
   visible,
   position,
@@ -92,11 +146,14 @@ export function WorkoutTimerOverlay({
   intervalSecondBounds,
   intervalExerciseName,
   intervalNextExerciseName,
+  pausedWeightEdit,
   onIntervalDismiss,
   betweenExerciseRestSeconds,
   onBetweenExerciseRestChange,
   betweenExerciseRestBounds,
   circuitTimerMode,
+  prepIntervalConfig,
+  onPrepIntervalConfigChange,
   circuit,
   onCircuitSkip,
   onCircuitDismiss,
@@ -107,9 +164,6 @@ export function WorkoutTimerOverlay({
   const intervalMin = intervalSecondBounds?.min ?? 5;
   const intervalMax = intervalSecondBounds?.max ?? 300;
   const intervalStep = intervalSecondBounds?.step ?? 5;
-
-  const clampIntervalSeconds = (value: number) =>
-    Math.min(intervalMax, Math.max(intervalMin, value));
 
   function handleRequestClose() {
     if (activeMode === 'traditional') onTraditionalDismiss?.();
@@ -196,50 +250,71 @@ export function WorkoutTimerOverlay({
                 {intervalPhaseLabel(interval.phase).toUpperCase()}
               </AppText>
               <AppText variant="caption" color="textSecondary" align="center">
-                {position?.currentSetLabel ?? `Round ${interval.round} of ${interval.config.rounds}`}
+                {position?.currentSetLabel ??
+                  formatIntervalRoundProgress(interval.round, interval.config.rounds)}
               </AppText>
               <AppText variant="timer" color="restTimer" align="center" style={styles.timer}>
                 {formatTimerSeconds(interval.secondsRemaining)}
               </AppText>
-              <View style={styles.configGrid}>
-                <ConfigStepper
-                  label="Work (sec)"
-                  value={interval.config.workSeconds}
-                  onDecrease={() =>
-                    onIntervalConfigChange({
-                      workSeconds: clampIntervalSeconds(interval.config.workSeconds - intervalStep),
-                    })
-                  }
-                  onIncrease={() =>
-                    onIntervalConfigChange({
-                      workSeconds: clampIntervalSeconds(interval.config.workSeconds + intervalStep),
-                    })
-                  }
-                />
-                <ConfigStepper
-                  label="Rest (sec)"
-                  value={interval.config.restSeconds}
-                  onDecrease={() =>
-                    onIntervalConfigChange({
-                      restSeconds: clampIntervalSeconds(interval.config.restSeconds - intervalStep),
-                    })
-                  }
-                  onIncrease={() =>
-                    onIntervalConfigChange({
-                      restSeconds: clampIntervalSeconds(interval.config.restSeconds + intervalStep),
-                    })
-                  }
-                />
-                <ConfigStepper
-                  label="Rounds"
-                  value={interval.config.rounds}
-                  onDecrease={() => onIntervalConfigChange({ rounds: Math.max(1, interval.config.rounds - 1) })}
-                  onIncrease={() => onIntervalConfigChange({ rounds: interval.config.rounds + 1 })}
-                />
-              </View>
+              <IntervalConfigGrid
+                config={interval.config}
+                intervalMin={intervalMin}
+                intervalMax={intervalMax}
+                intervalStep={intervalStep}
+                onChange={onIntervalConfigChange}
+              />
+              <AppText variant="footnote" color="textTertiary" align="center">
+                Work and rest · {intervalMin}–{intervalMax}s · up to {INTERVAL_ROUNDS_MAX} rounds
+              </AppText>
+              {!interval.running && interval.phase !== 'done' ? (
+                <>
+                  <AppText variant="footnote" color="accent" align="center">
+                    Paused — set your weight, then Resume
+                  </AppText>
+                  {pausedWeightEdit ? (
+                    <>
+                      <ConfigStepper
+                        label={`Weight (${pausedWeightEdit.weightLabel})`}
+                        value={Number(
+                          formatWorkoutWeightForInput(
+                            pausedWeightEdit.weightKg,
+                            pausedWeightEdit.preferredWeightUnit,
+                          ),
+                        )}
+                        onDecrease={() =>
+                          pausedWeightEdit.onChangeWeight(
+                            adjustWeightKg(
+                              pausedWeightEdit.weightKg,
+                              pausedWeightEdit.preferredWeightUnit,
+                              -1,
+                            ),
+                          )
+                        }
+                        onIncrease={() =>
+                          pausedWeightEdit.onChangeWeight(
+                            adjustWeightKg(
+                              pausedWeightEdit.weightKg,
+                              pausedWeightEdit.preferredWeightUnit,
+                              1,
+                            ),
+                          )
+                        }
+                      />
+                      <AppText variant="caption" color="textTertiary" align="center">
+                        ±{weightStepDisplay(pausedWeightEdit.preferredWeightUnit)}{' '}
+                        {pausedWeightEdit.weightLabel} per tap
+                      </AppText>
+                    </>
+                  ) : null}
+                </>
+              ) : (
+                <AppText variant="footnote" color="textSecondary" align="center">
+                  Pause anytime to change weight · prep is only between exercises
+                </AppText>
+              )}
               <View style={styles.controls}>
                 <PrimaryButton
-                  label={interval.running ? 'Pause' : interval.phase === 'done' ? 'Restart' : 'Start'}
+                  label={interval.running ? 'Pause' : interval.phase === 'done' ? 'Restart' : 'Resume'}
                   onPress={onIntervalToggle}
                 />
                 <Pressable style={styles.controlButtonWide} onPress={onIntervalSkip}>
@@ -251,7 +326,11 @@ export function WorkoutTimerOverlay({
               </View>
               <PrimaryButton label="Reset" onPress={onIntervalReset} variant="secondary" />
               {onIntervalDismiss ? (
-                <PrimaryButton label="Continue to workout" onPress={onIntervalDismiss} variant="ghost" />
+                <PrimaryButton
+                  label={!interval.running && interval.phase !== 'done' ? 'Minimize timer' : 'Continue to workout'}
+                  onPress={onIntervalDismiss}
+                  variant="ghost"
+                />
               ) : null}
             </>
           ) : null}
@@ -260,7 +339,7 @@ export function WorkoutTimerOverlay({
             <>
               <AppText variant="label" color="accent" align="center">
                 {circuitTimerMode === 'prep'
-                  ? 'Get ready'
+                  ? 'Get ready — set work, rest & rounds'
                   : betweenExerciseRestSeconds != null
                     ? 'Rest between exercises'
                     : `Circuit · ${circuitPhaseLabel(circuit.phase)}`}
@@ -278,10 +357,47 @@ export function WorkoutTimerOverlay({
               <AppText variant="timer" color="restTimer" align="center" style={styles.timer}>
                 {formatTimerSeconds(circuit.secondsRemaining)}
               </AppText>
-              {betweenExerciseRestSeconds != null &&
-              onBetweenExerciseRestChange &&
-              betweenExerciseRestBounds &&
-              circuitTimerMode !== 'prep' ? (
+              {circuitTimerMode === 'prep' && prepIntervalConfig && onPrepIntervalConfigChange ? (
+                <>
+                  <AppText variant="footnote" color="textSecondary" align="center">
+                    Between exercises only — log load, then Start when ready. Rounds keep going after this.
+                  </AppText>
+                  <IntervalConfigGrid
+                    config={prepIntervalConfig}
+                    intervalMin={intervalMin}
+                    intervalMax={intervalMax}
+                    intervalStep={intervalStep}
+                    onChange={onPrepIntervalConfigChange}
+                  />
+                  {betweenExerciseRestSeconds != null &&
+                  onBetweenExerciseRestChange &&
+                  betweenExerciseRestBounds ? (
+                    <ConfigStepper
+                      label="Prep (sec)"
+                      value={betweenExerciseRestSeconds}
+                      onDecrease={() =>
+                        onBetweenExerciseRestChange(
+                          Math.max(
+                            betweenExerciseRestBounds.min,
+                            betweenExerciseRestSeconds - betweenExerciseRestBounds.step,
+                          ),
+                        )
+                      }
+                      onIncrease={() =>
+                        onBetweenExerciseRestChange(
+                          Math.min(
+                            betweenExerciseRestBounds.max,
+                            betweenExerciseRestSeconds + betweenExerciseRestBounds.step,
+                          ),
+                        )
+                      }
+                    />
+                  ) : null}
+                </>
+              ) : betweenExerciseRestSeconds != null &&
+                onBetweenExerciseRestChange &&
+                betweenExerciseRestBounds &&
+                circuitTimerMode !== 'prep' ? (
                 <ConfigStepper
                   label="Between exercises (sec)"
                   value={betweenExerciseRestSeconds}
@@ -308,7 +424,11 @@ export function WorkoutTimerOverlay({
                 </AppText>
               )}
               <View style={styles.controls}>
-                <PrimaryButton label="Skip" onPress={onCircuitSkip} variant="secondary" />
+                <PrimaryButton
+                  label={circuitTimerMode === 'prep' ? 'Start Tabata' : 'Skip'}
+                  onPress={onCircuitSkip}
+                  variant="secondary"
+                />
                 <PrimaryButton label="Minimize timer" onPress={onCircuitDismiss} />
               </View>
             </>
@@ -355,8 +475,6 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.md,
     borderRadius: Radius.md,
     backgroundColor: LiftFlowColors.backgroundSecondary,
-    borderWidth: 1,
-    borderColor: LiftFlowColors.border,
   },
   controlButtonWide: {
     flex: 1,
@@ -365,37 +483,31 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.md,
     borderRadius: Radius.md,
     backgroundColor: LiftFlowColors.backgroundSecondary,
-    borderWidth: 1,
-    borderColor: LiftFlowColors.border,
-  },
-  presetRow: {
-    gap: Spacing.sm,
-  },
-  presetButton: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    borderRadius: Radius.full,
-    backgroundColor: LiftFlowColors.surfaceElevated,
-    borderWidth: 1,
-    borderColor: LiftFlowColors.border,
-    marginRight: Spacing.sm,
-  },
-  nextPreview: {
-    gap: Spacing.xs,
-    paddingTop: Spacing.sm,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: LiftFlowColors.border,
   },
   configGrid: {
+    flexDirection: 'row',
     gap: Spacing.sm,
   },
   configCell: {
+    flex: 1,
     gap: Spacing.xs,
   },
   configRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: Spacing.md,
+    gap: Spacing.xs,
+  },
+  presetRow: {
+    gap: Spacing.sm,
+    paddingVertical: Spacing.xs,
+  },
+  presetButton: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.md,
+    backgroundColor: LiftFlowColors.backgroundSecondary,
+  },
+  nextPreview: {
+    gap: Spacing.xs,
   },
 });

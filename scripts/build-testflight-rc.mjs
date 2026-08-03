@@ -31,6 +31,37 @@ async function main() {
   }
 
   record('eas.json testflight profile', fs.readFileSync(path.join(root, 'eas.json'), 'utf8').includes('"testflight"'));
+
+  // EXPO_TOKEN is the wrong (immadoer) credential. Only EXPO_TOKEN1 (liftflow1) can build.
+  const expoToken = process.env.EXPO_TOKEN1;
+  record(
+    'EXPO_TOKEN1 secret present',
+    Boolean(expoToken),
+    expoToken
+      ? 'ok'
+      : 'missing — add EXPO_TOKEN1 in https://cursor.com/dashboard/cloud-agents and delete EXPO_TOKEN, then restart the agent',
+  );
+
+  let expoAccount = 'missing-token';
+  if (expoToken) {
+    try {
+      const res = await fetch('https://api.expo.dev/graphql', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${expoToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: 'query { me { username } }' }),
+      });
+      const json = (await res.json()) as { data?: { me?: { username?: string } }; errors?: unknown };
+      expoAccount = json.data?.me?.username ?? (res.ok ? 'unauthorized' : `http-${res.status}`);
+    } catch {
+      expoAccount = 'unreachable';
+    }
+  }
+  record(
+    'EXPO_TOKEN1 is liftflow1 (not immadoer)',
+    expoAccount === 'liftflow1',
+    expoAccount === 'liftflow1' ? 'ok' : `got ${expoAccount}`,
+  );
+
   record(
     'EXPO_PUBLIC_SENTRY_DSN',
     Boolean(env.EXPO_PUBLIC_SENTRY_DSN?.includes('sentry.io')),
@@ -76,10 +107,17 @@ async function main() {
   }
 
   console.log('Starting EAS build (testflight profile)...\n');
+  // eas-cli reads EXPO_TOKEN; map the correct liftflow1 secret into that slot.
+  const buildEnv = {
+    ...process.env,
+    EXPO_TOKEN: expoToken,
+  };
+  delete buildEnv.EXPO_TOKEN1; // avoid ambiguity — only the mapped token is used
   const build = spawnSync('npx', ['eas-cli', 'build', '--platform', 'ios', '--profile', 'testflight', '--non-interactive'], {
     cwd: root,
     encoding: 'utf8',
     stdio: 'inherit',
+    env: buildEnv,
   });
 
   if (build.status !== 0) {

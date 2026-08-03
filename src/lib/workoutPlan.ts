@@ -130,7 +130,12 @@ export function exercisesForSessionStart(
 ): EditableWorkoutExercise[] {
   const base = exercisesFromPlannedWorkout(workout);
   if (!tabataModeEnabled) return base;
-  return remapExercisesForExecutionMode(base, 'tabata');
+  // Tabata mode is a short-interval overlay on a strength day — keep the beginner-friendly
+  // 3-round default even when the underlying plan was written for 4–5 strength sets.
+  return remapExercisesForExecutionMode(
+    base.map((exercise) => ({ ...exercise, sets: 3 })),
+    'tabata',
+  );
 }
 
 const WORKING_SECONDS_PER_SET = 45;
@@ -150,6 +155,9 @@ export function estimateWorkoutDurationMinutes(exercises: EditableWorkoutExercis
   return Math.max(10, Math.round(seconds / 60));
 }
 
+/** Set target for an exercise the plan does not describe (swapped in or added mid-session). */
+const UNPLANNED_TARGET_SETS = 3;
+
 /**
  * The plan array and the live session's exercise array drift apart whenever an exercise is
  * skipped, reordered or added mid-session, so positional lookups land on the wrong slot.
@@ -167,23 +175,50 @@ export function alignPlanExercisesToSession(
     return slot.exercise;
   };
 
-  return [...sessionExercises]
-    .sort((a, b) => a.sortOrder - b.sortOrder)
-    .map((sessionExercise) => {
-      const name = sessionExercise.exercise?.name ?? '';
-      const matched =
-        (sessionExercise.exerciseId
-          ? takeMatch((plan) => plan.exerciseId === sessionExercise.exerciseId)
-          : undefined) ?? (name ? takeMatch((plan) => plan.name.toLowerCase() === name.toLowerCase()) : undefined);
-      if (matched) return matched;
-      return {
-        id: `session-${sessionExercise.id}`,
-        exerciseId: sessionExercise.exerciseId,
-        name: name || 'Exercise',
-        sets: Math.max(sessionExercise.sets.length, 3),
-        repRange: sessionExercise.suggestedReps,
-      };
-    });
+  const ordered = [...sessionExercises].sort((a, b) => a.sortOrder - b.sortOrder);
+  const matched = ordered.map((sessionExercise) => {
+    const name = sessionExercise.exercise?.name ?? '';
+    return (
+      (sessionExercise.exerciseId
+        ? takeMatch((plan) => plan.exerciseId === sessionExercise.exerciseId)
+        : undefined) ?? (name ? takeMatch((plan) => plan.name.toLowerCase() === name.toLowerCase()) : undefined)
+    );
+  });
+
+  /**
+   * A swapped-out exercise leaves its plan slot unclaimed, so the swapped-in exercise inherits that
+   * slot's targets. Deriving the target from the logged set count instead made the target climb with
+   * every set, so the exercise could never register as complete.
+   */
+  const unclaimed = slots.filter((slot) => !slot.used).map((slot) => slot.exercise);
+  let unclaimedIndex = 0;
+
+  return ordered.map((sessionExercise, index) => {
+    const plan = matched[index];
+    if (plan) return plan;
+
+    const inherited = unclaimed[unclaimedIndex];
+    unclaimedIndex += 1;
+    const name = sessionExercise.exercise?.name ?? '';
+    return {
+      id: `session-${sessionExercise.id}`,
+      exerciseId: sessionExercise.exerciseId,
+      name: name || 'Exercise',
+      sets: inherited?.sets ?? UNPLANNED_TARGET_SETS,
+      repRange: inherited?.repRange ?? sessionExercise.suggestedReps,
+      restSeconds: inherited?.restSeconds,
+      // Keep the vacated slot's pairing so a mid-session swap does not dissolve the supersets.
+      executionMode: inherited?.executionMode,
+      supersetGroupId: inherited?.supersetGroupId,
+      intervalRounds: inherited?.intervalRounds,
+      intervalWorkSeconds: inherited?.intervalWorkSeconds,
+      intervalRestSeconds: inherited?.intervalRestSeconds,
+      restBetweenExercisesSeconds: inherited?.restBetweenExercisesSeconds,
+      // Keep sets/reps/pairing from the vacated slot, but never its load — a swap from a
+      // compound press must not prescribe that weight on an isolation accessory.
+      weightLbs: undefined,
+    };
+  });
 }
 
 export function parseTargetReps(repRange?: string): number {

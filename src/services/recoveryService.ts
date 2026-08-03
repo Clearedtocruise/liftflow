@@ -43,8 +43,29 @@ function mapRecovery(row: RecoveryRow): DailyRecoveryCheckIn {
   };
 }
 
+async function readTodayFromSupabase(
+  userId: string,
+  timeZone?: string | null,
+): Promise<ServiceResult<DailyRecoveryCheckIn | null>> {
+  // check_in_date is the user's local calendar day — never UTC-from-ISO alone.
+  const today = localDateString(new Date(), timeZone);
+  const { data, error } = await supabase
+    .from('recovery_assessments')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('check_in_date', today)
+    .maybeSingle();
+
+  if (error) return fail(error.message);
+  if (!data) return ok(null);
+  return ok(mapRecovery(data as RecoveryRow));
+}
+
 export const recoveryService = {
-  async getToday(userId: string): Promise<ServiceResult<DailyRecoveryCheckIn | null>> {
+  async getToday(
+    userId: string,
+    timeZone?: string | null,
+  ): Promise<ServiceResult<DailyRecoveryCheckIn | null>> {
     try {
       const token = await getAccessToken();
       const remote = await apiClient.get<RecoveryRow | null>(
@@ -52,20 +73,14 @@ export const recoveryService = {
         token,
       );
       if (remote) return ok(mapRecovery(remote));
-
-      const today = localDateString();
-      const { data, error } = await supabase
-        .from('recovery_assessments')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('check_in_date', today)
-        .maybeSingle();
-
-      if (error) return fail(error.message);
-      if (!data) return ok(null);
-      return ok(mapRecovery(data as RecoveryRow));
-    } catch (e) {
-      return fromError(e);
+      return readTodayFromSupabase(userId, timeZone);
+    } catch {
+      // Cold API / 401 used to fail closed and leave Home empty until a later refresh.
+      try {
+        return await readTodayFromSupabase(userId, timeZone);
+      } catch (e) {
+        return fromError(e);
+      }
     }
   },
 
@@ -86,8 +101,26 @@ export const recoveryService = {
       }));
 
       return ok(points);
-    } catch (e) {
-      return fromError(e);
+    } catch {
+      try {
+        const { data, error } = await supabase
+          .from('recovery_assessments')
+          .select('*')
+          .eq('user_id', userId)
+          .order('check_in_date', { ascending: false })
+          .limit(14);
+        if (error) return fail(error.message);
+        const points: RecoveryTrendPoint[] = (data as RecoveryRow[] | null)?.map((row) => ({
+          checkInDate: row.check_in_date,
+          recoveryScore: row.recovery_score ?? 0,
+          dailyRecommendation: row.daily_recommendation ?? undefined,
+          recoveryModeActive: row.recovery_mode_active ?? false,
+          status: row.status as RecoveryStatus,
+        })) ?? [];
+        return ok(points);
+      } catch (e) {
+        return fromError(e);
+      }
     }
   },
 

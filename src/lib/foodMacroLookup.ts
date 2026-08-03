@@ -11,6 +11,9 @@ const FOOD_PER_OZ: Record<string, FoodMacroEstimate> = {
   'cod': { calories: 30, proteinG: 6.5, carbsG: 0, fatG: 0.3 },
   'tofu': { calories: 22, proteinG: 2.3, carbsG: 0.6, fatG: 1.3 },
   'greek yogurt': { calories: 17, proteinG: 1.5, carbsG: 0.8, fatG: 0.2 },
+  // Nonfat high-protein yogurt cups (Oikos Triple Zero ≈ 90 kcal / 5.3 oz).
+  'oikos triple zero': { calories: 17, proteinG: 2.8, carbsG: 1.1, fatG: 0 },
+  'oikos': { calories: 17, proteinG: 2.8, carbsG: 1.1, fatG: 0 },
   'rice': { calories: 37, proteinG: 0.7, carbsG: 7.5, fatG: 0.1 },
   'quinoa': { calories: 34, proteinG: 1.3, carbsG: 6, fatG: 0.5 },
   'egg': { calories: 41, proteinG: 3.6, carbsG: 0.2, fatG: 2.9 },
@@ -21,11 +24,14 @@ const FOOD_PER_OZ: Record<string, FoodMacroEstimate> = {
   'olive oil': { calories: 251, proteinG: 0, carbsG: 0, fatG: 28.4 },
   'almond butter': { calories: 175, proteinG: 6.1, carbsG: 5.4, fatG: 15.6 },
   'peanut butter': { calories: 168, proteinG: 7.1, carbsG: 6.1, fatG: 14.4 },
+  'peanuts': { calories: 160, proteinG: 7.3, carbsG: 4.6, fatG: 14 },
   'whey protein': { calories: 109, proteinG: 21.8, carbsG: 2.7, fatG: 1.4 },
   'rolled oats': { calories: 107, proteinG: 4.6, carbsG: 19, fatG: 2.9 },
+  'oatmeal': { calories: 107, proteinG: 4.6, carbsG: 19, fatG: 2.9 },
   'banana': { calories: 25, proteinG: 0.3, carbsG: 6.4, fatG: 0.1 },
   'apple': { calories: 15, proteinG: 0.1, carbsG: 4, fatG: 0.1 },
   'berries': { calories: 17, proteinG: 0.2, carbsG: 4.2, fatG: 0.1 },
+  'blueberries': { calories: 17, proteinG: 0.2, carbsG: 4.2, fatG: 0.1 },
   'broccoli': { calories: 10, proteinG: 0.8, carbsG: 2, fatG: 0.1 },
   'asparagus': { calories: 6, proteinG: 0.6, carbsG: 1.1, fatG: 0.1 },
   'spinach': { calories: 7, proteinG: 0.9, carbsG: 1.1, fatG: 0.1 },
@@ -50,7 +56,8 @@ type ServingUnit =
   | 'small'
   | 'medium'
   | 'large'
-  | 'serving';
+  | 'serving'
+  | 'container';
 
 /** Ounces per unit for foods with no specific entry below. */
 const OZ_PER_UNIT: Record<ServingUnit, number> = {
@@ -70,6 +77,7 @@ const OZ_PER_UNIT: Record<ServingUnit, number> = {
   medium: 4,
   large: 5.5,
   serving: 4,
+  container: 5.3,
 };
 
 /** Per-food overrides where a unit's weight differs sharply from the generic value. */
@@ -77,7 +85,9 @@ const FOOD_UNIT_OZ: Record<string, Partial<Record<ServingUnit, number>>> = {
   'honey': { tbsp: 0.75, tsp: 0.25, cup: 12 },
   'almond butter': { tbsp: 0.57 },
   'peanut butter': { tbsp: 0.57 },
+  'peanuts': { tbsp: 0.32, cup: 5.1 },
   'rolled oats': { cup: 2.8 },
+  'oatmeal': { cup: 2.8, serving: 1.4 },
   'rice': { cup: 5.5 },
   'quinoa': { cup: 6.5 },
   'egg whites': { cup: 8.6 },
@@ -85,11 +95,15 @@ const FOOD_UNIT_OZ: Record<string, Partial<Record<ServingUnit, number>>> = {
   'mixed greens': { cup: 0.7 },
   'broccoli': { cup: 3.1 },
   'asparagus': { cup: 4.7 },
-  'berries': { cup: 5 },
+  'berries': { cup: 5, serving: 2.5 },
+  'blueberries': { cup: 5.2, serving: 2.6 },
   'mixed vegetables': { cup: 5 },
   'banana': { medium: 4.2, small: 3.3, large: 5.4 },
   'apple': { medium: 6.4, small: 5, large: 8 },
   'egg': { piece: 1.75, medium: 1.55, large: 1.75, slice: 1.75 },
+  'greek yogurt': { cup: 8.6, container: 5.3, serving: 5.3 },
+  'oikos triple zero': { cup: 5.3, container: 5.3, serving: 5.3 },
+  'oikos': { cup: 5.3, container: 5.3, serving: 5.3 },
 };
 
 const UNIT_PATTERNS: [ServingUnit, RegExp][] = [
@@ -108,11 +122,41 @@ const UNIT_PATTERNS: [ServingUnit, RegExp][] = [
   ['small', /\bsmall\b/i],
   ['medium', /\b(medium|med)\b/i],
   ['large', /\blarge\b/i],
+  ['container', /\bcontainers?\b/i],
   ['serving', /\bservings?\b/i],
 ];
 
+const EMBEDDED_SERVING_RE =
+  /^((?:\d+\s+\d+\/\d+|\d+\/\d+|\d+(?:\.\d+)?)\s*(?:tbsp|tablespoons?|tsp|teaspoons?|cups?|oz|ounces?|g|grams?|kg|kilograms?|lbs?|pounds?|ml|milliliters?|l|liters?|scoops?|slices?|pieces?|containers?|medium|large|small|servings?)(?:\s+of)?)\s+(.+)$/i;
+
+const TRAILING_SERVING_RE =
+  /^(.+?)\s+((?:\d+\s+\d+\/\d+|\d+\/\d+|\d+(?:\.\d+)?)\s*(?:tbsp|tablespoons?|tsp|teaspoons?|cups?|oz|ounces?|g|grams?|kg|kilograms?|lbs?|pounds?|ml|milliliters?|l|liters?|scoops?|slices?|pieces?|containers?|medium|large|small|servings?))$/i;
+
+/** Default single servings for calorie-dense foods — never invent a 4 oz "serving". */
+const DENSE_FOOD_DEFAULT_SERVING: Record<string, string> = {
+  'peanut butter': '2 tbsp',
+  'almond butter': '2 tbsp',
+  'peanuts': '1 oz',
+  'honey': '1 tbsp',
+  'olive oil': '1 tbsp',
+  'whey protein': '1 scoop',
+};
+
 function normalizeFood(name: string): string {
-  return name.trim().toLowerCase().replace(/\s+/g, ' ');
+  return name
+    .trim()
+    .toLowerCase()
+    // "3 whole eggs" / "eggs" must resolve to the egg row — `\begg\b` does not match "eggs".
+    .replace(/\bwhole\s+eggs?\b/g, 'egg')
+    .replace(/\beggs\b/g, 'egg')
+    .replace(/\s+/g, ' ');
+}
+
+/** "3 eggs" / "3 whole eggs" → count as pieces, not a 4 oz generic serving. */
+const EGG_COUNT_RE = /^((?:\d+\s+\d+\/\d+|\d+\/\d+|\d+(?:\.\d+)?))\s+(?:whole\s+)?eggs?\b(.*)$/i;
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /** Handles decimals, simple fractions and mixed numbers ("1 1/2"). */
@@ -152,13 +196,104 @@ function scaleMacros(base: FoodMacroEstimate, multiplier: number): FoodMacroEsti
   };
 }
 
+function sumMacros(parts: FoodMacroEstimate[]): FoodMacroEstimate {
+  return parts.reduce<FoodMacroEstimate>(
+    (acc, part) => ({
+      calories: acc.calories + part.calories,
+      proteinG: Math.round((acc.proteinG + part.proteinG) * 10) / 10,
+      carbsG: Math.round((acc.carbsG + part.carbsG) * 10) / 10,
+      fatG: Math.round((acc.fatG + part.fatG) * 10) / 10,
+    }),
+    { calories: 0, proteinG: 0, carbsG: 0, fatG: 0 },
+  );
+}
+
+export function isGenericServingSize(servingSize: string): boolean {
+  const normalized = servingSize.trim().toLowerCase();
+  return (
+    !normalized ||
+    normalized === '1' ||
+    normalized === '1x' ||
+    normalized === 'x1' ||
+    normalized === 'serving' ||
+    normalized === '1 serving' ||
+    normalized === '1 servings'
+  );
+}
+
+/** Pull "2 tablespoons peanut butter" or "chicken breast 6 oz" into food + serving. */
+export function extractEmbeddedServing(foodName: string): { food: string; serving: string } | null {
+  const trimmed = foodName.trim();
+  const eggCount = trimmed.match(EGG_COUNT_RE);
+  if (eggCount) {
+    const rest = eggCount[2].trim();
+    // Bare "3 eggs" / "3 whole eggs". Leave "3 eggs with spinach" to the composite splitter.
+    if (!rest || /^(large|medium|small)\b/i.test(rest)) {
+      const size = rest.match(/^(large|medium|small)\b/i)?.[1] ?? 'piece';
+      return { serving: `${eggCount[1]} ${size}`, food: 'egg' };
+    }
+  }
+  const leading = trimmed.match(EMBEDDED_SERVING_RE);
+  if (leading) return { serving: leading[1].trim(), food: leading[2].trim() };
+  const trailing = trimmed.match(TRAILING_SERVING_RE);
+  if (trailing) return { food: trailing[1].trim(), serving: trailing[2].trim() };
+  return null;
+}
+
+function splitOnConnectors(part: string): string[] {
+  // Split "banana and peanut butter" / "PB + peanuts" without breaking "mac and cheese"-style
+  // names that aren't in our catalog (acceptable — those fall through to generic).
+  return part
+    .split(/\s*(?:\+|\&|\band\b)\s*/i)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+/** Split composite titles like "yogurt, blueberries, 2 tbsp peanut butter". */
+export function splitCompositeFoodParts(foodName: string): string[] {
+  const normalized = foodName.trim();
+  if (!normalized) return [];
+
+  const byComma = normalized
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  const parts = (byComma.length > 1 ? byComma : [normalized]).flatMap((part) => {
+    const withParts = part
+      .split(/\s+with\s+/i)
+      .map((item) => item.trim())
+      .filter(Boolean);
+    const afterWith = withParts.length > 1 ? withParts : [part];
+    return afterWith.flatMap((item) => {
+      const connected = splitOnConnectors(item);
+      return connected.length > 1 ? connected : [item];
+    });
+  });
+
+  return parts.length > 1 ? parts : [normalized];
+}
+
 function lookupFoodKey(foodName: string): string | null {
   const key = normalizeFood(foodName);
   if (FOOD_PER_OZ[key]) return key;
 
   // Longest match first so "lean ground beef" wins over "ground beef".
+  // Word boundaries keep "peanuts" from becoming peanut butter.
   const patterns = Object.keys(FOOD_PER_OZ).sort((a, b) => b.length - a.length);
-  return patterns.find((pattern) => key.includes(pattern)) ?? null;
+  return (
+    patterns.find((pattern) => new RegExp(`\\b${escapeRegExp(pattern)}\\b`, 'i').test(key)) ?? null
+  );
+}
+
+function defaultServingForFood(foodKey: string | null): string {
+  if (foodKey && DENSE_FOOD_DEFAULT_SERVING[foodKey]) return DENSE_FOOD_DEFAULT_SERVING[foodKey];
+  if (foodKey === 'oikos' || foodKey === 'oikos triple zero' || foodKey === 'greek yogurt') {
+    return '1 container';
+  }
+  if (foodKey === 'blueberries' || foodKey === 'berries') return '1/2 cup';
+  if (foodKey === 'banana' || foodKey === 'apple' || foodKey === 'egg') return '1 medium';
+  return '1 serving';
 }
 
 /** Ounces described by a serving string, using per-food unit weights where known. */
@@ -167,15 +302,51 @@ export function servingSizeInOunces(foodKey: string | null, servingSize: string)
   if (amount == null || !Number.isFinite(amount) || amount <= 0) return null;
 
   const unit = parseUnit(servingSize);
-  if (!unit) return amount * OZ_PER_UNIT.serving;
+  if (!unit) {
+    // Bare "1" / "2" without a unit: for dense foods use their real default, not 4 oz.
+    if (foodKey && DENSE_FOOD_DEFAULT_SERVING[foodKey] && isGenericServingSize(servingSize)) {
+      return servingSizeInOunces(foodKey, DENSE_FOOD_DEFAULT_SERVING[foodKey]);
+    }
+    if (foodKey && DENSE_FOOD_DEFAULT_SERVING[foodKey] && amount === 1) {
+      return servingSizeInOunces(foodKey, DENSE_FOOD_DEFAULT_SERVING[foodKey]);
+    }
+    return amount * OZ_PER_UNIT.serving;
+  }
 
   const perFood = foodKey ? FOOD_UNIT_OZ[foodKey]?.[unit] : undefined;
   return amount * (perFood ?? OZ_PER_UNIT[unit]);
 }
 
-export function estimateFoodMacrosLocal(foodName: string, servingSize: string): FoodMacroEstimate {
-  const key = lookupFoodKey(foodName);
+function estimateSingleFood(foodName: string, servingSize: string): FoodMacroEstimate {
+  const embedded = extractEmbeddedServing(foodName);
+  const cleanName = embedded?.food ?? foodName;
+  const key = lookupFoodKey(cleanName);
+
+  let effectiveServing: string;
+  if (embedded && isGenericServingSize(servingSize)) {
+    effectiveServing = embedded.serving;
+  } else if (!servingSize || isGenericServingSize(servingSize)) {
+    effectiveServing = defaultServingForFood(key);
+  } else {
+    effectiveServing = servingSize;
+  }
+
   const base = key ? FOOD_PER_OZ[key] : { calories: 50, proteinG: 5, carbsG: 3, fatG: 2 };
-  const ounces = servingSizeInOunces(key, servingSize);
-  return scaleMacros(base, ounces ?? OZ_PER_UNIT.serving);
+  const ounces = servingSizeInOunces(key, effectiveServing);
+  return scaleMacros(base, ounces ?? servingSizeInOunces(key, defaultServingForFood(key)) ?? 1);
+}
+
+export function estimateFoodMacrosLocal(foodName: string, servingSize: string): FoodMacroEstimate {
+  const parts = splitCompositeFoodParts(foodName);
+  if (parts.length > 1) {
+    return sumMacros(
+      parts.map((part) => {
+        const embedded = extractEmbeddedServing(part);
+        if (embedded) return estimateSingleFood(part, embedded.serving);
+        return estimateSingleFood(part, isGenericServingSize(servingSize) ? '1 serving' : servingSize);
+      }),
+    );
+  }
+
+  return estimateSingleFood(foodName, servingSize);
 }

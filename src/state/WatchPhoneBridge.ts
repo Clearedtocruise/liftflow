@@ -1,6 +1,10 @@
 /**
- * Lets the Apple Watch delegate set logging and rest control to the phone workout UI
- * when ActiveWorkoutScreen is open — phone stays the single source of truth.
+ * Lets the Apple Watch delegate set logging and rest control to the phone — the phone stays the
+ * single source of truth.
+ *
+ * ActiveWorkoutScreen registers the rich handler (supersets, rest flow, progression) while it is
+ * open. A session-level fallback covers every other screen, because a wrist tap that only worked
+ * when the phone was already showing the workout defeated the point of logging from the watch.
  */
 
 type LogSetResult = { ok: true } | { ok: false; error: string };
@@ -15,6 +19,7 @@ export type WatchDisplayContext = {
 const LB_PER_KG = 2.2046226218;
 
 let logSetHandler: (() => Promise<LogSetResult>) | null = null;
+let fallbackLogSetHandler: (() => Promise<LogSetResult>) | null = null;
 let skipRestHandler: (() => Promise<void>) | null = null;
 let cancelWorkoutHandler: (() => Promise<void>) | null = null;
 let setRepsHandler: ((reps: number) => void) | null = null;
@@ -29,6 +34,16 @@ let displayContext: WatchDisplayContext | null = null;
 export const watchPhoneBridge = {
   setLogSetHandler(handler: (() => Promise<LogSetResult>) | null) {
     logSetHandler = handler;
+  },
+
+  /** Used whenever the workout screen is not mounted. Registered for the whole app session. */
+  setFallbackLogSetHandler(handler: (() => Promise<LogSetResult>) | null) {
+    fallbackLogSetHandler = handler;
+  },
+
+  /** True when a wrist tap can log a set right now — with or without the workout screen open. */
+  canLogSet(): boolean {
+    return logSetHandler != null || fallbackLogSetHandler != null;
   },
 
   setRepsHandler(handler: ((reps: number) => void) | null) {
@@ -120,11 +135,12 @@ export const watchPhoneBridge = {
   },
 
   async logCurrentSet(): Promise<LogSetResult> {
-    if (!logSetHandler) {
-      return { ok: false, error: 'Open your workout on iPhone to log sets.' };
+    const handler = logSetHandler ?? fallbackLogSetHandler;
+    if (!handler) {
+      return { ok: false, error: 'Start a workout on iPhone to log sets.' };
     }
     try {
-      return await logSetHandler();
+      return await handler();
     } catch (error) {
       return {
         ok: false,

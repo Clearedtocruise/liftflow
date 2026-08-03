@@ -40,12 +40,14 @@ const workoutService = read('src/services/workoutService.ts');
 record('Exercise number shown', active.includes('Exercise {currentIndex + 1} of'));
 record('Workout Time label', active.includes('Workout Time') && active.includes('formatWorkoutClockTime'));
 record('Workout progress bar', active.includes('WorkoutProgressBar'));
-record('Current Set metric', metrics.includes('Current Set'));
-record('Remaining Sets metric', metrics.includes('Remaining Sets'));
+record('Current Set metric', metrics.includes('Current set'));
+record('Remaining Sets metric', metrics.includes('Sets left'));
 record('Previous Performance block', metrics.includes('Previous Performance'));
 record('Target Performance block', metrics.includes('Target Performance'));
 record('One exercise focus (currentIndex)', active.includes('currentIndex'));
-record('No exercise picker in active screen', !active.includes('ExercisePickerModal'));
+// Sprint 5 kept the active screen to one exercise with no picker. Add / Swap Exercise were added
+// deliberately afterwards, so the guard is now that the picker is reachable, not that it is absent.
+record('Exercise picker available for add and swap', active.includes('ExercisePickerModal'));
 record('Timed history support', workoutService.includes('duration_seconds') && workoutService.includes("mode === 'timed'"));
 record('Coach enabled for timed exercises', !active.includes("loggingMode !== 'timed'"));
 record('Progress computation helper', lib.includes('computeWorkoutSetProgress'));

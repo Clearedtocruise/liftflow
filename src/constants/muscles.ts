@@ -56,6 +56,45 @@ export const MUSCLE_LABELS: Record<MuscleId, string> = {
   'full-body': 'Full Body',
 };
 
+/**
+ * Anatomical names, shown under the common name in the exercise guide.
+ *
+ * A lifter who knows "chest" learns more from seeing "Pectoralis Major" next to a highlighted
+ * figure than from the common name alone, and it is the vocabulary every other training resource
+ * they read will use.
+ */
+export const MUSCLE_ANATOMICAL_NAMES: Record<MuscleId, string> = {
+  chest: 'Pectoralis Major',
+  'front-delts': 'Anterior Deltoid',
+  'side-delts': 'Lateral Deltoid',
+  'rear-delts': 'Posterior Deltoid',
+  shoulders: 'Deltoids',
+  triceps: 'Triceps Brachii',
+  biceps: 'Biceps Brachii',
+  forearms: 'Brachioradialis',
+  lats: 'Latissimus Dorsi',
+  'mid-back': 'Rhomboids',
+  'upper-back': 'Trapezius (Upper)',
+  traps: 'Trapezius',
+  'lower-back': 'Erector Spinae',
+  quads: 'Quadriceps Femoris',
+  hamstrings: 'Biceps Femoris',
+  glutes: 'Gluteus Maximus',
+  calves: 'Gastrocnemius',
+  abs: 'Rectus Abdominis',
+  obliques: 'External Obliques',
+  core: 'Abdominals',
+  neck: 'Sternocleidomastoid',
+  'hip-flexors': 'Iliopsoas',
+  adductors: 'Adductor Group',
+  abductors: 'Gluteus Medius',
+  'full-body': 'Multiple Groups',
+};
+
+export function muscleAnatomicalName(id: MuscleId): string {
+  return MUSCLE_ANATOMICAL_NAMES[id] ?? MUSCLE_LABELS[id] ?? id;
+}
+
 /** Maps each MuscleId to body-highlighter slug(s). */
 export const MUSCLE_SLUGS: Record<MuscleId, Slug[]> = {
   chest: ['chest'],

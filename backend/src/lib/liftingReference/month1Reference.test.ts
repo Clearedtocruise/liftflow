@@ -5,6 +5,7 @@ import { applyBlockSupersets, enrichWithSmartSupersetGroups } from './applyRefer
 import { SPLIT_VOLUME_TARGETS } from './liftingProgrammingRules.js';
 import { MONTH1_WORKOUTS, MONTH1_WORKOUT_COUNT } from './month1Workouts.js';
 import {
+  dedupeReferenceDraftExercises,
   getMonth1Workout,
   resolveMonth1Workout,
   shouldUseReferenceLiftingProgram,
@@ -61,6 +62,17 @@ test('applyBlockSupersets groups B1/B2 blocks', () => {
   assert.equal(grouped[2].supersetGroupId, 'ss-b');
 });
 
+test('applyBlockSupersets never pairs bare letter compounds', () => {
+  const grouped = applyBlockSupersets([
+    { block: 'A', name: 'Bench' },
+    { block: 'A', name: 'Also Bench' },
+    { block: 'D', name: 'OHP' },
+  ]);
+  assert.equal(grouped[0].supersetGroupId, undefined);
+  assert.equal(grouped[1].supersetGroupId, undefined);
+  assert.equal(grouped[2].supersetGroupId, undefined);
+});
+
 test('smart supersets skip heavy compound pairs', () => {
   const grouped = enrichWithSmartSupersetGroups([
     { name: 'Squat', metadata: { movement_family: 'squat_pattern' } },
@@ -73,6 +85,21 @@ test('smart supersets skip heavy compound pairs', () => {
   assert.equal(grouped[1].supersetGroupId, undefined);
   assert.equal(grouped[2].supersetGroupId, 'ss-1');
   assert.equal(grouped[3].supersetGroupId, 'ss-1');
+});
+
+test('smart supersets do not invent pairs when movement family is missing', () => {
+  const grouped = enrichWithSmartSupersetGroups([
+    { name: 'Bench' },
+    { name: 'Incline DB' },
+    { name: 'Lateral Raise' },
+    { name: 'Cable Fly' },
+    { name: 'Pushdown' },
+    { name: 'OHP' },
+  ]);
+  assert.deepEqual(
+    grouped.map((exercise) => exercise.supersetGroupId),
+    [undefined, undefined, undefined, undefined, undefined, undefined],
+  );
 });
 
 test('slotLabelKey matches schedule labels to Month 1 slot labels', () => {
@@ -106,4 +133,21 @@ test('split volume targets match Month 1 spec', () => {
   assert.equal(SPLIT_VOLUME_TARGETS.chest_shoulders_triceps.chest, 12);
   assert.equal(SPLIT_VOLUME_TARGETS.back_biceps_core.core, 12);
   assert.equal(SPLIT_VOLUME_TARGETS.legs_core.calves, 8);
+});
+
+test('dedupeReferenceDraftExercises removes duplicates by name and slug', () => {
+  const deduped = dedupeReferenceDraftExercises([
+    { name: 'Bench Press', slug: 'bench-press', block: 'A' },
+    { name: 'Bench-Press', slug: 'bench-press-alt', block: 'B1' },
+    { name: 'Incline Bench Press', slug: 'incline-bench-press', block: 'B2' },
+    { name: 'Cable Row', slug: 'cable-row', block: 'C' },
+    { name: 'Cable Row', slug: 'cable-row', block: 'D' },
+  ]);
+
+  assert.deepEqual(
+    deduped.map((exercise) => exercise.slug),
+    ['bench-press', 'incline-bench-press', 'cable-row'],
+  );
+  assert.equal(deduped[0]?.block, 'A');
+  assert.equal(deduped[2]?.block, 'C');
 });

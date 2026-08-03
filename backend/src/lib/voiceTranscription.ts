@@ -63,7 +63,7 @@ export async function transcribeAudio(
   providerConfigured: () => boolean = hasOpenAI,
 ): Promise<TranscribeResult> {
   if (!audio || audio.byteLength < MIN_AUDIO_BYTES) {
-    return { ok: false, status: 400, message: 'No audio was recorded. Hold the button and speak, then release.' };
+    return { ok: false, status: 400, message: 'No audio was recorded. Tap the mic and speak your set.' };
   }
   if (audio.byteLength > MAX_AUDIO_BYTES) {
     return { ok: false, status: 413, message: 'That recording is too long. Try a shorter phrase.' };

@@ -37,6 +37,14 @@ const engine = read('src/lib/exerciseClassification.ts');
 const migration = read('supabase/migrations/020_exercise_classification.sql');
 const schema = read('supabase/schema.sql');
 
+/** Every seeding source, since later migrations added the leg, core and imported catalogs. */
+const allMigrations = fs
+  .readdirSync(path.join(root, 'supabase/migrations'))
+  .filter((file) => file.endsWith('.sql'))
+  .map((file) => read(`supabase/migrations/${file}`))
+  .join('\n')
+  .concat(schema);
+
 record('Schema defines exercise_type enum', schema.includes("create type public.exercise_type"));
 record('Schema stores exercise_type on exercises', schema.includes('exercise_type public.exercise_type'));
 record('Migration creates exercise_type enum', migration.includes("create type public.exercise_type"));
@@ -64,8 +72,18 @@ for (const [type, count] of Object.entries(typeCounts)) {
   record(`Catalog count > 0: ${type}`, count > 0, String(count));
 }
 
-record('Total catalog exercises = 37', slugMatches.length === 37, String(slugMatches.length));
-record('Every catalog slug referenced in migration', slugMatches.every((slug) => migration.includes(`'${slug}'`)));
+// The catalog started at 37 and is expected to grow; pinning the exact count only ever failed.
+record('Catalog has at least the Sprint 1 exercises', slugMatches.length >= 37, String(slugMatches.length));
+
+// Slugs are seeded across several migrations (leg / core / 1000-exercise import), not just this
+// one, so a slug missing everywhere is the real failure — an exercise the app offers but the
+// database has never heard of.
+const missingSlugs = slugMatches.filter((slug) => !allMigrations.includes(`'${slug}'`));
+record(
+  'Every catalog slug is seeded by some migration',
+  missingSlugs.length === 0,
+  missingSlugs.length ? missingSlugs.join(', ') : 'all seeded',
+);
 
 for (const slug of ['bench-press', 'pull-up', 'plank', 'running']) {
   record(`Migration covers ${slug}`, migration.includes(`'${slug}'`));

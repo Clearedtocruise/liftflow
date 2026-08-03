@@ -6,6 +6,7 @@ struct ContentView: View {
   @StateObject private var connectivity = WorkoutConnectivity()
   @StateObject private var heartRate = HeartRateReader()
   @StateObject private var workoutSession = WorkoutSessionManager()
+  @Environment(\.scenePhase) private var scenePhase
 
   var body: some View {
     ScrollView {
@@ -60,6 +61,15 @@ struct ContentView: View {
         workoutSession.start()
       } else {
         workoutSession.end()
+      }
+    }
+    .onChange(of: scenePhase) { phase in
+      // Whichever app owns a running workout session owns the wrist. If ours was refused at the
+      // Health prompt or lost to another workout app, reclaim it the next time the wrist comes up
+      // rather than leaving the lifter staring at the Fitness app for the rest of the session.
+      guard phase == .active else { return }
+      if connectivity.workoutSessionId != nil && !workoutSession.isRunning {
+        workoutSession.start()
       }
     }
   }

@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, StyleSheet, View } from 'react-native';
 
 import { ErrorStateCard } from '@/components/layout/StateCard';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
@@ -12,7 +12,7 @@ import { useTabataModePreference } from '@/hooks/useTabataModePreference';
 import { useWorkoutLocations } from '@/hooks/useWorkoutLocations';
 import { profileFigureGender } from '@/lib/exerciseMuscleMap';
 import { getWeekRange, isConditioningWorkout } from '@/lib/weekPlan';
-import { exercisesForSessionStart, exercisesFromPlannedWorkout } from '@/lib/workoutPlan';
+import { exercisesForSessionStart } from '@/lib/workoutPlan';
 import type { ExerciseAlternativeOption } from '@/services/exerciseAdvisoryService';
 import { trainingService } from '@/services/trainingService';
 import { workoutService } from '@/services/workoutService';
@@ -24,14 +24,29 @@ export default function WorkoutDayScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
   const { tabataModeEnabled } = useTabataModePreference();
-  const { exercises, setPlannedWorkout, setExercises } = useWorkoutPlanDraft();
+  const {
+    plannedWorkout: draftWorkout,
+    exercises,
+    isDirty,
+    setPlannedWorkout,
+    setExercises,
+    setSessionPlan,
+    markSaved,
+  } = useWorkoutPlanDraft();
   const { startSessionFromPlanned, refreshSession } = useWorkoutSession();
   const { locations, selectedId } = useWorkoutLocations(user?.id);
 
-  const [workout, setWorkout] = useState<PlannedWorkout | null>(null);
+  const [loaded, setLoaded] = useState<PlannedWorkout | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
+
+  /**
+   * The draft context holds the newest copy of this workout, because saving from the edit screen
+   * updates it there. Reading the locally loaded copy instead would start the session from the
+   * pre-edit exercises.
+   */
+  const workout = draftWorkout?.id === loaded?.id ? (draftWorkout ?? loaded) : loaded;
 
   const loadWorkout = useCallback(async () => {
     if (!user?.id || !id) {
@@ -47,21 +62,22 @@ export default function WorkoutDayScreen() {
 
     if (!result.success) {
       setLoadError(result.error);
-      setWorkout(null);
+      setLoaded(null);
       setLoading(false);
       return;
     }
 
     const found = result.data.find((item) => item.id === id) ?? null;
     if (found) {
-      setWorkout(found);
+      setLoaded(found);
+      // `setPlannedWorkout` seeds the exercises itself, and keeps unsaved edits for this workout.
+      // Following it with `setExercises(exercisesFromPlannedWorkout(found))` overwrote them.
       setPlannedWorkout(found);
-      setExercises(exercisesFromPlannedWorkout(found));
     } else {
-      setWorkout(null);
+      setLoaded(null);
     }
     setLoading(false);
-  }, [user?.id, id, setPlannedWorkout, setExercises]);
+  }, [user?.id, id, setPlannedWorkout]);
 
   useEffect(() => {
     void loadWorkout();
@@ -71,24 +87,56 @@ export default function WorkoutDayScreen() {
     if (!user || !workout) return;
     const location = pickDefaultLocation(locations, selectedId);
     setStarting(true);
-    const started = await startSessionFromPlanned(workout.id, {
-      name: workout.name,
+
+    // The session is built from the planned workout in the database, not from the draft, so unsaved
+    // edits used to be silently dropped by starting the workout.
+    let planned = workout;
+    if (isDirty) {
+      const saved = await trainingService.updatePlannedWorkoutExercises(
+        workout.id,
+        exercises,
+        workout.metadata,
+      );
+      if (!saved.success) {
+        Alert.alert('Could not save your changes', saved.error || 'Please try again.');
+        setStarting(false);
+        return;
+      }
+      planned = saved.data;
+      setLoaded(planned);
+      markSaved(planned);
+    }
+
+    const started = await startSessionFromPlanned(planned.id, {
+      name: planned.name,
       gymName: location?.name ?? user.primaryGymName ?? undefined,
       trainingLocation: location?.locationType ?? user.trainingLocation,
       workoutLocationId: location?.id,
     });
     if (started) {
       const sessionExercises = exercisesForSessionStart(
-        workout,
-        tabataModeEnabled && !isConditioningWorkout(workout),
+        planned,
+        tabataModeEnabled && !isConditioningWorkout(planned),
       );
-      setExercises(sessionExercises);
+      setSessionPlan(sessionExercises);
       await workoutService.applySessionExercisePlan(started.id, user.id, sessionExercises);
       await refreshSession();
       router.replace('/(tabs)/workout');
     }
     setStarting(false);
-  }, [user, workout, locations, selectedId, tabataModeEnabled, setExercises, startSessionFromPlanned, refreshSession]);
+  }, [
+    user,
+    workout,
+    exercises,
+    isDirty,
+    locations,
+    selectedId,
+    tabataModeEnabled,
+    markSaved,
+    setSessionPlan,
+    startSessionFromPlanned,
+    refreshSession,
+  ]);
 
   const handleReplaceExercise = useCallback(
     async (index: number, option: ExerciseAlternativeOption) => {
@@ -111,9 +159,8 @@ export default function WorkoutDayScreen() {
           workout.metadata,
         );
         if (result.success) {
-          setWorkout(result.data);
-          setPlannedWorkout(result.data);
-          setExercises(exercisesFromPlannedWorkout(result.data));
+          setLoaded(result.data);
+          markSaved(result.data);
         } else {
           setExercises(previousExercises);
         }
@@ -121,7 +168,7 @@ export default function WorkoutDayScreen() {
         setExercises(previousExercises);
       }
     },
-    [workout, exercises, setExercises, setPlannedWorkout],
+    [workout, exercises, setExercises, markSaved],
   );
 
   if (loading) {

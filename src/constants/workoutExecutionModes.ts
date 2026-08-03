@@ -60,8 +60,8 @@ export const SET_REP_MODE_DEFAULTS: Record<
   { sets: number; repRange: string; restSeconds: number }
 > = {
   traditional: { sets: 3, repRange: '10', restSeconds: 90 },
-  hypertrophy: { sets: 4, repRange: '8-12', restSeconds: 60 },
-  strength: { sets: 5, repRange: '3-5', restSeconds: 180 },
+  hypertrophy: { sets: 3, repRange: '8-12', restSeconds: 60 },
+  strength: { sets: 3, repRange: '3-5', restSeconds: 180 },
 };
 
 export const INTERVAL_MODE_DEFAULTS: Record<
@@ -69,8 +69,9 @@ export const INTERVAL_MODE_DEFAULTS: Record<
   { workSeconds: number; restSeconds: number; rounds: number }
 > = {
   hiit: { workSeconds: 45, restSeconds: 15, rounds: 8 },
-  // Canonical Tabata protocol (Tabata et al., 1996): 20s work / 10s rest x 8 rounds = 4:00.
-  tabata: { workSeconds: 20, restSeconds: 10, rounds: 8 },
+  // Strength-session Tabata mode: short intervals matching a standard 3-set prescription.
+  // (Classic conditioning Tabata 20/10×8 lives on the Cardio tab.)
+  tabata: { workSeconds: 20, restSeconds: 10, rounds: 3 },
 };
 
 export const CIRCUIT_MODE_DEFAULTS = {

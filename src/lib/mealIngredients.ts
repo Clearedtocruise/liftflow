@@ -1,4 +1,8 @@
-import { estimateFoodMacrosLocal } from '@/lib/foodMacroLookup';
+import {
+  estimateFoodMacrosLocal,
+  extractEmbeddedServing,
+  splitCompositeFoodParts,
+} from '@/lib/foodMacroLookup';
 
 export type MealIngredient = {
   name: string;
@@ -39,6 +43,11 @@ const MEAL_INGREDIENT_TEMPLATES: Record<string, MealIngredient[]> = {
     { name: 'Mixed vegetables', serving: '2 cups' },
     { name: 'Olive oil', serving: '1 tbsp' },
   ],
+  'lean beef with roasted vegetables': [
+    { name: 'Lean beef', serving: '6 oz' },
+    { name: 'Mixed vegetables', serving: '2 cups' },
+    { name: 'Olive oil', serving: '1 tbsp' },
+  ],
   'protein shake with banana': [
     { name: 'Whey protein', serving: '1 scoop' },
     { name: 'Banana', serving: '1 medium' },
@@ -47,6 +56,35 @@ const MEAL_INGREDIENT_TEMPLATES: Record<string, MealIngredient[]> = {
   'apple with almond butter': [
     { name: 'Apple', serving: '1 medium' },
     { name: 'Almond butter', serving: '2 tbsp' },
+  ],
+  'oatmeal with banana and peanut butter': [
+    { name: 'Oatmeal', serving: '1 serving' },
+    { name: 'Banana', serving: '1 medium' },
+    { name: 'Peanut butter', serving: '2 tbsp' },
+  ],
+  'rice cakes with peanut butter': [
+    { name: 'Rice cakes', serving: '2 pieces' },
+    { name: 'Peanut butter', serving: '2 tbsp' },
+  ],
+  'celery with peanut butter': [
+    { name: 'Celery', serving: '2 stalks' },
+    { name: 'Peanut butter', serving: '2 tbsp' },
+  ],
+  'celery with almond butter': [
+    { name: 'Celery', serving: '2 stalks' },
+    { name: 'Almond butter', serving: '2 tbsp' },
+  ],
+  'chia pudding with almond butter': [
+    { name: 'Chia pudding', serving: '1 cup' },
+    { name: 'Almond butter', serving: '1 tbsp' },
+  ],
+  'apple with peanut butter': [
+    { name: 'Apple', serving: '1 medium' },
+    { name: 'Peanut butter', serving: '2 tbsp' },
+  ],
+  'apple with rice cakes': [
+    { name: 'Apple', serving: '1 medium' },
+    { name: 'Rice cakes', serving: '2 pieces' },
   ],
   'egg white omelette with turkey': [
     { name: 'Egg whites', serving: '1 cup' },
@@ -150,8 +188,22 @@ const MEAL_MACROS: Record<string, MealMacros> = {
   'greek yogurt bowl with berries': { calories: 450, proteinG: 35, carbsG: 45, fatG: 12 },
   'grilled chicken rice bowl': { calories: 650, proteinG: 50, carbsG: 60, fatG: 14 },
   'salmon with roasted vegetables': { calories: 700, proteinG: 45, carbsG: 30, fatG: 38 },
+  'lean beef with roasted vegetables': { calories: 720, proteinG: 48, carbsG: 32, fatG: 32 },
   'protein shake with banana': { calories: 300, proteinG: 30, carbsG: 30, fatG: 5 },
   'apple with almond butter': { calories: 220, proteinG: 6, carbsG: 28, fatG: 12 },
+  'oatmeal with banana and peanut butter': { calories: 420, proteinG: 18, carbsG: 55, fatG: 14 },
+  'rice cakes with peanut butter': { calories: 230, proteinG: 10, carbsG: 26, fatG: 10 },
+  'celery with peanut butter': { calories: 200, proteinG: 8, carbsG: 10, fatG: 14 },
+  'celery with almond butter': { calories: 210, proteinG: 6, carbsG: 8, fatG: 16 },
+  'chia pudding with almond butter': { calories: 370, proteinG: 16, carbsG: 18, fatG: 24 },
+  'apple with peanut butter': { calories: 295, proteinG: 7, carbsG: 28, fatG: 16 },
+  'apple with rice cakes': { calories: 230, proteinG: 4, carbsG: 48, fatG: 2 },
+  'rice cakes with honey': { calories: 240, proteinG: 4, carbsG: 52, fatG: 2 },
+  'protein bar and apple': { calories: 260, proteinG: 20, carbsG: 28, fatG: 8 },
+  'chocolate milk and banana': { calories: 320, proteinG: 18, carbsG: 48, fatG: 6 },
+  'lean beef stir-fry with rice': { calories: 680, proteinG: 48, carbsG: 42, fatG: 24 },
+  'lean beef and quinoa salad': { calories: 580, proteinG: 46, carbsG: 48, fatG: 16 },
+  'turkey and quinoa salad': { calories: 580, proteinG: 46, carbsG: 48, fatG: 16 },
   'egg white omelette with turkey': { calories: 320, proteinG: 42, carbsG: 8, fatG: 8 },
   'grilled chicken and quinoa': { calories: 580, proteinG: 48, carbsG: 52, fatG: 12 },
   'protein-forward greek bowl': { calories: 420, proteinG: 45, carbsG: 35, fatG: 8 },
@@ -206,13 +258,33 @@ export function serializeMealMeta(meta: MealMeta): string {
 }
 
 function mealKey(name: string): string {
-  return name.trim().toLowerCase();
+  return name
+    .trim()
+    .toLowerCase()
+    // Preference rename used to produce "Lean lean beef …" from "Lean salmon …".
+    .replace(/\blean\s+lean\s+beef\b/g, 'lean beef');
 }
 
 export function ingredientsForMealName(name: string): MealIngredient[] {
   const key = mealKey(name);
-  return MEAL_INGREDIENT_TEMPLATES[key] ?? [{ name, serving: '1 serving' }];
+  if (MEAL_INGREDIENT_TEMPLATES[key]) return MEAL_INGREDIENT_TEMPLATES[key];
+
+  // Prefer splitting free-text snack titles over estimating the whole string as one food.
+  const parts = splitCompositeFoodParts(name);
+  if (parts.length > 1) {
+    return parts.map((part) => {
+      const embedded = extractEmbeddedServing(part);
+      if (embedded) return { name: embedded.food, serving: embedded.serving };
+      return { name: part, serving: '1 serving' };
+    });
+  }
+
+  const embedded = extractEmbeddedServing(name);
+  if (embedded) return [{ name: embedded.food, serving: embedded.serving }];
+
+  return [{ name, serving: '1 serving' }];
 }
+
 
 export function macrosForMealName(name: string): MealMacros {
   const key = mealKey(name);
@@ -267,6 +339,7 @@ export function mealNameFromIngredients(ingredients: MealIngredient[]): string |
 
 type MealMacroFields = {
   name: string;
+  mealType?: string;
   instructions?: string;
   calories?: number;
   proteinG?: number;
@@ -277,6 +350,27 @@ type MealMacroFields = {
 };
 
 const CARB_SHARE_OF_REMAINING_KCAL = 0.55;
+
+const MEAL_TYPE_DAILY_SHARE: Record<string, number> = {
+  breakfast: 0.25,
+  lunch: 0.35,
+  dinner: 0.3,
+  snack: 0.1,
+  pre_workout: 0.12,
+  post_workout: 0.13,
+};
+
+/** Above these, a slot was almost certainly scaled from an absurd daily target. */
+const MEAL_TYPE_MAX_REASONABLE_CAL: Record<string, number> = {
+  breakfast: 900,
+  lunch: 1100,
+  dinner: 1100,
+  snack: 450,
+  pre_workout: 450,
+  post_workout: 550,
+};
+
+const PLAN_BASE_DAILY_CALORIES = 2400;
 
 function round1(value: number): number {
   return Math.round(value * 10) / 10;
@@ -298,6 +392,76 @@ function macrosFromIngredients(meal: MealMacroFields): MealMacros | null {
     },
     { calories: 0, proteinG: 0, carbsG: 0, fatG: 0 },
   );
+}
+
+/**
+ * Detect the peanut-butter-as-whole-meal bug: stored calories much higher than a
+ * sane ingredient estimate, usually with extreme fat density on a mixed snack.
+ */
+export function looksLikeInflatedMealMacros(
+  meal: MealMacroFields,
+  estimated: MealMacros | null,
+): boolean {
+  const storedCal = meal.calories ?? 0;
+  if (storedCal < 450 || !estimated || estimated.calories <= 0) return false;
+
+  if (storedCal >= estimated.calories * 1.45 && estimated.calories >= 150) return true;
+
+  const fatKcalShare = ((meal.fatG ?? 0) * 9) / storedCal;
+  const mixed =
+    /,|\bwith\b|\band\b|\+/.test(meal.name) ||
+    (enrichMealMeta(meal.name, meal.instructions).ingredients?.length ?? 0) > 1;
+  const denseName = /peanut butter|almond butter|olive oil|peanuts/i.test(meal.name);
+  return mixed && denseName && fatKcalShare >= 0.55 && storedCal > estimated.calories * 1.25;
+}
+
+/**
+ * True when stored macros look like a plan scaled from a bogus daily target
+ * (weight-unit bug → ~11k kcal day → breakfast 2827, dinner 3392, snack 1131).
+ */
+export function looksLikeInflatedPlanMacros(meal: MealMacroFields): boolean {
+  const calories = meal.calories ?? 0;
+  const proteinG = meal.proteinG ?? 0;
+  if (calories >= 1800 || proteinG >= 140) return true;
+
+  const maxForType = MEAL_TYPE_MAX_REASONABLE_CAL[meal.mealType ?? ''] ?? 1100;
+  return calories > maxForType;
+}
+
+/** @deprecated use looksLikeInflatedPlanMacros */
+export function looksLikeDaySizedMealMacros(meal: MealMacroFields): boolean {
+  return looksLikeInflatedPlanMacros(meal);
+}
+
+function correctInflatedPlanMacros(meal: MealMacroFields): MealMacros {
+  const named = macrosForMealName(meal.name);
+  const isGenericFallback = named.calories === 400 && named.proteinG === 30;
+  if (!isGenericFallback) return named;
+
+  const type = meal.mealType ?? 'dinner';
+  const share = MEAL_TYPE_DAILY_SHARE[type] ?? 0.25;
+  const calories = meal.calories ?? 0;
+  if (calories <= 0) return named;
+
+  const impliedDaily = calories / share;
+  // Rebuild as if the plan used the standard 2400 base the templates assume.
+  const scale =
+    impliedDaily > PLAN_BASE_DAILY_CALORIES * 1.35
+      ? PLAN_BASE_DAILY_CALORIES / impliedDaily
+      : Math.min(1, (MEAL_TYPE_MAX_REASONABLE_CAL[type] ?? 1100) / calories);
+
+  return {
+    calories: Math.round(calories * scale),
+    proteinG: round1((meal.proteinG ?? 0) * scale),
+    carbsG: round1((meal.carbsG ?? 0) * scale),
+    fatG: round1((meal.fatG ?? 0) * scale),
+  };
+}
+
+/** Corrected macros when a plan row looks inflated; otherwise null. */
+export function correctedMacrosIfInflated(meal: MealMacroFields): MealMacros | null {
+  if (!looksLikeInflatedPlanMacros(meal)) return null;
+  return correctInflatedPlanMacros(meal);
 }
 
 /**
@@ -337,17 +501,27 @@ function distributeRemainingCalories(meal: MealMacroFields): MealMacros {
 
 /**
  * Stored macros when they were actually measured; otherwise estimate from the
- * logged ingredients. A row explicitly marked as measured keeps its zeros, so a
- * genuinely calorie-free food is not silently replaced by a guess.
+ * logged ingredients. Inflated plan rows (bad weight → 11k daily) are scaled
+ * back to a sane meal-sized estimate; peanut-butter composite overcounts are
+ * replaced with the ingredient-based estimate.
  */
 export function resolveMealMacros(meal: MealMacroFields): MealMacros {
+  if (looksLikeInflatedPlanMacros(meal)) {
+    return correctInflatedPlanMacros(meal);
+  }
+
+  const estimated = macrosFromIngredients(meal);
   const hasAnyStoredValue =
     meal.calories != null || meal.proteinG != null || meal.carbsG != null || meal.fatG != null;
   const measured = meal.macrosProvided ?? hasAnyStoredValue;
 
+  if (measured && looksLikeInflatedMealMacros(meal, estimated) && estimated) {
+    return estimated;
+  }
+
   if (measured) return distributeRemainingCalories(meal);
 
-  return macrosFromIngredients(meal) ?? { calories: 0, proteinG: 0, carbsG: 0, fatG: 0 };
+  return estimated ?? { calories: 0, proteinG: 0, carbsG: 0, fatG: 0 };
 }
 
 export function resolveMealMacrosFromIngredients(

@@ -29,6 +29,7 @@ export const EQUIPMENT_CATALOG: EquipmentItem[] = [
   { id: 'ez_curl_bar', label: 'EZ curl bar', category: 'free_weights', satisfies: ['barbell'] },
   { id: 'trap_bar', label: 'Trap / hex bar', category: 'free_weights', satisfies: ['barbell'] },
   { id: 'weight_plates', label: 'Weight plates', category: 'free_weights', satisfies: ['barbell'] },
+  { id: 'landmine', label: 'Landmine / T-bar', category: 'free_weights', satisfies: ['landmine'] },
   // Racks & benches
   { id: 'squat_rack', label: 'Squat rack', category: 'racks_benches', satisfies: ['rack'] },
   { id: 'power_rack', label: 'Power rack', category: 'racks_benches', satisfies: ['rack'] },
@@ -59,6 +60,11 @@ export const EQUIPMENT_CATALOG: EquipmentItem[] = [
   { id: 'bands', label: 'Bands (general)', category: 'bodyweight_accessories', satisfies: ['bands'] },
   { id: 'ab_wheel', label: 'Ab wheel', category: 'bodyweight_accessories', satisfies: ['bodyweight'] },
   { id: 'medicine_ball', label: 'Medicine ball', category: 'bodyweight_accessories', satisfies: ['bodyweight'] },
+  // A suspension trainer is a separate purchase, not something you have by virtue of having a body.
+  // The catalog stores every TRX and ring movement as `bodyweight`, so without its own requirement
+  // key these were programmed for people who do not own one.
+  { id: 'suspension_trainer', label: 'Suspension trainer (TRX)', category: 'bodyweight_accessories', satisfies: ['suspension'] },
+  { id: 'gymnastic_rings', label: 'Gymnastic rings', category: 'bodyweight_accessories', satisfies: ['suspension'] },
   { id: 'full_gym', label: 'Full commercial gym (all equipment)', category: 'cable_machines', satisfies: ['full_gym'] },
 ];
 
@@ -76,29 +82,43 @@ export function equipmentByCategory(category: EquipmentCategoryId): EquipmentIte
   return EQUIPMENT_CATALOG.filter((item) => item.category === category && item.id !== 'full_gym');
 }
 
+/**
+ * Requirements a "full gym" covers. Specialty implements a gym may or may not own are deliberately
+ * excluded, so they are only ever programmed when the user ticks them explicitly.
+ */
+const FULL_GYM_REQUIREMENTS = [
+  'bodyweight',
+  'bands',
+  'dumbbells',
+  'kettlebells',
+  'bench',
+  'pull_up_bar',
+  'barbell',
+  'rack',
+  'machines',
+  'landmine',
+] as const;
+
 /** Expand stored equipment IDs into planner requirement keys. */
 export function expandEquipmentRequirements(selected: string[]): Set<string> {
+  // Bodyweight needs no equipment, so it is available at every training location. Gym presets that
+  // omit it were silently filtering push-ups, planks and sit-ups out of the exercise pool.
+  const out = new Set<string>(['bodyweight']);
+
+  // "Full gym" is additive rather than absolute: it grants the standard requirements, but a user who
+  // also ticks a suspension trainer still gets one. Returning a fixed set discarded those picks.
   if (selected.includes('full_gym')) {
-    return new Set([
-      'bodyweight',
-      'bands',
-      'dumbbells',
-      'kettlebells',
-      'bench',
-      'pull_up_bar',
-      'barbell',
-      'rack',
-      'machines',
-    ]);
+    for (const key of FULL_GYM_REQUIREMENTS) out.add(key);
   }
 
-  const out = new Set<string>();
   for (const id of selected) {
+    if (id === 'full_gym') continue;
     const item = CATALOG_BY_ID.get(id);
     if (item) {
       for (const key of item.satisfies) {
         if (key === 'full_gym') {
-          return expandEquipmentRequirements(['full_gym']);
+          for (const full of FULL_GYM_REQUIREMENTS) out.add(full);
+          continue;
         }
         out.add(key);
       }
@@ -108,6 +128,25 @@ export function expandEquipmentRequirements(selected: string[]): Set<string> {
     out.add(id);
   }
   return out;
+}
+
+/**
+ * TRX and rings are stored in the catalog as `bodyweight`, so the stored equipment column cannot be
+ * trusted to gate them. The name is the reliable signal, exactly as it is for movement families.
+ */
+const SUSPENSION_NAME_PATTERN = /\btrx\b|\bsuspension\b|\bgymnastic\s+rings?\b/i;
+/** Anything named "Ring <movement>" is a gymnastic ring exercise. */
+const RING_PREFIX_PATTERN = /^\s*rings?\s+\S/i;
+
+export function requiresSuspensionTrainer(name?: string | null, slug?: string | null): boolean {
+  const readableSlug = (slug ?? '').replace(/[-_]+/g, ' ');
+  const key = `${name ?? ''} ${readableSlug}`.trim();
+  if (!key) return false;
+  return (
+    SUSPENSION_NAME_PATTERN.test(key) ||
+    RING_PREFIX_PATTERN.test(name ?? '') ||
+    RING_PREFIX_PATTERN.test(readableSlug)
+  );
 }
 
 function ids(...items: EquipmentId[]): EquipmentId[] {
@@ -180,6 +219,7 @@ export const EQUIPMENT_PRESETS = {
       'leg_curl',
       'pull_up_bar',
       'smith_machine',
+      'landmine',
     ),
   },
   powerlifting_gym: {

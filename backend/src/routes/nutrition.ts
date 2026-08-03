@@ -5,10 +5,18 @@ import { loadCoachContext } from '../lib/coachContext.js';
 import { loadDailyMacroInputs, macroContextFrom } from '../lib/dailyMacroInputs.js';
 import { loadNutritionIntelligence } from '../lib/loadNutritionIntelligence.js';
 import { syncNutritionForDates } from '../lib/nutritionDaySync.js';
+import {
+    nutritionGoalsNeedUpdate,
+    persistNutritionGoals,
+    resolvePlanMacroTargets,
+    type MacroSplit,
+} from '../lib/nutritionGoals.js';
 import { requireAdmin } from '../lib/supabase.js';
 import {
     calculateMacroTargets,
     generateDailyMeals,
+    isInvertedBodyWeightKg,
+    normalizeBodyWeightKg,
 } from '../lib/workoutAwareNutrition.js';
 import { inferDietaryStyle, type NutritionPreferenceInput } from '../lib/dietaryRestrictions.js';
 import { authedUserId } from '../middleware/authUser.js';
@@ -75,6 +83,8 @@ nutritionRouter.post('/meal-plan/generate', async (req, res) => {
     };
     let proteinG = 180;
     let calories = 2400;
+    let goalCalories: number | null = null;
+    let goalProtein: number | null = null;
 
     const db = requireAdmin();
     const { data: goals } = await db
@@ -85,20 +95,77 @@ nutritionRouter.post('/meal-plan/generate', async (req, res) => {
       .limit(1)
       .maybeSingle();
     if (goals) {
-      proteinG = goals.protein_g ?? proteinG;
-      calories = goals.daily_calories ?? calories;
+      goalProtein = goals.protein_g ?? null;
+      goalCalories = goals.daily_calories ?? null;
+      proteinG = goalProtein ?? proteinG;
+      calories = goalCalories ?? calories;
     }
+
+    // Persist lbs×2.2 weight inversions so the next generate/sync stays correct.
+    try {
+      const { data: profile } = await db.from('profiles').select('weight_kg').eq('id', userId).maybeSingle();
+      const rawWeight = profile?.weight_kg != null ? Number(profile.weight_kg) : null;
+      if (isInvertedBodyWeightKg(rawWeight)) {
+        await db.from('profiles').update({ weight_kg: normalizeBodyWeightKg(rawWeight) }).eq('id', userId);
+      }
+    } catch {
+      // Non-fatal — meal generation still proceeds with clamped targets.
+    }
+
     let today: string | undefined;
+    let macroTargets: MacroSplit | null = null;
     try {
       const ctx = await loadCoachContext(userId);
       today = ctx.today;
       if (ctx.macroTargets) {
-        proteinG = ctx.macroTargets.proteinG;
-        calories = ctx.macroTargets.calories;
+        const coachCal = ctx.macroTargets.calories;
+        const goalsLookSane = goalCalories != null && goalCalories >= 1200 && goalCalories <= 4500;
+        // Prefer active goals when coach macros still look like the weight-unit bug
+        // (header can show 2241 while generate would otherwise write 11k-day meals).
+        const coachLooksInflated =
+          coachCal > 4500 || (goalsLookSane && coachCal > goalCalories! * 1.5);
+        if (!coachLooksInflated) {
+          proteinG = ctx.macroTargets.proteinG;
+          calories = ctx.macroTargets.calories;
+          macroTargets = {
+            calories: ctx.macroTargets.calories,
+            proteinG: ctx.macroTargets.proteinG,
+            carbsG: ctx.macroTargets.carbsG,
+            fatG: ctx.macroTargets.fatG,
+          };
+        }
       }
     } catch {
       // Keep goals/defaults — never fail meal generation on coach context.
     }
+
+    // Inflated goals (from a bad weight_kg) must not ship 3k-calorie dinners.
+    if (calories > 4500) {
+      const scale = 4500 / calories;
+      calories = 4500;
+      proteinG = Math.round(proteinG * scale);
+    }
+    if (calories < 1200) calories = 1200;
+
+    // The plan is built around these numbers, so they become the saved goal. Without this a user
+    // who never ran coach activation had meals sized for a target nothing recorded, leaving the
+    // home protein tile with nothing to measure against.
+    const resolvedTargets = resolvePlanMacroTargets({
+      macroTargets,
+      existing: goals,
+      fallback: { calories, proteinG },
+    });
+
+    if (nutritionGoalsNeedUpdate(goals, resolvedTargets)) {
+      try {
+        await persistNutritionGoals(db, userId, resolvedTargets, today ?? undefined);
+      } catch {
+        // A plan the user can eat is worth more than a goal row; never fail generation on this.
+      }
+    }
+
+    proteinG = resolvedTargets.proteinG;
+    calories = resolvedTargets.calories;
 
     const prefs = await resolveNutritionPreferences(userId, dietaryRestrictions, foodPreferences);
     const resolvedStyle =
@@ -112,6 +179,53 @@ nutritionRouter.post('/meal-plan/generate', async (req, res) => {
     res.json(plan);
   } catch (error) {
     res.status(500).json({ message: error instanceof Error ? error.message : 'Meal plan generation failed' });
+  }
+});
+
+/**
+ * Recompute and save macro targets from the user's current training goal.
+ *
+ * Training goals and nutrition targets were only ever connected during onboarding. Changing a goal
+ * afterwards updated `profiles` while `nutrition_goals` kept the old row, so someone who switched
+ * from muscle gain to fat loss carried a surplus around indefinitely. The goals screen calls this
+ * as soon as a new goal is saved.
+ */
+nutritionRouter.post('/goals/recalculate', async (req, res) => {
+  try {
+    const userId = authedUserId(req);
+    const db = requireAdmin();
+
+    const [ctx, macroInputs] = await Promise.all([loadCoachContext(userId), loadDailyMacroInputs(userId)]);
+
+    const { data: existing } = await db
+      .from('nutrition_goals')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('is_active', true)
+      .limit(1)
+      .maybeSingle();
+
+    const macroContext = macroContextFrom(macroInputs, {
+      recoveryScore: ctx.recovery.score,
+      recoveryModeActive: ctx.recovery.recoveryModeActive,
+    });
+    const targets = calculateMacroTargets(macroContext);
+
+    const resolved: MacroSplit = {
+      calories: Math.round(targets.calories),
+      proteinG: Math.round(targets.proteinG),
+      carbsG: Math.round(targets.carbsG),
+      fatG: Math.round(targets.fatG),
+    };
+
+    const changed = nutritionGoalsNeedUpdate(existing, resolved);
+    if (changed) {
+      await persistNutritionGoals(db, userId, resolved);
+    }
+
+    res.json({ ...resolved, goal: macroInputs.goal, changed });
+  } catch (error) {
+    res.status(500).json({ message: error instanceof Error ? error.message : 'Could not update nutrition targets' });
   }
 });
 

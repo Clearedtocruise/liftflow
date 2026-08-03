@@ -324,6 +324,13 @@ export function selectDailyCoreMeals(
   const dayIndex = dayIndexFromDate(date);
   const pools = MEAL_POOLS[style] ?? MEAL_POOLS.balanced;
   const split = { breakfast: 0.25, lunch: 0.35, dinner: 0.3, snack: 0.1 } as const;
+  // Guard against inflated daily targets (e.g. lbs stored as ~400 kg → 11k kcal)
+  // landing almost a full day's food on one dinner slot.
+  const dailyCalories = Math.max(1200, Math.min(4500, macros.calories));
+  const scale = macros.calories > 0 ? dailyCalories / macros.calories : 1;
+  const dailyProtein = Math.round(macros.proteinG * scale);
+  const dailyCarbs = Math.round(macros.carbsG * scale);
+  const dailyFat = Math.round(macros.fatG * scale);
 
   return (['breakfast', 'lunch', 'dinner', 'snack'] as const).map((mealType) => {
     const picked = pickAllowedFromPool(pools[mealType], dayIndex, prefs.dietaryRestrictions);
@@ -331,10 +338,10 @@ export function selectDailyCoreMeals(
     return {
       mealType,
       name: adaptMealName(picked.name, mealType, prefs).name,
-      calories: Math.round(macros.calories * ratio),
-      proteinG: Math.round(macros.proteinG * ratio),
-      carbsG: Math.round(macros.carbsG * ratio),
-      fatG: Math.round(macros.fatG * ratio),
+      calories: Math.round(dailyCalories * ratio),
+      proteinG: Math.round(dailyProtein * ratio),
+      carbsG: Math.round(dailyCarbs * ratio),
+      fatG: Math.round(dailyFat * ratio),
     };
   });
 }
@@ -347,19 +354,28 @@ export function generateWeeklyMealPlanMeals(
   prefs: NutritionPreferenceInput = {},
 ) {
   const meals: Array<MealSlotTemplate & { scheduledDate: string }> = [];
+  const safeCalories = Math.max(1200, Math.min(4500, calories));
+  const safeProtein =
+    calories > 0 && calories !== safeCalories
+      ? Math.round(proteinG * (safeCalories / calories))
+      : proteinG;
   // Carbs take whatever energy protein and fat leave, so the grams add up to
   // the calorie target instead of overshooting it.
-  const fatG = Math.round((calories * 0.25) / 9);
-  const carbsG = Math.max(0, Math.round((calories - proteinG * 4 - fatG * 9) / 4));
+  const fatG = Math.round((safeCalories * 0.25) / 9);
+  const carbsG = Math.max(0, Math.round((safeCalories - safeProtein * 4 - fatG * 9) / 4));
 
   for (let dayIndex = 0; dayIndex < 7; dayIndex += 1) {
     const dateStr = addCalendarDays(weekStart, dayIndex);
-    const pre = scaleMeal(pickAllowedFromPool(PRE_WORKOUT_POOL, dayIndex, prefs.dietaryRestrictions), calories, proteinG);
-    const post = scaleMeal(pickAllowedFromPool(POST_WORKOUT_POOL, dayIndex, prefs.dietaryRestrictions), calories, proteinG);
-    const core = selectDailyCoreMeals(dateStr, { calories, proteinG, carbsG, fatG }, style, prefs);
+    const pre = scaleMeal(pickAllowedFromPool(PRE_WORKOUT_POOL, dayIndex, prefs.dietaryRestrictions), safeCalories, safeProtein);
+    const post = scaleMeal(pickAllowedFromPool(POST_WORKOUT_POOL, dayIndex, prefs.dietaryRestrictions), safeCalories, safeProtein);
+    const core = selectDailyCoreMeals(dateStr, { calories: safeCalories, proteinG: safeProtein, carbsG, fatG }, style, prefs);
 
-    for (const meal of [pre, post, ...core]) {
-      meals.push({ ...meal, name: adaptMealName(meal.name, meal.mealType, prefs).name, scheduledDate: dateStr });
+    // Core meals already ran through adaptMealName in selectDailyCoreMeals —
+    // adapting again turns "Lean salmon…" → "lean beef…" → "Lean lean beef…".
+    const adaptedPre = { ...pre, name: adaptMealName(pre.name, pre.mealType, prefs).name };
+    const adaptedPost = { ...post, name: adaptMealName(post.name, post.mealType, prefs).name };
+    for (const meal of [adaptedPre, adaptedPost, ...core]) {
+      meals.push({ ...meal, scheduledDate: dateStr });
     }
   }
 

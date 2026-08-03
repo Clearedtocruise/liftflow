@@ -24,6 +24,11 @@ import { useAuth } from '@/hooks/useAuth';
 import { useSubscription } from '@/hooks/useSubscription';
 import { useUnits } from '@/hooks/useUnits';
 import { loadRolloverValidationState, type RolloverValidationState } from '@/lib/rolloverDebug';
+import {
+    isTabataModeEnabled,
+    TABATA_MODE_PREF_KEY,
+    tabataModeSummary,
+} from '@/lib/trainingPreferences';
 import { resolveDaysPerWeek, summarizeTrainingSchedule } from '@/lib/trainingSchedule';
 import { resolveUnitPreferences } from '@/lib/unitConversion';
 import { coachingPrefsPatch } from '@/lib/voice/voicePreferences';
@@ -52,6 +57,9 @@ export default function SettingsScreen() {
   const [locationPermission, setLocationPermission] = useState<string>('—');
   const [tabataMode, setTabataMode] = useState(false);
   const [validationState, setValidationState] = useState<RolloverValidationState | null>(null);
+  const [editingDisplayName, setEditingDisplayName] = useState(false);
+  const [displayNameDraft, setDisplayNameDraft] = useState('');
+  const [savingDisplayName, setSavingDisplayName] = useState(false);
 
   const refreshValidationState = useCallback(async () => {
     if (!user) {
@@ -124,6 +132,29 @@ export default function SettingsScreen() {
     },
     [user, refreshProfile],
   );
+
+  const beginEditDisplayName = useCallback(() => {
+    setDisplayNameDraft(user?.displayName?.trim() ?? '');
+    setEditingDisplayName(true);
+  }, [user?.displayName]);
+
+  const saveDisplayName = useCallback(async () => {
+    if (!user) return;
+    const next = displayNameDraft.trim().replace(/\s+/g, ' ');
+    if (!next) {
+      Alert.alert('Name required', 'Enter the name home should greet you with.');
+      return;
+    }
+    setSavingDisplayName(true);
+    const result = await userService.updateProfile(user.id, { displayName: next });
+    setSavingDisplayName(false);
+    if (!result.success) {
+      Alert.alert('Could not save name', result.error);
+      return;
+    }
+    setEditingDisplayName(false);
+    await refreshProfile();
+  }, [user, displayNameDraft, refreshProfile]);
 
   async function handleSignOut() {
     await signOut();
@@ -289,19 +320,20 @@ export default function SettingsScreen() {
         <SettingsRow
           label="Mic input mode"
           value={
-            voiceInputMode === 'push_to_talk'
-              ? 'Push-to-talk'
-              : voiceInputMode === 'continuous'
+            voiceInputMode === 'continuous'
                 ? 'Continuous'
-                : 'Tap toggle'
+                : 'Tap once · auto-stop'
           }
           onPress={() => {
-            Alert.alert('Voice input mode', 'Choose how the workout microphone activates', [
-              { text: 'Push-to-talk (default)', onPress: () => saveVoiceInputMode('push_to_talk') },
-              { text: 'Tap toggle', onPress: () => saveVoiceInputMode('tap_toggle') },
-              { text: 'Continuous', onPress: () => saveVoiceInputMode('continuous') },
-              { text: 'Cancel', style: 'cancel' },
-            ]);
+            Alert.alert(
+              'Voice input mode',
+              'Tap once to start. Recording stops when you finish speaking and your music resumes.',
+              [
+                { text: 'Tap once · auto-stop (recommended)', onPress: () => saveVoiceInputMode('tap_toggle') },
+                { text: 'Continuous', onPress: () => saveVoiceInputMode('continuous') },
+                { text: 'Cancel', style: 'cancel' },
+              ],
+            );
           }}
         />
         <SettingsRow label="Wake phrase" value="Coming soon" />
@@ -438,6 +470,53 @@ export default function SettingsScreen() {
         <SectionHeader title="Profile" />
       </View>
       <Card style={styles.group}>
+        {editingDisplayName ? (
+          <View style={styles.displayNameEditor}>
+            <AppText variant="caption" color="textSecondary">
+              Display name
+            </AppText>
+            <TextInput
+              style={styles.displayNameInput}
+              value={displayNameDraft}
+              onChangeText={setDisplayNameDraft}
+              placeholder="Your name"
+              placeholderTextColor={LiftFlowColors.textTertiary}
+              autoFocus
+              autoCapitalize="words"
+              returnKeyType="done"
+              onSubmitEditing={() => {
+                void saveDisplayName();
+              }}
+            />
+            <View style={styles.displayNameActions}>
+              <PrimaryButton
+                label="Cancel"
+                variant="secondary"
+                onPress={() => setEditingDisplayName(false)}
+              />
+              <PrimaryButton
+                label={savingDisplayName ? 'Saving…' : 'Save'}
+                onPress={() => {
+                  void saveDisplayName();
+                }}
+              />
+            </View>
+          </View>
+        ) : (
+          <SettingsRow
+            label="Display name"
+            value={user?.displayName?.trim() || 'Add your name'}
+            icon={
+              <AppSymbol
+                name="person.text.rectangle"
+                fallback={SYMBOL_FALLBACKS['person.fill']}
+                size={20}
+                tintColor={LiftFlowColors.textSecondary}
+              />
+            }
+            onPress={beginEditDisplayName}
+          />
+        )}
         <SettingsRow
           label="Weight"
           value={user?.weightKg ? units.formatWeight(user.weightKg) : 'Not set'}
@@ -841,6 +920,22 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: Spacing.md,
     color: LiftFlowColors.textPrimary,
+  },
+  displayNameEditor: {
+    gap: Spacing.sm,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+  },
+  displayNameInput: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: LiftFlowColors.border,
+    borderRadius: 12,
+    padding: Spacing.md,
+    color: LiftFlowColors.textPrimary,
+  },
+  displayNameActions: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
   },
   validationPanel: {
     gap: Spacing.sm,

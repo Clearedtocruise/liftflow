@@ -8,6 +8,7 @@ import {
     isAllowedOnDayFocus,
     isCoreFocusedExercise,
     resolveDayFocusPlan,
+    resolveExerciseRequirements,
     selectFocusedSplitExercises,
     suggestWeightLbs,
     type ExerciseRecord,
@@ -204,6 +205,81 @@ test('dumbbell-only profile excludes kettlebell and cable catalog rows', () => {
   assert.equal(exerciseMeetsEquipment(dbCurl, dumbbellsOnly), true);
 });
 
+test('t-bar row requires landmine — barbell + rack alone is not enough', () => {
+  const tBarRow: ExerciseRecord = {
+    id: 't-bar-row',
+    name: 'T-Bar Row',
+    slug: 't-bar-row',
+    category: 'pull',
+    equipment: 'barbell',
+    muscle_groups: ['back'],
+    metadata: { movement_family: 'horizontal_pull', requires: ['landmine'] },
+  };
+  const garage = new Set(['barbell', 'rack', 'dumbbells', 'bench', 'bodyweight']);
+  const withLandmine = new Set([...garage, 'landmine']);
+
+  assert.deepEqual(resolveExerciseRequirements(tBarRow), ['landmine']);
+  assert.equal(exerciseMeetsEquipment(tBarRow, garage), false);
+  assert.equal(exerciseMeetsEquipment(tBarRow, withLandmine), true);
+});
+
+test('TRX and ring work requires a suspension trainer, not just a body', () => {
+  // The catalog stores all 27 of these as equipment 'bodyweight' with requires ['bodyweight'], so
+  // they passed the filter for everyone. A suspension trainer is a separate purchase.
+  const trxRow: ExerciseRecord = {
+    id: 'trx-row',
+    name: 'TRX Reverse Lunge Row',
+    slug: 'il-reverse-lunge-row',
+    category: 'squat',
+    equipment: 'bodyweight',
+    muscle_groups: ['back'],
+    metadata: { movement_family: 'lunge_pattern', requires: ['bodyweight'] },
+  };
+  const ringDip: ExerciseRecord = {
+    id: 'ring-dip',
+    name: 'Ring Dip',
+    slug: 'ring-dip',
+    category: 'push',
+    equipment: 'bodyweight',
+    muscle_groups: ['triceps'],
+    metadata: { requires: ['bodyweight'] },
+  };
+  const pushUp: ExerciseRecord = {
+    id: 'push-up',
+    name: 'Push-Up',
+    slug: 'push-up',
+    category: 'push',
+    equipment: 'bodyweight',
+    muscle_groups: ['chest'],
+    metadata: { requires: ['bodyweight'] },
+  };
+
+  const commercialGym = expandAvailableEquipment(['barbell', 'dumbbells', 'cable_station', 'pull_up_bar']);
+  const withSuspension = expandAvailableEquipment(['bodyweight', 'suspension_trainer']);
+
+  assert.deepEqual(resolveExerciseRequirements(trxRow), ['suspension']);
+  assert.deepEqual(resolveExerciseRequirements(ringDip), ['suspension']);
+  assert.equal(exerciseMeetsEquipment(trxRow, commercialGym), false);
+  assert.equal(exerciseMeetsEquipment(ringDip, commercialGym), false);
+  assert.equal(exerciseMeetsEquipment(trxRow, withSuspension), true);
+
+  // Real bodyweight work must stay available everywhere.
+  assert.equal(exerciseMeetsEquipment(pushUp, commercialGym), true);
+});
+
+test('a full gym does not silently include specialty implements, but explicit picks still count', () => {
+  const fullGym = expandAvailableEquipment(['full_gym']);
+  assert.equal(fullGym.has('suspension'), false);
+  assert.equal(fullGym.has('barbell'), true);
+  assert.equal(fullGym.has('machines'), true);
+
+  // Selecting full gym used to discard every other choice, so a user who owned a suspension
+  // trainer could never enable it.
+  const fullGymPlusTrx = expandAvailableEquipment(['full_gym', 'suspension_trainer']);
+  assert.equal(fullGymPlusTrx.has('suspension'), true);
+  assert.equal(fullGymPlusTrx.has('barbell'), true);
+});
+
 test('bodyweight core names do not receive external load targets when metadata is wrong', () => {
   const windshieldWiper: ExerciseRecord = {
     id: 'windshield-wiper',
@@ -228,4 +304,147 @@ test('bodyweight core names do not receive external load targets when metadata i
   assert.notEqual(suggestWeightLbs(weightedSitUp, 'muscle_gain', undefined, 80), undefined);
 });
 
+test('DB Kickback never inherits compound press starting loads', () => {
+  const kickback: ExerciseRecord = {
+    id: 'db-kickback',
+    name: 'DB Kickback',
+    slug: 'db-kickback',
+    category: 'push',
+    equipment: 'dumbbell',
+    muscle_groups: ['triceps'],
+    // Catalog bug: tagged like a bench press.
+    metadata: { movement_family: 'horizontal_press', requires: ['dumbbells'] },
+  };
+  const bench: ExerciseRecord = {
+    id: 'bench',
+    name: 'Bench Press',
+    slug: 'bench-press',
+    category: 'push',
+    equipment: 'barbell',
+    muscle_groups: ['chest'],
+    metadata: { movement_family: 'horizontal_press', requires: ['barbell'] },
+  };
+
+  // 175 stored as kg (lbs entered into kg field) previously produced ~175 lb press targets.
+  const kickbackLbs = suggestWeightLbs(kickback, 'muscle_gain', undefined, 175);
+  const benchLbs = suggestWeightLbs(bench, 'muscle_gain', undefined, 175);
+  assert.ok(kickbackLbs != null && kickbackLbs <= 35, `kickback starting load ${kickbackLbs}`);
+  assert.ok(benchLbs != null && benchLbs >= 100, `bench starting load ${benchLbs}`);
+  assert.ok(kickbackLbs! < benchLbs! * 0.4);
+});
+
 console.log('workoutPlannerSplit.test.ts — all assertions passed');
+
+test('a Push day is recognised and filters to pushing work', () => {
+  // The generated week labels days "Push", "Pull" and "Legs". Only "Legs" matched a plan, so push
+  // and pull days had no focus filtering at all — which put calf raises on push day.
+  const push = resolveDayFocusPlan('Push');
+  const pull = resolveDayFocusPlan('Pull');
+  assert.ok(push, 'Push must resolve to a day focus plan');
+  assert.ok(pull, 'Pull must resolve to a day focus plan');
+  assert.deepEqual(push!.dayBuckets, ['push']);
+  assert.deepEqual(pull!.dayBuckets, ['pull']);
+
+  const calfRaise: ExerciseRecord = {
+    id: 'calf', name: 'Band Calf Raise', slug: 'band-calf-raise',
+    // The catalog really does file calf raises under `pull`.
+    category: 'pull', equipment: 'bands', muscle_groups: ['calves'], metadata: {},
+  };
+  const benchPress: ExerciseRecord = {
+    id: 'bench', name: 'Bench Press', slug: 'bench-press',
+    category: 'push', equipment: 'barbell', muscle_groups: ['chest'], metadata: {},
+  };
+  const barbellRow: ExerciseRecord = {
+    id: 'row', name: 'Barbell Row', slug: 'barbell-row',
+    category: 'pull', equipment: 'barbell', muscle_groups: ['back'], metadata: {},
+  };
+
+  assert.equal(isAllowedOnDayFocus(calfRaise, push!), false);
+  assert.equal(isAllowedOnDayFocus(calfRaise, pull!), false);
+  assert.equal(isAllowedOnDayFocus(benchPress, push!), true);
+  assert.equal(isAllowedOnDayFocus(benchPress, pull!), false);
+  assert.equal(isAllowedOnDayFocus(barbellRow, pull!), true);
+  assert.equal(isAllowedOnDayFocus(barbellRow, push!), false);
+});
+
+test('the day is decided by the name, not the catalog muscle tags', () => {
+  // The import lists `lats` as the primary muscle of the Goblet Squat, so 16 of 22 squats were
+  // excluded from leg day and offered on back day instead.
+  const gobletSquat: ExerciseRecord = {
+    id: 'goblet', name: 'Goblet Squat', slug: 'goblet-squat',
+    category: 'squat', equipment: 'dumbbell', muscle_groups: ['lats'], metadata: {},
+  };
+
+  assert.equal(isAllowedOnDayFocus(gobletSquat, BODY_PART_DAY_PLANS.legs_core!), true);
+  assert.equal(isAllowedOnDayFocus(gobletSquat, BODY_PART_DAY_PLANS.back_biceps_core!), false);
+  assert.equal(isAllowedOnDayFocus(gobletSquat, BODY_PART_DAY_PLANS.push!), false);
+});
+
+test('conditioning and unidentified movements stay off focused strength days', () => {
+  const make = (name: string, muscles: string[], category = 'carry'): ExerciseRecord => ({
+    id: name, name, slug: name.toLowerCase().replace(/\s+/g, '-'),
+    category, equipment: 'bodyweight', muscle_groups: muscles, metadata: {},
+  });
+
+  // Stored as `carry`, `squat` and `hinge` respectively by the import.
+  assert.equal(isAllowedOnDayFocus(make('Burpee', ['full_body']), BODY_PART_DAY_PLANS.push!), false);
+  assert.equal(isAllowedOnDayFocus(make('Rowing', ['cardiovascular']), BODY_PART_DAY_PLANS.legs_core!), false);
+  assert.equal(isAllowedOnDayFocus(make('Farmer Carry', ['forearms']), BODY_PART_DAY_PLANS.push!), false);
+  assert.equal(isAllowedOnDayFocus(make('Neck Isometric Hold Press', ['neck']), BODY_PART_DAY_PLANS.push!), false);
+});
+
+test('core is allowed on a push day but cannot take it over', () => {
+  const pushPlan = BODY_PART_DAY_PLANS.push!;
+  const plank: ExerciseRecord = {
+    id: 'plank', name: 'Plank', slug: 'plank',
+    category: 'core', equipment: 'bodyweight', muscle_groups: ['core'], metadata: {},
+  };
+  assert.equal(isAllowedOnDayFocus(plank, pushPlan), true);
+
+  // A pool of nothing but core work must still not fill ten slots with it.
+  const corePool: ExerciseRecord[] = Array.from({ length: 12 }, (_, i) => ({
+    id: `core-${i}`, name: `Cable Crunch ${i}`, slug: `cable-crunch-${i}`,
+    category: 'core', equipment: 'cable', muscle_groups: ['core'], metadata: {},
+  }));
+  const picked = selectFocusedSplitExercises(corePool, pushPlan, new Map(), 10, 0);
+  assert.ok(picked.length <= 2, `core should be capped, got ${picked.length}`);
+});
+
+test('every day label the week generator produces resolves to a focus plan', () => {
+  // A label with no plan means no muscle filtering at all, which is how calf raises reached a
+  // push day. Full Body is the one label that legitimately trains everything.
+  const labels = [
+    'Push', 'Pull', 'Legs',
+    'Upper', 'Lower',
+    'Squat Day', 'Bench Day', 'Deadlift Day', 'Press Day',
+    'Back, Biceps & Core', 'Chest, Shoulders & Triceps', 'Legs & Core',
+  ];
+  for (const label of labels) {
+    assert.ok(resolveDayFocusPlan(label), `"${label}" must resolve to a day focus plan`);
+  }
+  assert.equal(resolveDayFocusPlan('Full Body'), null);
+});
+
+test('strength and upper/lower days train the right movements', () => {
+  const make = (name: string, slug: string): ExerciseRecord => ({
+    id: slug, name, slug, category: 'push', equipment: 'barbell', muscle_groups: [], metadata: {},
+  });
+  const squat = make('Back Squat', 'back-squat');
+  const bench = make('Bench Press', 'bench-press');
+  const row = make('Barbell Row', 'barbell-row');
+  const calf = make('Standing Calf Raise', 'standing-calf-raise');
+
+  const squatDay = resolveDayFocusPlan('Squat Day')!;
+  const benchDay = resolveDayFocusPlan('Bench Day')!;
+  const upper = resolveDayFocusPlan('Upper')!;
+
+  assert.equal(isAllowedOnDayFocus(squat, squatDay), true);
+  assert.equal(isAllowedOnDayFocus(bench, squatDay), false);
+  assert.equal(isAllowedOnDayFocus(bench, benchDay), true);
+  assert.equal(isAllowedOnDayFocus(calf, benchDay), false);
+
+  // An upper day is the one split that trains both pushing and pulling.
+  assert.equal(isAllowedOnDayFocus(bench, upper), true);
+  assert.equal(isAllowedOnDayFocus(row, upper), true);
+  assert.equal(isAllowedOnDayFocus(squat, upper), false);
+});

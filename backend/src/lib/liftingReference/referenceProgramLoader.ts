@@ -1,5 +1,6 @@
 import { isCatalogVariantSlug } from '../exerciseCatalogDedup.js';
 import { findEquipmentSubstitute } from '../equipmentSubstitutionEngine.js';
+import { capSetsForExperience, resolveExperienceVolume } from '../experienceVolume.js';
 import { applySubstitutionsToExercises, type LimitationContext } from '../exerciseSubstitution.js';
 import { maxPatternUsesForDayFocus, patternExclusionGroupId } from '../movementPatternExclusion.js';
 import { applyWeeklyProgression } from '../programProgression.js';
@@ -314,17 +315,29 @@ export function resolveMonth1Workout(
   return null;
 }
 
-function dedupeExercisesByName<T extends { name: string }>(exercises: T[]): T[] {
-  const seen = new Set<string>();
+export function dedupeReferenceDraftExercises<T extends { name: string; slug?: string }>(
+  exercises: T[],
+): T[] {
+  const seenNames = new Set<string>();
+  const seenSlugs = new Set<string>();
   const result: T[] = [];
   for (const exercise of exercises) {
-    const key = normalizeName(exercise.name);
-    if (seen.has(key)) continue;
-    seen.add(key);
+    const normalizedName = normalizeName(exercise.name);
+    const normalizedSlug = exercise.slug?.trim().toLowerCase();
+    if (normalizedSlug && seenSlugs.has(normalizedSlug)) continue;
+    if (seenNames.has(normalizedName)) continue;
+    seenNames.add(normalizedName);
+    if (normalizedSlug) seenSlugs.add(normalizedSlug);
     result.push(exercise);
   }
   return result;
 }
+
+type ReferenceDraftExercise = GeneratedWorkoutExercise & {
+  block?: string;
+  slug?: string;
+  metadata?: ExerciseRecord['metadata'];
+};
 
 type BuildReferenceOptions = {
   equipmentOverride?: string[];
@@ -362,6 +375,7 @@ export async function buildReferenceStyleWorkoutPlan(
   const performance = await getLastPerformanceBySlug(userId);
   const limitations = await loadActiveLimitations(userId);
   const recoveryMods = await loadRecoveryModifiers(userId);
+  const volumeProfile = resolveExperienceVolume(profile.trainingExperience, options.weekNumber);
 
   const recentSlugs = new Set<string>();
   for (const [slug, history] of performance) {
@@ -372,9 +386,7 @@ export async function buildReferenceStyleWorkoutPlan(
   const usedMovementFamilies = new Map<string, number>();
   const patternGroupUses = new Map<string, number>();
 
-  const draft: Array<
-    GeneratedWorkoutExercise & { block?: string; slug?: string; metadata?: ExerciseRecord['metadata'] }
-  > = [];
+  const draft: ReferenceDraftExercise[] = [];
 
   for (let blockIndex = 0; blockIndex < reference.exercises.length; blockIndex++) {
     const block = reference.exercises[blockIndex];
@@ -400,10 +412,14 @@ export async function buildReferenceStyleWorkoutPlan(
       continue;
     }
 
+    if (draft.length >= volumeProfile.maxExercisesPerSession) {
+      break;
+    }
+
     const resolvedName = catalogExercise.name;
     const resolvedSlug = catalogExercise.slug;
 
-    let sets = block.sets;
+    let sets = capSetsForExperience(block.sets, volumeProfile);
     if (recoveryMods.volumeMultiplier < 1) {
       sets = Math.max(2, Math.round(sets * recoveryMods.volumeMultiplier));
     }
@@ -441,24 +457,31 @@ export async function buildReferenceStyleWorkoutPlan(
     });
   }
 
-  let exercises = applySubstitutionsToExercises(
+  const substitutedExercises = applySubstitutionsToExercises(
     draft.map(({ slug: _slug, block: _block, metadata: _meta, ...exercise }) => exercise),
     limitations as LimitationContext[],
   );
 
-  exercises = dedupeExercisesByName(exercises);
+  const substitutedWithMetadata: ReferenceDraftExercise[] = substitutedExercises.map((exercise, index) => ({
+    ...exercise,
+    block: draft[index]?.block,
+    slug: draft[index]?.slug,
+    metadata: draft[index]?.metadata,
+  }));
 
-  exercises = applyWeeklyProgression(
-    exercises,
+  const dedupedExercises = dedupeReferenceDraftExercises(substitutedWithMetadata);
+
+  const progressedExercises = applyWeeklyProgression(
+    dedupedExercises.map(({ slug: _slug, block: _block, metadata: _meta, ...exercise }) => exercise),
     performance,
     useExactPrescription ? 1 : 1.02,
     recoveryMods.volumeMultiplier,
   );
 
-  const withBlocks = draft.map((item, index) => ({
-    ...exercises[index],
-    block: item.block,
-    metadata: item.metadata,
+  const withBlocks = progressedExercises.map((exercise, index) => ({
+    ...exercise,
+    block: dedupedExercises[index]?.block,
+    metadata: dedupedExercises[index]?.metadata,
   }));
 
   const supersetted = applyBlockSupersets(withBlocks).map(
@@ -469,15 +492,12 @@ export async function buildReferenceStyleWorkoutPlan(
     ? ' Recovery Mode — volume adjusted while preserving reference structure.'
     : '';
 
-  const estimatedMinutes = Math.max(
-    50,
-    Math.min(
-      75,
-      Math.round(
-        supersetted.reduce((sum, exercise) => sum + exercise.sets * 2 + exercise.restSeconds / 60, 0),
-      ),
-    ),
+  // A trimmed beginner session genuinely is shorter, so the floor tracks the prescription rather
+  // than advertising an hour the user will not spend.
+  const rawMinutes = Math.round(
+    supersetted.reduce((sum, exercise) => sum + exercise.sets * 2 + exercise.restSeconds / 60, 0),
   );
+  const estimatedMinutes = Math.max(20, Math.min(75, rawMinutes));
 
   const programLabel = useExactPrescription
     ? 'Month 1 reference program'
@@ -485,7 +505,7 @@ export async function buildReferenceStyleWorkoutPlan(
 
   return {
     name: `${reference.slotLabel} — Week ${options.weekNumber}`,
-    rationale: `${options.rationalePrefix ?? programLabel} · Compound-first split with B1/B2 supersets and ~12 working sets per target muscle.${recoveryNote}`,
+    rationale: `${options.rationalePrefix ?? programLabel} · Compound-first split with B1/B2 supersets. ${volumeProfile.rationale}${recoveryNote}`,
     muscleGroups: targetMuscles,
     exercises: supersetted,
     estimatedMinutes,
