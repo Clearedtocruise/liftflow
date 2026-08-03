@@ -15,7 +15,11 @@ export type WorkoutPreviewRow = {
   name: string;
   /** "3 sets × 8-10 · 90s rest" — how the work is prescribed. */
   detail: string;
-  /** Set when this exercise is paired with the one beside it. */
+  /**
+   * Station label for paired work, in the standard `A1` / `A2` notation used on the workout and
+   * active session screens. A bare letter and a full stop read like an outline heading rather than
+   * a programme, so the position is always included and the label never prefixes the name.
+   */
   supersetLabel?: string;
 };
 
@@ -81,13 +85,27 @@ export function buildWorkoutPreview(exercises: EditableWorkoutExercise[]): Worko
     }
   }
 
-  const rows = exercises.map((exercise, index) => ({
-    id: exercise.id || `${exercise.name}-${index}`,
-    position: index + 1,
-    name: exercise.name,
-    detail: describePlannedExercise(exercise),
-    supersetLabel: exercise.supersetGroupId ? groupLetters.get(exercise.supersetGroupId) : undefined,
-  }));
+  const positionInGroup = new Map<string, number>();
+
+  const rows = exercises.map((exercise, index) => {
+    const groupId = exercise.supersetGroupId;
+    const letter = groupId ? groupLetters.get(groupId) : undefined;
+
+    let supersetLabel: string | undefined;
+    if (groupId && letter) {
+      const next = (positionInGroup.get(groupId) ?? 0) + 1;
+      positionInGroup.set(groupId, next);
+      supersetLabel = `${letter}${next}`;
+    }
+
+    return {
+      id: exercise.id || `${exercise.name}-${index}`,
+      position: index + 1,
+      name: exercise.name,
+      detail: describePlannedExercise(exercise),
+      supersetLabel,
+    };
+  });
 
   return {
     rows,

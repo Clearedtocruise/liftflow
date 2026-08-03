@@ -1667,9 +1667,11 @@ export function ActiveWorkoutScreen({
                   {stationLabel ? ` · ${stationLabel}` : ''}
                 </AppText>
               ) : null}
-              {stationLabel ? (
+              {stationLabel && executionMode !== 'circuit' ? (
+                // The exercise name is already the heading above; this line only needs to say
+                // which station of the superset you are on.
                 <AppText variant="caption" color="accent">
-                  {stationLabel} · {(currentExercise.exercise?.name ?? 'Exercise')}
+                  Superset station {stationLabel}
                 </AppText>
               ) : null}
 

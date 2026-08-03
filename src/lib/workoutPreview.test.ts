@@ -50,17 +50,28 @@ test('a single set is not pluralised', () => {
   assert.match(describePlannedExercise(exercise({ name: 'Plank', sets: 1 })), /^1 set$/);
 });
 
-test('paired exercises are labelled as one superset station', () => {
+test('paired exercises use standard A1 / A2 station notation', () => {
+  // A bare "A." glued to the front of the name read like an outline heading rather than a
+  // programme. Stations are numbered within their group, as on the workout and session screens.
   const preview = buildWorkoutPreview([
     exercise({ name: 'Bench Press', id: 'a', supersetGroupId: 'g1' }),
     exercise({ name: 'Barbell Row', id: 'b', supersetGroupId: 'g1' }),
     exercise({ name: 'Curl', id: 'c' }),
+    exercise({ name: 'Leg Press', id: 'd', supersetGroupId: 'g2' }),
+    exercise({ name: 'Leg Curl', id: 'e', supersetGroupId: 'g2' }),
   ]);
 
-  assert.equal(preview.rows[0]!.supersetLabel, 'A');
-  assert.equal(preview.rows[1]!.supersetLabel, 'A');
+  assert.equal(preview.rows[0]!.supersetLabel, 'A1');
+  assert.equal(preview.rows[1]!.supersetLabel, 'A2');
   assert.equal(preview.rows[2]!.supersetLabel, undefined);
-  assert.deepEqual(preview.rows.map((row) => row.position), [1, 2, 3]);
+  assert.equal(preview.rows[3]!.supersetLabel, 'B1');
+  assert.equal(preview.rows[4]!.supersetLabel, 'B2');
+  assert.deepEqual(preview.rows.map((row) => row.position), [1, 2, 3, 4, 5]);
+
+  // The name itself must stay clean — no letter is ever folded into it.
+  for (const row of preview.rows) {
+    assert.doesNotMatch(row.name, /^[A-Z]\d?\s*[.·]/);
+  }
 });
 
 test('a group with only one exercise is not shown as a superset', () => {

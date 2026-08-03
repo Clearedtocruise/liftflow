@@ -52,14 +52,12 @@ export function WorkoutPreviewModal({
             <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
               {preview.rows.map((row) => (
                 <View key={row.id} style={styles.row}>
+                  {/* The station label replaces the running number rather than prefixing the name. */}
                   <AppText variant="footnote" color="textTertiary" style={styles.position}>
-                    {row.position}
+                    {row.supersetLabel ?? row.position}
                   </AppText>
                   <View style={styles.rowText}>
-                    <AppText variant="body">
-                      {row.supersetLabel ? `${row.supersetLabel}. ` : ''}
-                      {row.name}
-                    </AppText>
+                    <AppText variant="body">{row.name}</AppText>
                     <AppText variant="caption" color="textSecondary">
                       {row.detail}
                     </AppText>
@@ -115,7 +113,7 @@ const styles = StyleSheet.create({
     borderBottomColor: LiftFlowColors.border,
   },
   position: {
-    width: 20,
+    width: 24,
     textAlign: 'right',
   },
   rowText: {
