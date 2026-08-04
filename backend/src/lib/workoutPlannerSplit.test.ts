@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { getWeeklyLiftingPattern } from './weeklyLiftingGenerator.js';
 import {
     BODY_PART_DAY_PLANS,
     exerciseMeetsEquipment,
@@ -364,7 +365,8 @@ test('a Push day is recognised and filters to pushing work', () => {
   assert.equal(isAllowedOnDayFocus(benchPress, push!), true);
   assert.equal(isAllowedOnDayFocus(benchPress, pull!), false);
   assert.equal(isAllowedOnDayFocus(barbellRow, pull!), true);
-  assert.equal(isAllowedOnDayFocus(barbellRow, push!), false);
+  // Pulling is permitted on a pressing day as balance work, but capped — see the accessory test.
+  assert.equal(isAllowedOnDayFocus(barbellRow, push!), true);
 });
 
 test('the day is decided by the name, not the catalog muscle tags', () => {
@@ -447,4 +449,71 @@ test('strength and upper/lower days train the right movements', () => {
   assert.equal(isAllowedOnDayFocus(bench, upper), true);
   assert.equal(isAllowedOnDayFocus(row, upper), true);
   assert.equal(isAllowedOnDayFocus(squat, upper), false);
+});
+
+test('no generated week trains pressing without any pulling', () => {
+  // A Squat/Bench/Deadlift/Press week produced zero pulling movements: the deadlift day was
+  // treated as legs-only and the pressing days excluded the back, so nothing in seven days
+  // trained a pull. Any split that presses must also pull.
+  const programTypes = ['push_pull_legs', 'upper_lower', 'body_part_split', 'strength'] as const;
+
+  for (const programType of programTypes) {
+    for (const days of [3, 4, 5, 6, 7] as const) {
+      const labels = getWeeklyLiftingPattern(programType, days).filter((label) => label !== 'Rest');
+      const buckets = new Set<string>();
+
+      for (const label of labels) {
+        const plan = resolveDayFocusPlan(label);
+        if (!plan) continue;
+        for (const bucket of plan.dayBuckets) buckets.add(bucket);
+        for (const bucket of plan.accessoryBuckets ?? []) buckets.add(bucket);
+      }
+
+      const where = `${programType} @ ${days} days`;
+      assert.ok(buckets.has('push'), `${where} never trains pushing`);
+      assert.ok(buckets.has('pull'), `${where} never trains pulling`);
+      assert.ok(buckets.has('legs'), `${where} never trains legs`);
+    }
+  }
+});
+
+test('a deadlift day is the back day of a strength week', () => {
+  const plan = resolveDayFocusPlan('Deadlift Day')!;
+  assert.deepEqual([...plan.dayBuckets].sort(), ['legs', 'pull']);
+
+  const row: ExerciseRecord = {
+    id: 'row', name: 'Barbell Row', slug: 'barbell-row',
+    category: 'pull', equipment: 'barbell', muscle_groups: ['back'], metadata: {},
+  };
+  const rdl: ExerciseRecord = {
+    id: 'rdl', name: 'Romanian Deadlift', slug: 'romanian-deadlift',
+    category: 'hinge', equipment: 'barbell', muscle_groups: ['hamstrings'], metadata: {},
+  };
+  const bench: ExerciseRecord = {
+    id: 'bench', name: 'Bench Press', slug: 'bench-press',
+    category: 'push', equipment: 'barbell', muscle_groups: ['chest'], metadata: {},
+  };
+
+  assert.equal(isAllowedOnDayFocus(row, plan), true, 'rows belong on a deadlift day');
+  assert.equal(isAllowedOnDayFocus(rdl, plan), true);
+  assert.equal(isAllowedOnDayFocus(bench, plan), false, 'a bench press does not');
+});
+
+test('a pressing day allows a little pulling for balance, but stays a pressing day', () => {
+  const push = BODY_PART_DAY_PLANS.push!;
+  assert.deepEqual(push.accessoryBuckets, ['pull']);
+
+  const facePull: ExerciseRecord = {
+    id: 'fp', name: 'Face Pull', slug: 'face-pull',
+    category: 'pull', equipment: 'cable', muscle_groups: ['shoulders'], metadata: {},
+  };
+  assert.equal(isAllowedOnDayFocus(facePull, push), true);
+
+  // A pool of nothing but pulling must not turn a bench day into a back day.
+  const pullPool: ExerciseRecord[] = Array.from({ length: 12 }, (_, i) => ({
+    id: `row-${i}`, name: `Cable Row ${i}`, slug: `cable-row-${i}`,
+    category: 'pull', equipment: 'cable', muscle_groups: ['back'], metadata: {},
+  }));
+  const picked = selectFocusedSplitExercises(pullPool, push, new Map(), 10, 0);
+  assert.ok(picked.length <= 2, `pulling accessories should be capped, got ${picked.length}`);
 });
