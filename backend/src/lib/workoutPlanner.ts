@@ -106,7 +106,15 @@ export type DayFocusPlan = {
   excludePrimaryMuscles: string[];
   /** The movement buckets this day trains. Decided from exercise names, not stored metadata. */
   dayBuckets: TrainingDayBucket[];
+  /**
+   * Buckets allowed as balance work but capped, so they cannot take the day over. A bench day
+   * wants a couple of rows in it; it does not want to become a back day.
+   */
+  accessoryBuckets?: TrainingDayBucket[];
+  maxAccessory?: number;
 };
+
+const DEFAULT_MAX_ACCESSORY = 2;
 
 export const BODY_PART_DAY_PLANS: Record<string, DayFocusPlan> = {
   back_biceps_core: {
@@ -147,13 +155,16 @@ export const BODY_PART_DAY_PLANS: Record<string, DayFocusPlan> = {
   push: {
     key: 'push',
     dayBuckets: ['push'],
+    // A little pulling on a pressing day keeps the shoulders balanced; it is capped so the day
+    // still trains what it says it does.
+    accessoryBuckets: ['pull'],
     quotas: [
       { muscles: ['chest'], min: 3 },
       { muscles: ['shoulders'], min: 2 },
       { muscles: ['triceps'], min: 2 },
       { muscles: ['core'], min: 1 },
     ],
-    excludePrimaryMuscles: ['back', 'biceps', 'quads', 'hamstrings', 'glutes', 'calves'],
+    excludePrimaryMuscles: ['quads', 'hamstrings', 'glutes', 'calves'],
   },
   pull: {
     key: 'pull',
@@ -191,6 +202,23 @@ export const BODY_PART_DAY_PLANS: Record<string, DayFocusPlan> = {
     ],
     excludePrimaryMuscles: ['chest', 'back', 'shoulders', 'biceps', 'triceps'],
   },
+  /**
+   * A deadlift day is the back day of a strength week — the pull itself is a posterior chain lift
+   * and its accessories are rows, pulldowns and shrugs. Treating it as legs-only left a
+   * Squat/Bench/Deadlift/Press week with no pulling in it at all.
+   */
+  deadlift: {
+    key: 'deadlift',
+    dayBuckets: ['legs', 'pull'],
+    quotas: [
+      { muscles: ['hamstrings'], min: 2 },
+      { muscles: ['glutes'], min: 1 },
+      { muscles: ['back'], min: 3 },
+      { muscles: ['biceps'], min: 1 },
+      { muscles: ['core'], min: 1 },
+    ],
+    excludePrimaryMuscles: ['chest'],
+  },
 };
 
 /**
@@ -216,7 +244,8 @@ export function resolveDayFocusPlan(slotLabel: string): DayFocusPlan | null {
   if (/\blower\b/.test(key)) return BODY_PART_DAY_PLANS.lower;
 
   // Strength split: "Squat Day", "Bench Day", "Deadlift Day", "Press Day".
-  if (/\bsquat\b|\bdead\s*lift\b/.test(key)) return BODY_PART_DAY_PLANS.lower;
+  if (/\bdead\s*lift\b/.test(key)) return BODY_PART_DAY_PLANS.deadlift;
+  if (/\bsquat\b/.test(key)) return BODY_PART_DAY_PLANS.lower;
   if (/\bbench\b|\bpress\b/.test(key)) return BODY_PART_DAY_PLANS.push;
 
   return null;
@@ -233,7 +262,22 @@ function bucketFitsDayFocus(bucket: TrainingDayBucket, plan: DayFocusPlan): bool
     return plan.quotas.some((quota) => quota.muscles.includes('core'));
   }
   if (bucket === 'conditioning') return false;
-  return plan.dayBuckets.includes(bucket);
+  if (plan.dayBuckets.includes(bucket)) return true;
+  return plan.accessoryBuckets?.includes(bucket) ?? false;
+}
+
+/** True when this exercise is balance work on this day rather than the day's actual focus. */
+function isAccessoryForDayFocus(exercise: ExerciseRecord, plan: DayFocusPlan): boolean {
+  if (!plan.accessoryBuckets?.length) return false;
+  const bucket = resolveTrainingDayBucket({
+    name: exercise.name,
+    slug: exercise.slug,
+    category: exercise.category,
+    equipment: exercise.equipment,
+    muscleGroups: exercise.muscle_groups,
+  });
+  if (!bucket || plan.dayBuckets.includes(bucket)) return false;
+  return plan.accessoryBuckets.includes(bucket);
 }
 
 function exerciseHitsMuscle(exercise: ExerciseRecord, muscle: string): boolean {
@@ -909,8 +953,12 @@ export function selectFocusedSplitExercises(
   const maxCore = coreQuotaMin > 0 ? coreQuotaMin + 1 : 0;
   let corePicked = 0;
 
+  const maxAccessory = plan.maxAccessory ?? DEFAULT_MAX_ACCESSORY;
+  let accessoryPicked = 0;
+
   function registerPick(exercise: ExerciseRecord): void {
     if (isCoreFocusedExercise(exercise)) corePicked += 1;
+    if (isAccessoryForDayFocus(exercise, plan)) accessoryPicked += 1;
     selected.push(exercise);
     usedSlugs.add(exercise.slug);
     usedNormalizedNames.add(exercise.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim());
@@ -940,6 +988,7 @@ export function selectFocusedSplitExercises(
   function canPick(exercise: ExerciseRecord, allowProgramReuse = false, relaxPatterns = false): boolean {
     if (usedSlugs.has(exercise.slug)) return false;
     if (corePicked >= maxCore && isCoreFocusedExercise(exercise)) return false;
+    if (accessoryPicked >= maxAccessory && isAccessoryForDayFocus(exercise, plan)) return false;
     const normalizedName = exercise.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
     if (usedNormalizedNames.has(normalizedName)) return false;
     if (!allowProgramReuse && programRecentSlugs?.has(exercise.slug)) return false;

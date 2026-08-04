@@ -52,12 +52,17 @@ const WEEKLY_LIFTING_PATTERNS: Record<
     6: ['Chest, Shoulders & Triceps', 'Back, Biceps & Core', 'Legs & Core', 'Chest, Shoulders & Triceps', 'Back, Biceps & Core', 'Legs & Core', 'Rest'],
     7: ['Chest, Shoulders & Triceps', 'Back, Biceps & Core', 'Legs & Core', 'Chest, Shoulders & Triceps', 'Back, Biceps & Core', 'Legs & Core', 'Back, Biceps & Core'],
   },
+  /**
+   * The extra days beyond the four competition lifts are a dedicated pull day rather than a second
+   * squat or bench. Repeating those gave a seven-day week four days that trained legs and three
+   * that pressed, against nothing that was built around pulling.
+   */
   strength: {
     3: ['Squat Day', 'Bench Day', 'Deadlift Day', 'Rest', 'Rest', 'Rest', 'Rest'],
     4: ['Squat Day', 'Bench Day', 'Rest', 'Deadlift Day', 'Press Day', 'Rest', 'Rest'],
-    5: ['Squat Day', 'Bench Day', 'Deadlift Day', 'Press Day', 'Squat Day', 'Rest', 'Rest'],
-    6: ['Squat Day', 'Bench Day', 'Deadlift Day', 'Press Day', 'Squat Day', 'Bench Day', 'Rest'],
-    7: ['Squat Day', 'Bench Day', 'Deadlift Day', 'Press Day', 'Squat Day', 'Bench Day', 'Deadlift Day'],
+    5: ['Squat Day', 'Bench Day', 'Deadlift Day', 'Press Day', 'Pull Day', 'Rest', 'Rest'],
+    6: ['Squat Day', 'Bench Day', 'Deadlift Day', 'Press Day', 'Squat Day', 'Pull Day', 'Rest'],
+    7: ['Squat Day', 'Bench Day', 'Deadlift Day', 'Press Day', 'Squat Day', 'Pull Day', 'Bench Day'],
   },
 };
 
