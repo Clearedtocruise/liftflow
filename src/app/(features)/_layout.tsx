@@ -33,6 +33,7 @@ const SCREEN_TITLES: Record<string, string> = {
   'training-goals': 'Training Goals',
   'training-profile': 'Workout Locations',
   'training-schedule': 'Training Schedule',
+  'training-split': 'Training Split',
   'unit-preferences': 'Units',
   upgrade: 'Upgrade',
   'weekly-check-in': 'Weekly Check-In',

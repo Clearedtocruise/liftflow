@@ -29,6 +29,7 @@ import {
     TABATA_MODE_PREF_KEY,
     tabataModeSummary,
 } from '@/lib/trainingPreferences';
+import { programSplitLabel, resolveProgramType } from '@/lib/programSplit';
 import { resolveDaysPerWeek, summarizeTrainingSchedule } from '@/lib/trainingSchedule';
 import { resolveUnitPreferences } from '@/lib/unitConversion';
 import { coachingPrefsPatch } from '@/lib/voice/voicePreferences';
@@ -413,6 +414,14 @@ export default function SettingsScreen() {
             <AppSymbol name="calendar" fallback="📅" size={20} tintColor={LiftFlowColors.textSecondary} />
           }
           onPress={() => router.push('/(features)/training-schedule')}
+        />
+        <SettingsRow
+          label="Training split"
+          value={user ? programSplitLabel(resolveProgramType(user)) : 'Not set'}
+          icon={
+            <AppSymbol name="square.grid.2x2.fill" fallback="▦" size={20} tintColor={LiftFlowColors.textSecondary} />
+          }
+          onPress={() => router.push('/(features)/training-split')}
         />
         <SettingsRow
           label="Training goals"
