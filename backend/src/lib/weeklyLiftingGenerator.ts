@@ -28,7 +28,9 @@ const WEEKLY_LIFTING_PATTERNS: Record<
     4: ['Push', 'Pull', 'Legs', 'Push', 'Rest', 'Rest', 'Rest'],
     5: ['Push', 'Pull', 'Legs', 'Push', 'Pull', 'Rest', 'Rest'],
     6: ['Push', 'Pull', 'Legs', 'Push', 'Pull', 'Legs', 'Rest'],
-    7: ['Push', 'Pull', 'Legs', 'Push', 'Pull', 'Legs', 'Push'],
+    // Seventh day is Pull, not a third Push — ~2× per pattern, with the extra volume on the
+    // side that gym programming usually under-trains (posterior chain / back).
+    7: ['Push', 'Pull', 'Legs', 'Push', 'Pull', 'Legs', 'Pull'],
   },
   upper_lower: {
     3: ['Upper', 'Lower', 'Upper', 'Rest', 'Rest', 'Rest', 'Rest'],
@@ -53,16 +55,21 @@ const WEEKLY_LIFTING_PATTERNS: Record<
     7: ['Chest, Shoulders & Triceps', 'Back, Biceps & Core', 'Legs & Core', 'Chest, Shoulders & Triceps', 'Back, Biceps & Core', 'Legs & Core', 'Back, Biceps & Core'],
   },
   /**
-   * The extra days beyond the four competition lifts are a dedicated pull day rather than a second
-   * squat or bench. Repeating those gave a seven-day week four days that trained legs and three
-   * that pressed, against nothing that was built around pulling.
+   * Strength weeks follow the same ~2×/week pattern frequency that hypertrophy meta-analyses
+   * support (each major pattern twice), not a pile-up of squat/bench repeats.
+   *
+   * At 6 days that is exactly 2 squat/hinge · 2 press · 2 pull, spaced so the same pattern is
+   * not trained on consecutive days. At 7 days the extra session is an Upper day — torso work
+   * without a third heavy squat or press, which is what recovery norms recommend when someone
+   * insists on lifting every day. A third press or third hard lower day is how shoulders and
+   * knees get overused; a third dedicated pull is also fine, but Upper keeps push/pull paired.
    */
   strength: {
     3: ['Squat Day', 'Bench Day', 'Deadlift Day', 'Rest', 'Rest', 'Rest', 'Rest'],
     4: ['Squat Day', 'Bench Day', 'Rest', 'Deadlift Day', 'Press Day', 'Rest', 'Rest'],
-    5: ['Squat Day', 'Bench Day', 'Deadlift Day', 'Press Day', 'Pull Day', 'Rest', 'Rest'],
-    6: ['Squat Day', 'Bench Day', 'Deadlift Day', 'Press Day', 'Squat Day', 'Pull Day', 'Rest'],
-    7: ['Squat Day', 'Bench Day', 'Deadlift Day', 'Press Day', 'Squat Day', 'Pull Day', 'Bench Day'],
+    5: ['Squat Day', 'Bench Day', 'Pull Day', 'Deadlift Day', 'Press Day', 'Rest', 'Rest'],
+    6: ['Squat Day', 'Bench Day', 'Pull Day', 'Deadlift Day', 'Press Day', 'Pull Day', 'Rest'],
+    7: ['Squat Day', 'Bench Day', 'Pull Day', 'Deadlift Day', 'Press Day', 'Pull Day', 'Upper Day'],
   },
 };
 
