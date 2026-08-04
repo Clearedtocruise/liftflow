@@ -129,8 +129,9 @@ export default function TrainingSplitScreen() {
                   key={opt.id}
                   label={opt.label}
                   selected={programType === opt.id}
-                  onPress={() => setProgramType(opt.id)}
-                  disabled={saving}
+                  onPress={() => {
+                    if (!saving) setProgramType(opt.id);
+                  }}
                 />
               ))}
             </ChipGrid>
