@@ -75,6 +75,7 @@ export function ProgramDashboardCard({ dashboard, onAdapt, onStartNextWorkout, s
           />
         ) : null}
         <PrimaryButton label="Calendar" onPress={() => router.push('/(features)/program-calendar')} variant="secondary" />
+        <PrimaryButton label="Change split" onPress={() => router.push('/(features)/training-split')} variant="secondary" />
         <PrimaryButton label={adapting ? 'Adapting…' : 'Adapt Program'} onPress={() => onAdapt?.()} variant="secondary" disabled={adapting || !onAdapt} />
       </View>
     </Card>
