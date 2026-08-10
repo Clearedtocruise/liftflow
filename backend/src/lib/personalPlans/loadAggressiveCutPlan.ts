@@ -1,5 +1,9 @@
-import { localDateString } from '../localDate.js';
-import { removePlannedMealsForWeek } from '../mealCleanup.js';
+import {
+  isReplaceablePlannedMeal,
+  MEAL_COLUMNS,
+  removePlannedMealsForWeek,
+  type MealCleanupRow,
+} from '../mealCleanup.js';
 import { persistNutritionGoals } from '../nutritionGoals.js';
 import { totalPlannedVolume } from '../programProgression.js';
 import { addDays, currentProgramWeek, dayLabel, weekStartFromDate } from '../programTypes.js';
@@ -14,6 +18,7 @@ import {
   AGGRESSIVE_CUT_PROGRAM_NAME,
   AGGRESSIVE_CUT_WORKOUT_DAYS,
 } from './aggressiveCutWorkouts.js';
+import { cutPlanWeekWindow } from './cutPlanWeek.js';
 
 export type LoadAggressiveCutResult = {
   planId: typeof AGGRESSIVE_CUT_PLAN_ID;
@@ -40,6 +45,42 @@ function toGeneratedExercises(day: (typeof AGGRESSIVE_CUT_WORKOUT_DAYS)[number])
  * Sticky via `training_programs.metadata.planPack` and `coachProfile.planPack` so weekly
  * regenerate can reload the same blueprint instead of inventing a new split.
  */
+/** Drop prior cut-pack plan meals (including a previous UTC-week load) so reload can't 409. */
+async function clearPriorCutPlanMeals(
+  db: ReturnType<typeof requireAdmin>,
+  userId: string,
+): Promise<number> {
+  const { data, error } = await db
+    .from('meals')
+    .select(MEAL_COLUMNS)
+    .eq('user_id', userId)
+    .like('client_key', `cut:${AGGRESSIVE_CUT_PLAN_ID}:%`);
+  if (error) throw new Error(error.message);
+
+  const removeIds = ((data ?? []) as MealCleanupRow[])
+    .filter(isReplaceablePlannedMeal)
+    .map((row) => row.id);
+  if (removeIds.length === 0) return 0;
+
+  const { error: deleteError } = await db.from('meals').delete().in('id', removeIds);
+  if (deleteError) throw new Error(deleteError.message);
+  return removeIds.length;
+}
+
+/** Cancel prior cut-pack planned sessions left in the wrong week from a UTC load. */
+async function cancelPriorCutPlanWorkouts(
+  db: ReturnType<typeof requireAdmin>,
+  userId: string,
+): Promise<void> {
+  const { error } = await db
+    .from('planned_workouts')
+    .update({ status: 'cancelled' })
+    .eq('user_id', userId)
+    .eq('status', 'planned')
+    .contains('metadata', { planPack: AGGRESSIVE_CUT_PLAN_ID });
+  if (error) throw new Error(error.message);
+}
+
 export async function loadAggressiveCutPlan(userId: string): Promise<LoadAggressiveCutResult> {
   const db = requireAdmin();
 
@@ -50,9 +91,11 @@ export async function loadAggressiveCutPlan(userId: string): Promise<LoadAggress
     .maybeSingle();
 
   // Match the Nutrition/Workout tabs: week windows are local to the athlete, not UTC.
-  const today = localDateString(new Date(), profile?.timezone as string | null | undefined);
-  const weekStart = weekStartFromDate(today);
-  const weekEnd = addDays(weekStart, 6);
+  // (UTC "today" on Monday morning is still Sunday for US Pacific/Central — empty tabs.)
+  const { today, weekStart, weekEnd } = cutPlanWeekWindow(
+    new Date(),
+    profile?.timezone as string | null | undefined,
+  );
 
   const existingMeta = (profile?.metadata ?? {}) as Record<string, unknown>;
   const coachProfile = {
@@ -142,7 +185,8 @@ export async function loadAggressiveCutPlan(userId: string): Promise<LoadAggress
 
   await db.from('training_programs').update({ is_active: false }).eq('user_id', userId).neq('id', program.id);
 
-  // Cancel leftover planned rows in this calendar week before inserting the PDF week.
+  // Cancel prior cut-pack rows (wrong UTC week) plus any other planned slots in the local week.
+  await cancelPriorCutPlanWorkouts(db, userId);
   await db
     .from('planned_workouts')
     .update({ status: 'cancelled' })
@@ -197,7 +241,9 @@ export async function loadAggressiveCutPlan(userId: string): Promise<LoadAggress
     plannedWorkouts += 1;
   }
 
-  const mealsCleared = await removePlannedMealsForWeek(db, userId, weekStart, weekEnd);
+  const priorCutCleared = await clearPriorCutPlanMeals(db, userId);
+  const weekCleared = await removePlannedMealsForWeek(db, userId, weekStart, weekEnd);
+  const mealsCleared = priorCutCleared + weekCleared;
 
   const { data: mealPlan, error: mealPlanError } = await db
     .from('meal_plans')

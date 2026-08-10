@@ -29,7 +29,7 @@ import {
     TABATA_MODE_PREF_KEY,
     tabataModeSummary,
 } from '@/lib/trainingPreferences';
-import { invalidateWeekPlanPrefetch } from '@/lib/planDataPrefetch';
+import { invalidateWeekPlanPrefetch, warmWeekPlanData } from '@/lib/planDataPrefetch';
 import { planDataCache } from '@/lib/planDataCache';
 import {
   isSelfDirectedNutrition,
@@ -443,11 +443,23 @@ export default function SettingsScreen() {
                       }
                       invalidateWeekPlanPrefetch(user.id, user.timezone);
                       await planDataCache.clearUser(user.id);
+                      await warmWeekPlanData(user.id, user.timezone);
                       bumpRevision();
                       await refreshProfile();
                       Alert.alert(
                         'Cut plan loaded',
-                        `${result.data.plannedWorkouts} workouts · ${result.data.mealsInserted} meals for the week starting ${result.data.weekStart}. Open Workout and Nutrition to see the new week.`,
+                        `${result.data.plannedWorkouts} workouts · ${result.data.mealsInserted} meals for the week starting ${result.data.weekStart}.`,
+                        [
+                          { text: 'OK', style: 'cancel' },
+                          {
+                            text: 'Open Nutrition',
+                            onPress: () => router.push('/(tabs)/nutrition'),
+                          },
+                          {
+                            text: 'Open Workout',
+                            onPress: () => router.push('/(tabs)/workout'),
+                          },
+                        ],
                       );
                     })();
                   },
