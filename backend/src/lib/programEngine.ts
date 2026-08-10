@@ -566,7 +566,17 @@ export async function regenerateActiveProgram(
     .maybeSingle();
 
   if (program) {
-    const meta = (program.metadata ?? {}) as StoredProgramMetadata;
+    const meta = (program.metadata ?? {}) as StoredProgramMetadata & { planPack?: string };
+    // Sticky personal PDF packs — reload the blueprint instead of inventing a new week.
+    if (meta.planPack === 'aggressive_cut') {
+      const { loadAggressiveCutPlan } = await import('./personalPlans/loadAggressiveCutPlan.js');
+      const loaded = await loadAggressiveCutPlan(userId);
+      return {
+        regenerated: true as const,
+        plannedCount: loaded.plannedWorkouts,
+        program: { id: loaded.programId },
+      };
+    }
     const profileInput = await buildProgramInputFromProfile(userId);
     const expectedFrequency = profileInput.frequency;
     const storedFrequency =

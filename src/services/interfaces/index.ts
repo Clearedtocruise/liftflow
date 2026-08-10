@@ -167,6 +167,16 @@ export interface ITrainingService {
   assessRecovery(userId: string): Promise<ServiceResult<RecoveryAssessment>>;
   createPlannedWorkout(userId: string, workout: Omit<PlannedWorkout, 'id' | 'createdAt'>): Promise<ServiceResult<PlannedWorkout>>;
   generateProgram(userId: string, payload: import('@/types').CreateProgramPayload): Promise<ServiceResult<import('@/types').ProgramDashboard | null>>;
+  loadPersonalPlan(planId: 'aggressive_cut'): Promise<
+    ServiceResult<{
+      planId: string;
+      programId: string;
+      weekStart: string;
+      plannedWorkouts: number;
+      mealsInserted: number;
+      mealsCleared: number;
+    }>
+  >;
   regenerateProgramIfNeeded(userId: string): Promise<ServiceResult<{ regenerated: boolean }>>;
   forceRegenerateProgram(userId: string): Promise<ServiceResult<{ regenerated: boolean }>>;
   getDashboard(userId: string): Promise<ServiceResult<import('@/types').ProgramDashboard | null>>;

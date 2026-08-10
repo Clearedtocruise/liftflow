@@ -43,6 +43,7 @@ import { deviceLocationService } from '@/services/deviceLocationService';
 import { exportService } from '@/services/exportService';
 import { feedbackService } from '@/services/feedbackService';
 import { nutritionService } from '@/services/nutritionService';
+import { trainingService } from '@/services/trainingService';
 import { userService } from '@/services/userService';
 import { useWorkoutSession } from '@/state/workout/WorkoutSessionContext';
 import type { ConfirmationMode } from '@/types/common';
@@ -416,6 +417,40 @@ export default function SettingsScreen() {
         />
       </View>
       <Card style={styles.group}>
+        <SettingsRow
+          label="Load Aggressive Cut plan"
+          value="193→180 · 6-day + meals"
+          icon={
+            <AppSymbol name="target" fallback="🎯" size={20} tintColor={LiftFlowColors.textSecondary} />
+          }
+          onPress={() => {
+            if (!user) return;
+            Alert.alert(
+              'Load your cut plan?',
+              'Replaces this week’s workouts and untouched meal-plan slots with your PDF plan: 6-day home-gym split + cut nutrition (≈2175 kcal · 210g protein). Logged meals stay.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Load plan',
+                  onPress: () => {
+                    void (async () => {
+                      const result = await trainingService.loadPersonalPlan('aggressive_cut');
+                      if (!result.success) {
+                        Alert.alert('Could not load plan', result.error);
+                        return;
+                      }
+                      await refreshProfile();
+                      Alert.alert(
+                        'Cut plan loaded',
+                        `${result.data.plannedWorkouts} workouts · ${result.data.mealsInserted} meals for the week starting ${result.data.weekStart}.`,
+                      );
+                    })();
+                  },
+                },
+              ],
+            );
+          }}
+        />
         <SettingsRow
           label="My own workouts"
           value={selfDirectedTrainingSummary(isSelfDirectedTraining(user))}

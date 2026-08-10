@@ -549,6 +549,23 @@ trainingRouter.post('/programs/generate', async (req, res) => {
   }
 });
 
+/** Load a sticky personal plan pack (workout week + nutrition) from a fixed blueprint. */
+trainingRouter.post('/programs/load-personal-plan', async (req, res) => {
+  try {
+    const userId = authedUserId(req);
+    const planId = String((req.body as { planId?: string }).planId ?? '');
+    if (planId !== 'aggressive_cut') {
+      res.status(400).json({ message: 'Unknown planId. Supported: aggressive_cut' });
+      return;
+    }
+    const { loadAggressiveCutPlan } = await import('../lib/personalPlans/loadAggressiveCutPlan.js');
+    const result = await loadAggressiveCutPlan(userId);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ message: error instanceof Error ? error.message : 'Personal plan load failed' });
+  }
+});
+
 trainingRouter.get('/programs/dashboard', async (req, res) => {
   try {
     const userId = authedUserId(req);

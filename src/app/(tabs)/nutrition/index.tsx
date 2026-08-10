@@ -838,7 +838,9 @@ export default function NutritionScreen() {
               <MealPlanCard
                 key={meal.id}
                 meal={meal}
-                scheduledTime={todayTimes[index]}
+                scheduledTime={
+                  enrichMealMeta(meal.name, meal.instructions).scheduledTime ?? todayTimes[index]
+                }
                 usual={usualMealSuggestion(meal, usualMeals)}
                 onUseUsual={(usual) => void handleUseUsualMeal(meal, usual)}
                 onMarkComplete={(status, consumedAt) => handleMarkMeal(meal, status, consumedAt)}

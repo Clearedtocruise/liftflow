@@ -329,6 +329,16 @@ export const trainingService: ITrainingService = {
     }
   },
 
+  async loadPersonalPlan(planId: 'aggressive_cut') {
+    try {
+      const token = await getAccessToken();
+      const result = await api.loadPersonalPlan(planId, token);
+      return ok(result);
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
   async forceRegenerateProgram(userId: string) {
     try {
       const token = await getAccessToken();

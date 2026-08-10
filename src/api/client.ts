@@ -227,6 +227,15 @@ export const api = {
       body,
       token,
     ),
+  loadPersonalPlan: (planId: 'aggressive_cut', token?: string) =>
+    apiClient.post<{
+      planId: string;
+      programId: string;
+      weekStart: string;
+      plannedWorkouts: number;
+      mealsInserted: number;
+      mealsCleared: number;
+    }>('/api/training/programs/load-personal-plan', { planId }, token),
   activateCoach: (userId: string, token?: string) =>
     apiClient.post<import('@/types/coachActivation').CoachActivationResult>(
       '/api/training/coach/activate',
