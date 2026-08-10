@@ -22,6 +22,8 @@ type WorkoutWeeklyPlanScreenProps = {
   refreshing?: boolean;
   adaptingPlan?: boolean;
   timeZone?: string | null;
+  /** Athlete opted out of coach week planning — Quick log is the primary path. */
+  selfDirected?: boolean;
   onSelectDay: (day: WeekDayPlan) => void;
   onEditDay: (day: WeekDayPlan) => void;
   onManualLog: () => void;
@@ -33,6 +35,7 @@ export function WorkoutWeeklyPlanScreen({
   refreshing = false,
   adaptingPlan = false,
   timeZone,
+  selfDirected = false,
   onSelectDay,
   onEditDay,
   onManualLog,
@@ -41,8 +44,17 @@ export function WorkoutWeeklyPlanScreen({
     <View style={styles.container}>
       <AppText variant="headline">Workout</AppText>
       <AppText variant="body" color="textSecondary">
-        Your weekly training plan
+        {selfDirected ? 'Log the session you actually trained' : 'Your weekly training plan'}
       </AppText>
+
+      {selfDirected && !loading ? (
+        <EmptyStateCard
+          title="Your own workouts"
+          message="Coach week planning is off. Start an empty session and log the lifts you do."
+          actionLabel="Log my workout"
+          onAction={onManualLog}
+        />
+      ) : null}
 
       {loading ? (
         <View style={styles.loadingWrap}>
@@ -59,13 +71,13 @@ export function WorkoutWeeklyPlanScreen({
         </View>
       ) : null}
 
-      {!loading && refreshing ? (
+      {!loading && refreshing && !selfDirected ? (
         <AppText variant="caption" color="textTertiary">
           Updating plan…
         </AppText>
       ) : null}
 
-      {!loading && days.length === 0 ? (
+      {!loading && !selfDirected && days.length === 0 ? (
         <EmptyStateCard
           title="No week planned yet"
           message="Once you have a training program, your seven-day plan shows up here."
@@ -74,7 +86,7 @@ export function WorkoutWeeklyPlanScreen({
         />
       ) : null}
 
-      {!loading
+      {!loading && !selfDirected
         ? days.map((day) => {
             const scheduledWorkout = day.scheduledWorkout;
             const hasWorkout = day.hasScheduledWorkout && scheduledWorkout != null;

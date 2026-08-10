@@ -187,13 +187,23 @@ export const dataResetService = {
       await clearLocalAppCache();
       await recordResetTime();
 
-      if (includesWorkout) {
+      const { data: profileMeta } = await supabase
+        .from('profiles')
+        .select('metadata')
+        .eq('id', userId)
+        .maybeSingle();
+      const coachProfile = (profileMeta?.metadata as {
+        coachProfile?: { selfDirectedTraining?: boolean; selfDirectedNutrition?: boolean };
+      } | null)?.coachProfile;
+
+      if (includesWorkout && coachProfile?.selfDirectedTraining !== true) {
         const token = await getAccessToken();
         await api.regenerateProgram(userId, token, true);
       }
 
       if (includesNutrition) {
         const { from, to } = getWeekRange(new Date(), timeZone);
+        // ensureWeekMealCoverage no-ops when self-directed nutrition is on.
         await nutritionService.ensureWeekMealCoverage(userId, timeZone);
         await nutritionService.pruneDuplicateMeals(userId, { from, to });
       }

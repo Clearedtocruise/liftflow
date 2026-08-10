@@ -34,11 +34,11 @@ const active = read('src/components/workout/execution/ActiveWorkoutScreen.tsx');
 const debug = read('src/lib/workoutProgressionDebug.ts');
 
 record(
-  'Superset rotation gated by execution mode',
+  'Superset rotation disabled (circuit only)',
   flow.includes('executionModeUsesSupersetRotation') &&
-    flow.includes("mode === 'superset'") &&
+    flow.includes('Superset rotation is retired') &&
     flow.includes("mode === 'circuit'") &&
-    flow.includes('executionModeUsesSupersetRotation(executionMode)'),
+    !flow.includes("return mode === 'superset' || mode === 'circuit'"),
 );
 record(
   'Traditional mode skips post-set superset advance',
@@ -57,8 +57,9 @@ record(
     debug.includes('Advance:'),
 );
 record(
-  'Completion uses completedSets >= effectiveTargetSets',
-  active.includes('completedAfterLog >= effectiveTargetSets') &&
+  'Completion uses completedSets >= target sets',
+  (active.includes('completedAfterLog >= logTargetSets') ||
+    active.includes('completedAfterLog >= effectiveTargetSets')) &&
     active.includes('allSetsDone = completedSets.length >= effectiveTargetSets'),
 );
 

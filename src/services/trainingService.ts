@@ -329,6 +329,16 @@ export const trainingService: ITrainingService = {
     }
   },
 
+  async loadPersonalPlan(planId: 'aggressive_cut') {
+    try {
+      const token = await getAccessToken();
+      const result = await api.loadPersonalPlan(planId, token);
+      return ok(result);
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
   async forceRegenerateProgram(userId: string) {
     try {
       const token = await getAccessToken();
@@ -356,6 +366,20 @@ export const trainingService: ITrainingService = {
     try {
       const now = Date.now();
       if (now - lastRegenCheckAt < REGEN_CHECK_COOLDOWN_MS) {
+        return ok({ regenerated: false });
+      }
+
+      // Self-directed athletes log their own sessions — do not refill an empty week
+      // with a coached plan behind their back.
+      const { data: profileMeta } = await supabase
+        .from('profiles')
+        .select('metadata')
+        .eq('id', userId)
+        .maybeSingle();
+      const coachProfile = (profileMeta?.metadata as { coachProfile?: { selfDirectedTraining?: boolean } } | null)
+        ?.coachProfile;
+      if (coachProfile?.selfDirectedTraining === true) {
+        lastRegenCheckAt = now;
         return ok({ regenerated: false });
       }
 

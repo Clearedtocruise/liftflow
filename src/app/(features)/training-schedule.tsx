@@ -10,6 +10,7 @@ import { AppText } from '@/components/ui/AppText';
 import { DAYS_PER_WEEK_OPTIONS, WEEKDAY_OPTIONS } from '@/constants/onboardingCoach';
 import { Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
+import { isSelfDirectedTraining } from '@/lib/selfDirectedMode';
 import { resolveDaysPerWeek, summarizeTrainingSchedule, trainingScheduleLabel } from '@/lib/trainingSchedule';
 import { trainingService } from '@/services/trainingService';
 import { userService } from '@/services/userService';
@@ -70,6 +71,14 @@ export default function TrainingScheduleScreen() {
     }
 
     await refreshProfile();
+
+    if (isSelfDirectedTraining(user)) {
+      setSaving(false);
+      Alert.alert('Saved', 'Lifting frequency saved. Coach week planning stays off while you log your own workouts.');
+      router.back();
+      return;
+    }
+
     const regenResult = await trainingService.forceRegenerateProgram(user.id);
     setSaving(false);
 

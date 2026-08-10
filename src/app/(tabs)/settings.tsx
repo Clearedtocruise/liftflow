@@ -29,6 +29,12 @@ import {
     TABATA_MODE_PREF_KEY,
     tabataModeSummary,
 } from '@/lib/trainingPreferences';
+import {
+  isSelfDirectedNutrition,
+  isSelfDirectedTraining,
+  selfDirectedNutritionSummary,
+  selfDirectedTrainingSummary,
+} from '@/lib/selfDirectedMode';
 import { resolveDaysPerWeek, summarizeTrainingSchedule } from '@/lib/trainingSchedule';
 import { resolveUnitPreferences } from '@/lib/unitConversion';
 import { coachingPrefsPatch } from '@/lib/voice/voicePreferences';
@@ -36,6 +42,8 @@ import { dataResetService, formatResetConfirmation, type DataResetType } from '@
 import { deviceLocationService } from '@/services/deviceLocationService';
 import { exportService } from '@/services/exportService';
 import { feedbackService } from '@/services/feedbackService';
+import { nutritionService } from '@/services/nutritionService';
+import { trainingService } from '@/services/trainingService';
 import { userService } from '@/services/userService';
 import { useWorkoutSession } from '@/state/workout/WorkoutSessionContext';
 import type { ConfirmationMode } from '@/types/common';
@@ -398,6 +406,134 @@ export default function SettingsScreen() {
                 ],
               );
             }
+          }}
+        />
+      </Card>
+
+      <View style={styles.sectionGap}>
+        <SectionHeader
+          title="Do it yourself"
+          subtitle="Turn off coach autopilot when you want to run your own sessions and meals"
+        />
+      </View>
+      <Card style={styles.group}>
+        <SettingsRow
+          label="Load Aggressive Cut plan"
+          value="193→180 · 6-day + meals"
+          icon={
+            <AppSymbol name="target" fallback="🎯" size={20} tintColor={LiftFlowColors.textSecondary} />
+          }
+          onPress={() => {
+            if (!user) return;
+            Alert.alert(
+              'Load your cut plan?',
+              'Replaces this week’s workouts and untouched meal-plan slots with your PDF plan: 6-day home-gym split + cut nutrition (≈2175 kcal · 210g protein). Logged meals stay.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Load plan',
+                  onPress: () => {
+                    void (async () => {
+                      const result = await trainingService.loadPersonalPlan('aggressive_cut');
+                      if (!result.success) {
+                        Alert.alert('Could not load plan', result.error);
+                        return;
+                      }
+                      await refreshProfile();
+                      Alert.alert(
+                        'Cut plan loaded',
+                        `${result.data.plannedWorkouts} workouts · ${result.data.mealsInserted} meals for the week starting ${result.data.weekStart}.`,
+                      );
+                    })();
+                  },
+                },
+              ],
+            );
+          }}
+        />
+        <SettingsRow
+          label="My own workouts"
+          value={selfDirectedTrainingSummary(isSelfDirectedTraining(user))}
+          icon={
+            <AppSymbol name="dumbbell.fill" fallback="🏋" size={20} tintColor={LiftFlowColors.textSecondary} />
+          }
+          onPress={() => {
+            if (!user) return;
+            const next = !isSelfDirectedTraining(user);
+            Alert.alert(
+              next ? 'Log your own workouts?' : 'Let ONE MORE plan workouts?',
+              next
+                ? 'Home and Workout will center on Quick log. The app will stop auto-building your training week. Your history stays.'
+                : 'ONE MORE will rebuild your training week from your split and schedule again.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: next ? 'Use my own workouts' : 'Use coach plan',
+                  onPress: () => {
+                    void (async () => {
+                      const result = await userService.updateProfile(user.id, {
+                        metadata: {
+                          ...(user.metadata ?? {}),
+                          coachProfile: {
+                            ...(user.metadata?.coachProfile ?? {}),
+                            selfDirectedTraining: next,
+                          },
+                        },
+                      });
+                      if (!result.success) {
+                        Alert.alert('Could not save', result.error);
+                        return;
+                      }
+                      await refreshProfile();
+                    })();
+                  },
+                },
+              ],
+            );
+          }}
+        />
+        <SettingsRow
+          label="My own nutrition"
+          value={selfDirectedNutritionSummary(isSelfDirectedNutrition(user))}
+          icon={
+            <AppSymbol name="leaf.fill" fallback="🥗" size={20} tintColor={LiftFlowColors.textSecondary} />
+          }
+          onPress={() => {
+            if (!user) return;
+            const next = !isSelfDirectedNutrition(user);
+            Alert.alert(
+              next ? 'Log your own meals?' : 'Let ONE MORE plan meals?',
+              next
+                ? 'Nutrition will stop filling empty days with a meal plan. Untouched coach meals for this week are cleared. Meals you already logged stay.'
+                : 'ONE MORE can generate and fill meal-plan days again.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: next ? 'Use my own nutrition' : 'Use meal plans',
+                  onPress: () => {
+                    void (async () => {
+                      const result = await userService.updateProfile(user.id, {
+                        metadata: {
+                          ...(user.metadata ?? {}),
+                          coachProfile: {
+                            ...(user.metadata?.coachProfile ?? {}),
+                            selfDirectedNutrition: next,
+                          },
+                        },
+                      });
+                      if (!result.success) {
+                        Alert.alert('Could not save', result.error);
+                        return;
+                      }
+                      if (next) {
+                        await nutritionService.clearPlannedMealsForWeek(user.id, user.timezone);
+                      }
+                      await refreshProfile();
+                    })();
+                  },
+                },
+              ],
+            );
           }}
         />
       </Card>

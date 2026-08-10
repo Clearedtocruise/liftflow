@@ -270,9 +270,6 @@ function formatExerciseNotes(block: Month1ExerciseBlock, workoutNotes?: string, 
   if (block.primaryFocus) {
     parts.push(block.primaryFocus);
   }
-  if (block.block.endsWith('1') || block.block.endsWith('2')) {
-    parts.push('Superset — rest after both movements');
-  }
   if (phaseLabel) {
     parts.push(phaseLabel);
   } else if (workoutNotes && block.block === 'A') {
@@ -505,7 +502,7 @@ export async function buildReferenceStyleWorkoutPlan(
 
   return {
     name: `${reference.slotLabel} — Week ${options.weekNumber}`,
-    rationale: `${options.rationalePrefix ?? programLabel} · Compound-first split with B1/B2 supersets. ${volumeProfile.rationale}${recoveryNote}`,
+    rationale: `${options.rationalePrefix ?? programLabel} · Compound-first split (straight sets). ${volumeProfile.rationale}${recoveryNote}`,
     muscleGroups: targetMuscles,
     exercises: supersetted,
     estimatedMinutes,

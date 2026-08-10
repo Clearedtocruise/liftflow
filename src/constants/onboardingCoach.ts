@@ -111,4 +111,8 @@ export type CoachProfileMetadata = {
   currentSupplements?: string[];
   limitationNotes?: string;
   exercisesToAvoid?: string[];
+  /** When true, skip program week regen — athlete logs workouts themselves. */
+  selfDirectedTraining?: boolean;
+  /** When true, skip meal-plan day sync — athlete logs meals themselves. */
+  selfDirectedNutrition?: boolean;
 };

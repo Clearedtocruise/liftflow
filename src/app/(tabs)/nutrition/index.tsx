@@ -36,6 +36,7 @@ import { aggregateWeeklyGroceries, groupGroceriesByCategory } from '@/lib/grocer
 import { resolveTimeZone } from '@/lib/localDate';
 import { aggregateDailyMeals, aggregateWeeklyMeals, buildDailySummaryFromMeals, mealsForCalendarDay } from '@/lib/mealAggregation';
 import { resolveUsualMeals, usualMealSuggestion, type MealDefault } from '@/lib/mealDefaults';
+import { isSelfDirectedNutrition } from '@/lib/selfDirectedMode';
 import { friendlyMealError, isStaleMealError } from '@/lib/mealErrors';
 import {
     enrichMealMeta,
@@ -319,6 +320,10 @@ export default function NutritionScreen() {
 
   useLocalWeekRollover(user?.timezone, () => {
     if (!user) return;
+    if (isSelfDirectedNutrition(user)) {
+      void load({ silent: true });
+      return;
+    }
     void nutritionService.ensureWeekMealCoverage(user.id, user.timezone).then(() => {
       void load({ silent: true });
     });
@@ -782,11 +787,22 @@ export default function NutritionScreen() {
 
       {weekMeals.length === 0 ? (
         <Card style={styles.empty}>
-          <AppText variant="body" color="textSecondary">
-            No weekly meal plan yet. Generate a coached plan for all seven days, or log meals manually.
-          </AppText>
-          <PrimaryButton label="Generate Weekly Meal Plan" onPress={ensureMealPlan} loading={generating} />
-          <PrimaryButton label="Log a Meal" variant="secondary" onPress={() => setQuickLogOpen(true)} />
+          {isSelfDirectedNutrition(user) ? (
+            <>
+              <AppText variant="body" color="textSecondary">
+                You&apos;re logging your own nutrition. Add what you eat — no meal plan required.
+              </AppText>
+              <PrimaryButton label="Log a Meal" onPress={() => setQuickLogOpen(true)} />
+            </>
+          ) : (
+            <>
+              <AppText variant="body" color="textSecondary">
+                No weekly meal plan yet. Generate a coached plan for all seven days, or log meals manually.
+              </AppText>
+              <PrimaryButton label="Generate Weekly Meal Plan" onPress={ensureMealPlan} loading={generating} />
+              <PrimaryButton label="Log a Meal" variant="secondary" onPress={() => setQuickLogOpen(true)} />
+            </>
+          )}
         </Card>
       ) : null}
 
@@ -802,7 +818,7 @@ export default function NutritionScreen() {
           />
           <View style={styles.todayHeader}>
             <AppText variant="label" color="accent">
-              Today&apos;s Plan
+              {isSelfDirectedNutrition(user) ? 'Today' : "Today's Plan"}
             </AppText>
             <Pressable onPress={() => setQuickLogOpen(true)} hitSlop={8}>
               <AppText variant="caption" color="accent">
@@ -822,7 +838,9 @@ export default function NutritionScreen() {
               <MealPlanCard
                 key={meal.id}
                 meal={meal}
-                scheduledTime={todayTimes[index]}
+                scheduledTime={
+                  enrichMealMeta(meal.name, meal.instructions).scheduledTime ?? todayTimes[index]
+                }
                 usual={usualMealSuggestion(meal, usualMeals)}
                 onUseUsual={(usual) => void handleUseUsualMeal(meal, usual)}
                 onMarkComplete={(status, consumedAt) => handleMarkMeal(meal, status, consumedAt)}

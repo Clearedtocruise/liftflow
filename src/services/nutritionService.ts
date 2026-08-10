@@ -290,6 +290,18 @@ export const nutritionService: INutritionService = {
 
   async ensureWeekMealCoverage(userId: string, timeZone?: string | null) {
     try {
+      // Self-directed nutrition: never auto-insert coached plan slots for empty days.
+      const { data: profileMeta } = await supabase
+        .from('profiles')
+        .select('metadata')
+        .eq('id', userId)
+        .maybeSingle();
+      const coachProfile = (profileMeta?.metadata as { coachProfile?: { selfDirectedNutrition?: boolean } } | null)
+        ?.coachProfile;
+      if (coachProfile?.selfDirectedNutrition === true) {
+        return ok(0);
+      }
+
       const { from, to, dates } = getWeekRange(new Date(), timeZone);
       const mealsResult = await this.getMealsForWeek(userId, from, to);
       if (!mealsResult.success) return fail(mealsResult.error);
@@ -304,6 +316,25 @@ export const nutritionService: INutritionService = {
 
       await api.syncNutritionDates({ userId, dates: missingDates }, token);
       return ok(missingDates.length);
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
+  /** Removes untouched coach-plan meals for the current week so a self-directed athlete starts clean. */
+  async clearPlannedMealsForWeek(userId: string, timeZone?: string | null) {
+    try {
+      const { from, to } = getWeekRange(new Date(), timeZone);
+      const mealsResult = await this.getMealsForWeek(userId, from, to);
+      if (!mealsResult.success) return fail(mealsResult.error);
+
+      const { isReplaceablePlannedMeal } = await import('@/lib/mealCleanup');
+      const ids = mealsResult.data.filter(isReplaceablePlannedMeal).map((meal) => meal.id);
+      if (ids.length === 0) return ok(0);
+
+      const { error } = await supabase.from('meals').delete().in('id', ids);
+      if (error) return fail(error.message);
+      return ok(ids.length);
     } catch (e) {
       return fromError(e);
     }
