@@ -11,7 +11,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { useTabataModePreference } from '@/hooks/useTabataModePreference';
 import { useWorkoutLocations } from '@/hooks/useWorkoutLocations';
 import { profileFigureGender } from '@/lib/exerciseMuscleMap';
-import { getWeekRange, isConditioningWorkout } from '@/lib/weekPlan';
+import { isSelfDirectedTraining } from '@/lib/selfDirectedMode';
+import { isConditioningWorkout } from '@/lib/weekPlan';
 import { exercisesForSessionStart } from '@/lib/workoutPlan';
 import type { ExerciseAlternativeOption } from '@/services/exerciseAdvisoryService';
 import { trainingService } from '@/services/trainingService';
@@ -40,6 +41,7 @@ export default function WorkoutDayScreen() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
+  const ownWorkouts = isSelfDirectedTraining(user);
 
   /**
    * The draft context holds the newest copy of this workout, because saving from the edit screen
@@ -47,6 +49,7 @@ export default function WorkoutDayScreen() {
    * pre-edit exercises.
    */
   const workout = draftWorkout?.id === loaded?.id ? (draftWorkout ?? loaded) : loaded;
+  const workoutUnavailable = Boolean(loaded && loaded.status === 'cancelled');
 
   const loadWorkout = useCallback(async () => {
     if (!user?.id || !id) {
@@ -54,11 +57,18 @@ export default function WorkoutDayScreen() {
       return;
     }
 
+    // Self-directed athletes log freely — old coached day deep links should not trap them.
+    if (isSelfDirectedTraining(user)) {
+      setLoading(false);
+      router.replace('/(tabs)/workout/manual-log');
+      return;
+    }
+
     setLoading(true);
     setLoadError(null);
 
-    const { from, to } = getWeekRange();
-    const result = await trainingService.getPlannedWorkouts(user.id, from, to);
+    // Load by id (not "this week"), so timezone edges / plan reloads don't false-miss.
+    const result = await trainingService.getPlannedWorkoutById(user.id, id);
 
     if (!result.success) {
       setLoadError(result.error);
@@ -67,17 +77,17 @@ export default function WorkoutDayScreen() {
       return;
     }
 
-    const found = result.data.find((item) => item.id === id) ?? null;
-    if (found) {
+    const found = result.data;
+    if (found && found.status !== 'cancelled') {
       setLoaded(found);
       // `setPlannedWorkout` seeds the exercises itself, and keeps unsaved edits for this workout.
       // Following it with `setExercises(exercisesFromPlannedWorkout(found))` overwrote them.
       setPlannedWorkout(found);
     } else {
-      setLoaded(null);
+      setLoaded(found);
     }
     setLoading(false);
-  }, [user?.id, id, setPlannedWorkout]);
+  }, [user, id, setPlannedWorkout]);
 
   useEffect(() => {
     void loadWorkout();
@@ -193,14 +203,20 @@ export default function WorkoutDayScreen() {
     );
   }
 
-  if (!workout) {
+  if (!workout || workoutUnavailable) {
     return (
       <ScreenContainer contentContainerStyle={styles.centeredContent}>
         <ErrorStateCard
           title="Workout not found"
-          message="This workout may have been moved, completed, or removed from your plan."
+          message={
+            ownWorkouts
+              ? 'Coach week planning is off. Log your own workout instead.'
+              : 'This workout may have been replaced when your plan updated, or removed from your week.'
+          }
           onBack={() => router.replace('/(tabs)/workout')}
           backLabel="Back to weekly plan"
+          onRetry={() => router.push('/(tabs)/workout/manual-log')}
+          retryLabel="Log my workout"
         />
       </ScreenContainer>
     );

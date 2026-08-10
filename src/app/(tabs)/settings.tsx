@@ -29,6 +29,8 @@ import {
     TABATA_MODE_PREF_KEY,
     tabataModeSummary,
 } from '@/lib/trainingPreferences';
+import { invalidateWeekPlanPrefetch } from '@/lib/planDataPrefetch';
+import { planDataCache } from '@/lib/planDataCache';
 import {
   isSelfDirectedNutrition,
   isSelfDirectedTraining,
@@ -439,10 +441,12 @@ export default function SettingsScreen() {
                         Alert.alert('Could not load plan', result.error);
                         return;
                       }
+                      invalidateWeekPlanPrefetch(user.id, user.timezone);
+                      await planDataCache.clearUser(user.id);
                       await refreshProfile();
                       Alert.alert(
                         'Cut plan loaded',
-                        `${result.data.plannedWorkouts} workouts · ${result.data.mealsInserted} meals for the week starting ${result.data.weekStart}.`,
+                        `${result.data.plannedWorkouts} workouts · ${result.data.mealsInserted} meals for the week starting ${result.data.weekStart}. Open the Workout tab to see the new week.`,
                       );
                     })();
                   },
@@ -484,7 +488,22 @@ export default function SettingsScreen() {
                         Alert.alert('Could not save', result.error);
                         return;
                       }
+                      invalidateWeekPlanPrefetch(user.id, user.timezone);
+                      await planDataCache.clearUser(user.id);
                       await refreshProfile();
+                      if (next) {
+                        Alert.alert(
+                          'Your own workouts',
+                          'Coach week planning is off. Use Log my workout on Home or the Workout tab.',
+                          [
+                            { text: 'OK', style: 'cancel' },
+                            {
+                              text: 'Log my workout',
+                              onPress: () => router.push('/(tabs)/workout/manual-log'),
+                            },
+                          ],
+                        );
+                      }
                     })();
                   },
                 },

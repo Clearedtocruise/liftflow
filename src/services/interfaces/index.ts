@@ -161,6 +161,8 @@ export interface ITrainingService {
     to: string,
     timeZone?: string | null,
   ): Promise<ServiceResult<PlannedWorkout[]>>;
+  /** Load one planned workout by id — does not depend on the current week window. */
+  getPlannedWorkoutById(userId: string, plannedWorkoutId: string): Promise<ServiceResult<PlannedWorkout | null>>;
   /** The next scheduled session strictly after `afterDate`, unconstrained by week boundaries. */
   getNextPlannedWorkout(userId: string, afterDate: string): Promise<ServiceResult<PlannedWorkout | null>>;
   suggestMuscleGroups(userId: string): Promise<ServiceResult<SuggestedMuscleGroups>>;
