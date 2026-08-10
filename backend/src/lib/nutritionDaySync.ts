@@ -182,6 +182,22 @@ export async function syncNutritionForDate(userId: string, date: string): Promis
   ]);
 
   const profile = profileRes.data;
+  const selfDirectedNutrition =
+    (profile?.metadata as { coachProfile?: { selfDirectedNutrition?: boolean } } | null)?.coachProfile
+      ?.selfDirectedNutrition === true;
+  if (selfDirectedNutrition) {
+    // Athlete is logging their own food — do not invent plan slots for empty days.
+    return {
+      date,
+      macros: { calories: 0, proteinG: 0, carbsG: 0, fatG: 0, rationale: 'Self-directed nutrition' },
+      mealTiming: [],
+      hydrationNote: 'Self-directed nutrition — log what you eat.',
+      isTrainingDay: false,
+      mealsUpdated: 0,
+      mealsInserted: 0,
+      mealsRemoved: 0,
+    };
+  }
   const rawWeight = profile?.weight_kg != null ? Number(profile.weight_kg) : null;
   const bodyWeightKg = isInvertedBodyWeightKg(rawWeight)
     ? normalizeBodyWeightKg(rawWeight)

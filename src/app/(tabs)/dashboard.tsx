@@ -20,6 +20,7 @@ import { useTodayDashboard } from '@/hooks/useTodayDashboard';
 import { describeProteinBudget } from '@/lib/calorieBudget';
 import { resolveExerciseMuscles } from '@/lib/exerciseMuscleMap';
 import { buildHomeManageDayMenu, type ManageDayMenuContent } from '@/lib/planDayActions';
+import { isSelfDirectedTraining } from '@/lib/selfDirectedMode';
 import { exercisesFromPlannedWorkout } from '@/lib/workoutPlan';
 import type { PlannedWorkout } from '@/types';
 
@@ -89,6 +90,8 @@ export default function DashboardScreen() {
     }
   }, [isProfileHydrated, user]);
 
+  const ownWorkouts = isSelfDirectedTraining(user);
+
   const heroState: HeroState = useMemo(() => {
     if (loading) return { kind: 'loading' };
     if (error) return { kind: 'error' };
@@ -104,6 +107,8 @@ export default function DashboardScreen() {
         extraCount: Math.max(exercises.length - 4, 0),
       };
     }
+    // Self-directed athletes skip the coached day card — Quick log is the primary path.
+    if (ownWorkouts) return { kind: 'self-directed' };
     if (todaysWorkout) {
       const exercises = exercisesFromPlannedWorkout(todaysWorkout);
       return {
@@ -115,7 +120,15 @@ export default function DashboardScreen() {
     }
     if (!hasProgram) return { kind: 'no-program' };
     return { kind: 'rest' };
-  }, [loading, error, todaysWorkout, completedTodaysWorkout, inProgressTodaysWorkout, hasProgram]);
+  }, [
+    loading,
+    error,
+    todaysWorkout,
+    completedTodaysWorkout,
+    inProgressTodaysWorkout,
+    hasProgram,
+    ownWorkouts,
+  ]);
 
   // The hero card can only show four exercises, so the preview needs the whole planned session.
   const previewWorkout = inProgressTodaysWorkout ?? todaysWorkout;
@@ -168,6 +181,7 @@ export default function DashboardScreen() {
         onRetry={() => void refresh()}
         onOpenRecovery={() => router.push('/(features)/recovery-check-in')}
         onViewHistory={() => router.push('/(tabs)/history')}
+        onLogOwnWorkout={() => router.push('/(tabs)/workout/manual-log')}
         onManageWorkout={() => {
           if (!todaysWorkout) return;
           router.push({
@@ -175,7 +189,7 @@ export default function DashboardScreen() {
             params: { id: todaysWorkout.id },
           });
         }}
-        onManageDay={hasProgram ? handleManageDay : undefined}
+        onManageDay={!ownWorkouts && hasProgram ? handleManageDay : undefined}
         manageDayBusy={adaptingPlan}
         onPreviewWorkout={previewExercises.length > 0 ? () => setPreviewOpen(true) : undefined}
       />
@@ -241,7 +255,7 @@ export default function DashboardScreen() {
         />
       ) : null}
 
-      {upcomingWorkout && upNextMuscles ? (
+      {!ownWorkouts && upcomingWorkout && upNextMuscles ? (
         <View style={styles.section}>
           <AppText variant="label" color="textTertiary">
             UP NEXT

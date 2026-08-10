@@ -19,6 +19,7 @@ export type HeroState =
   | { kind: 'loading' }
   | { kind: 'error' }
   | { kind: 'no-program' }
+  | { kind: 'self-directed' }
   | { kind: 'workout'; name: string; exercises: string[]; extraCount: number }
   | { kind: 'in-progress'; name: string; exercises: string[]; extraCount: number }
   | { kind: 'completed'; name: string }
@@ -44,6 +45,8 @@ type TodayHeroCardProps = {
   onPreviewWorkout?: () => void;
   onContinueWorkout?: () => void;
   onViewHistory?: () => void;
+  /** Quick-log path when the athlete runs their own workouts. */
+  onLogOwnWorkout?: () => void;
 };
 
 export function TodayHeroCard({
@@ -62,8 +65,9 @@ export function TodayHeroCard({
   onPreviewWorkout,
   onContinueWorkout,
   onViewHistory,
+  onLogOwnWorkout,
 }: TodayHeroCardProps) {
-  const resting = state.kind === 'rest';
+  const resting = state.kind === 'rest' || state.kind === 'self-directed';
   const celebrating = state.kind === 'completed';
   const hour = new Date().getHours();
   const backdrop = resolveHeroBackdrop(resting ? 'recovery' : 'workout', hour);
@@ -132,6 +136,23 @@ export function TodayHeroCard({
             disabled={busy}
             size="large"
             icon="✨"
+          />
+        </>
+      ) : state.kind === 'self-directed' ? (
+        <>
+          <AppText variant="title">Your workout</AppText>
+          <AppText variant="footnote" color="textSecondary">
+            You&apos;re logging your own sessions. Start empty and add the lifts you do today.
+          </AppText>
+          <RecoveryBlock
+            percent={recoveryPercent}
+            label={recoveryLabel}
+            onOpenRecovery={onOpenRecovery}
+          />
+          <PrimaryButton
+            label="Log my workout"
+            onPress={onLogOwnWorkout ?? onStart}
+            size="large"
           />
         </>
       ) : state.kind === 'completed' ? (

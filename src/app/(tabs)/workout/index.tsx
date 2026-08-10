@@ -23,6 +23,7 @@ import { INTERVAL_MODE_DEFAULTS } from '@/constants/workoutExecutionModes';
 import { localDateString } from '@/lib/localDate';
 import { planDataCache } from '@/lib/planDataCache';
 import { warmWeekPlanData } from '@/lib/planDataPrefetch';
+import { isSelfDirectedTraining } from '@/lib/selfDirectedMode';
 import { buildEditDayMenu, type ManageDayMenuContent } from '@/lib/planDayActions';
 import { logStartup } from '@/lib/startupLogger';
 import { enrichWithSupersetGroups, inferExecutionModeFromPlan } from '@/lib/supersetFlow';
@@ -119,6 +120,7 @@ export default function WorkoutScreen() {
   useLocalWeekRollover(user?.timezone, () => {
     if (!user?.id) return;
     void loadWeekPlan({ silent: true });
+    if (isSelfDirectedTraining(user)) return;
     void trainingService.regenerateProgramIfNeeded(user.id).then((regen) => {
       if (regen.success && regen.data.regenerated) void loadWeekPlan({ silent: true });
     });
@@ -422,6 +424,7 @@ export default function WorkoutScreen() {
         refreshing={refreshingPlan}
         adaptingPlan={adaptingPlan}
         timeZone={user?.timezone}
+        selfDirected={isSelfDirectedTraining(user)}
         onSelectDay={handleSelectDay}
         onEditDay={handleEditDay}
         onManualLog={() => router.push('/(tabs)/workout/manual-log')}

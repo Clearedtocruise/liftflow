@@ -264,6 +264,7 @@ export interface INutritionService {
   ): Promise<ServiceResult<GroceryList>>;
   syncGroceryListFromMeals(userId: string, from: string, to: string): Promise<ServiceResult<GroceryList | null>>;
   ensureWeekMealCoverage(userId: string, timeZone?: string | null): Promise<ServiceResult<number>>;
+  clearPlannedMealsForWeek(userId: string, timeZone?: string | null): Promise<ServiceResult<number>>;
   updateMeal(
     mealId: string,
     updates: Partial<

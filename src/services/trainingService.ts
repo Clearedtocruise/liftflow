@@ -359,6 +359,20 @@ export const trainingService: ITrainingService = {
         return ok({ regenerated: false });
       }
 
+      // Self-directed athletes log their own sessions — do not refill an empty week
+      // with a coached plan behind their back.
+      const { data: profileMeta } = await supabase
+        .from('profiles')
+        .select('metadata')
+        .eq('id', userId)
+        .maybeSingle();
+      const coachProfile = (profileMeta?.metadata as { coachProfile?: { selfDirectedTraining?: boolean } } | null)
+        ?.coachProfile;
+      if (coachProfile?.selfDirectedTraining === true) {
+        lastRegenCheckAt = now;
+        return ok({ regenerated: false });
+      }
+
       const { from, to } = await import('@/lib/weekPlan').then((m) => m.getWeekRange());
       const weekRes = await this.getPlannedWorkouts(userId, from, to);
       const weekPlans = weekRes.success ? weekRes.data : [];
