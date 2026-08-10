@@ -203,6 +203,23 @@ export const trainingService: ITrainingService = {
    * the weekly planner, but it means the next session is invisible on the last day of a week — so
    * "Up Next" would vanish every Sunday.
    */
+  async getPlannedWorkoutById(userId: string, plannedWorkoutId: string) {
+    try {
+      const { data, error } = await supabase
+        .from('planned_workouts')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('id', plannedWorkoutId)
+        .maybeSingle();
+
+      if (error) return fail(error.message);
+      if (!data) return ok(null);
+      return ok(mapPlanned(data as PlannedRow));
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
   async getNextPlannedWorkout(
     userId: string,
     afterDate: string,

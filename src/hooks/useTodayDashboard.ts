@@ -114,7 +114,7 @@ export function useTodayDashboard(): TodayDashboardState {
     try {
       const { from, to } = getWeekRange(new Date(), user.timezone);
       const [result, nextResult] = await Promise.all([
-        trainingService.getPlannedWorkouts(user.id, from, to),
+        trainingService.getPlannedWorkouts(user.id, from, to, user.timezone),
         trainingService.getNextPlannedWorkout(user.id, today),
       ]);
       if (!result.success) {

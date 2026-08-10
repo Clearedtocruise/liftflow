@@ -29,6 +29,8 @@ import {
     TABATA_MODE_PREF_KEY,
     tabataModeSummary,
 } from '@/lib/trainingPreferences';
+import { invalidateWeekPlanPrefetch, warmWeekPlanData } from '@/lib/planDataPrefetch';
+import { planDataCache } from '@/lib/planDataCache';
 import {
   isSelfDirectedNutrition,
   isSelfDirectedTraining,
@@ -439,10 +441,25 @@ export default function SettingsScreen() {
                         Alert.alert('Could not load plan', result.error);
                         return;
                       }
+                      invalidateWeekPlanPrefetch(user.id, user.timezone);
+                      await planDataCache.clearUser(user.id);
+                      await warmWeekPlanData(user.id, user.timezone);
+                      bumpRevision();
                       await refreshProfile();
                       Alert.alert(
                         'Cut plan loaded',
                         `${result.data.plannedWorkouts} workouts · ${result.data.mealsInserted} meals for the week starting ${result.data.weekStart}.`,
+                        [
+                          { text: 'OK', style: 'cancel' },
+                          {
+                            text: 'Open Nutrition',
+                            onPress: () => router.push('/(tabs)/nutrition'),
+                          },
+                          {
+                            text: 'Open Workout',
+                            onPress: () => router.push('/(tabs)/workout'),
+                          },
+                        ],
                       );
                     })();
                   },
@@ -484,7 +501,23 @@ export default function SettingsScreen() {
                         Alert.alert('Could not save', result.error);
                         return;
                       }
+                      invalidateWeekPlanPrefetch(user.id, user.timezone);
+                      await planDataCache.clearUser(user.id);
+                      bumpRevision();
                       await refreshProfile();
+                      if (next) {
+                        Alert.alert(
+                          'Your own workouts',
+                          'Coach week planning is off. Use Log my workout on Home or the Workout tab.',
+                          [
+                            { text: 'OK', style: 'cancel' },
+                            {
+                              text: 'Log my workout',
+                              onPress: () => router.push('/(tabs)/workout/manual-log'),
+                            },
+                          ],
+                        );
+                      }
                     })();
                   },
                 },
@@ -527,8 +560,26 @@ export default function SettingsScreen() {
                       }
                       if (next) {
                         await nutritionService.clearPlannedMealsForWeek(user.id, user.timezone);
+                      } else {
+                        await nutritionService.ensureWeekMealCoverage(user.id, user.timezone);
                       }
+                      invalidateWeekPlanPrefetch(user.id, user.timezone);
+                      await planDataCache.clearUser(user.id);
+                      bumpRevision();
                       await refreshProfile();
+                      if (next) {
+                        Alert.alert(
+                          'Your own nutrition',
+                          'Coach meal planning is off. Use Log a Meal on the Nutrition tab.',
+                          [
+                            { text: 'OK', style: 'cancel' },
+                            {
+                              text: 'Open Nutrition',
+                              onPress: () => router.push('/(tabs)/nutrition'),
+                            },
+                          ],
+                        );
+                      }
                     })();
                   },
                 },
