@@ -443,10 +443,11 @@ export default function SettingsScreen() {
                       }
                       invalidateWeekPlanPrefetch(user.id, user.timezone);
                       await planDataCache.clearUser(user.id);
+                      bumpRevision();
                       await refreshProfile();
                       Alert.alert(
                         'Cut plan loaded',
-                        `${result.data.plannedWorkouts} workouts · ${result.data.mealsInserted} meals for the week starting ${result.data.weekStart}. Open the Workout tab to see the new week.`,
+                        `${result.data.plannedWorkouts} workouts · ${result.data.mealsInserted} meals for the week starting ${result.data.weekStart}. Open Workout and Nutrition to see the new week.`,
                       );
                     })();
                   },
@@ -490,6 +491,7 @@ export default function SettingsScreen() {
                       }
                       invalidateWeekPlanPrefetch(user.id, user.timezone);
                       await planDataCache.clearUser(user.id);
+                      bumpRevision();
                       await refreshProfile();
                       if (next) {
                         Alert.alert(
@@ -546,8 +548,26 @@ export default function SettingsScreen() {
                       }
                       if (next) {
                         await nutritionService.clearPlannedMealsForWeek(user.id, user.timezone);
+                      } else {
+                        await nutritionService.ensureWeekMealCoverage(user.id, user.timezone);
                       }
+                      invalidateWeekPlanPrefetch(user.id, user.timezone);
+                      await planDataCache.clearUser(user.id);
+                      bumpRevision();
                       await refreshProfile();
+                      if (next) {
+                        Alert.alert(
+                          'Your own nutrition',
+                          'Coach meal planning is off. Use Log a Meal on the Nutrition tab.',
+                          [
+                            { text: 'OK', style: 'cancel' },
+                            {
+                              text: 'Open Nutrition',
+                              onPress: () => router.push('/(tabs)/nutrition'),
+                            },
+                          ],
+                        );
+                      }
                     })();
                   },
                 },

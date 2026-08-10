@@ -334,6 +334,9 @@ export const nutritionService: INutritionService = {
 
       const { error } = await supabase.from('meals').delete().in('id', ids);
       if (error) return fail(error.message);
+      // Keep the week cache honest so Nutrition doesn't keep showing deleted plan slots.
+      const remaining = mealsResult.data.filter((meal) => !ids.includes(meal.id));
+      await planDataCache.writeMeals(userId, from, to, remaining);
       return ok(ids.length);
     } catch (e) {
       return fromError(e);

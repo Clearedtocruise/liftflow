@@ -152,8 +152,9 @@ export default function NutritionScreen() {
       if (cached.goals) {
         setGoals(cached.goals);
       }
+      // Always apply — including [] — so cleared plans / self-directed weeks don't leave ghost meals.
+      setWeekMeals(cached.meals);
       if (cached.meals.length > 0) {
-        setWeekMeals(cached.meals);
         logStartup('NUTRITION_PLAN_LOADED', { count: cached.meals.length, source: 'nutrition-tab' });
       }
 
@@ -180,8 +181,8 @@ export default function NutritionScreen() {
         if (generation !== loadGenerationRef.current) return;
 
         if (fresh.goals) setGoals(fresh.goals);
+        setWeekMeals(fresh.meals);
         if (fresh.meals.length > 0) {
-          setWeekMeals(fresh.meals);
           logStartup('NUTRITION_PLAN_LOADED', { count: fresh.meals.length, source: 'nutrition-tab-refresh' });
         }
         setSummary((prev) =>
@@ -281,7 +282,7 @@ export default function NutritionScreen() {
 
       if (cached.goals) setGoals(cached.goals);
       if (cached.workouts.length > 0) applyWorkoutTodayFromPlan(cached.workouts);
-      if (cached.meals.length > 0) setWeekMeals(cached.meals);
+      setWeekMeals(cached.meals);
 
       if (cached.goals || cached.meals.length > 0) {
         setSummary(buildDailySummaryFromMeals(cached.meals, today, cached.goals));

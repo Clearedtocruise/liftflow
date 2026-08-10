@@ -1,3 +1,4 @@
+import { localDateString } from '../localDate.js';
 import { removePlannedMealsForWeek } from '../mealCleanup.js';
 import { persistNutritionGoals } from '../nutritionGoals.js';
 import { totalPlannedVolume } from '../programProgression.js';
@@ -41,15 +42,17 @@ function toGeneratedExercises(day: (typeof AGGRESSIVE_CUT_WORKOUT_DAYS)[number])
  */
 export async function loadAggressiveCutPlan(userId: string): Promise<LoadAggressiveCutResult> {
   const db = requireAdmin();
-  const today = new Date().toISOString().slice(0, 10);
-  const weekStart = weekStartFromDate(today);
-  const weekEnd = addDays(weekStart, 6);
 
   const { data: profile } = await db
     .from('profiles')
-    .select('metadata, primary_training_goal, fitness_goals')
+    .select('metadata, primary_training_goal, fitness_goals, timezone')
     .eq('id', userId)
     .maybeSingle();
+
+  // Match the Nutrition/Workout tabs: week windows are local to the athlete, not UTC.
+  const today = localDateString(new Date(), profile?.timezone as string | null | undefined);
+  const weekStart = weekStartFromDate(today);
+  const weekEnd = addDays(weekStart, 6);
 
   const existingMeta = (profile?.metadata ?? {}) as Record<string, unknown>;
   const coachProfile = {
