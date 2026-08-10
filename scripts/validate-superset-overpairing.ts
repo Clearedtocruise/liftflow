@@ -1,5 +1,5 @@
 /**
- * Guards against the "everything is a supersets" production bug.
+ * Guards that supersets stay disabled (no pairing at plan or session load).
  *
  * Usage: npx tsx scripts/validate-superset-overpairing.ts
  */
@@ -10,7 +10,7 @@ import {
 import {
   enrichWithSupersetGroups,
   inferExecutionModeFromPlan,
-  sanitizeOverpairedSupersets,
+  stripAllSupersetGroups,
 } from '@/lib/supersetFlow';
 import type { EditableWorkoutExercise } from '@/types/workoutExecution';
 
@@ -31,78 +31,52 @@ function check(label: string, actual: unknown, expected: unknown): void {
   );
 }
 
-console.log('\nSmart pairing must not invent groups without movement families');
+console.log('\nPlan-time pairing is off');
 check(
-  'empty metadata stays unpaired',
+  'smart pairing strips and invents nothing',
   enrichWithSmartSupersetGroups<NamedCandidate>([
-    { name: 'Bench' },
-    { name: 'Row' },
-    { name: 'Curl' },
-    { name: 'Extension' },
+    { name: 'Curl', metadata: { movement_family: 'biceps' }, supersetGroupId: 'ss-1' },
+    { name: 'Extension', metadata: { movement_family: 'triceps' }, supersetGroupId: 'ss-1' },
   ]).map((exercise) => exercise.supersetGroupId ?? null),
-  [null, null, null, null],
+  [null, null],
 );
 
-console.log('\nBlock supersets only pair numbered stations');
 check(
-  'bare A compounds stay solo',
+  'block pairing strips numbered stations',
   applyBlockSupersets<NamedCandidate>([
-    { block: 'A', name: 'Bench' },
-    { block: 'A', name: 'Also' },
-    { block: 'B1', name: 'Fly' },
-    { block: 'B2', name: 'Raise' },
+    { block: 'B1', name: 'Fly', supersetGroupId: 'ss-b' },
+    { block: 'B2', name: 'Raise', supersetGroupId: 'ss-b' },
   ]).map((exercise) => exercise.supersetGroupId ?? null),
-  [null, null, 'ss-b', 'ss-b'],
+  [null, null],
 );
 
-console.log('\nSaved over-paired plans are scrubbed on load');
-const overpaired: EditableWorkoutExercise[] = [
+console.log('\nSession load strips every leftover group');
+const withGroups: EditableWorkoutExercise[] = [
   { id: '1', name: 'A', sets: 3, supersetGroupId: 'ss-1' },
   { id: '2', name: 'B', sets: 3, supersetGroupId: 'ss-1' },
   { id: '3', name: 'C', sets: 3, supersetGroupId: 'ss-2' },
   { id: '4', name: 'D', sets: 3, supersetGroupId: 'ss-2' },
-  { id: '5', name: 'E', sets: 3, supersetGroupId: 'ss-3' },
-  { id: '6', name: 'F', sets: 3, supersetGroupId: 'ss-3' },
-  { id: '7', name: 'G', sets: 3, supersetGroupId: 'ss-4' },
-  { id: '8', name: 'H', sets: 3, supersetGroupId: 'ss-4' },
 ];
 check(
-  'sanitize strips wall-to-wall adjacent pairs',
-  sanitizeOverpairedSupersets(overpaired).every((exercise) => !exercise.supersetGroupId),
+  'stripAllSupersetGroups clears ids',
+  stripAllSupersetGroups(withGroups).every((exercise) => !exercise.supersetGroupId),
   true,
 );
 check(
-  'enrichWithSupersetGroups scrub path',
-  enrichWithSupersetGroups(overpaired, 'traditional').every((exercise) => !exercise.supersetGroupId),
+  'enrichWithSupersetGroups clears ids',
+  enrichWithSupersetGroups(withGroups, 'traditional').every((exercise) => !exercise.supersetGroupId),
   true,
 );
 check(
-  'inferExecutionMode stays traditional after scrub',
-  inferExecutionModeFromPlan(overpaired, 'traditional'),
+  'inferExecutionMode never promotes to superset',
+  inferExecutionModeFromPlan(withGroups, 'traditional'),
+  'traditional',
+);
+check(
+  'explicit superset preference falls back to traditional',
+  inferExecutionModeFromPlan(withGroups, 'superset'),
   'traditional',
 );
 
-console.log('\nLegitimate sparse Month 1-style pairs survive');
-const month1Style: EditableWorkoutExercise[] = [
-  { id: '1', name: 'Bench', sets: 4 },
-  { id: '2', name: 'Incline', sets: 3, supersetGroupId: 'ss-b' },
-  { id: '3', name: 'Raise', sets: 3, supersetGroupId: 'ss-b' },
-  { id: '4', name: 'Fly', sets: 3, supersetGroupId: 'ss-c' },
-  { id: '5', name: 'Pushdown', sets: 3, supersetGroupId: 'ss-c' },
-  { id: '6', name: 'OHP', sets: 4 },
-  { id: '7', name: 'Curl', sets: 3 },
-  { id: '8', name: 'Kickback', sets: 3 },
-];
-check(
-  'sparse pairs kept',
-  sanitizeOverpairedSupersets(month1Style).map((exercise) => exercise.supersetGroupId ?? null),
-  [null, 'ss-b', 'ss-b', 'ss-c', 'ss-c', null, null, null],
-);
-check(
-  'inferExecutionMode becomes superset for real pairs',
-  inferExecutionModeFromPlan(month1Style, 'traditional'),
-  'superset',
-);
-
-console.log(`\n${failures === 0 ? 'Superset over-pairing: PASS' : `Superset over-pairing: ${failures} FAILURE(S)`}`);
+console.log(`\n${failures === 0 ? 'Superset disabled: PASS' : `Superset disabled: ${failures} FAILURE(S)`}`);
 process.exit(failures === 0 ? 0 : 1);

@@ -50,55 +50,30 @@ test('Month 1 push day volume targets ~12 sets per muscle group', () => {
   }
 });
 
-test('applyBlockSupersets groups B1/B2 blocks', () => {
+test('applyBlockSupersets is a no-op — supersets are disabled', () => {
   const grouped = applyBlockSupersets([
     { block: 'A', name: 'Bench', metadata: { movement_family: 'horizontal_press' } },
-    { block: 'B1', name: 'Fly', metadata: { movement_family: 'horizontal_press' } },
-    { block: 'B2', name: 'Raise', metadata: { movement_family: 'rear_delt' } },
+    { block: 'B1', name: 'Fly', metadata: { movement_family: 'horizontal_press' }, supersetGroupId: 'ss-b' },
+    { block: 'B2', name: 'Raise', metadata: { movement_family: 'rear_delt' }, supersetGroupId: 'ss-b' },
   ]);
 
-  assert.equal(grouped[0].supersetGroupId, undefined);
-  assert.equal(grouped[1].supersetGroupId, 'ss-b');
-  assert.equal(grouped[2].supersetGroupId, 'ss-b');
+  assert.deepEqual(
+    grouped.map((exercise) => exercise.supersetGroupId),
+    [undefined, undefined, undefined],
+  );
 });
 
-test('applyBlockSupersets never pairs bare letter compounds', () => {
-  const grouped = applyBlockSupersets([
-    { block: 'A', name: 'Bench' },
-    { block: 'A', name: 'Also Bench' },
-    { block: 'D', name: 'OHP' },
-  ]);
-  assert.equal(grouped[0].supersetGroupId, undefined);
-  assert.equal(grouped[1].supersetGroupId, undefined);
-  assert.equal(grouped[2].supersetGroupId, undefined);
-});
-
-test('smart supersets skip heavy compound pairs', () => {
+test('smart supersets are disabled and strip leftover group ids', () => {
   const grouped = enrichWithSmartSupersetGroups([
     { name: 'Squat', metadata: { movement_family: 'squat_pattern' } },
     { name: 'Deadlift', metadata: { movement_family: 'hinge_pattern' } },
-    { name: 'Curl', metadata: { movement_family: 'biceps' } },
-    { name: 'Extension', metadata: { movement_family: 'triceps' } },
+    { name: 'Curl', metadata: { movement_family: 'biceps' }, supersetGroupId: 'ss-1' },
+    { name: 'Extension', metadata: { movement_family: 'triceps' }, supersetGroupId: 'ss-1' },
   ]);
 
-  assert.equal(grouped[0].supersetGroupId, undefined);
-  assert.equal(grouped[1].supersetGroupId, undefined);
-  assert.equal(grouped[2].supersetGroupId, 'ss-1');
-  assert.equal(grouped[3].supersetGroupId, 'ss-1');
-});
-
-test('smart supersets do not invent pairs when movement family is missing', () => {
-  const grouped = enrichWithSmartSupersetGroups([
-    { name: 'Bench' },
-    { name: 'Incline DB' },
-    { name: 'Lateral Raise' },
-    { name: 'Cable Fly' },
-    { name: 'Pushdown' },
-    { name: 'OHP' },
-  ]);
   assert.deepEqual(
     grouped.map((exercise) => exercise.supersetGroupId),
-    [undefined, undefined, undefined, undefined, undefined, undefined],
+    [undefined, undefined, undefined, undefined],
   );
 });
 
