@@ -16,5 +16,6 @@ Fixes that broke in later perf/refactor passes. Each item has a static validator
 | 2026-07 | Active workout | Swapped-in exercises took their set target from the logged set count, so the target climbed with every set and the exercise never completed | `npm run validate:active-workout-progression` — `alignPlanExercisesToSession` inherits the unclaimed plan slot, never `sets.length` |
 | 2026-07 | Active workout | Re-applying a plan to a live session deleted exercises added mid-workout along with their logged sets | `applySessionExercisePlanInternal` skips any exercise with `sets.length > 0` |
 | 2026-07 | Supersets | Back-to-back partner logs wrote both sets to the first exercise because `setCurrentIndex` had not re-rendered yet; Month 1 `ss-b` labels were also blank | `npm run validate:superset-logging` — `currentIndexRef` advances synchronously; letter group ids label as B1/B2 |
+| 2026-08 | Active workout | Loading method leaked across exercises so a dumbbell row after pull-ups logged set 1 with no weight; already-complete exercises auto-skipped | Reset `loadingMethod` on exercise change; refuse weighted logs at ≤0 kg; auto-advance only when `justFinishedExerciseRef` |
 
 When fixing a user-facing flow, add a row here and a validator pattern if the bug can be caught statically.

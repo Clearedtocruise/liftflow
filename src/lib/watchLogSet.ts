@@ -77,15 +77,24 @@ export function resolveWatchSetPayload(input: WatchLogSetInput): WatchSetResolut
   const weight =
     nonNegative(input.draftWeightKg) ??
     nonNegative(lastSet?.weight) ??
-    nonNegative(exercise.suggestedWeight) ??
-    0;
+    nonNegative(exercise.suggestedWeight);
+
+  if (weight == null) {
+    // Strength lifts must not silently log at 0 lb from the watch.
+    const name = (exercise.exercise?.name ?? '').toLowerCase();
+    const looksBodyweight =
+      /\b(pull[\s-]?up|chin[\s-]?up|push[\s-]?up|dip|burpee|plank|bodyweight)\b/i.test(name);
+    if (!looksBodyweight) {
+      return { ok: false, error: 'Set a weight on iPhone or Watch before logging.' };
+    }
+  }
 
   return {
     ok: true,
     exerciseName: exercise.exercise?.name ?? 'Exercise',
     payload: {
       workoutExerciseId: exercise.id,
-      weight: round1(weight),
+      weight: round1(weight ?? 0),
       reps,
     },
   };
