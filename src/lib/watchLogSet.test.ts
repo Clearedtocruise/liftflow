@@ -35,7 +35,11 @@ function session(overrides: Partial<WorkoutSession> = {}): WorkoutSession {
 }
 
 test('logs against the exercise the watch is showing', () => {
-  const result = resolveWatchSetPayload({ session: session(), activeExerciseIndex: 1 });
+  const result = resolveWatchSetPayload({
+    session: session(),
+    activeExerciseIndex: 1,
+    draftWeightKg: 50,
+  });
   assert.ok(result.ok);
   assert.equal(result.payload.workoutExerciseId, 'we-2');
   assert.equal(result.exerciseName, 'Barbell Row');
@@ -73,8 +77,24 @@ test('a first set falls back to the plan', () => {
   assert.equal(result.payload.weight, 60);
 });
 
-test('bodyweight work logs at zero rather than refusing', () => {
+test('strength work without a known weight is refused', () => {
   const result = resolveWatchSetPayload({ session: session(), activeExerciseIndex: 1 });
+  assert.equal(result.ok, false);
+  assert.match((result as { error: string }).error, /Set a weight/);
+});
+
+test('bodyweight work logs at zero rather than refusing', () => {
+  const pullUps = session();
+  pullUps.exercises[1] = {
+    id: 'we-2',
+    sortOrder: 1,
+    exerciseId: 'pullup',
+    exercise: { id: 'pullup', name: 'Pull-Up' },
+    suggestedReps: '10',
+    sets: [],
+  } as never;
+
+  const result = resolveWatchSetPayload({ session: pullUps, activeExerciseIndex: 1 });
   assert.ok(result.ok);
   assert.equal(result.payload.weight, 0);
   assert.equal(result.payload.reps, 10);

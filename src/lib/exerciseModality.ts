@@ -126,8 +126,9 @@ export function formatSetLoggedLabel(
   if (mode === 'bodyweight') {
     return `${set.reps ?? '—'} reps`;
   }
+  // Weighted lifts must not look like bodyweight when the load was missing/zero.
   if (set.weight != null && set.weight > 0) {
     return `${formatWeight(set.weight)} ${weightLabel} × ${set.reps ?? '—'}`;
   }
-  return `${set.reps ?? '—'} reps`;
+  return `— ${weightLabel} × ${set.reps ?? '—'}`;
 }

@@ -249,6 +249,8 @@ export function ActiveWorkoutScreen({
   const advanceExerciseRef = useRef<() => void>(() => {});
   const pendingRoundIncrementRef = useRef(false);
   const offeredExerciseCompleteRef = useRef<number | null>(null);
+  /** Only auto-advance when THIS visit just finished the last set — not when landing on an already-done exercise. */
+  const justFinishedExerciseRef = useRef(false);
   const [circuitRound, setCircuitRound] = useState(1);
   const [bonusSets, setBonusSets] = useState(0);
   const [exercisePickerVisible, setExercisePickerVisible] = useState(false);
@@ -574,11 +576,23 @@ export function ActiveWorkoutScreen({
     setCoachPrescription(null);
     setExerciseHadPr(false);
     setShowComplete(false);
+    justFinishedExerciseRef.current = false;
     setDistanceKm(0);
 
     const sessionSets = currentExercise?.sets ?? [];
     const planReps = planExercises[currentIndex]?.repRange ?? currentExercise?.suggestedReps;
     const lastSession = sessionSets[sessionSets.length - 1];
+
+    // Loading method used to leak from the previous exercise (e.g. pull-ups → bodyweight), so the
+    // next weighted lift logged set 1 with no load until history returned.
+    setLoadingMethod(
+      inferLoadingMethodFromHistory(
+        currentExercise?.exercise,
+        currentExercise?.exercise?.slug,
+        lastSession?.weight,
+        lastSession?.durationSeconds,
+      ),
+    );
 
     setWeightKg(
       resolveExerciseSeedWeightKg({
@@ -794,6 +808,7 @@ export function ActiveWorkoutScreen({
   useEffect(() => {
     if (!executionModeUsesIntervalTimer(executionMode) || showComplete || isPaused) return;
     if (intervalTimer?.phase !== 'done') return;
+    justFinishedExerciseRef.current = true;
     setShowComplete(true);
     setExerciseHadPr(completedSets.some((set) => set.isPr));
     dismissIntervalTimer();
@@ -820,6 +835,8 @@ export function ActiveWorkoutScreen({
     ) {
       return;
     }
+    // Revisiting an already-complete exercise must not auto-skip the lifter forward.
+    if (!justFinishedExerciseRef.current) return;
     scheduleAutoExerciseAdvance();
     return () => {
       if (autoAdvanceTimeoutRef.current) {
@@ -904,6 +921,7 @@ export function ActiveWorkoutScreen({
       setExerciseHadPr(completedSets.some((set) => set.isPr));
     } else {
       setShowComplete(false);
+      justFinishedExerciseRef.current = false;
     }
   }, [groupComplete, completedSets, allSetsDone, executionMode]);
 
@@ -935,6 +953,7 @@ export function ActiveWorkoutScreen({
     pendingAdvanceRef.current = null;
     pendingExerciseAdvanceAfterRestRef.current = false;
     pendingAdvanceAfterChallengeRef.current = null;
+    justFinishedExerciseRef.current = false;
   }
 
   async function handleDeleteSet(setId: string) {
@@ -1215,6 +1234,19 @@ export function ActiveWorkoutScreen({
     const resolvedDurationSeconds = overrides?.durationSeconds ?? durationSeconds;
     const resolvedDistanceKm = overrides?.distanceKm ?? distanceKm;
 
+    if (loggingMode === 'weighted' && (!(resolvedWeightKg > 0) || resolvedWeightKg == null)) {
+      AccessibilityInfo.announceForAccessibility('Enter a weight before logging this set.');
+      Alert.alert('Add a weight', 'This lift needs a load before you log the set.');
+      return { ok: false, error: 'Enter a weight before logging this set.' };
+    }
+    if (
+      (loggingMode === 'weighted' || loggingMode === 'bodyweight') &&
+      (!(resolvedReps > 0) || resolvedReps == null)
+    ) {
+      AccessibilityInfo.announceForAccessibility('Enter reps before logging this set.');
+      return { ok: false, error: 'Enter reps before logging this set.' };
+    }
+
     loggingInFlightRef.current = true;
     setLogging(true);
     try {
@@ -1234,6 +1266,9 @@ export function ActiveWorkoutScreen({
       );
 
       const exerciseAdvance = completedAfterLog >= logTargetSets;
+      if (exerciseAdvance) {
+        justFinishedExerciseRef.current = true;
+      }
       logWorkoutProgressionDecision({
         exerciseId: logExercise.exerciseId ?? logExercise.id,
         exerciseName: logExercise.exercise?.name ?? 'Exercise',
@@ -1897,7 +1932,8 @@ export function ActiveWorkoutScreen({
                         logging ||
                         restActive ||
                         intervalBlocksLogging ||
-                        transitionBlocksLogging
+                        transitionBlocksLogging ||
+                        (loggingMode === 'weighted' && !(weightKg > 0))
                       }
                       onPress={() => {
                         void handleLogSet();

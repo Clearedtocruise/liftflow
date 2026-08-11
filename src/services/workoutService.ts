@@ -179,20 +179,23 @@ async function preloadSessionExercises(
   // A session started from a planned workout is seeded twice: the `trg_seed_session_exercises_from_plan`
   // trigger fires inside the session INSERT, and then this runs. The trigger skips when the client
   // got there first, but this had no matching check, so it inserted a second copy of every exercise
-  // — the duplicated lists and split set counts users saw. Read what is already there and add only
-  // what is missing.
+  // — the duplicated lists and split set counts users saw. Fill only empty sort_order slots so two
+  // plan rows that resolve to the same catalog exercise (e.g. left/right) are not collapsed away.
   const { data: existingRows } = await supabase
     .from('workout_exercises')
-    .select('exercise_id')
+    .select('exercise_id, sort_order')
     .eq('session_id', sessionId);
-  const alreadySeeded = new Set((existingRows ?? []).map((row) => row.exercise_id as string));
+  const occupiedOrders = new Set((existingRows ?? []).map((row) => row.sort_order as number));
 
   for (let i = 0; i < exercises.length; i++) {
+    if (occupiedOrders.has(i)) continue;
     const template = exercises[i];
     const exerciseId = await findOrCreateExerciseByNameInternal(template.name, userId);
-    if (!exerciseId) continue;
-    if (alreadySeeded.has(exerciseId)) continue;
-    alreadySeeded.add(exerciseId);
+    if (!exerciseId) {
+      console.warn('[workout] could not resolve planned exercise for session seed', template.name);
+      continue;
+    }
+    occupiedOrders.add(i);
 
     await supabase.from('workout_exercises').insert({
       session_id: sessionId,
