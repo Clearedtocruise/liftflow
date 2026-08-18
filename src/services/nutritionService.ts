@@ -296,10 +296,23 @@ export const nutritionService: INutritionService = {
         .select('metadata')
         .eq('id', userId)
         .maybeSingle();
-      const coachProfile = (profileMeta?.metadata as { coachProfile?: { selfDirectedNutrition?: boolean } } | null)
-        ?.coachProfile;
+      const coachProfile = (profileMeta?.metadata as {
+        coachProfile?: { selfDirectedNutrition?: boolean; planPack?: string };
+        coachActivation?: { planPack?: string };
+      } | null)?.coachProfile;
+      const planPack =
+        coachProfile?.planPack ??
+        (profileMeta?.metadata as { coachActivation?: { planPack?: string } } | null)?.coachActivation?.planPack;
       if (coachProfile?.selfDirectedNutrition === true) {
         return ok(0);
+      }
+
+      // Sticky PDF meal week: reload the blueprint instead of inventing generic day-sync meals.
+      if (planPack === 'aggressive_cut') {
+        const { trainingService } = await import('@/services/trainingService');
+        const regen = await trainingService.regenerateProgramIfNeeded(userId, timeZone);
+        if (!regen.success) return fail(regen.error);
+        return ok(regen.data.regenerated ? 1 : 0);
       }
 
       const { from, to, dates } = getWeekRange(new Date(), timeZone);

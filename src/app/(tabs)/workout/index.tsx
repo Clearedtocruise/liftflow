@@ -121,7 +121,7 @@ export default function WorkoutScreen() {
     if (!user?.id) return;
     void loadWeekPlan({ silent: true });
     if (isSelfDirectedTraining(user)) return;
-    void trainingService.regenerateProgramIfNeeded(user.id).then((regen) => {
+    void trainingService.regenerateProgramIfNeeded(user.id, user.timezone).then((regen) => {
       if (regen.success && regen.data.regenerated) void loadWeekPlan({ silent: true });
     });
   });
@@ -152,6 +152,15 @@ export default function WorkoutScreen() {
 
       void warmWeekPlanData(user.id, user?.timezone);
       void loadWeekPlan({ silent: hydratedFromCacheRef.current });
+      // Opening the app in a new week never fires useLocalWeekRollover (it only ticks while mounted).
+      // Sticky personal plans need this check so week 2+ of the PDF cycle actually appears.
+      if (!isSelfDirectedTraining(user)) {
+        void trainingService.regenerateProgramIfNeeded(user.id, user.timezone).then((regen) => {
+          if (!cancelled && regen.success && regen.data.regenerated) {
+            void loadWeekPlan({ silent: true });
+          }
+        });
+      }
     })();
 
     return () => {
