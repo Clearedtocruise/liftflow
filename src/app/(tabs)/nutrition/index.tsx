@@ -298,6 +298,11 @@ export default function NutritionScreen() {
         void warmWeekPlanData(user.id, user.timezone);
         void load({ silent: false });
       }
+      if (!isSelfDirectedNutrition(user)) {
+        void nutritionService.ensureWeekMealCoverage(user.id, user.timezone).then(() => {
+          if (!cancelled) void load({ silent: true });
+        });
+      }
     })();
 
     return () => {

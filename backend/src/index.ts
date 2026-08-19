@@ -49,7 +49,7 @@ app.disable('x-powered-by');
 app.use('/health', healthRouter);
 
 app.use(cors(corsOptions));
-app.use(express.json({ limit: '2mb' }));
+app.use(express.json({ limit: '12mb' }));
 app.use(globalLimiter);
 
 app.use(debugRouter);

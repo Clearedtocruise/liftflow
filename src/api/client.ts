@@ -236,6 +236,17 @@ export const api = {
       mealsInserted: number;
       mealsCleared: number;
     }>('/api/training/programs/load-personal-plan', { planId }, token),
+  uploadPersonalPlan: (
+    body: { kind: 'workout' | 'nutrition'; filename?: string; text: string },
+    token?: string,
+  ) =>
+    apiClient.post<{
+      planId: string;
+      programId?: string;
+      weekStart: string;
+      plannedWorkouts: number;
+      mealsInserted: number;
+    }>('/api/training/programs/upload-personal-plan', body, token),
   activateCoach: (userId: string, token?: string) =>
     apiClient.post<import('@/types/coachActivation').CoachActivationResult>(
       '/api/training/coach/activate',

@@ -36,7 +36,7 @@ import {
 } from '@/lib/weekPlan';
 import { serializeChallengeNotes } from '@/lib/workoutChallengeFlow';
 import { normalizeExecutionMode } from '@/lib/workoutExecutionMode';
-import { exercisesForSessionStart } from '@/lib/workoutPlan';
+import { exercisesForSessionStart, preferPlannedSetCounts } from '@/lib/workoutPlan';
 import { productAnalyticsService } from '@/services/productAnalyticsService';
 import { trainingService } from '@/services/trainingService';
 import { workoutService } from '@/services/workoutService';
@@ -48,7 +48,7 @@ import type { WorkoutChallengeRecord } from '@/types/workoutChallenge';
 export default function WorkoutScreen() {
   const { user } = useAuth();
   const { revision, setFromAdaptation } = usePlanAdjustment();
-  const { exercises, setPlannedWorkout, plannedWorkout } = useWorkoutPlanDraft();
+  const { exercises, isDirty, setPlannedWorkout, plannedWorkout } = useWorkoutPlanDraft();
   const { tabataModeEnabled } = useTabataModePreference();
   const { activeSession: session, isLoading: loading, endSession, cancelSession, refreshSession } = useWorkoutSession();
 
@@ -121,7 +121,7 @@ export default function WorkoutScreen() {
     if (!user?.id) return;
     void loadWeekPlan({ silent: true });
     if (isSelfDirectedTraining(user)) return;
-    void trainingService.regenerateProgramIfNeeded(user.id).then((regen) => {
+    void trainingService.regenerateProgramIfNeeded(user.id, user.timezone).then((regen) => {
       if (regen.success && regen.data.regenerated) void loadWeekPlan({ silent: true });
     });
   });
@@ -152,6 +152,15 @@ export default function WorkoutScreen() {
 
       void warmWeekPlanData(user.id, user?.timezone);
       void loadWeekPlan({ silent: hydratedFromCacheRef.current });
+      // Opening the app in a new week never fires useLocalWeekRollover (it only ticks while mounted).
+      // Sticky personal plans need this check so week 2+ of the PDF cycle actually appears.
+      if (!isSelfDirectedTraining(user)) {
+        void trainingService.regenerateProgramIfNeeded(user.id, user.timezone).then((regen) => {
+          if (!cancelled && regen.success && regen.data.regenerated) {
+            void loadWeekPlan({ silent: true });
+          }
+        });
+      }
     })();
 
     return () => {
@@ -176,6 +185,21 @@ export default function WorkoutScreen() {
   });
 
   const invalidPlannedSession = Boolean(session?.plannedWorkoutId) && (session?.exercises.length ?? 0) === 0;
+
+  // An in-progress session must use THAT day's prescriptions (Pull-Up 5×5), not whatever
+  // the week tab last put in the draft — otherwise set targets fall back to 3 and skip ahead.
+  useEffect(() => {
+    if (!user?.id || !session?.plannedWorkoutId) return;
+    if (plannedWorkout?.id === session.plannedWorkoutId) return;
+    let cancelled = false;
+    void trainingService.getPlannedWorkoutById(user.id, session.plannedWorkoutId).then((result) => {
+      if (cancelled || !result.success || !result.data) return;
+      setPlannedWorkout(result.data);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, session?.plannedWorkoutId, plannedWorkout?.id, setPlannedWorkout]);
 
   useEffect(() => {
     if (!session || !invalidPlannedSession) {
@@ -362,22 +386,24 @@ export default function WorkoutScreen() {
       ? exercises
       : exercisesForSessionStart(plannedWorkout, sessionTabata);
 
-    const basePlan =
-      draftExercises.length > 0
-        ? draftExercises
-        : [...session.exercises]
-            .sort((a, b) => a.sortOrder - b.sortOrder)
-            .map((exercise) => ({
-              id: exercise.id,
-              name: exercise.exercise?.name ?? 'Exercise',
-              // Tabata rounds are not strength sets, so the set count stays mode-independent.
-              sets: 3,
-              repRange: exercise.suggestedReps ?? '8-10',
-              restSeconds: sessionTabata ? INTERVAL_MODE_DEFAULTS.tabata.restSeconds : 90,
-              intervalRounds: sessionTabata ? INTERVAL_MODE_DEFAULTS.tabata.rounds : undefined,
-              intervalWorkSeconds: sessionTabata ? INTERVAL_MODE_DEFAULTS.tabata.workSeconds : undefined,
-              executionMode: sessionTabata ? ('tabata' as const) : undefined,
-            }));
+    const plannedFallback = exercisesForSessionStart(plannedWorkout, sessionTabata);
+    const sessionFallback = [...session.exercises]
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((exercise, index) => ({
+        id: exercise.id,
+        name: exercise.exercise?.name ?? 'Exercise',
+        sets: plannedFallback[index]?.sets ?? 3,
+        repRange: exercise.suggestedReps ?? '8-10',
+        restSeconds: sessionTabata ? INTERVAL_MODE_DEFAULTS.tabata.restSeconds : 90,
+        intervalRounds: sessionTabata ? INTERVAL_MODE_DEFAULTS.tabata.rounds : undefined,
+        intervalWorkSeconds: sessionTabata ? INTERVAL_MODE_DEFAULTS.tabata.workSeconds : undefined,
+        executionMode: sessionTabata ? ('tabata' as const) : undefined,
+      }));
+    const livePlan =
+      draftExercises.length > 0 ? draftExercises : plannedFallback.length > 0 ? plannedFallback : sessionFallback;
+    // Unsaved day-edits keep their own set counts; otherwise the PDF/plan wins so 5-set
+    // pull-ups cannot complete after set 3 and skip to barbell rows.
+    const basePlan = isDirty ? livePlan : preferPlannedSetCounts(livePlan, plannedFallback);
 
     const executionMode = inferExecutionModeFromPlan(
       basePlan,

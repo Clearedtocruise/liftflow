@@ -356,6 +356,16 @@ export const trainingService: ITrainingService = {
     }
   },
 
+  async uploadPersonalPlan(payload: { kind: 'workout' | 'nutrition'; filename?: string; text: string }) {
+    try {
+      const token = await getAccessToken();
+      const result = await api.uploadPersonalPlan(payload, token);
+      return ok(result);
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
   async forceRegenerateProgram(userId: string) {
     try {
       const token = await getAccessToken();
@@ -379,7 +389,7 @@ export const trainingService: ITrainingService = {
     }
   },
 
-  async regenerateProgramIfNeeded(userId: string) {
+  async regenerateProgramIfNeeded(userId: string, timeZone?: string | null) {
     try {
       const now = Date.now();
       if (now - lastRegenCheckAt < REGEN_CHECK_COOLDOWN_MS) {
@@ -390,24 +400,32 @@ export const trainingService: ITrainingService = {
       // with a coached plan behind their back.
       const { data: profileMeta } = await supabase
         .from('profiles')
-        .select('metadata')
+        .select('metadata, timezone')
         .eq('id', userId)
         .maybeSingle();
-      const coachProfile = (profileMeta?.metadata as { coachProfile?: { selfDirectedTraining?: boolean } } | null)
-        ?.coachProfile;
+      const profileRecord = profileMeta as {
+        metadata?: {
+          coachProfile?: { selfDirectedTraining?: boolean; planPack?: string };
+          coachActivation?: { planPack?: string };
+        };
+        timezone?: string | null;
+      } | null;
+      const coachProfile = profileRecord?.metadata?.coachProfile;
       if (coachProfile?.selfDirectedTraining === true) {
         lastRegenCheckAt = now;
         return ok({ regenerated: false });
       }
 
-      const { from, to } = await import('@/lib/weekPlan').then((m) => m.getWeekRange());
-      const weekRes = await this.getPlannedWorkouts(userId, from, to);
+      const zone = timeZone ?? profileRecord?.timezone ?? null;
+      const { from, to } = await import('@/lib/weekPlan').then((m) => m.getWeekRange(new Date(), zone));
+      const { isStartableWorkoutStatus } = await import('@/lib/weekPlan');
+      const weekRes = await this.getPlannedWorkouts(userId, from, to, zone);
       const weekPlans = weekRes.success ? weekRes.data : [];
+      const hasStartableWeek = weekPlans.some((workout) => isStartableWorkoutStatus(workout.status));
 
-      // Only rebuild when the week is empty. Background version/frequency regen was
-      // hanging the API and leaving cancelled workouts — which broke Start Workout
-      // and anything that waits on training/nutrition.
-      if (weekPlans.length > 0) {
+      // Only rebuild when the visible week has no startable sessions. Cancelled leftovers from a
+      // previous load used to count as "already planned" and blocked the sticky PDF week from cycling.
+      if (hasStartableWeek) {
         lastRegenCheckAt = now;
         return ok({ regenerated: false });
       }

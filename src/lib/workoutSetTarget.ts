@@ -41,6 +41,21 @@ export function resolveEffectiveTargetSets(input: TargetSetsInput): number {
   return planSets + bonusSets;
 }
 
+/**
+ * Prefer the planned set count from the workout template. Session fallback used to be 3, so a
+ * 5-set pull-up completed after set 3 and skipped forward to barbell rows.
+ */
+export function resolveSessionExerciseTargetSets(input: {
+  planSets?: number | null;
+  sessionSuggestedSets?: number | null;
+  bonusSets?: number;
+}): number {
+  const planned = positive(input.planSets);
+  const suggested = positive(input.sessionSuggestedSets);
+  const bonusSets = Math.max(0, input.bonusSets ?? 0);
+  return (planned ?? suggested ?? DEFAULT_TARGET_SETS) + bonusSets;
+}
+
 function positive(value: number | null | undefined): number | undefined {
   return value != null && Number.isFinite(value) && value > 0 ? value : undefined;
 }

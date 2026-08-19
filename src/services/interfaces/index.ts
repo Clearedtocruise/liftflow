@@ -179,7 +179,20 @@ export interface ITrainingService {
       mealsCleared: number;
     }>
   >;
-  regenerateProgramIfNeeded(userId: string): Promise<ServiceResult<{ regenerated: boolean }>>;
+  uploadPersonalPlan(payload: {
+    kind: 'workout' | 'nutrition';
+    filename?: string;
+    text: string;
+  }): Promise<
+    ServiceResult<{
+      planId: string;
+      programId?: string;
+      weekStart: string;
+      plannedWorkouts: number;
+      mealsInserted: number;
+    }>
+  >;
+  regenerateProgramIfNeeded(userId: string, timeZone?: string | null): Promise<ServiceResult<{ regenerated: boolean }>>;
   forceRegenerateProgram(userId: string): Promise<ServiceResult<{ regenerated: boolean }>>;
   getDashboard(userId: string): Promise<ServiceResult<import('@/types').ProgramDashboard | null>>;
   adaptProgram(userId: string): Promise<ServiceResult<import('@/types').ProgramDashboard | null>>;

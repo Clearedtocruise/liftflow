@@ -1,9 +1,11 @@
 import { applyEquipmentSubstitutionsToExercises } from './equipmentSubstitutionEngine.js';
 import { applySubstitutionsToExercises, type LimitationContext } from './exerciseSubstitution.js';
+import { localDateString } from './localDate.js';
 import {
     buildReferenceStyleWorkoutPlan,
     shouldUseReferenceLiftingProgram,
 } from './liftingReference/index.js';
+import { AGGRESSIVE_CUT_PLAN_ID } from './personalPlans/aggressiveCutWorkouts.js';
 import { applyWeeklyProgression, totalPlannedVolume } from './programProgression.js';
 import { inferProgramFrequency, inferProgramType, resolveDaysPerWeekFromProfile } from './programSelection.js';
 import {
@@ -63,10 +65,19 @@ type StoredProgramMetadata = {
   locationId?: string;
   locationName?: string;
   customSchedule?: string[];
-  planRulesVersion?: number;
+  planRulesVersion?: number | string;
   startDate?: string;
   schedule?: Array<{ label?: string; isRest?: boolean }>;
+  planPack?: string;
 };
+
+function planPackFromProfileMetadata(metadata: unknown): string | undefined {
+  const record = (metadata ?? {}) as {
+    coachProfile?: { planPack?: string };
+    coachActivation?: { planPack?: string };
+  };
+  return record.coachProfile?.planPack ?? record.coachActivation?.planPack;
+}
 
 /** Noon UTC on both ends, so a DST boundary cannot shorten the span below a whole day. */
 function daysBetween(fromDate: string, toDate: string): number {
@@ -565,18 +576,52 @@ export async function regenerateActiveProgram(
     .eq('is_active', true)
     .maybeSingle();
 
-  if (program) {
-    const meta = (program.metadata ?? {}) as StoredProgramMetadata & { planPack?: string };
-    // Sticky personal PDF packs — reload the blueprint instead of inventing a new week.
-    if (meta.planPack === 'aggressive_cut') {
-      const { loadAggressiveCutPlan } = await import('./personalPlans/loadAggressiveCutPlan.js');
-      const loaded = await loadAggressiveCutPlan(userId);
-      return {
-        regenerated: true as const,
-        plannedCount: loaded.plannedWorkouts,
-        program: { id: loaded.programId },
-      };
+  const { data: profileRow } = await db
+    .from('profiles')
+    .select('metadata, timezone')
+    .eq('id', userId)
+    .maybeSingle();
+  const profilePack = planPackFromProfileMetadata(profileRow?.metadata);
+  const meta = (program?.metadata ?? {}) as StoredProgramMetadata;
+  const stickyPack = meta.planPack ?? profilePack;
+
+  // Sticky personal PDF packs — reload the blueprint instead of inventing a new week.
+  // Profile planPack is the fallback if a later generic regen dropped it from the program row.
+  if (stickyPack === AGGRESSIVE_CUT_PLAN_ID) {
+    const { loadAggressiveCutPlan } = await import('./personalPlans/loadAggressiveCutPlan.js');
+    const loaded = await loadAggressiveCutPlan(userId);
+    return {
+      regenerated: true as const,
+      plannedCount: loaded.plannedWorkouts,
+      program: { id: loaded.programId },
+    };
+  }
+
+  const uploadedPlans = (profileRow?.metadata as {
+    uploadedPlans?: { workout?: import('./personalPlans/uploadedPlanTypes.js').ParsedPersonalPlan; nutrition?: import('./personalPlans/uploadedPlanTypes.js').ParsedPersonalPlan };
+  } | null)?.uploadedPlans;
+  if (uploadedPlans?.workout || uploadedPlans?.nutrition) {
+    const { applyUploadedPersonalPlan } = await import('./personalPlans/applyUploadedPlan.js');
+    let plannedCount = 0;
+    let programId: string | undefined;
+    if (uploadedPlans?.workout) {
+      const loaded = await applyUploadedPersonalPlan(userId, { ...uploadedPlans.workout, kind: 'workout' });
+      plannedCount += loaded.plannedWorkouts;
+      programId = loaded.programId;
     }
+    if (uploadedPlans?.nutrition) {
+      const loaded = await applyUploadedPersonalPlan(userId, { ...uploadedPlans.nutrition, kind: 'nutrition' });
+      plannedCount += loaded.plannedWorkouts;
+      programId = programId ?? loaded.programId;
+    }
+    return {
+      regenerated: true as const,
+      plannedCount,
+      program: { id: programId },
+    };
+  }
+
+  if (program) {
     const profileInput = await buildProgramInputFromProfile(userId);
     const expectedFrequency = profileInput.frequency;
     const storedFrequency =
@@ -595,7 +640,9 @@ export async function regenerateActiveProgram(
 
     // Visible calendar week can lag metadata after a failed rebuild (preference 6, still 3 lift days).
     // Count planned + completed so mid-week progress does not look like an under-built week.
-    const calendarWeekStart = weekStartFromDate(new Date().toISOString().slice(0, 10));
+    const calendarWeekStart = weekStartFromDate(
+      localDateString(new Date(), profileRow?.timezone as string | null | undefined),
+    );
     const calendarWeekEnd = addDays(calendarWeekStart, 6);
     const { data: calendarWeekRows } = await db
       .from('planned_workouts')
