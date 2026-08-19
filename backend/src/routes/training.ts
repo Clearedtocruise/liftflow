@@ -566,6 +566,50 @@ trainingRouter.post('/programs/load-personal-plan', async (req, res) => {
   }
 });
 
+trainingRouter.post('/programs/upload-personal-plan', async (req, res) => {
+  try {
+    const userId = authedUserId(req);
+    const body = req.body as { kind?: string; filename?: string; pdfBase64?: string; text?: string };
+    const kind = body.kind === 'nutrition' ? 'nutrition' : body.kind === 'workout' ? 'workout' : null;
+    if (!kind) {
+      res.status(400).json({ message: 'kind must be workout or nutrition' });
+      return;
+    }
+    const rawText =
+      typeof body.text === 'string' && body.text.trim()
+        ? body.text
+        : typeof body.pdfBase64 === 'string'
+          ? Buffer.from(body.pdfBase64, 'base64').toString('utf8')
+          : '';
+    if (rawText.trim().length < 40) {
+      res.status(400).json({
+        message:
+          'Could not read that file. Paste the plan text, or export the PDF as text and try again.',
+      });
+      return;
+    }
+    const { parseUploadedPlanText } = await import('../lib/personalPlans/parseUploadedPlan.js');
+    const parsed = await parseUploadedPlanText(kind, body.filename ?? 'plan.pdf', rawText);
+    if (!parsed) {
+      res.status(422).json({ message: 'Could not extract a plan from that PDF. Try a clearer export.' });
+      return;
+    }
+    if (kind === 'workout' && !parsed.workouts?.length) {
+      res.status(422).json({ message: 'No workout days were found in that PDF.' });
+      return;
+    }
+    if (kind === 'nutrition' && !parsed.meals?.length && !parsed.nutritionGoals) {
+      res.status(422).json({ message: 'No meals or calorie targets were found in that PDF.' });
+      return;
+    }
+    const { applyUploadedPersonalPlan } = await import('../lib/personalPlans/applyUploadedPlan.js');
+    const result = await applyUploadedPersonalPlan(userId, { ...parsed, kind });
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ message: error instanceof Error ? error.message : 'Plan upload failed' });
+  }
+});
+
 trainingRouter.get('/programs/dashboard', async (req, res) => {
   try {
     const userId = authedUserId(req);

@@ -356,6 +356,16 @@ export const trainingService: ITrainingService = {
     }
   },
 
+  async uploadPersonalPlan(payload: { kind: 'workout' | 'nutrition'; filename?: string; text: string }) {
+    try {
+      const token = await getAccessToken();
+      const result = await api.uploadPersonalPlan(payload, token);
+      return ok(result);
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
   async forceRegenerateProgram(userId: string) {
     try {
       const token = await getAccessToken();

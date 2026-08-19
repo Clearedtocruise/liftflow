@@ -308,7 +308,7 @@ export const nutritionService: INutritionService = {
       }
 
       // Sticky PDF meal week: reload the blueprint instead of inventing generic day-sync meals.
-      if (planPack === 'aggressive_cut') {
+      if (planPack === 'aggressive_cut' || (typeof planPack === 'string' && planPack.startsWith('uploaded_'))) {
         const { trainingService } = await import('@/services/trainingService');
         const regen = await trainingService.regenerateProgramIfNeeded(userId, timeZone);
         if (!regen.success) return fail(regen.error);

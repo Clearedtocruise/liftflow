@@ -597,6 +597,30 @@ export async function regenerateActiveProgram(
     };
   }
 
+  const uploadedPlans = (profileRow?.metadata as {
+    uploadedPlans?: { workout?: import('./personalPlans/uploadedPlanTypes.js').ParsedPersonalPlan; nutrition?: import('./personalPlans/uploadedPlanTypes.js').ParsedPersonalPlan };
+  } | null)?.uploadedPlans;
+  if (uploadedPlans?.workout || uploadedPlans?.nutrition) {
+    const { applyUploadedPersonalPlan } = await import('./personalPlans/applyUploadedPlan.js');
+    let plannedCount = 0;
+    let programId: string | undefined;
+    if (uploadedPlans?.workout) {
+      const loaded = await applyUploadedPersonalPlan(userId, { ...uploadedPlans.workout, kind: 'workout' });
+      plannedCount += loaded.plannedWorkouts;
+      programId = loaded.programId;
+    }
+    if (uploadedPlans?.nutrition) {
+      const loaded = await applyUploadedPersonalPlan(userId, { ...uploadedPlans.nutrition, kind: 'nutrition' });
+      plannedCount += loaded.plannedWorkouts;
+      programId = programId ?? loaded.programId;
+    }
+    return {
+      regenerated: true as const,
+      plannedCount,
+      program: { id: programId },
+    };
+  }
+
   if (program) {
     const profileInput = await buildProgramInputFromProfile(userId);
     const expectedFrequency = profileInput.frequency;

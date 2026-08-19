@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { DEFAULT_TARGET_SETS, resolveEffectiveTargetSets } from './workoutSetTarget';
+import { DEFAULT_TARGET_SETS, resolveEffectiveTargetSets, resolveSessionExerciseTargetSets } from './workoutSetTarget';
 
 test('a traditional exercise finishes on its planned sets', () => {
   assert.equal(resolveEffectiveTargetSets({ executionMode: 'traditional', planSets: 4 }), 4);
@@ -55,6 +55,13 @@ test('a missing plan falls back to a sane default instead of zero', () => {
   assert.equal(resolveEffectiveTargetSets({}), DEFAULT_TARGET_SETS);
   assert.equal(resolveEffectiveTargetSets({ planSets: 0 }), DEFAULT_TARGET_SETS);
   assert.equal(resolveEffectiveTargetSets({ planSets: null }), DEFAULT_TARGET_SETS);
+});
+
+test('a 5-set pull-up is not treated as a 3-set exercise', () => {
+  assert.equal(
+    resolveSessionExerciseTargetSets({ planSets: 5, sessionSuggestedSets: 3 }),
+    5,
+  );
 });
 
 test('a zero target can never make an exercise complete before a set is logged', () => {

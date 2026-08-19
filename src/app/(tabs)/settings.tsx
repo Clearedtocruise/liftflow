@@ -1,6 +1,6 @@
-import { useFocusEffect } from '@react-navigation/native';
 import Constants from 'expo-constants';
 import { router } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, StyleSheet, TextInput, View } from 'react-native';
 
@@ -70,6 +70,9 @@ export default function SettingsScreen() {
   const [editingDisplayName, setEditingDisplayName] = useState(false);
   const [displayNameDraft, setDisplayNameDraft] = useState('');
   const [savingDisplayName, setSavingDisplayName] = useState(false);
+  const [uploadKind, setUploadKind] = useState<'workout' | 'nutrition' | null>(null);
+  const [uploadDraft, setUploadDraft] = useState('');
+  const [uploadingPlan, setUploadingPlan] = useState(false);
 
   const refreshValidationState = useCallback(async () => {
     if (!user) {
@@ -270,6 +273,39 @@ export default function SettingsScreen() {
     if (!result.success) Alert.alert('Export failed', result.error);
   }
 
+  async function handleUploadPersonalPlan() {
+    if (!user || !uploadKind) return;
+    const text = uploadDraft.trim();
+    if (text.length < 40) {
+      Alert.alert('Paste more of the plan', 'Copy the workout or meal text from your PDF, then paste it here.');
+      return;
+    }
+    setUploadingPlan(true);
+    const result = await trainingService.uploadPersonalPlan({
+      kind: uploadKind,
+      filename: `${uploadKind}-plan.pdf`,
+      text,
+    });
+    setUploadingPlan(false);
+    if (!result.success) {
+      Alert.alert('Could not load that plan', result.error);
+      return;
+    }
+    invalidateWeekPlanPrefetch(user.id, user.timezone);
+    await planDataCache.clearUser(user.id);
+    await warmWeekPlanData(user.id, user.timezone);
+    bumpRevision();
+    await refreshProfile();
+    setUploadKind(null);
+    setUploadDraft('');
+    Alert.alert(
+      'Plan uploaded',
+      uploadKind === 'workout'
+        ? `${result.data.plannedWorkouts} workouts for the week starting ${result.data.weekStart}.`
+        : `${result.data.mealsInserted} meals for the week starting ${result.data.weekStart}.`,
+    );
+  }
+
   return (
     <ScreenContainer keyboardAvoiding>
       <View style={styles.header}>
@@ -468,6 +504,61 @@ export default function SettingsScreen() {
             );
           }}
         />
+        <SettingsRow
+          label="Upload workout PDF"
+          value="Paste the plan text"
+          icon={
+            <AppSymbol name="doc.fill" fallback="📄" size={20} tintColor={LiftFlowColors.textSecondary} />
+          }
+          onPress={() => {
+            setUploadKind('workout');
+            setUploadDraft('');
+          }}
+        />
+        <SettingsRow
+          label="Upload nutrition PDF"
+          value="Paste the meal plan text"
+          icon={
+            <AppSymbol name="leaf.fill" fallback="🥗" size={20} tintColor={LiftFlowColors.textSecondary} />
+          }
+          onPress={() => {
+            setUploadKind('nutrition');
+            setUploadDraft('');
+          }}
+        />
+        {uploadKind ? (
+          <View style={styles.uploadBox}>
+            <AppText variant="label" color="accent">
+              {uploadKind === 'workout' ? 'Workout plan' : 'Nutrition plan'}
+            </AppText>
+            <AppText variant="footnote" color="textSecondary">
+              Open the PDF, select the week, copy it, and paste it here. We turn that text into this week’s plan and keep it for later weeks.
+            </AppText>
+            <TextInput
+              value={uploadDraft}
+              onChangeText={setUploadDraft}
+              placeholder="Paste plan text from your PDF…"
+              placeholderTextColor={LiftFlowColors.textTertiary}
+              multiline
+              textAlignVertical="top"
+              style={styles.uploadInput}
+            />
+            <PrimaryButton
+              label={uploadingPlan ? 'Reading plan…' : 'Load pasted plan'}
+              onPress={() => void handleUploadPersonalPlan()}
+              loading={uploadingPlan}
+              disabled={uploadingPlan}
+            />
+            <PrimaryButton
+              label="Cancel"
+              variant="ghost"
+              onPress={() => {
+                setUploadKind(null);
+                setUploadDraft('');
+              }}
+            />
+          </View>
+        ) : null}
         <SettingsRow
           label="My own workouts"
           value={selfDirectedTrainingSummary(isSelfDirectedTraining(user))}
@@ -1126,6 +1217,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
   },
   displayNameInput: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: LiftFlowColors.border,
+    borderRadius: 12,
+    padding: Spacing.md,
+    color: LiftFlowColors.textPrimary,
+  },
+  uploadBox: {
+    gap: Spacing.sm,
+    padding: Spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: LiftFlowColors.border,
+  },
+  uploadInput: {
+    minHeight: 140,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: LiftFlowColors.border,
     borderRadius: 12,
