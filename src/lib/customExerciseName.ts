@@ -6,6 +6,8 @@
  * so an exercise outside the database could not be added or swapped in at all.
  */
 
+import { namesMatchExercise } from '@/lib/exerciseNameLookup';
+
 export const MAX_CUSTOM_EXERCISE_NAME = 60;
 /** Three keeps "Row", "Dip" and "Fly" while a half-typed search like "Conc" stays a search. */
 const MIN_CUSTOM_EXERCISE_NAME = 3;
@@ -17,7 +19,7 @@ export function normalizeCustomExerciseName(raw: string): string {
 
 /** Case- and spacing-insensitive identity, matching the service's `ilike` lookup. */
 export function isSameExerciseName(a: string, b: string): boolean {
-  return normalizeCustomExerciseName(a).toLowerCase() === normalizeCustomExerciseName(b).toLowerCase();
+  return namesMatchExercise(a, b);
 }
 
 export type CustomExerciseNameCheck =

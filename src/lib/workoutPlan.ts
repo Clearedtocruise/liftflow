@@ -1,4 +1,5 @@
 import { INTERVAL_MODE_DEFAULTS } from '@/constants/workoutExecutionModes';
+import { namesMatchExercise } from '@/lib/exerciseNameLookup';
 import { enrichWithSupersetGroups } from '@/lib/supersetFlow';
 import { normalizeExecutionMode, prescribeExerciseExecution } from '@/lib/workoutExecutionMode';
 import type { PlannedWorkout, TemplateExercise } from '@/types/training';
@@ -154,9 +155,7 @@ export function preferPlannedSetCounts(
   if (planned.length === 0) return live;
 
   return live.map((exercise, index) => {
-    const byName = planned.find(
-      (item) => item.name.trim().toLowerCase() === exercise.name.trim().toLowerCase(),
-    );
+    const byName = planned.find((item) => namesMatchExercise(item.name, exercise.name));
     const plannedSets = positiveSetCount(byName?.sets) ?? positiveSetCount(planned[index]?.sets);
     if (plannedSets == null || plannedSets === exercise.sets) return exercise;
     return { ...exercise, sets: plannedSets };
@@ -206,7 +205,7 @@ export function alignPlanExercisesToSession(
     return (
       (sessionExercise.exerciseId
         ? takeMatch((plan) => plan.exerciseId === sessionExercise.exerciseId)
-        : undefined) ?? (name ? takeMatch((plan) => plan.name.toLowerCase() === name.toLowerCase()) : undefined)
+        : undefined) ?? (name ? takeMatch((plan) => namesMatchExercise(plan.name, name)) : undefined)
     );
   });
 

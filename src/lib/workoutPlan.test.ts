@@ -34,6 +34,13 @@ test('planned set counts match by name when session order drifts', () => {
   assert.equal(merged[1]?.sets, 5);
 });
 
+test('Pull-Up in the PDF still overlays the catalog Pull Up row', () => {
+  const live = [planExercise('Pull Up', 3), planExercise('Barbell Row', 3)];
+  const planned = [planExercise('Pull-Up', 5), planExercise('Barbell Row', 5)];
+  const merged = preferPlannedSetCounts(live, planned);
+  assert.equal(merged[0]?.sets, 5);
+});
+
 test('aggressive-cut day 1 metadata keeps pull-ups at 5 sets', () => {
   const workout = {
     metadata: {

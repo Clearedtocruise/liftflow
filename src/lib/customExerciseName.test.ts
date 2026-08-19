@@ -63,6 +63,7 @@ test('create is hidden when the exercise already exists', () => {
   assert.equal(shouldOfferCustomExercise('Bench Press', [{ name: 'Bench Press' }]), false);
   // Same exercise typed differently must not invite a duplicate row.
   assert.equal(shouldOfferCustomExercise('  bench   press ', [{ name: 'Bench Press' }]), false);
+  assert.equal(shouldOfferCustomExercise('Pull-Up', [{ name: 'Pull Up' }]), false);
 });
 
 test('create is hidden for an unusable query', () => {
