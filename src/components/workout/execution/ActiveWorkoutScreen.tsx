@@ -73,6 +73,7 @@ import { matchSpokenExercise } from '@/lib/voice/matchSpokenExercise';
 import { pickWorkoutChallenge } from '@/lib/workoutChallengeFlow';
 import { normalizeExecutionMode } from '@/lib/workoutExecutionMode';
 import { alignPlanExercisesToSession, parseTargetReps } from '@/lib/workoutPlan';
+import { AUTO_ADVANCE_EXERCISE_MS, shouldAutoAdvanceAfterExercise } from '@/lib/workoutAutoAdvance';
 import { resolveEffectiveTargetSets, resolveSessionExerciseTargetSets } from '@/lib/workoutSetTarget';
 import { resolveExerciseSeedWeightKg } from '@/lib/activeWorkoutWeightSeed';
 import { logWorkoutProgressionDecision } from '@/lib/workoutProgressionDebug';
@@ -240,10 +241,12 @@ export function ActiveWorkoutScreen({
   const [loadingMethod, setLoadingMethod] = useState<LoadingMethod>('external_load');
   const pendingAdvanceRef = useRef<number | null>(null);
   const pendingAdvanceAfterChallengeRef = useRef<(() => void) | null>(null);
+  const autoAdvanceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loggingInFlightRef = useRef(false);
+  const advanceExerciseRef = useRef<() => void>(() => {});
   const pendingRoundIncrementRef = useRef(false);
   const offeredExerciseCompleteRef = useRef<number | null>(null);
-  /** True after the last planned set of this visit — used to show the complete card, not to skip ahead. */
+  /** True only after this visit logged the last planned set — auto-advance may then run after rest. */
   const justFinishedExerciseRef = useRef(false);
   const [circuitRound, setCircuitRound] = useState(1);
   const [bonusSets, setBonusSets] = useState(0);
@@ -798,7 +801,7 @@ export function ActiveWorkoutScreen({
   ]);
 
   // For interval modes the protocol's rounds decide when the exercise block is done.
-  // Dismiss the timer so the lifter can log weight/reps, then tap Next Exercise.
+  // Dismiss the timer so the lifter can log weight/reps before auto-advance.
   useEffect(() => {
     if (!executionModeUsesIntervalTimer(executionMode) || showComplete || isPaused) return;
     if (intervalTimer?.phase !== 'done') return;
@@ -811,6 +814,59 @@ export function ActiveWorkoutScreen({
   useEffect(() => {
     setTimersPaused(isPaused);
   }, [isPaused, setTimersPaused]);
+
+  const scheduleAutoExerciseAdvance = useCallback(() => {
+    if (autoAdvanceTimeoutRef.current) clearTimeout(autoAdvanceTimeoutRef.current);
+    autoAdvanceTimeoutRef.current = setTimeout(() => {
+      autoAdvanceTimeoutRef.current = null;
+      advanceExerciseRef.current();
+    }, AUTO_ADVANCE_EXERCISE_MS);
+  }, []);
+
+  useEffect(() => {
+    if (
+      !shouldAutoAdvanceAfterExercise({
+        justFinishedThisVisit: justFinishedExerciseRef.current,
+        loggedSets: completedSets.length,
+        targetSets: effectiveTargetSets,
+        restActive,
+        paused: isPaused,
+        challengeOpen: Boolean(activeChallenge),
+      })
+    ) {
+      return;
+    }
+    if (!showComplete) return;
+    if (
+      executionModeUsesIntervalTimer(executionMode) &&
+      completedSets.length < effectiveTargetSets
+    ) {
+      return;
+    }
+    scheduleAutoExerciseAdvance();
+    return () => {
+      if (autoAdvanceTimeoutRef.current) {
+        clearTimeout(autoAdvanceTimeoutRef.current);
+        autoAdvanceTimeoutRef.current = null;
+      }
+    };
+  }, [
+    showComplete,
+    restActive,
+    activeChallenge,
+    isPaused,
+    currentIndex,
+    scheduleAutoExerciseAdvance,
+    executionMode,
+    completedSets.length,
+    effectiveTargetSets,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      if (autoAdvanceTimeoutRef.current) clearTimeout(autoAdvanceTimeoutRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     skippedExerciseIdsRef.current.clear();
@@ -867,13 +923,15 @@ export function ActiveWorkoutScreen({
     // Interval modes own their own completion signal; a set count must not override it.
     if (executionModeUsesIntervalTimer(executionMode)) return;
     if (groupComplete && completedSets.length > 0 && allSetsDone) {
+      // Keep the last-set rest on screen. Auto-advance runs after that clock hits zero.
+      if (restActive) return;
       setShowComplete(true);
       setExerciseHadPr(completedSets.some((set) => set.isPr));
     } else {
       setShowComplete(false);
       justFinishedExerciseRef.current = false;
     }
-  }, [groupComplete, completedSets, allSetsDone, executionMode]);
+  }, [groupComplete, completedSets, allSetsDone, executionMode, restActive]);
 
   function handleAddSet() {
     setShowComplete(false);
@@ -896,6 +954,10 @@ export function ActiveWorkoutScreen({
   }
 
   function clearPendingExerciseAdvance() {
+    if (autoAdvanceTimeoutRef.current) {
+      clearTimeout(autoAdvanceTimeoutRef.current);
+      autoAdvanceTimeoutRef.current = null;
+    }
     pendingAdvanceRef.current = null;
     pendingAdvanceAfterChallengeRef.current = null;
     justFinishedExerciseRef.current = false;
@@ -1418,6 +1480,10 @@ export function ActiveWorkoutScreen({
   }
 
   function performExerciseAdvanceDirect(options?: { auto?: boolean }) {
+    if (autoAdvanceTimeoutRef.current) {
+      clearTimeout(autoAdvanceTimeoutRef.current);
+      autoAdvanceTimeoutRef.current = null;
+    }
     if (usesSupersetRotation && supersetGroup && supersetGroup.memberIndices.length >= 2) {
       const incompletePartner = [...supersetGroup.memberIndices]
         .sort((a, b) => a - b)
@@ -1461,6 +1527,8 @@ export function ActiveWorkoutScreen({
     setCurrentIndex(nextIndex);
     setShowComplete(false);
   }
+
+  advanceExerciseRef.current = () => performExerciseAdvanceDirect({ auto: true });
 
   function performExerciseAdvance() {
     performExerciseAdvanceDirect();
@@ -1977,7 +2045,7 @@ export function ActiveWorkoutScreen({
             volumeKg={exerciseVolume}
             hasPr={exerciseHadPr}
             onNext={handleNextExercise}
-            autoAdvancing={false}
+            autoAdvancing={!restActive && !activeChallenge && !isPaused && !isFinalExercise}
             isLastExercise={isFinalExercise}
           />
         ) : null}
