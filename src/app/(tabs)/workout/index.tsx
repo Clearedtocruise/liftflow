@@ -314,6 +314,16 @@ export default function WorkoutScreen() {
       }
 
       void productAnalyticsService.trackWorkoutCompleted(user.id, completed.id);
+
+      // Custom day-based programs advance to the next day (looping Day N → Day 1) when the current
+      // day's workout completes. No-ops for calendar programs. Runs before navigation so the next
+      // day is materialized by the time the user returns to the Workout tab.
+      if (completed.plannedWorkoutId) {
+        void trainingService
+          .advanceProgramCycle(completed.plannedWorkoutId, user.timezone)
+          .then(() => loadWeekPlan({ silent: true }));
+      }
+
       const challengesPayload = challengeRecords;
       setChallengeRecords([]);
 
@@ -328,7 +338,7 @@ export default function WorkoutScreen() {
       finishingRef.current = false;
       setFinishing(false);
     }
-  }, [challengeRecords, endSession, user]);
+  }, [challengeRecords, endSession, user, loadWeekPlan]);
 
   const handleChallengeRecord = useCallback((record: WorkoutChallengeRecord) => {
     setChallengeRecords((current) => [...current, record]);

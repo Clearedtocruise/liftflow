@@ -18,6 +18,7 @@ import type {
     TrainingProgram,
     WorkoutTemplate,
 } from '@/types';
+import type { CycleProgramInput, PreviousPerformance } from '@/types/programCycle';
 
 type PlannedRow = {
   id: string;
@@ -379,7 +380,7 @@ export const trainingService: ITrainingService = {
     }
   },
 
-  async regenerateProgramIfNeeded(userId: string) {
+  async regenerateProgramIfNeeded(userId: string, timeZone?: string | null) {
     try {
       const now = Date.now();
       if (now - lastRegenCheckAt < REGEN_CHECK_COOLDOWN_MS) {
@@ -393,8 +394,19 @@ export const trainingService: ITrainingService = {
         .select('metadata')
         .eq('id', userId)
         .maybeSingle();
-      const coachProfile = (profileMeta?.metadata as { coachProfile?: { selfDirectedTraining?: boolean } } | null)
-        ?.coachProfile;
+      const coachProfile = (profileMeta?.metadata as {
+        coachProfile?: { selfDirectedTraining?: boolean; planPack?: string };
+      } | null)?.coachProfile;
+
+      // Custom day-based cycles own their own scheduling — reconcile the cycle day and materialize
+      // today's workout instead of running the calendar-week generator (which would clobber it).
+      const { CUSTOM_CYCLE_PLAN_PACK } = await import('@/lib/programCycle');
+      if (coachProfile?.planPack === CUSTOM_CYCLE_PLAN_PACK) {
+        lastRegenCheckAt = now;
+        const ensured = await this.ensureProgramCycle(timeZone);
+        return ok({ regenerated: ensured.success && ensured.data != null });
+      }
+
       if (coachProfile?.selfDirectedTraining === true) {
         lastRegenCheckAt = now;
         return ok({ regenerated: false });
@@ -434,6 +446,63 @@ export const trainingService: ITrainingService = {
       );
       if (!raw) return ok(null);
       return ok(mapProgramDashboard(raw));
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
+  // --- Custom day-based program cycle (Basic tier) ------------------------------------------
+
+  async createProgramCycle(input: CycleProgramInput, timeZone?: string | null) {
+    try {
+      const token = await getAccessToken();
+      return ok(await api.createProgramCycle({ ...input, timeZone }, token));
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
+  async updateProgramCycle(input: CycleProgramInput, timeZone?: string | null) {
+    try {
+      const token = await getAccessToken();
+      return ok(await api.updateProgramCycle({ ...input, timeZone }, token));
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
+  async getProgramCycle(timeZone?: string | null) {
+    try {
+      const token = await getAccessToken();
+      return ok(await api.getProgramCycle(timeZone, token));
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
+  async ensureProgramCycle(timeZone?: string | null) {
+    try {
+      const token = await getAccessToken();
+      return ok(await api.ensureProgramCycle(timeZone, token));
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
+  async advanceProgramCycle(plannedWorkoutId: string | undefined, timeZone?: string | null) {
+    try {
+      const token = await getAccessToken();
+      return ok(await api.advanceProgramCycle({ plannedWorkoutId, timeZone }, token));
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
+  async getPreviousExercisePerformance(names: string[]) {
+    try {
+      if (names.length === 0) return ok({} as Record<string, PreviousPerformance>);
+      const token = await getAccessToken();
+      return ok(await api.previousExercisePerformance(names, token));
     } catch (e) {
       return fromError(e);
     }

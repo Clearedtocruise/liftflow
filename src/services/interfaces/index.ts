@@ -194,6 +194,29 @@ export interface ITrainingService {
     exercises: import('@/types/workoutExecution').EditableWorkoutExercise[],
     existingMetadata?: PlannedWorkout['metadata'],
   ): Promise<ServiceResult<PlannedWorkout>>;
+
+  // Custom day-based program cycle (Basic tier)
+  createProgramCycle(
+    input: import('@/types/programCycle').CycleProgramInput,
+    timeZone?: string | null,
+  ): Promise<ServiceResult<import('@/types/programCycle').CycleStatus>>;
+  updateProgramCycle(
+    input: import('@/types/programCycle').CycleProgramInput,
+    timeZone?: string | null,
+  ): Promise<ServiceResult<import('@/types/programCycle').CycleStatus>>;
+  getProgramCycle(
+    timeZone?: string | null,
+  ): Promise<ServiceResult<import('@/types/programCycle').CycleStatus | null>>;
+  ensureProgramCycle(
+    timeZone?: string | null,
+  ): Promise<ServiceResult<import('@/types/programCycle').CycleStatus | null>>;
+  advanceProgramCycle(
+    plannedWorkoutId: string | undefined,
+    timeZone?: string | null,
+  ): Promise<ServiceResult<import('@/types/programCycle').CycleStatus | null>>;
+  getPreviousExercisePerformance(
+    names: string[],
+  ): Promise<ServiceResult<Record<string, import('@/types/programCycle').PreviousPerformance>>>;
 }
 
 // =============================================================================

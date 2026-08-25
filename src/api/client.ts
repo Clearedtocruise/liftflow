@@ -273,6 +273,38 @@ export const api = {
     body: { userId: string; change: import('@/types/planAdaptation').ScheduleChange },
     token?: string,
   ) => apiClient.post<import('@/types/planAdaptation').PlanAdaptationResult>('/api/training/plan/adapt', body, token),
+
+  // Custom day-based program cycle (Basic tier)
+  createProgramCycle: (
+    body: import('@/types/programCycle').CycleProgramInput & { timeZone?: string | null },
+    token?: string,
+  ) => apiClient.post<import('@/types/programCycle').CycleStatus>('/api/training/programs/cycle', body, token),
+  getProgramCycle: (timeZone: string | null | undefined, token?: string) =>
+    apiClient.get<import('@/types/programCycle').CycleStatus | null>(
+      `/api/training/programs/cycle${timeZone ? `?timeZone=${encodeURIComponent(timeZone)}` : ''}`,
+      token,
+    ),
+  updateProgramCycle: (
+    body: import('@/types/programCycle').CycleProgramInput & { timeZone?: string | null },
+    token?: string,
+  ) =>
+    apiClient.request<import('@/types/programCycle').CycleStatus>('/api/training/programs/cycle', {
+      method: 'PUT',
+      body,
+      token,
+    }),
+  ensureProgramCycle: (timeZone: string | null | undefined, token?: string) =>
+    apiClient.post<import('@/types/programCycle').CycleStatus | null>('/api/training/programs/cycle/ensure', { timeZone }, token),
+  advanceProgramCycle: (
+    body: { plannedWorkoutId?: string; timeZone?: string | null },
+    token?: string,
+  ) => apiClient.post<import('@/types/programCycle').CycleStatus | null>('/api/training/programs/cycle/advance', body, token),
+  previousExercisePerformance: (names: string[], token?: string) =>
+    apiClient.post<Record<string, import('@/types/programCycle').PreviousPerformance>>(
+      '/api/training/programs/previous-performance',
+      { names },
+      token,
+    ),
   postSmartProgression: (
     body: {
       userId: string;
