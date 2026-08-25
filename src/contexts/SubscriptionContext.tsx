@@ -1,9 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
-import { PRO_FEATURE_LABELS, type ProFeatureId } from '@/constants/subscription';
+import { PRO_FEATURE_LABELS, type BasicFeatureId, type ProFeatureId } from '@/constants/subscription';
 import { useAuth } from '@/hooks/useAuth';
 import { hasPremiumAccessOverride, isBetaTesterUser, isFounderUser } from '@/lib/accessOverride';
-import { hasProFeature, isTrialingSubscription } from '@/lib/entitlements';
+import { hasBasicFeature, hasProFeature, isBasicSubscription, isTrialingSubscription } from '@/lib/entitlements';
 import { withTimeout } from '@/lib/withTimeout';
 import { productAnalyticsService } from '@/services/productAnalyticsService';
 import { subscriptionService } from '@/services/subscriptionService';
@@ -14,12 +14,16 @@ type SubscriptionContextValue = {
   isPremium: boolean;
   isTrialing: boolean;
   isPro: boolean;
+  /** Basic ($4.99) or above — unlocks custom day-based programs and looping. */
+  isBasic: boolean;
   isFounder: boolean;
   isBetaTester: boolean;
   loading: boolean;
   isNativePurchasesAvailable: boolean;
   isRevenueCatConfigured: boolean;
   hasFeature: (featureId: ProFeatureId) => boolean;
+  /** Basic-tier feature gate (e.g. 'custom-programs'). Pro and overrides pass too. */
+  hasBasicAccess: (featureId: BasicFeatureId) => boolean;
   featureLabel: (featureId: ProFeatureId) => string;
   refresh: (options?: { showLoading?: boolean }) => Promise<void>;
 };
@@ -126,10 +130,18 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
   const isFounder = isFounderUser(user?.email);
   const isBetaTester = isBetaTesterUser(user);
   const isPremium = premiumOverride || subscriptionService.isPremium(subscription);
+  // Pro is a superset of Basic, and founder/beta overrides unlock everything.
+  const isBasic = premiumOverride || isPremium || isBasicSubscription(subscription);
   const isTrialing = !premiumOverride && isTrialingSubscription(subscription);
 
   const hasFeature = useCallback(
     (featureId: ProFeatureId) => premiumOverride || hasProFeature(subscription, featureId),
+    [subscription, premiumOverride],
+  );
+
+  const hasBasicAccess = useCallback(
+    // hasBasicFeature already treats Pro as a superset of Basic (tier rank ≥ basic).
+    (featureId: BasicFeatureId) => premiumOverride || hasBasicFeature(subscription, featureId),
     [subscription, premiumOverride],
   );
 
@@ -140,6 +152,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
       subscription,
       isPremium,
       isPro: isPremium,
+      isBasic,
       isFounder,
       isBetaTester,
       isTrialing,
@@ -147,10 +160,11 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
       isNativePurchasesAvailable: subscriptionService.isNativePurchasesAvailable(),
       isRevenueCatConfigured: subscriptionService.isRevenueCatConfigured(),
       hasFeature,
+      hasBasicAccess,
       featureLabel,
       refresh,
     }),
-    [subscription, isPremium, isFounder, isBetaTester, isTrialing, loading, hasFeature, featureLabel, refresh],
+    [subscription, isPremium, isBasic, isFounder, isBetaTester, isTrialing, loading, hasFeature, hasBasicAccess, featureLabel, refresh],
   );
 
   return <SubscriptionContext.Provider value={value}>{children}</SubscriptionContext.Provider>;

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 
 import { requireAdmin } from '../lib/supabase.js';
+import { tierForProductId } from '../lib/subscriptionTiers.js';
 import type { AuthedRequest } from '../middleware/authUser.js';
 import { requireUser } from '../middleware/authUser.js';
 import { notImplemented } from '../middleware/placeholder.js';
@@ -64,7 +65,10 @@ subscriptionsRouter.post('/webhook/revenuecat', async (req, res) => {
     const eventType = event.event?.type ?? '';
     const isActive = ['INITIAL_PURCHASE', 'RENEWAL', 'UNCANCELLATION', 'PRODUCT_CHANGE', 'TRIAL_STARTED', 'TRIAL_CONVERTED'].includes(eventType);
     const isTrial = eventType === 'TRIAL_STARTED' || event.event?.period_type === 'TRIAL';
-    const tier = isActive ? 'premium' : 'free';
+    // Map the purchased product to the tier it grants (Basic $4.99 vs Pro $9.99). Unknown paid
+    // products fall back to premium so a new Pro SKU is never accidentally downgraded to free.
+    const purchasedTier = tierForProductId(event.event?.product_id) ?? 'premium';
+    const tier = isActive ? purchasedTier : 'free';
     const status = isActive ? (isTrial ? 'trialing' : 'active') : 'expired';
     const periodEnd = event.event?.expiration_at_ms ? new Date(event.event.expiration_at_ms).toISOString() : null;
 
