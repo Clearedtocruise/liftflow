@@ -40,6 +40,7 @@ const ALLOWED_PATTERNS = [
   /liftflow-api/,
   /com\.liftflow/,
   /liftflow_premium/,
+  /liftflow_basic/,
   /liftflow@\d/,
   /liftflow-api@/,
   /support@liftflow/,

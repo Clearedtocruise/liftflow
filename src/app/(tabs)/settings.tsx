@@ -420,6 +420,14 @@ export default function SettingsScreen() {
       </View>
       <Card style={styles.group}>
         <SettingsRow
+          label="Custom program"
+          value="Build a 1–30 day looping cycle"
+          icon={
+            <AppSymbol name="calendar" fallback="📆" size={20} tintColor={LiftFlowColors.textSecondary} />
+          }
+          onPress={() => router.push('/(features)/custom-program')}
+        />
+        <SettingsRow
           label="Load Aggressive Cut plan"
           value="193→180 · 6-day + meals"
           icon={

@@ -11,6 +11,7 @@ const SCREEN_TITLES: Record<string, string> = {
   'apple-watch': 'Apple Watch',
   'cardio-tracking': 'Cardio & HIIT',
   'coach-chat': 'ONE MORE Coach',
+  'custom-program': 'Custom Program',
   equipment: 'Gym Equipment',
   healthkit: 'Health & Strava',
   limitations: 'What ONE MORE Can Do',

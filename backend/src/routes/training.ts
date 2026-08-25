@@ -29,9 +29,18 @@ import {
     reschedulePlannedWorkout,
     type CreateProgramInput,
 } from '../lib/programEngine.js';
+import {
+    advanceCycleAfterCompletion,
+    createOrReplaceCycle,
+    ensureCycleMaterialized,
+    getCycleStatus,
+    updateActiveCycleTemplate,
+    type CycleProgramInput,
+} from '../lib/programCycleService.js';
+import { loadPreviousPerformanceByName } from '../lib/previousPerformance.js';
 import { requireAdmin } from '../lib/supabase.js';
 import { authedUserId } from '../middleware/authUser.js';
-import { requireProSubscription } from '../middleware/requireProSubscription.js';
+import { requireBasicSubscription, requireProSubscription } from '../middleware/requireProSubscription.js';
 
 export const trainingRouter = Router();
 
@@ -694,6 +703,91 @@ trainingRouter.post('/programs/adapt', async (req, res) => {
     res.json(await adaptActiveProgram(userId));
   } catch (error) {
     res.status(500).json({ message: error instanceof Error ? error.message : 'Program adaptation failed' });
+  }
+});
+
+// --- Custom day-based program cycle (Basic tier) --------------------------------------------
+
+/** Create or replace the active program with a 1–30 day looping cycle. */
+trainingRouter.post('/programs/cycle', requireBasicSubscription, async (req, res) => {
+  try {
+    const userId = authedUserId(req);
+    const body = req.body as { name?: string; lengthDays?: number; days?: CycleProgramInput['days']; timeZone?: string | null };
+    if (!Array.isArray(body.days) || body.days.length === 0) {
+      res.status(400).json({ message: 'days is required (1–30 entries)' });
+      return;
+    }
+    const status = await createOrReplaceCycle(
+      userId,
+      { name: body.name, lengthDays: body.lengthDays ?? body.days.length, days: body.days },
+      body.timeZone,
+    );
+    res.json(status);
+  } catch (error) {
+    res.status(500).json({ message: error instanceof Error ? error.message : 'Create program failed' });
+  }
+});
+
+/** Read the active cycle (template + current day). */
+trainingRouter.get('/programs/cycle', async (req, res) => {
+  try {
+    const userId = authedUserId(req);
+    const timeZone = typeof req.query.timeZone === 'string' ? req.query.timeZone : undefined;
+    res.json(await getCycleStatus(userId, timeZone));
+  } catch (error) {
+    res.status(500).json({ message: error instanceof Error ? error.message : 'Load program failed' });
+  }
+});
+
+/** Edit the active cycle template — affects future workouts only; history is untouched. */
+trainingRouter.put('/programs/cycle', requireBasicSubscription, async (req, res) => {
+  try {
+    const userId = authedUserId(req);
+    const body = req.body as { name?: string; lengthDays?: number; days?: CycleProgramInput['days']; timeZone?: string | null };
+    if (!Array.isArray(body.days) || body.days.length === 0) {
+      res.status(400).json({ message: 'days is required (1–30 entries)' });
+      return;
+    }
+    res.json(await updateActiveCycleTemplate(userId, { name: body.name, lengthDays: body.lengthDays, days: body.days }, body.timeZone));
+  } catch (error) {
+    res.status(500).json({ message: error instanceof Error ? error.message : 'Update program failed' });
+  }
+});
+
+/** Reconcile the pointer with the calendar and materialize today's day. Idempotent per date. */
+trainingRouter.post('/programs/cycle/ensure', async (req, res) => {
+  try {
+    const userId = authedUserId(req);
+    const { timeZone } = req.body as { timeZone?: string | null };
+    res.json(await ensureCycleMaterialized(userId, timeZone));
+  } catch (error) {
+    res.status(500).json({ message: error instanceof Error ? error.message : 'Ensure program failed' });
+  }
+});
+
+/** Advance to the next day (loops Day N → Day 1) after a workout or rest day completes. */
+trainingRouter.post('/programs/cycle/advance', async (req, res) => {
+  try {
+    const userId = authedUserId(req);
+    const { plannedWorkoutId, timeZone } = req.body as { plannedWorkoutId?: string; timeZone?: string | null };
+    res.json(await advanceCycleAfterCompletion(userId, plannedWorkoutId, timeZone));
+  } catch (error) {
+    res.status(500).json({ message: error instanceof Error ? error.message : 'Advance program failed' });
+  }
+});
+
+/** Batch previous performance for a set of exercise names, tied to (user, exercise) history. */
+trainingRouter.post('/programs/previous-performance', async (req, res) => {
+  try {
+    const userId = authedUserId(req);
+    const { names } = req.body as { names?: string[] };
+    if (!Array.isArray(names) || names.length === 0) {
+      res.json({});
+      return;
+    }
+    res.json(await loadPreviousPerformanceByName(userId, names.slice(0, 60)));
+  } catch (error) {
+    res.status(500).json({ message: error instanceof Error ? error.message : 'Previous performance failed' });
   }
 });
 

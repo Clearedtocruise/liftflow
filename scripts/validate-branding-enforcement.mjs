@@ -39,6 +39,7 @@ const ALLOWED = [
   /liftflow-api/,
   /com\.liftflow/,
   /liftflow_premium/,
+  /liftflow_basic/,
   /support@liftflow/,
   /liftflow:\/\//,
   /slug: 'liftflow'/,

@@ -4,6 +4,7 @@ import {
     buildReferenceStyleWorkoutPlan,
     shouldUseReferenceLiftingProgram,
 } from './liftingReference/index.js';
+import { CUSTOM_CYCLE_PLAN_PACK } from './programCycle.js';
 import { applyWeeklyProgression, totalPlannedVolume } from './programProgression.js';
 import { inferProgramFrequency, inferProgramType, resolveDaysPerWeekFromProfile } from './programSelection.js';
 import {
@@ -567,6 +568,17 @@ export async function regenerateActiveProgram(
 
   if (program) {
     const meta = (program.metadata ?? {}) as StoredProgramMetadata & { planPack?: string };
+    // Custom day-based cycles own their own scheduling — never let the calendar-week generator
+    // overwrite the user's looping program. Reconcile the cycle day and materialize today instead.
+    if (meta.planPack === CUSTOM_CYCLE_PLAN_PACK) {
+      const { ensureCycleMaterialized } = await import('./programCycleService.js');
+      const status = await ensureCycleMaterialized(userId);
+      return {
+        regenerated: true as const,
+        plannedCount: status?.activeDay && !status.activeDay.isRest ? 1 : 0,
+        program: { id: program.id },
+      };
+    }
     // Sticky personal PDF packs — reload the blueprint instead of inventing a new week.
     if (meta.planPack === 'aggressive_cut') {
       const { loadAggressiveCutPlan } = await import('./personalPlans/loadAggressiveCutPlan.js');
