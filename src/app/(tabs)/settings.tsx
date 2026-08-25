@@ -428,6 +428,14 @@ export default function SettingsScreen() {
           onPress={() => router.push('/(features)/custom-program')}
         />
         <SettingsRow
+          label="Import program PDF"
+          value="Upload workout and/or nutrition to follow"
+          icon={
+            <AppSymbol name="doc.fill" fallback="📄" size={20} tintColor={LiftFlowColors.textSecondary} />
+          }
+          onPress={() => router.push('/(features)/import-program')}
+        />
+        <SettingsRow
           label="Load Aggressive Cut plan"
           value="193→180 · 6-day + meals"
           icon={

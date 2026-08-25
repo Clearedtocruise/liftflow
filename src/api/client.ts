@@ -305,6 +305,41 @@ export const api = {
       { names },
       token,
     ),
+
+  /** Parse a PDF or pasted program text into a preview (Basic). */
+  previewProgramImport: (
+    body: {
+      kind: import('@/types/programImport').ProgramImportKind;
+      pdfBase64?: string;
+      text?: string;
+      fileName?: string;
+    },
+    token?: string,
+  ) =>
+    apiClient.post<import('@/types/programImport').ProgramImportPreview>(
+      '/api/training/programs/import-pdf/preview',
+      body,
+      token,
+    ),
+
+  /** Commit a parsed workout cycle and/or nutrition plan (Basic). */
+  commitProgramImport: (
+    body: {
+      kind: import('@/types/programImport').ProgramImportKind;
+      pdfBase64?: string;
+      text?: string;
+      fileName?: string;
+      preview?: import('@/types/programImport').ProgramImportPreview;
+      timeZone?: string | null;
+    },
+    token?: string,
+  ) =>
+    apiClient.post<import('@/types/programImport').ProgramImportCommitResult>(
+      '/api/training/programs/import-pdf/commit',
+      body,
+      token,
+    ),
+
   postSmartProgression: (
     body: {
       userId: string;

@@ -508,6 +508,36 @@ export const trainingService: ITrainingService = {
     }
   },
 
+  async previewProgramImport(input: {
+    kind: import('@/types/programImport').ProgramImportKind;
+    pdfBase64?: string;
+    text?: string;
+    fileName?: string;
+  }) {
+    try {
+      const token = await getAccessToken();
+      return ok(await api.previewProgramImport(input, token));
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
+  async commitProgramImport(input: {
+    kind: import('@/types/programImport').ProgramImportKind;
+    pdfBase64?: string;
+    text?: string;
+    fileName?: string;
+    preview?: import('@/types/programImport').ProgramImportPreview;
+    timeZone?: string | null;
+  }) {
+    try {
+      const token = await getAccessToken();
+      return ok(await api.commitProgramImport(input, token));
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
   async adaptProgram(userId: string) {
     try {
       const token = await getAccessToken();

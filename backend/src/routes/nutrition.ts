@@ -76,6 +76,44 @@ nutritionRouter.get('/intelligence', requireProSubscription, async (req, res) =>
 nutritionRouter.post('/meal-plan/generate', async (req, res) => {
   try {
     const userId = authedUserId(req);
+
+    // Sticky imported PDF nutrition — prefer the athlete's uploaded plan over a template week.
+    try {
+      const { loadStoredImportedNutrition, importedNutritionToMealPlanResponse } = await import(
+        '../lib/importedNutritionPlan.js'
+      );
+      const { cutPlanWeekWindow } = await import('../lib/personalPlans/cutPlanWeek.js');
+      const stored = await loadStoredImportedNutrition(userId);
+      if (stored && stored.days.some((d) => d.meals.length > 0)) {
+        const dbSticky = requireAdmin();
+        const { data: profileSticky } = await dbSticky
+          .from('profiles')
+          .select('timezone')
+          .eq('id', userId)
+          .maybeSingle();
+        const { weekStart } = cutPlanWeekWindow(
+          new Date(),
+          profileSticky?.timezone as string | null | undefined,
+        );
+        if (stored.goals && (stored.goals.calories || stored.goals.proteinG)) {
+          try {
+            await persistNutritionGoals(dbSticky, userId, {
+              calories: stored.goals.calories ?? 2200,
+              proteinG: stored.goals.proteinG ?? 160,
+              carbsG: stored.goals.carbsG ?? 200,
+              fatG: stored.goals.fatG ?? 70,
+            });
+          } catch {
+            // Non-fatal
+          }
+        }
+        res.json(importedNutritionToMealPlanResponse(stored, weekStart));
+        return;
+      }
+    } catch {
+      // Fall through to normal generation
+    }
+
     const { dietaryStyle, dietaryRestrictions, foodPreferences } = req.body as {
       dietaryStyle?: string;
       dietaryRestrictions?: string[];
