@@ -46,6 +46,7 @@ export const BASIC_SUBSCRIPTION = {
 /** Basic tier capabilities (also included in Pro). */
 export const BASIC_FEATURES = [
   'Custom workout programs up to 30 days',
+  'Import workout and nutrition PDFs',
   'Automatic program looping',
   'Workout and rest days',
   'Exercise library access',

@@ -217,6 +217,20 @@ export interface ITrainingService {
   getPreviousExercisePerformance(
     names: string[],
   ): Promise<ServiceResult<Record<string, import('@/types/programCycle').PreviousPerformance>>>;
+  previewProgramImport(input: {
+    kind: import('@/types/programImport').ProgramImportKind;
+    pdfBase64?: string;
+    text?: string;
+    fileName?: string;
+  }): Promise<ServiceResult<import('@/types/programImport').ProgramImportPreview>>;
+  commitProgramImport(input: {
+    kind: import('@/types/programImport').ProgramImportKind;
+    pdfBase64?: string;
+    text?: string;
+    fileName?: string;
+    preview?: import('@/types/programImport').ProgramImportPreview;
+    timeZone?: string | null;
+  }): Promise<ServiceResult<import('@/types/programImport').ProgramImportCommitResult>>;
 }
 
 // =============================================================================

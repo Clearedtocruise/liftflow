@@ -833,3 +833,73 @@ trainingRouter.post('/coaching/workout-prescriptions', requireProSubscription, a
     res.status(500).json({ message: error instanceof Error ? error.message : 'Workout prescriptions failed' });
   }
 });
+
+// --- PDF / text program import (Basic tier) -------------------------------------------------
+
+function parseImportKind(raw: unknown): 'workout' | 'nutrition' | 'both' {
+  return raw === 'workout' || raw === 'nutrition' || raw === 'both' ? raw : 'both';
+}
+
+function parseImportSource(body: {
+  pdfBase64?: string;
+  text?: string;
+  fileName?: string;
+}): import('../lib/pdfProgramImport.js').ImportSource {
+  if (typeof body.pdfBase64 === 'string' && body.pdfBase64.trim()) {
+    return { type: 'pdf', base64: body.pdfBase64, fileName: body.fileName };
+  }
+  if (typeof body.text === 'string' && body.text.trim()) {
+    return { type: 'text', text: body.text, fileName: body.fileName };
+  }
+  throw new Error('Provide pdfBase64 or text');
+}
+
+/** Parse a PDF or pasted plan into a preview (does not write workouts/meals yet). */
+trainingRouter.post('/programs/import-pdf/preview', requireBasicSubscription, async (req, res) => {
+  try {
+    const body = req.body as {
+      kind?: string;
+      pdfBase64?: string;
+      text?: string;
+      fileName?: string;
+    };
+    const { previewProgramImport } = await import('../lib/pdfProgramImport.js');
+    const preview = await previewProgramImport(parseImportSource(body), parseImportKind(body.kind));
+    res.json(preview);
+  } catch (error) {
+    res.status(400).json({ message: error instanceof Error ? error.message : 'Import preview failed' });
+  }
+});
+
+/**
+ * Apply a parsed workout as a looping custom cycle and/or nutrition as this week's trackable meals.
+ * Accepts either a fresh source (re-parse) or a previously returned preview object.
+ */
+trainingRouter.post('/programs/import-pdf/commit', requireBasicSubscription, async (req, res) => {
+  try {
+    const userId = authedUserId(req);
+    const body = req.body as {
+      kind?: string;
+      pdfBase64?: string;
+      text?: string;
+      fileName?: string;
+      preview?: import('../lib/pdfProgramParse.js').ProgramImportPreview;
+      timeZone?: string | null;
+    };
+    const { commitProgramImport } = await import('../lib/pdfProgramImport.js');
+    const kind = parseImportKind(body.kind);
+    const hasSource =
+      (typeof body.pdfBase64 === 'string' && body.pdfBase64.trim()) ||
+      (typeof body.text === 'string' && body.text.trim());
+    const result = await commitProgramImport({
+      userId,
+      kind,
+      timeZone: body.timeZone,
+      preview: body.preview,
+      source: hasSource ? parseImportSource(body) : undefined,
+    });
+    res.json(result);
+  } catch (error) {
+    res.status(400).json({ message: error instanceof Error ? error.message : 'Import commit failed' });
+  }
+});
