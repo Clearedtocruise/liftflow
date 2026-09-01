@@ -417,14 +417,54 @@ test('every day label the week generator produces resolves to a focus plan', () 
   // push day. Full Body is the one label that legitimately trains everything.
   const labels = [
     'Push', 'Pull', 'Legs',
-    'Upper', 'Lower',
-    'Squat Day', 'Bench Day', 'Deadlift Day', 'Press Day',
+    'Upper', 'Upper Day', 'Lower',
+    'Squat Day', 'Bench Day', 'Deadlift Day', 'Press Day', 'Pull Day',
     'Back, Biceps & Core', 'Chest, Shoulders & Triceps', 'Legs & Core',
   ];
   for (const label of labels) {
     assert.ok(resolveDayFocusPlan(label), `"${label}" must resolve to a day focus plan`);
   }
   assert.equal(resolveDayFocusPlan('Full Body'), null);
+});
+
+/** Primary focus of a strength-week label for counting 2/2/2 balance. Deadlift = lower/hinge day. */
+function strengthDayFocus(label: string): 'push' | 'pull' | 'legs' | 'upper' {
+  const key = label.toLowerCase();
+  if (key.includes('upper')) return 'upper';
+  if (key.includes('pull')) return 'pull';
+  if (key.includes('squat') || key.includes('deadlift') || key.includes('leg') || key.includes('lower')) {
+    return 'legs';
+  }
+  if (key.includes('bench') || key.includes('press') || key.includes('push')) return 'push';
+  throw new Error(`unclassified strength label: ${label}`);
+}
+
+test('a six-day strength week is two of each pattern, not three presses and one pull', () => {
+  const days = getWeeklyLiftingPattern('strength', 6).filter((l) => l !== 'Rest');
+  const counts = { push: 0, pull: 0, legs: 0, upper: 0 };
+  for (const label of days) counts[strengthDayFocus(label)] += 1;
+  assert.deepEqual(counts, { push: 2, pull: 2, legs: 2, upper: 0 });
+});
+
+test('a seven-day strength week stays 2/2/2 and puts the extra day on Upper', () => {
+  // Third squat or third press would violate recovery norms; Upper is torso work without
+  // another heavy axial or overhead day.
+  const days = getWeeklyLiftingPattern('strength', 7).filter((l) => l !== 'Rest');
+  const counts = { push: 0, pull: 0, legs: 0, upper: 0 };
+  for (const label of days) counts[strengthDayFocus(label)] += 1;
+  assert.deepEqual(counts, { push: 2, pull: 2, legs: 2, upper: 1 });
+  assert.equal(days[6], 'Upper Day');
+});
+
+test('a seven-day push/pull/legs week does not stack a third press day', () => {
+  const days = getWeeklyLiftingPattern('push_pull_legs', 7).filter((l) => l !== 'Rest');
+  const counts = { push: 0, pull: 0, legs: 0 };
+  for (const label of days) {
+    const f = strengthDayFocus(label);
+    if (f === 'upper') continue;
+    counts[f] += 1;
+  }
+  assert.deepEqual(counts, { push: 2, pull: 3, legs: 2 });
 });
 
 test('strength and upper/lower days train the right movements', () => {
