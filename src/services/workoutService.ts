@@ -168,25 +168,36 @@ async function findOrCreateExerciseByNameInternal(name: string, userId: string):
   const bySlug = await pickCatalogId('slug', slug);
   if (bySlug) return bySlug;
 
-  const { data: created, error } = await supabase
-    .from('exercises')
-    .insert({
-      name: normalized,
-      slug,
-      category: 'other',
-      equipment: 'other',
-      muscle_groups: ['general'],
-      is_system: false,
-      created_by: userId,
-    })
-    .select('id')
-    .single();
+  const insertCustom = async (customSlug: string) =>
+    supabase
+      .from('exercises')
+      .insert({
+        name: normalized,
+        slug: customSlug,
+        category: 'other',
+        equipment: 'other',
+        muscle_groups: ['general'],
+        is_system: false,
+        created_by: userId,
+      })
+      .select('id')
+      .single();
 
+  const { data: created, error } = await insertCustom(slug);
   if (created?.id) return created.id;
   if (error) {
     // Unique slug: catalog already has this movement under a spaced name ("Pull Up" vs "Pull-Up").
     const collided = await pickCatalogId('slug', slug);
     if (collided) return collided;
+
+    // The slug is taken but did not resolve to a row we can read (e.g. RLS on another user's
+    // custom row). Never return null here — a dropped exercise is the "session skips the first
+    // lift" bug — so retry with a unique slug so the planned exercise still gets a session row.
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const uniqueSlug = `${slug}-${Math.random().toString(36).slice(2, 8)}`;
+      const retry = await insertCustom(uniqueSlug);
+      if (retry.data?.id) return retry.data.id;
+    }
   }
   return null;
 }
