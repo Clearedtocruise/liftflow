@@ -1,4 +1,10 @@
 import { mapHistoryItem, mapSession, mapSet } from '@/lib/db-mappers';
+import {
+  exerciseCanonicalKey,
+  exerciseNameLookupCandidates,
+  exerciseSlugFromName,
+  namesMatchExercise,
+} from '@/lib/exerciseNameLookup';
 import { fail, fromError, ok } from '@/lib/serviceResult';
 import type { IWorkoutService } from '@/services/interfaces';
 import { supabase } from '@/supabase/client';
@@ -138,21 +144,30 @@ async function loadPlannedExercises(plannedWorkoutId: string): Promise<PlannedEx
 
 async function findOrCreateExerciseByNameInternal(name: string, userId: string): Promise<string | null> {
   const normalized = name.trim().replace(/\s+/g, ' ');
+  if (!normalized) return null;
+  const slug = exerciseSlugFromName(normalized);
+
   // Ordered the same way the `seed_session_exercises_from_plan` trigger orders it, so the client and
   // the database resolve a name to the same row. Preferring the system entry also stops a custom row
   // that shadows a catalog exercise — "Reverse Fly" existed twice — from being picked up and spread.
-  const { data: matches } = await supabase
-    .from('exercises')
-    .select('id, is_system, created_at')
-    .ilike('name', normalized)
-    .order('is_system', { ascending: false })
-    .order('created_at', { ascending: true })
-    .limit(1);
+  const pickCatalogId = async (column: 'name' | 'slug', value: string): Promise<string | null> => {
+    const table = supabase.from('exercises').select('id, is_system, created_at');
+    const filtered = column === 'slug' ? table.eq('slug', value) : table.ilike('name', value);
+    const { data } = await filtered
+      .order('is_system', { ascending: false })
+      .order('created_at', { ascending: true })
+      .limit(1);
+    return data?.[0]?.id ?? null;
+  };
 
-  const found = matches?.[0];
-  if (found?.id) return found.id;
+  for (const candidate of exerciseNameLookupCandidates(normalized)) {
+    const found = await pickCatalogId('name', candidate);
+    if (found) return found;
+  }
 
-  const slug = normalized.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  const bySlug = await pickCatalogId('slug', slug);
+  if (bySlug) return bySlug;
+
   const { data: created, error } = await supabase
     .from('exercises')
     .insert({
@@ -167,8 +182,13 @@ async function findOrCreateExerciseByNameInternal(name: string, userId: string):
     .select('id')
     .single();
 
-  if (error || !created) return null;
-  return created.id;
+  if (created?.id) return created.id;
+  if (error) {
+    // Unique slug: catalog already has this movement under a spaced name ("Pull Up" vs "Pull-Up").
+    const collided = await pickCatalogId('slug', slug);
+    if (collided) return collided;
+  }
+  return null;
 }
 
 async function preloadSessionExercises(
@@ -281,10 +301,11 @@ async function applySessionExercisePlanInternal(
       }
     }
 
-    const desiredNames = exercises.map((exercise) => exercise.name.trim().toLowerCase());
+    // Canonical keys so a plan "Pull Ups" does not delete the seeded catalog "Pull Up" row.
+    const desiredKeys = new Set(exercises.map((exercise) => exerciseCanonicalKey(exercise.name)));
     for (const current of session.exercises) {
-      const name = current.exercise?.name?.trim().toLowerCase() ?? '';
-      if (desiredNames.includes(name)) continue;
+      const name = current.exercise?.name ?? '';
+      if (desiredKeys.has(exerciseCanonicalKey(name))) continue;
       // Logged sets are work the user actually did, so an exercise they added or swapped in
       // mid-session survives a plan re-apply instead of being deleted along with its sets.
       if (current.sets.length > 0) continue;
@@ -307,7 +328,7 @@ async function applySessionExercisePlanInternal(
       const existing = session.exercises.find(
         (exercise) =>
           !claimed.has(exercise.id) &&
-          exercise.exercise?.name?.trim().toLowerCase() === normalized.toLowerCase(),
+          namesMatchExercise(exercise.exercise?.name ?? '', normalized),
       );
 
       if (existing) {
@@ -317,7 +338,12 @@ async function applySessionExercisePlanInternal(
       }
 
       const exerciseIdResult = await findOrCreateExerciseByNameInternal(normalized, userId);
-      if (!exerciseIdResult) continue;
+      if (!exerciseIdResult) {
+        // Dropping a planned exercise here is exactly the "session starts on the second lift"
+        // bug, so make the failure loud instead of silently skipping it.
+        console.warn('[workout] could not resolve planned exercise; it will be missing from session', normalized);
+        continue;
+      }
 
       // The catalog can resolve a plan name to a row already in the session under a different
       // spelling, which is how the same exercise ended up listed twice.
@@ -330,11 +356,23 @@ async function applySessionExercisePlanInternal(
         continue;
       }
 
-      await supabase.from('workout_exercises').insert({
+      const { error: insertError } = await supabase.from('workout_exercises').insert({
         session_id: sessionId,
         exercise_id: exerciseIdResult,
         ...suggested,
       });
+      if (insertError) {
+        // A unique (session_id, exercise_id) row already exists — claim it and fix its order
+        // rather than leaving a hole at this sort_order (which surfaces the next lift first).
+        const refreshed = await loadSession(sessionId);
+        const collided = refreshed?.exercises.find((exercise) => exercise.exerciseId === exerciseIdResult);
+        if (collided) {
+          claimed.add(collided.id);
+          await supabase.from('workout_exercises').update(suggested).eq('id', collided.id);
+        } else {
+          console.warn('[workout] failed to insert planned exercise into session', normalized, insertError.message);
+        }
+      }
     }
 
     // Kept exercises the plan does not describe move after the planned ones, so plan order holds

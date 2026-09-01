@@ -1,4 +1,5 @@
 import { INTERVAL_MODE_DEFAULTS } from '@/constants/workoutExecutionModes';
+import { namesMatchExercise } from '@/lib/exerciseNameLookup';
 import { enrichWithSupersetGroups } from '@/lib/supersetFlow';
 import { normalizeExecutionMode, prescribeExerciseExecution } from '@/lib/workoutExecutionMode';
 import type { PlannedWorkout, TemplateExercise } from '@/types/training';
@@ -138,6 +139,29 @@ export function exercisesForSessionStart(
   );
 }
 
+function positiveSetCount(value: number | null | undefined): number | undefined {
+  return value != null && Number.isFinite(value) && value > 0 ? value : undefined;
+}
+
+/**
+ * Keep the live session's exercise order/names, but never let a missing draft collapse a
+ * 5-set pull-up into the 3-set default (which then skips forward to the next lift).
+ */
+export function preferPlannedSetCounts(
+  live: EditableWorkoutExercise[],
+  planned: EditableWorkoutExercise[],
+): EditableWorkoutExercise[] {
+  if (live.length === 0) return planned;
+  if (planned.length === 0) return live;
+
+  return live.map((exercise, index) => {
+    const byName = planned.find((item) => namesMatchExercise(item.name, exercise.name));
+    const plannedSets = positiveSetCount(byName?.sets) ?? positiveSetCount(planned[index]?.sets);
+    if (plannedSets == null || plannedSets === exercise.sets) return exercise;
+    return { ...exercise, sets: plannedSets };
+  });
+}
+
 const WORKING_SECONDS_PER_SET = 45;
 
 export function estimateWorkoutDurationMinutes(exercises: EditableWorkoutExercise[]): number {
@@ -181,7 +205,7 @@ export function alignPlanExercisesToSession(
     return (
       (sessionExercise.exerciseId
         ? takeMatch((plan) => plan.exerciseId === sessionExercise.exerciseId)
-        : undefined) ?? (name ? takeMatch((plan) => plan.name.toLowerCase() === name.toLowerCase()) : undefined)
+        : undefined) ?? (name ? takeMatch((plan) => namesMatchExercise(plan.name, name)) : undefined)
     );
   });
 
