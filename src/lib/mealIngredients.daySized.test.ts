@@ -115,6 +115,46 @@ test('normal dinner macros are left alone', () => {
   });
 });
 
+test('a logged pre-workout shake over the type cap keeps the user-entered macros', () => {
+  // Regression: "optimum weight gainer protein 600 cals" logged as a 600 cal pre-workout meal
+  // was silently rescaled to 288 cal / 14P / 43C / 5F because the plan-inflation heuristic ran
+  // against a real logged meal, not just plan-generated rows.
+  const loggedShake = {
+    name: 'Optimum weight gainer protein 600 cals',
+    mealType: 'pre_workout',
+    calories: 600,
+    proteinG: 30,
+    carbsG: 90,
+    fatG: 10,
+    macrosProvided: true,
+    origin: 'log',
+  };
+
+  assert.equal(looksLikeInflatedPlanMacros(loggedShake), true);
+  assert.deepEqual(resolveMealMacros(loggedShake), {
+    calories: 600,
+    proteinG: 30,
+    carbsG: 90,
+    fatG: 10,
+  });
+});
+
+test('an un-logged plan row over the type cap is still corrected', () => {
+  const planRow = {
+    name: 'Rice cakes with honey',
+    mealType: 'pre_workout',
+    calories: 1131,
+    proteinG: 20,
+    carbsG: 245,
+    fatG: 9,
+    origin: 'plan',
+  };
+
+  const macros = resolveMealMacros(planRow);
+  assert.notEqual(macros.calories, 1131);
+  assert.ok(macros.calories < 450, `expected corrected calories, got ${macros.calories}`);
+});
+
 test('Today screenshot breakfast/snack correct via correctedMacrosIfInflated', () => {
   const breakfast = correctedMacrosIfInflated({
     name: 'Greek yogurt bowl with berries',

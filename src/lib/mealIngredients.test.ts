@@ -28,3 +28,26 @@ test('resolveMealMacros corrects inflated Oikos peanut butter snack', () => {
   assert.ok(macros.fatG < 45, `expected corrected fat, got ${macros.fatG}`);
   assert.ok(macros.calories > 200, `expected a real snack, got ${macros.calories}`);
 });
+
+test('looksLikeInflatedMealMacros does not flag a dense single-item food just for beating the local catalog guess', () => {
+  // Regression: "optimum weight gainer protein 600 cals" is a single food (no "with"/"and"
+  // composite, no peanut-butter-style dense name) — being calorie-dense and off the tiny local
+  // catalog is not itself evidence of a mis-parse, so this must not be treated as inflated.
+  const meal = {
+    name: 'Optimum weight gainer protein 600 cals',
+    calories: 600,
+    proteinG: 30,
+    carbsG: 90,
+    fatG: 10,
+    macrosProvided: true,
+  };
+
+  const estimated = resolveMealMacros({ ...meal, macrosProvided: false });
+  assert.equal(looksLikeInflatedMealMacros(meal, estimated), false);
+  assert.deepEqual(resolveMealMacros(meal), {
+    calories: 600,
+    proteinG: 30,
+    carbsG: 90,
+    fatG: 10,
+  });
+});
