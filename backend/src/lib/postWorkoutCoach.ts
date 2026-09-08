@@ -12,6 +12,24 @@ export type PostWorkoutCoachSummary = {
   progressionRecommendations: string[];
 };
 
+const LB_PER_KG = 2.2046226218;
+
+/**
+ * `workout_sessions.total_volume` and `workout_exercises.suggested_weight` are stored in kg no
+ * matter what the lifter's display preference is. The workout summary and progression lines used
+ * to print that raw kg number and either label it "kg" regardless of preference, or with the
+ * lb/kg suffix bolted on without converting the number — an lbs user finishing a 675 lb-volume
+ * session read "306 total volume" (306 kg, unlabeled) and a "2.5 lb" progression bump that was
+ * actually 2.5 kg (~5.5 lb). Convert before formatting so the number matches the label.
+ */
+export function kgToDisplayWeight(kg: number, unit: 'kg' | 'lbs'): number {
+  if (unit === 'kg') {
+    const rounded = Math.round(kg * 10) / 10;
+    return rounded % 1 === 0 ? Math.round(rounded) : rounded;
+  }
+  return Math.round(kg * LB_PER_KG);
+}
+
 export async function generatePostWorkoutCoachSummary(
   userId: string,
   sessionId: string,
@@ -87,7 +105,9 @@ export async function generatePostWorkoutCoachSummary(
   const durationMin = Math.round((session.duration_seconds ?? 0) / 60);
   const prCount = (sets ?? []).filter((s) => s.is_pr).length;
 
-  const workoutSummary = `Completed ${session.name}: ${session.total_sets ?? 0} sets, ${Math.round(session.total_volume ?? 0)} total volume in ${durationMin} min${prCount ? ` — ${prCount} PR${prCount > 1 ? 's' : ''}!` : '.'}`;
+  const totalVolumeDisplay = kgToDisplayWeight(session.total_volume ?? 0, weightUnit);
+  const volumeUnitLabel = weightUnit === 'kg' ? 'kg' : 'lb';
+  const workoutSummary = `Completed ${session.name}: ${session.total_sets ?? 0} sets, ${totalVolumeDisplay} ${volumeUnitLabel} total volume in ${durationMin} min${prCount ? ` — ${prCount} PR${prCount > 1 ? 's' : ''}!` : '.'}`;
 
   // No check-in means no recovery reading; saying "moderate" would present a default as a measurement.
   const recoveryRecommendation =
@@ -120,9 +140,10 @@ export async function generatePostWorkoutCoachSummary(
     const hitTarget = (lastSet.reps ?? 0) >= targetReps;
 
     if (hitTarget && ex.suggested_weight) {
-      const increase = Math.max(2.5, Math.round(ex.suggested_weight * 0.025 * 2) / 2);
+      const increaseKg = Math.max(2.5, Math.round(ex.suggested_weight * 0.025 * 2) / 2);
+      const increaseDisplay = kgToDisplayWeight(increaseKg, weightUnit);
       progressionRecommendations.push(
-        `${exName}: increase by ${increase} ${weightUnit} next session if you hit ${targetReps} reps again.`,
+        `${exName}: increase by ${increaseDisplay} ${weightUnit} next session if you hit ${targetReps} reps again.`,
       );
     } else if ((lastSet.reps ?? 0) < targetReps - 2) {
       progressionRecommendations.push(
