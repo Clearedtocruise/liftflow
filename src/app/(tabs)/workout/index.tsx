@@ -115,13 +115,20 @@ export default function WorkoutScreen() {
 
   useLocalDayRollover(user?.timezone, () => {
     void loadWeekPlan({ silent: true });
+    // A custom day-based cycle only materializes the rest of the week on demand; without this,
+    // a program that already only had today filled in would stay stuck showing "Rest Day" for
+    // every day after today until the weekly rollover next ran.
+    if (!user?.id || isSelfDirectedTraining(user)) return;
+    void trainingService.regenerateProgramIfNeeded(user.id, user.timezone).then((regen) => {
+      if (regen.success && regen.data.regenerated) void loadWeekPlan({ silent: true });
+    });
   });
 
   useLocalWeekRollover(user?.timezone, () => {
     if (!user?.id) return;
     void loadWeekPlan({ silent: true });
     if (isSelfDirectedTraining(user)) return;
-    void trainingService.regenerateProgramIfNeeded(user.id).then((regen) => {
+    void trainingService.regenerateProgramIfNeeded(user.id, user.timezone).then((regen) => {
       if (regen.success && regen.data.regenerated) void loadWeekPlan({ silent: true });
     });
   });
@@ -152,6 +159,16 @@ export default function WorkoutScreen() {
 
       void warmWeekPlanData(user.id, user?.timezone);
       void loadWeekPlan({ silent: hydratedFromCacheRef.current });
+
+      // Backfill the rest of the week for a custom cycle whose materialization window fell
+      // behind (e.g. a program imported before the rolling week-ahead fix shipped) as soon as
+      // the tab opens, rather than waiting for the next day/week rollover.
+      if (!isSelfDirectedTraining(user)) {
+        void trainingService.regenerateProgramIfNeeded(user.id, user?.timezone).then((regen) => {
+          if (cancelled) return;
+          if (regen.success && regen.data.regenerated) void loadWeekPlan({ silent: true });
+        });
+      }
     })();
 
     return () => {

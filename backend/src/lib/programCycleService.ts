@@ -16,8 +16,10 @@ import { totalPlannedVolume } from './programProgression.js';
 import {
   completeCurrentCycleDay,
   currentCycleDay,
+  cycleWorkoutName,
   isRestDay,
   normalizeCycle,
+  projectedCycleDayNumber,
   reconcileCycleForDate,
   CUSTOM_CYCLE_PLAN_PACK,
   type CycleDay,
@@ -27,6 +29,13 @@ import {
 import { requireAdmin } from './supabase.js';
 
 type Db = ReturnType<typeof requireAdmin>;
+
+/**
+ * How many calendar days ahead of today to keep materialized. The weekly plan screen shows a
+ * Monday–Sunday window, so 7 always covers the rest of whichever week the user opens it on
+ * (import mid-week still fills through Sunday, plus a little into next week).
+ */
+const CYCLE_LOOKAHEAD_DAYS = 7;
 
 export type CycleProgramInput = {
   name?: string;
@@ -142,7 +151,7 @@ async function materializeCycleDay(
     .insert({
       user_id: userId,
       template_id: template.id,
-      name: `${day.label} — Day ${dayNumber}`,
+      name: cycleWorkoutName(day.label, dayNumber),
       scheduled_date: date,
       status: 'planned',
       suggested_muscle_groups: muscleGroups,
@@ -163,6 +172,39 @@ async function materializeCycleDay(
     .single();
   if (plannedError) throw plannedError;
   return planned.id;
+}
+
+/**
+ * Materialize a rolling window of upcoming cycle days (today + the next few) as real
+ * `planned_workouts` rows so the Monday–Sunday week view shows the whole imported/edited program
+ * instead of "Rest Day" on every day after today. Only today's row is the authoritative pointer —
+ * these are a forward projection assuming on-schedule completion, and are recomputed (and any
+ * still-`planned` row replaced) every time this runs, so a skipped/early day self-heals on the
+ * next load. A date that already has a completed/active/in-progress row for this program is left
+ * alone — history and an in-flight session are never touched.
+ */
+async function materializeUpcomingCycleDays(
+  db: Db,
+  userId: string,
+  programId: string,
+  cycle: ProgramCycle,
+  fromDate: string,
+  aheadDays: number = CYCLE_LOOKAHEAD_DAYS,
+): Promise<void> {
+  const untouchedStatuses = new Set(['completed', 'active', 'in_progress', 'paused']);
+  for (let offset = 0; offset < aheadDays; offset += 1) {
+    const date = addIsoDays(fromDate, offset);
+    const { data: existingRows } = await db
+      .from('planned_workouts')
+      .select('status')
+      .eq('user_id', userId)
+      .eq('scheduled_date', date)
+      .contains('metadata', { planPack: CUSTOM_CYCLE_PLAN_PACK });
+    if ((existingRows ?? []).some((row) => untouchedStatuses.has(row.status))) continue;
+
+    const dayNumber = projectedCycleDayNumber(cycle, offset);
+    await materializeCycleDay(db, userId, programId, cycle, dayNumber, date);
+  }
 }
 
 async function persistCycle(db: Db, programId: string, userId: string, cycle: ProgramCycle): Promise<void> {
@@ -227,7 +269,7 @@ export async function createOrReplaceCycle(
     .gte('scheduled_date', today)
     .lte('scheduled_date', addIsoDays(today, 6));
 
-  await materializeCycleDay(db, userId, program.id, cycle, cycle.currentDay, today);
+  await materializeUpcomingCycleDays(db, userId, program.id, cycle, today);
 
   return { programId: program.id, cycle, activeDayNumber: cycle.currentDay, activeDay: currentCycleDay(cycle), today };
 }
@@ -259,17 +301,9 @@ export async function updateActiveCycleTemplate(
 
   await persistCycle(db, program.id, userId, nextCycle);
 
-  // Refresh today's slot only if it has not been started/completed yet (status still 'planned').
-  const { data: todaysRows } = await db
-    .from('planned_workouts')
-    .select('id, status')
-    .eq('user_id', userId)
-    .eq('scheduled_date', today)
-    .contains('metadata', { planPack: CUSTOM_CYCLE_PLAN_PACK });
-  const startedToday = (todaysRows ?? []).some((row) => row.status !== 'planned');
-  if (!startedToday) {
-    await materializeCycleDay(db, userId, program.id, nextCycle, nextCycle.currentDay, today);
-  }
+  // Refresh the upcoming week from the edited template — materializeUpcomingCycleDays already
+  // skips any date whose row is completed/active/in-progress, so a started-today session is safe.
+  await materializeUpcomingCycleDays(db, userId, program.id, nextCycle, today);
 
   return {
     programId: program.id,
@@ -307,18 +341,10 @@ export async function ensureCycleMaterialized(userId: string, timeZone?: string 
     await persistCycle(db, program.id, userId, reconciled);
   }
 
-  // Is today already represented (planned or already completed)? If not, materialize the active day.
-  const { data: todaysRows } = await db
-    .from('planned_workouts')
-    .select('id, status')
-    .eq('user_id', userId)
-    .eq('scheduled_date', today)
-    .contains('metadata', { planPack: CUSTOM_CYCLE_PLAN_PACK });
-  const hasToday = (todaysRows ?? []).some((row) => row.status === 'planned' || row.status === 'completed' || row.status === 'active');
+  // Refresh the rolling week window (today + lookahead) so the week view always shows the current
+  // program instead of "Rest Day" past today — self-heals if a day was skipped or completed early.
+  await materializeUpcomingCycleDays(db, userId, program.id, reconciled, today);
   const activeDay = reconciled.days.find((d) => d.dayNumber === reconciled.currentDay);
-  if (!hasToday && activeDay && !isRestDay(activeDay)) {
-    await materializeCycleDay(db, userId, program.id, reconciled, reconciled.currentDay, today);
-  }
 
   return {
     programId: program.id,
@@ -366,8 +392,9 @@ export async function advanceCycleAfterCompletion(
   const advanced = completeCurrentCycleDay(cycle, { anchorDate: nextDate });
   await persistCycle(db, program.id, userId, advanced);
 
-  // Pre-materialize the next day so the upcoming session is ready.
-  await materializeCycleDay(db, userId, program.id, advanced, advanced.currentDay, nextDate);
+  // Refresh the rolling week window from tomorrow so the rest of the visible week keeps matching
+  // the advanced pointer (not just the single next day).
+  await materializeUpcomingCycleDays(db, userId, program.id, advanced, nextDate);
 
   return {
     programId: program.id,

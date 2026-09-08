@@ -67,6 +67,27 @@ export function isRestDay(day: CycleDay | null | undefined): boolean {
   return Boolean(day?.isRest);
 }
 
+/**
+ * The cycle day that lands `offset` calendar days after `cycle.currentDay`, assuming each day in
+ * between completes on schedule. Used to project the rest of the visible week (Days 2..N) so an
+ * imported program shows its whole week instead of only today — the pointer itself only ever
+ * moves via {@link completeCurrentCycleDay} / {@link reconcileCycleForDate}.
+ */
+export function projectedCycleDayNumber(cycle: Pick<ProgramCycle, 'currentDay' | 'lengthDays'>, offset: number): number {
+  return normalizeCurrentDay(cycle.currentDay + offset, cycle.lengthDays);
+}
+
+/**
+ * The planned-workout title for a materialized cycle day. Plans that already label a day "Day 1"
+ * (common in imported PDFs with no Push/Pull/Legs-style focus) used to become "Day 1 — Day 1"
+ * once the cycle day number was appended a second time.
+ */
+export function cycleWorkoutName(label: string, dayNumber: number): string {
+  const trimmed = label.trim();
+  if (new RegExp(`^day\\s*0*${dayNumber}\\b`, 'i').test(trimmed)) return trimmed;
+  return `${trimmed} — Day ${dayNumber}`;
+}
+
 function sanitizeExercises(exercises: unknown): CycleTemplateExercise[] {
   if (!Array.isArray(exercises)) return [];
   const cleaned: CycleTemplateExercise[] = [];
