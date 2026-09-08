@@ -186,9 +186,21 @@ export function VoiceSetLogger({
         onPressOut={voice.handlePressOut}
       />
 
-      {parseError ? (
+      {voice.error ? (
+        <AppText variant="caption" color="error" align="center">
+          {voice.error}
+        </AppText>
+      ) : parseError ? (
         <AppText variant="caption" color="error" align="center">
           {parseError}
+        </AppText>
+      ) : voice.state === 'recording' ? (
+        <AppText variant="caption" color="accent" align="center">
+          Listening… speak your set, then pause
+        </AppText>
+      ) : voice.state === 'transcribing' ? (
+        <AppText variant="caption" color="accent" align="center">
+          Transcribing…
         </AppText>
       ) : status ? (
         <AppText variant="caption" color="accent" align="center">

@@ -505,7 +505,7 @@ const GOAL_PRESETS: Record<
   fat_loss: { sets: 3, reps: '12-15', restSeconds: 45, exerciseCount: 10 },
   muscle_gain: { sets: 3, reps: '8-12', restSeconds: 90, exerciseCount: 10 },
   strength: { sets: 3, reps: '4-6', restSeconds: 150, exerciseCount: 10 },
-  general_fitness: { sets: 3, reps: '10-12', restSeconds: 60, exerciseCount: 10 },
+  general_fitness: { sets: 3, reps: '10-12', restSeconds: 90, exerciseCount: 10 },
 };
 
 export const WORKOUT_MIN_EXERCISES = 8;

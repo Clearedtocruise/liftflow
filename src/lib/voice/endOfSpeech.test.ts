@@ -31,32 +31,38 @@ test('stops after sustained silence once speech was heard', () => {
   assert.equal(done.reason, 'end_silence');
 });
 
-test('stops if nobody speaks before no-speech timeout', () => {
+test('does not auto-stop on silence before speech (avoids duck-then-nothing)', () => {
   const state = createEndOfSpeechState(0);
-  const done = reduceEndOfSpeech(state, -70, cfg.noSpeechTimeoutMs + 1, cfg);
+  const done = reduceEndOfSpeech(state, -70, 20_000, cfg);
+  assert.equal(done.shouldStop, false);
+});
+
+test('optional no-speech timeout still works when explicitly configured', () => {
+  const short = { ...cfg, noSpeechTimeoutMs: 5000 };
+  const state = createEndOfSpeechState(0);
+  const done = reduceEndOfSpeech(state, -70, 5001, short);
   assert.equal(done.shouldStop, true);
   assert.equal(done.reason, 'no_speech');
 });
 
-test('a recorder that never reports metering still ends the capture', () => {
-  // Devices have been seen delivering status updates with no `metering` field at all. Without a
-  // stop here the mic stays open, nothing transcribes and the music never comes back.
+test('a recorder that never reports metering keeps recording (hard cap / tap stop)', () => {
   let state = createEndOfSpeechState(0);
   const early = reduceEndOfSpeech(state, undefined, 1000, cfg);
   assert.equal(early.shouldStop, false);
 
-  const done = reduceEndOfSpeech(early.state, undefined, cfg.noSpeechTimeoutMs + 1, cfg);
-  assert.equal(done.shouldStop, true);
-  assert.equal(done.reason, 'no_speech');
+  const later = reduceEndOfSpeech(early.state, undefined, 20_000, cfg);
+  assert.equal(later.shouldStop, false);
+  assert.equal(later.reason, undefined);
 });
 
-test('non-finite metering is treated as no reading rather than as speech', () => {
+test('non-finite metering is treated as no reading rather than as speech or no-speech', () => {
   const state = createEndOfSpeechState(0);
   const nan = reduceEndOfSpeech(state, Number.NaN, 1000, cfg);
   assert.equal(nan.state.speechHeard, false);
+  assert.equal(nan.shouldStop, false);
 
-  const done = reduceEndOfSpeech(nan.state, Number.NaN, cfg.noSpeechTimeoutMs + 1, cfg);
-  assert.equal(done.shouldStop, true);
+  const later = reduceEndOfSpeech(nan.state, Number.NaN, 20_000, cfg);
+  assert.equal(later.shouldStop, false);
 });
 
 test('loud frames reset the silence clock', () => {
