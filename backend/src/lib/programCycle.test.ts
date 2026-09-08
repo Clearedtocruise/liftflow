@@ -7,8 +7,10 @@ import {
   clampCycleLength,
   completeCurrentCycleDay,
   currentCycleDay,
+  cycleWorkoutName,
   normalizeCurrentDay,
   normalizeCycle,
+  projectedCycleDayNumber,
   reconcileCycleForDate,
   CYCLE_MAX_DAYS,
 } from './programCycle.js';
@@ -111,4 +113,19 @@ test('normalizeCurrentDay wraps under- and over-flow', () => {
   assert.equal(normalizeCurrentDay(0, 5), 5);
   assert.equal(normalizeCurrentDay(6, 5), 1);
   assert.equal(normalizeCurrentDay(11, 5), 1);
+});
+
+test('projectedCycleDayNumber walks the rest of the week forward and loops', () => {
+  const cycle = { currentDay: 5, lengthDays: 6 };
+  assert.equal(projectedCycleDayNumber(cycle, 0), 5, 'today is the pointer itself');
+  assert.equal(projectedCycleDayNumber(cycle, 1), 6);
+  assert.equal(projectedCycleDayNumber(cycle, 2), 1, 'Day 6 → Day 1 loops on the day after tomorrow');
+  assert.equal(projectedCycleDayNumber(cycle, 7), 6, 'a full lap plus one lands back on tomorrow');
+});
+
+test('cycleWorkoutName does not repeat a label that already names the day (the reported "Day 1 — Day 1")', () => {
+  assert.equal(cycleWorkoutName('Day 1', 1), 'Day 1');
+  assert.equal(cycleWorkoutName('day 3', 3), 'day 3');
+  assert.equal(cycleWorkoutName('Push', 1), 'Push — Day 1');
+  assert.equal(cycleWorkoutName('Day 2 — Pull', 2), 'Day 2 — Pull');
 });
