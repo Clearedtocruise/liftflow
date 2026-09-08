@@ -73,7 +73,7 @@ import { matchSpokenExercise } from '@/lib/voice/matchSpokenExercise';
 import { pickWorkoutChallenge } from '@/lib/workoutChallengeFlow';
 import { normalizeExecutionMode } from '@/lib/workoutExecutionMode';
 import { alignPlanExercisesToSession, parseTargetReps } from '@/lib/workoutPlan';
-import { resolveEffectiveTargetSets } from '@/lib/workoutSetTarget';
+import { firstIncompleteExerciseIndex, resolveEffectiveTargetSets } from '@/lib/workoutSetTarget';
 import { resolveExerciseSeedWeightKg } from '@/lib/activeWorkoutWeightSeed';
 import { logWorkoutProgressionDecision } from '@/lib/workoutProgressionDebug';
 import { resolveBetweenExerciseUpNext, resolveTabataPrepUpNext, resolveWorkoutUpNext } from '@/lib/workoutUpNext';
@@ -212,7 +212,22 @@ export function ActiveWorkoutScreen({
     [planExercisesProp, sortedExercises],
   );
 
-  const [currentIndex, setCurrentIndex] = useState(0);
+  /**
+   * Landing on index 0 unconditionally meant leaving the app mid-session (exercise 1 finished,
+   * exercise 2 in progress) and coming back restarted at exercise 1 — the next set logged there
+   * instead of the exercise actually in progress, which then read as skipped since it never got a
+   * set. Resume at the first exercise that still has sets left instead.
+   */
+  const [currentIndex, setCurrentIndex] = useState(() =>
+    firstIncompleteExerciseIndex(
+      sortedExercises.map((exercise) => exercise.sets.length),
+      planExercises.map((exercise) => ({
+        planSets: exercise.sets,
+        executionMode: exercise.executionMode,
+        intervalRounds: exercise.intervalRounds,
+      })),
+    ),
+  );
   /**
    * Superset partners log back-to-back with no rest. `setCurrentIndex` only lands on the next
    * render, so a second Log Set tap (or watch tap) that fires after `loggingInFlightRef` clears

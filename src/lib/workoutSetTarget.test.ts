@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { DEFAULT_TARGET_SETS, resolveEffectiveTargetSets } from './workoutSetTarget';
+import { DEFAULT_TARGET_SETS, firstIncompleteExerciseIndex, resolveEffectiveTargetSets } from './workoutSetTarget';
 
 test('a traditional exercise finishes on its planned sets', () => {
   assert.equal(resolveEffectiveTargetSets({ executionMode: 'traditional', planSets: 4 }), 4);
@@ -64,4 +64,34 @@ test('a zero target can never make an exercise complete before a set is logged',
     assert.ok(resolveEffectiveTargetSets({ planSets }) >= 1);
     assert.ok(resolveEffectiveTargetSets({ executionMode: 'tabata', planSets }) >= 1);
   }
+});
+
+test('resuming a session lands on the exercise still in progress, not exercise 1', () => {
+  // Pullups (0), Barbell Rows (1), DB Rows (2). Pullups finished, Barbell Rows has 0 of 3 —
+  // reopening the screen must not restart at Pullups and silently skip Barbell Rows.
+  const loggedSetCounts = [3, 0, 0];
+  const targets = [{ planSets: 3 }, { planSets: 3 }, { planSets: 3 }];
+  assert.equal(firstIncompleteExerciseIndex(loggedSetCounts, targets), 1);
+});
+
+test('resuming mid-exercise lands on that exercise, not the one after it', () => {
+  const loggedSetCounts = [3, 2, 0];
+  const targets = [{ planSets: 3 }, { planSets: 3 }, { planSets: 3 }];
+  assert.equal(firstIncompleteExerciseIndex(loggedSetCounts, targets), 1);
+});
+
+test('a session with every exercise complete resumes on the last exercise', () => {
+  const loggedSetCounts = [3, 3, 3];
+  const targets = [{ planSets: 3 }, { planSets: 3 }, { planSets: 3 }];
+  assert.equal(firstIncompleteExerciseIndex(loggedSetCounts, targets), 2);
+});
+
+test('a brand-new session with nothing logged resumes on the first exercise', () => {
+  const loggedSetCounts = [0, 0, 0];
+  const targets = [{ planSets: 4 }, { planSets: 3 }, { planSets: 3 }];
+  assert.equal(firstIncompleteExerciseIndex(loggedSetCounts, targets), 0);
+});
+
+test('an empty session resumes at index 0 rather than a negative index', () => {
+  assert.equal(firstIncompleteExerciseIndex([], []), 0);
 });
