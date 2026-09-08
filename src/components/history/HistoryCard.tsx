@@ -4,6 +4,7 @@ import { Card } from '@/components/layout/Card';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Spacing } from '@/constants/theme';
 import { useUnits } from '@/hooks/useUnits';
+import { displayWeightFromKg } from '@/lib/unitConversion';
 import type { WorkoutHistoryItem } from '@/types/workout';
 
 type HistoryCardProps = {
@@ -57,7 +58,10 @@ export function HistoryCard({ item, onPress, onLongPress }: HistoryCardProps) {
         <View style={styles.statsRow}>
           <Stat label="Exercises" value={String(item.exerciseCount)} />
           <Stat label="Sets" value={String(item.totalSets)} />
-          <Stat label="Volume" value={`${(item.totalVolume / 1000).toFixed(1)}k`} />
+          <Stat
+            label="Volume"
+            value={`${(displayWeightFromKg(item.totalVolume, units.preferredWeightUnit) / 1000).toFixed(1)}k ${units.weightLabel}`}
+          />
         </View>
       )}
     </Card>

@@ -8,6 +8,8 @@ import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { SectionHeader } from '@/components/layout/SectionHeader';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Spacing } from '@/constants/theme';
+import { useUnits } from '@/hooks/useUnits';
+import { displayWeightFromKg } from '@/lib/unitConversion';
 import { socialShareService } from '@/services/socialShareService';
 import { workoutService } from '@/services/workoutService';
 import type { WorkoutSession } from '@/types';
@@ -23,6 +25,7 @@ function formatDate(dateStr: string): string {
 
 export default function SessionDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const units = useUnits();
   const [session, setSession] = useState<WorkoutSession | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -107,7 +110,10 @@ export default function SessionDetailScreen() {
       <View style={styles.statsRow}>
         <StatCard label="Duration" value={`${durationMinutes} min`} />
         <StatCard label="Sets" value={String(session.totalSets ?? 0)} />
-        <StatCard label="Volume" value={`${((session.totalVolume ?? 0) / 1000).toFixed(1)}k`} />
+        <StatCard
+          label="Volume"
+          value={`${(displayWeightFromKg(session.totalVolume ?? 0, units.preferredWeightUnit) / 1000).toFixed(1)}k ${units.weightLabel}`}
+        />
         {prCount > 0 ? <StatCard label="PRs" value={String(prCount)} accent /> : null}
       </View>
 
@@ -132,7 +138,8 @@ export default function SessionDetailScreen() {
                     Set {set.setNumber}
                   </AppText>
                   <AppText variant="body">
-                    {set.weight ?? '—'} × {set.reps ?? '—'}
+                    {set.weight != null ? `${units.formatWeight(set.weight)} × ` : ''}
+                    {set.reps ?? '—'} reps
                   </AppText>
                   {set.isPr ? (
                     <View style={styles.prBadge}>
