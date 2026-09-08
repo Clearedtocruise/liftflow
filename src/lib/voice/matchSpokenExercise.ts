@@ -46,6 +46,33 @@ const EXCLUSIVE_QUALIFIER_GROUPS: string[][] = [
   ['reverse', 'forward'],
 ];
 
+/**
+ * Equipment families that are mutually exclusive: naming one implement explicitly rules out every
+ * other family for that exercise, even though the movement word ("row", "curl", "press") is
+ * identical. Without this, "Barbell Row" and "Dumbbell Row" both reduce to the core token "row"
+ * and read as the same exercise — so saying "barbell rows" while Dumbbell Row is on screen would
+ * log the set to Dumbbell Row instead of rejecting the mismatch. "bar" folds into "barbell" since
+ * lifters routinely just say "bar row" to mean barbell.
+ */
+const IMPLEMENT_FAMILY: Record<string, string> = {
+  bar: 'barbell',
+  barbell: 'barbell',
+  ez: 'barbell',
+  smith: 'barbell',
+  dumbbell: 'dumbbell',
+  kettlebell: 'kettlebell',
+  cable: 'cable',
+  machine: 'machine',
+  lever: 'machine',
+  band: 'band',
+  banded: 'band',
+  landmine: 'landmine',
+  plate: 'plate',
+  sled: 'sled',
+  bodyweight: 'bodyweight',
+  assisted: 'bodyweight',
+};
+
 /** Shorthand that speech-to-text preserves verbatim but the catalog spells out. */
 const ABBREVIATIONS: Record<string, string> = {
   bb: 'barbell',
@@ -145,6 +172,32 @@ function hasConflictingQualifier(a: string[], b: string[]): boolean {
   });
 }
 
+function implementFamilies(tokens: string[]): Set<string> {
+  const families = new Set<string>();
+  for (const token of tokens) {
+    const family = IMPLEMENT_FAMILY[token];
+    if (family) families.add(family);
+  }
+  return families;
+}
+
+/**
+ * True only when BOTH names name an implement and those implements are different families — e.g.
+ * spoken "barbell row" against an on-screen "Dumbbell Row". If either side leaves the implement
+ * unsaid (just "rows"), there is nothing to conflict with, so this stays false and the generic
+ * name is free to match whatever movement is active.
+ */
+function hasConflictingImplement(spokenTokens: string[], activeTokens: string[]): boolean {
+  const spokenFamilies = implementFamilies(spokenTokens);
+  const activeFamilies = implementFamilies(activeTokens);
+  if (spokenFamilies.size === 0 || activeFamilies.size === 0) return false;
+
+  for (const family of spokenFamilies) {
+    if (activeFamilies.has(family)) return false;
+  }
+  return true;
+}
+
 function isSubset(inner: string[], outer: string[]): boolean {
   return inner.every((token) => outer.includes(token));
 }
@@ -167,11 +220,24 @@ export type SpokenExerciseMatch =
  * the caller should accept it and name the exercise the set landed on rather than refuse the save.
  */
 export function matchSpokenExercise(spoken: string, active: string): SpokenExerciseMatch {
+  const spokenTokens = tokenize(spoken);
+  const activeTokens = tokenize(active);
   const spokenCore = coreTokens(spoken);
   const activeCore = coreTokens(active);
 
   if (spokenCore.length === 0 || activeCore.length === 0) {
     return { kind: 'different', reason: `${active.trim()} is the current exercise.` };
+  }
+
+  // Implement words are stripped before the core-token comparison below, so "Barbell Row" and
+  // "Dumbbell Row" would otherwise both reduce to "row" and read as an exact match. Reject that
+  // up front whenever both names actually name an implement and they disagree — this is what was
+  // sending a spoken "barbell rows" set onto whichever row variant happened to be on screen.
+  if (hasConflictingImplement(spokenTokens, activeTokens)) {
+    return {
+      kind: 'different',
+      reason: `Heard "${spoken.trim()}", but ${active.trim()} is the current exercise.`,
+    };
   }
 
   if (spokenCore.join(' ') === activeCore.join(' ')) return { kind: 'exact' };
