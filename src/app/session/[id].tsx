@@ -9,9 +9,11 @@ import { SectionHeader } from '@/components/layout/SectionHeader';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Spacing } from '@/constants/theme';
 import { useUnits } from '@/hooks/useUnits';
+import { canReopenSession } from '@/lib/sessionReopen';
 import { displayWeightFromKg } from '@/lib/unitConversion';
 import { socialShareService } from '@/services/socialShareService';
 import { workoutService } from '@/services/workoutService';
+import { useWorkoutSession } from '@/state/workout/WorkoutSessionContext';
 import type { WorkoutSession } from '@/types';
 
 function formatDate(dateStr: string): string {
@@ -25,9 +27,11 @@ function formatDate(dateStr: string): string {
 
 export default function SessionDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { reopenSession } = useWorkoutSession();
   const units = useUnits();
   const [session, setSession] = useState<WorkoutSession | null>(null);
   const [loading, setLoading] = useState(true);
+  const [continuing, setContinuing] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -62,6 +66,18 @@ export default function SessionDetailScreen() {
     if (!session) return;
     const result = await socialShareService.shareWorkoutRecap(session);
     if (!result.success) Alert.alert('Share failed', result.error);
+  }
+
+  async function handleContinueWorkout() {
+    if (!session || continuing) return;
+    setContinuing(true);
+    const { session: reopened, error } = await reopenSession(session.id);
+    setContinuing(false);
+    if (!reopened) {
+      Alert.alert('Could not continue workout', error ?? 'Something went wrong. Please try again.');
+      return;
+    }
+    router.replace('/(tabs)/workout');
   }
 
   if (loading) {
@@ -156,7 +172,14 @@ export default function SessionDetailScreen() {
       )}
 
       <View style={styles.actions}>
-        <PrimaryButton label="Share Workout" onPress={handleShare} />
+        {canReopenSession(session) ? (
+          <PrimaryButton
+            label="Finished by accident? Continue Workout"
+            onPress={handleContinueWorkout}
+            loading={continuing}
+          />
+        ) : null}
+        <PrimaryButton label="Share Workout" onPress={handleShare} variant={canReopenSession(session) ? 'secondary' : 'primary'} />
         <PrimaryButton label="Delete Session" onPress={handleDelete} variant="secondary" />
       </View>
     </ScreenContainer>

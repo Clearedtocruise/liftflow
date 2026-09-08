@@ -1,16 +1,18 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, Alert, View } from 'react-native';
 
 import { ErrorStateCard } from '@/components/layout/StateCard';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { WorkoutSummaryScreen } from '@/components/workout/execution/WorkoutSummaryScreen';
 import { LiftFlowColors } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
+import { canReopenSession } from '@/lib/sessionReopen';
 import { parseChallengeNotes } from '@/lib/workoutChallengeFlow';
 import { coachActivationService } from '@/services/coachActivationService';
 import { socialShareService } from '@/services/socialShareService';
 import { workoutService } from '@/services/workoutService';
+import { useWorkoutSession } from '@/state/workout/WorkoutSessionContext';
 import type { WorkoutSession } from '@/types';
 import type { PostWorkoutCoachSummary } from '@/types/coachActivation';
 import type { WorkoutChallengeRecord } from '@/types/workoutChallenge';
@@ -31,10 +33,12 @@ export default function WorkoutSummaryRoute() {
     challenges?: string;
   }>();
   const { user } = useAuth();
+  const { reopenSession } = useWorkoutSession();
   const [session, setSession] = useState<WorkoutSession | null>(null);
   const [coachSummary, setCoachSummary] = useState<PostWorkoutCoachSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [continuingWorkout, setContinuingWorkout] = useState(false);
 
   const challenges = useMemo(() => {
     const fromParams = parseChallengesParam(challengesParam);
@@ -75,6 +79,18 @@ export default function WorkoutSummaryRoute() {
     void load();
   }, [load]);
 
+  const handleContinueWorkout = useCallback(async () => {
+    if (!session || continuingWorkout) return;
+    setContinuingWorkout(true);
+    const { session: reopened, error } = await reopenSession(session.id);
+    setContinuingWorkout(false);
+    if (!reopened) {
+      Alert.alert('Could not continue workout', error ?? 'Something went wrong. Please try again.');
+      return;
+    }
+    router.replace('/(tabs)/workout');
+  }, [session, continuingWorkout, reopenSession]);
+
   if (loading) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: LiftFlowColors.background }}>
@@ -106,6 +122,8 @@ export default function WorkoutSummaryRoute() {
       onShare={() => {
         void socialShareService.shareWorkoutRecap(session);
       }}
+      onContinueWorkout={canReopenSession(session) ? handleContinueWorkout : undefined}
+      continuingWorkout={continuingWorkout}
     />
   );
 }

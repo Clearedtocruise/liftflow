@@ -38,6 +38,12 @@ type WorkoutSessionActions = {
   startSession: (payload: StartSessionPayload) => Promise<WorkoutSession | null>;
   startSessionFromPlanned: (plannedWorkoutId: string, payload: StartSessionPayload) => Promise<WorkoutSession | null>;
   endSession: () => Promise<WorkoutSession | null>;
+  /**
+   * Undo an accidental "Finish Workout" tap. Fails if another session is already active/paused
+   * (finishing that one first avoids two sessions racing to be "the" active session), or if the
+   * target session is outside the reopen grace window.
+   */
+  reopenSession: (sessionId: string) => Promise<{ session: WorkoutSession | null; error: string | null }>;
   pauseSession: () => Promise<void>;
   resumeSession: () => Promise<void>;
   cancelSession: () => Promise<void>;
@@ -276,6 +282,34 @@ export function WorkoutSessionProvider({
     return null;
   }, [activeSession, clearLocalSessionState]);
 
+  const reopenSession = useCallback(
+    async (sessionId: string) => {
+      // `activeSession` is only ever populated with an active/paused session (see hydrate /
+      // refreshSession), so any non-null, different id here is a genuinely different in-progress
+      // workout — finish or cancel it first rather than silently swapping the tracked session.
+      if (activeSession && activeSession.id !== sessionId) {
+        return {
+          session: null,
+          error: 'Finish or cancel your current workout before continuing a different one.',
+        };
+      }
+
+      setIsLoading(true);
+      const result = await workoutService.reopenSession(sessionId);
+      setIsLoading(false);
+      if (!result.success) {
+        return { session: null, error: result.error };
+      }
+
+      sessionEpochRef.current += 1;
+      dismissedSessionIdsRef.current.delete(sessionId);
+      trackedSessionIdRef.current = result.data.id;
+      setActiveSession(result.data);
+      return { session: result.data, error: null };
+    },
+    [activeSession],
+  );
+
   const pauseSession = useCallback(async () => {
     if (!activeSession) return;
     const result = await workoutService.pauseSession(activeSession.id);
@@ -501,6 +535,7 @@ export function WorkoutSessionProvider({
       startSession,
       startSessionFromPlanned,
       endSession,
+      reopenSession,
       pauseSession,
       resumeSession,
       cancelSession,
@@ -536,6 +571,7 @@ export function WorkoutSessionProvider({
       startSession,
       startSessionFromPlanned,
       endSession,
+      reopenSession,
       pauseSession,
       resumeSession,
       cancelSession,
