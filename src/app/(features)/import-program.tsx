@@ -136,11 +136,15 @@ export default function ImportProgramScreen() {
       const buttons: Array<{ text: string; style?: 'cancel'; onPress?: () => void }> = [
         { text: 'OK', style: 'cancel' },
       ];
+      if (result.data.workout) {
+        buttons.push({
+          text: 'View full program',
+          onPress: () => router.push('/(features)/custom-program'),
+        });
+        buttons.push({ text: 'Open Workout', onPress: () => router.push('/(tabs)/workout') });
+      }
       if (result.data.nutrition) {
         buttons.push({ text: 'Open Nutrition', onPress: () => router.push('/(tabs)/nutrition') });
-      }
-      if (result.data.workout) {
-        buttons.push({ text: 'Open Workout', onPress: () => router.push('/(tabs)/workout') });
       }
       Alert.alert('Plan applied', parts.join('\n') || preview.summary, buttons);
     } finally {
@@ -222,11 +226,20 @@ export default function ImportProgramScreen() {
             <AppText style={styles.cardTitle}>{preview.title ?? 'Preview'}</AppText>
             <AppText>{preview.summary}</AppText>
             {preview.workout ? (
-              <AppText style={styles.detail}>
-                Workout: {preview.workout.lengthDays} days ·{' '}
-                {preview.workout.days.filter((d) => !d.isRest).length} training ·{' '}
-                {preview.workout.days.filter((d) => d.isRest).length} rest
-              </AppText>
+              <>
+                <AppText style={styles.detail}>
+                  Workout: {preview.workout.lengthDays} days ·{' '}
+                  {preview.workout.days.filter((d) => !d.isRest).length} training ·{' '}
+                  {preview.workout.days.filter((d) => d.isRest).length} rest
+                </AppText>
+                {preview.workout.days.map((day, index) => (
+                  <AppText key={`${day.label}-${index}`} style={styles.dayLine}>
+                    {day.isRest
+                      ? `Day ${index + 1}: Rest`
+                      : `Day ${index + 1}: ${day.label?.replace(/^Day\s*\d+\s*[—–-]?\s*/i, '') || 'Training'} · ${day.exercises?.length ?? 0} exercises`}
+                  </AppText>
+                ))}
+              </>
             ) : null}
             {preview.nutrition ? (
               <AppText style={styles.detail}>
@@ -290,5 +303,6 @@ const styles = StyleSheet.create({
   },
   busy: { alignItems: 'center', padding: Spacing.md },
   detail: { color: LiftFlowColors.textSecondary, marginTop: Spacing.xs },
+  dayLine: { color: LiftFlowColors.textSecondary, fontSize: 13, marginTop: 2 },
   warn: { color: LiftFlowColors.warning, marginTop: Spacing.xs },
 });

@@ -1,8 +1,20 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { heuristicParseProgramText } from './pdfProgramParse.js';
+import { heuristicParseProgramText, normalizePlanText } from './pdfProgramParse.js';
 import { importedNutritionToMealPlanResponse } from './importedNutritionPlan.js';
+
+describe('normalizePlanText', () => {
+  it('breaks a collapsed multi-day paste into separate day lines', () => {
+    const collapsed =
+      'Day 1 — Push Bench Press 4x8 Overhead Press 3x10 Day 2 — Pull Pull-Up 5x5 Barbell Row 4x8 Day 3 — Legs Squat 5x5';
+    const normalized = normalizePlanText(collapsed);
+    assert.match(normalized, /^Day 1/m);
+    assert.match(normalized, /^Day 2/m);
+    assert.match(normalized, /^Day 3/m);
+    assert.ok(normalized.split('\n').length >= 3);
+  });
+});
 
 describe('pdfProgramParse heuristic', () => {
   it('extracts a multi-day workout cycle from plain text', () => {
@@ -28,6 +40,24 @@ Barbell Row 4x8
     assert.equal(preview.workout!.days[1].isRest, true);
     assert.ok(preview.workout!.days[2].exercises.some((e) => /pull/i.test(e.name)));
     assert.equal(preview.nutrition, null);
+  });
+
+  it('extracts all six days from a collapsed one-line paste (the reported bug)', () => {
+    const text =
+      'Day 1 — Push Bench Press 4x8 Overhead Press 3x10 Day 2 — Pull Pull-Up 5x5 Barbell Row 4x8 Day 3 — Legs Squat 5x5 RDL 3x8 Day 4 — Push Incline Bench 4x8 Lateral Raise 3x15 Day 5 — Pull Chin-Up 4x6 Seated Row 4x10 Day 6 — Legs Front Squat 4x6 Walking Lunges 3x10 each Leg Curl 3x12';
+    const preview = heuristicParseProgramText(text, 'workout');
+    assert.ok(preview.workout, 'expected a workout preview');
+    assert.equal(preview.workout!.lengthDays, 6);
+    assert.equal(preview.workout!.days.filter((d) => !d.isRest).length, 6);
+    assert.ok(preview.workout!.days[0].exercises.some((e) => /bench/i.test(e.name)));
+    assert.ok(preview.workout!.days[1].exercises.some((e) => /pull/i.test(e.name)));
+    assert.ok(preview.workout!.days[5].exercises.some((e) => /squat|leg curl|lunges/i.test(e.name)));
+    assert.ok(
+      preview.workout!.days[5].exercises.some((e) => /leg curl/i.test(e.name)),
+      'Leg Curl after "each" must not be swallowed into Walking Lunges',
+    );
+    // Every imported lift gets the standard 90s rest when the paste omits rest.
+    assert.ok(preview.workout!.days[0].exercises.every((e) => e.restSeconds === 90));
   });
 
   it('extracts nutrition calorie/protein targets', () => {

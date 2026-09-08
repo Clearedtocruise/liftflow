@@ -15,7 +15,12 @@ import {
  * Android, neither of which the transcription API accepts. High quality yields `.m4a` on both.
  * Metering is already enabled on the preset — required for end-of-speech auto-stop.
  */
-const RECORDING_OPTIONS = Audio.RecordingOptionsPresets.HIGH_QUALITY;
+const RECORDING_OPTIONS: Audio.RecordingOptions = {
+  ...Audio.RecordingOptionsPresets.HIGH_QUALITY,
+  // Explicit — some devices omit metering from the preset merge and then end-of-speech never
+  // sees speech, so the hard cap is the only stop and empty takes look like a broken mic.
+  isMeteringEnabled: true,
+};
 
 /**
  * Last-resort cap if both end-of-speech paths go quiet. A spoken set is a few seconds, so 30s of

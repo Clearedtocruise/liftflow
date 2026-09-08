@@ -41,7 +41,7 @@ export type ExerciseExecutionPrescription =
 
 const SET_REP_DEFAULTS = {
   traditional: { sets: 3, repRange: '10', restSeconds: 90 },
-  hypertrophy: { sets: 3, repRange: '8-12', restSeconds: 60 },
+  hypertrophy: { sets: 3, repRange: '8-12', restSeconds: 90 },
   strength: { sets: 3, repRange: '3-5', restSeconds: 180 },
 } as const;
 

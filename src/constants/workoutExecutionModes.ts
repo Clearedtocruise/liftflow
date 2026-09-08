@@ -60,7 +60,8 @@ export const SET_REP_MODE_DEFAULTS: Record<
   { sets: number; repRange: string; restSeconds: number }
 > = {
   traditional: { sets: 3, repRange: '10', restSeconds: 90 },
-  hypertrophy: { sets: 3, repRange: '8-12', restSeconds: 60 },
+  /** Match the product standard of 1:30 between sets (was 60). */
+  hypertrophy: { sets: 3, repRange: '8-12', restSeconds: 90 },
   strength: { sets: 3, repRange: '3-5', restSeconds: 180 },
 };
 

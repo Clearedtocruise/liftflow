@@ -17,11 +17,17 @@ export type EndOfSpeechConfig = {
 };
 
 export const DEFAULT_END_OF_SPEECH: EndOfSpeechConfig = {
-  speechThresholdDb: -38,
-  silenceThresholdDb: -46,
-  endSilenceMs: 1100,
+  /** Gym floors are noisy but speech is quieter than music — slightly more sensitive. */
+  speechThresholdDb: -42,
+  silenceThresholdDb: -50,
+  endSilenceMs: 1400,
   minRecordingMs: 700,
-  noSpeechTimeoutMs: 5000,
+  /**
+   * Disabled in practice (see reduceEndOfSpeech): auto-stopping on "no speech" while metering
+   * reports silence cut captures before the lifter finished — music unducked, empty transcript.
+   * Hard MAX_RECORDING_MS / a second tap end the take instead.
+   */
+  noSpeechTimeoutMs: Number.POSITIVE_INFINITY,
 };
 
 export type EndOfSpeechState = {
@@ -61,7 +67,15 @@ export function reduceEndOfSpeech(
   }
 
   if (!next.speechHeard) {
-    if (elapsed >= config.noSpeechTimeoutMs) {
+    // Do not auto-stop before speech is heard. Missing metering, constant low dB readings, and
+    // slow talkers all used to trip no_speech → unduck → empty transcript (music dips then
+    // returns with nothing logged). Hard MAX_RECORDING_MS / a second tap still end the take.
+    if (
+      Number.isFinite(config.noSpeechTimeoutMs) &&
+      meteringDb != null &&
+      Number.isFinite(meteringDb) &&
+      elapsed >= config.noSpeechTimeoutMs
+    ) {
       return { state: next, shouldStop: true, reason: 'no_speech' };
     }
     return { state: next, shouldStop: false };
