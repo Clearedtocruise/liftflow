@@ -148,43 +148,52 @@ function deriveFromNamePattern(name: string): ExerciseMuscleProfile {
   const dayFocus = deriveFromDayFocusList(lower);
   if (dayFocus) return dayFocus;
 
-  if (/\b(bench|fly|push-up|pushup|dip)\b/.test(lower)) {
+  // `\bcurl\b` never matches "Curls" — the trailing "s" is a word character, so there is no
+  // boundary between "curl" and "s". Plain-language plans (imported PDFs especially) almost
+  // always use plurals ("Curls", "Rows", "Pullups", "Squats"), so every pattern below accepts an
+  // optional trailing "s" (or "es"/irregular plural) instead of only the singular lift name — the
+  // reported bug where Curls, Pullups, Barbell Rows and DB Rows all rendered as "Full Body".
+  if (/\b(benches?|flys?|flyes?|flies|push-?ups?|dips?)\b/.test(lower)) {
     return { primary: ['chest'], secondary: ['triceps', 'front-delts'] };
   }
-  if (/\b(pull-up|pullup|pulldown|chin-up|row)\b/.test(lower)) {
+  if (/\b(pull-?ups?|pulldowns?|chin-?ups?|rows?)\b/.test(lower)) {
     return { primary: ['lats'], secondary: ['biceps', 'mid-back'] };
   }
-  if (/\b(squat|lunge|leg press)\b/.test(lower)) {
+  if (/\b(squats?|lunges?|leg\s+press(?:es)?)\b/.test(lower)) {
     return { primary: ['quads', 'glutes'], secondary: ['hamstrings'] };
   }
-  if (/\b(deadlift|rdl|hinge)\b/.test(lower)) {
+  if (/\b(deadlifts?|rdls?|hinges?)\b/.test(lower)) {
     return { primary: ['hamstrings', 'glutes'], secondary: ['lower-back'] };
   }
-  if (/\b(curl)\b/.test(lower)) {
+  if (/\b(curls?)\b/.test(lower)) {
     return { primary: ['biceps'], secondary: ['forearms'] };
   }
-  if (/\b(press|ohp|shoulder)\b/.test(lower)) {
+  if (/\b(press(?:es)?|ohp|shoulders?)\b/.test(lower)) {
     return { primary: ['shoulders'], secondary: ['triceps'] };
   }
-  if (/\b(plank|crunch)\b/.test(lower) || /(^|[^a-z])core([^a-z]|$)/.test(lower)) {
+  if (/\b(planks?|crunch(?:es)?)\b/.test(lower) || /(^|[^a-z])core([^a-z]|$)/.test(lower)) {
     return { primary: ['core'], secondary: ['abs'] };
   }
-  if (/\b(weighted\s+sit[\s-]?up|sit[\s-]?up|windshield\s*wiper|russian\s+twist|dead\s+bug|hanging\s+leg\s+raise|leg\s+raise|toes?\s+to\s+bar|v[\s-]?up|hollow\s+rock)\b/.test(lower)) {
+  if (
+    /\b(weighted\s+sit[\s-]?ups?|sit[\s-]?ups?|windshield\s*wipers?|russian\s+twists?|dead\s+bugs?|hanging\s+leg\s+raises?|leg\s+raises?|toes?\s+to\s+bar|v[\s-]?ups?|hollow\s+rocks?)\b/.test(
+      lower,
+    )
+  ) {
     return { primary: ['core'], secondary: ['obliques', 'abs'] };
   }
-  if (/\b(calf)\b/.test(lower)) {
+  if (/\b(calf|calves)\b/.test(lower)) {
     return { primary: ['calves'], secondary: [] };
   }
-  if (/\b(glute\s+kickback|cable\s+kickback|donkey\s+kick|fire\s+hydrant)\b/.test(lower)) {
+  if (/\b(glute\s+kickbacks?|cable\s+kickbacks?|donkey\s+kicks?|fire\s+hydrants?)\b/.test(lower)) {
     return { primary: ['glutes'], secondary: ['hamstrings'] };
   }
-  if (/\b(kickback|tricep|triceps)\b/.test(lower)) {
+  if (/\b(kickbacks?|tricep|triceps)\b/.test(lower)) {
     return { primary: ['triceps'], secondary: ['shoulders'] };
   }
-  if (/\b(lateral\s+raise|front\s+raise|rear\s+delt)\b/.test(lower)) {
+  if (/\b(lateral\s+raises?|front\s+raises?|rear\s+delts?)\b/.test(lower)) {
     return { primary: ['shoulders'], secondary: [] };
   }
-  if (/\b(run|walk|cardio|bike|cycle|swim|rower)\b/.test(lower)) {
+  if (/\b(runs?|walks?|cardio|bikes?|cycles?|swims?|rowers?)\b/.test(lower)) {
     return { primary: ['quads'], secondary: ['calves', 'glutes'] };
   }
   return { primary: ['full-body'], secondary: [] };
