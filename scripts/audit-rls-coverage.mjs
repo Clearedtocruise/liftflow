@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 /**
- * Reports tables where row-level security is enabled but no policy grants access.
+ * Reports two Supabase Security Advisor classes of problem:
  *
- * That combination is not a partially open door, it is a closed one: Postgres denies everything.
- * The service-role key bypasses RLS, so every backend path keeps working and the breakage only shows
- * up in the app — where a denied select returns an empty array rather than an error, and so reads as
- * "this user has no data".
+ * 1. Tables in `public` with RLS *disabled* (`rls_disabled_in_public`) — anyone with the
+ *    project URL can CRUD every row. This is a live data exposure.
+ * 2. Tables with RLS enabled but no policy — a closed door. Postgres denies everything.
+ *    The service-role key bypasses RLS, so backend paths keep working and the breakage only
+ *    shows up in the app (denied select → empty array → "this user has no data").
  *
- * Needs the service-role key, because this queries the catalog.
  *   SUPABASE_ACCESS_TOKEN=... node scripts/audit-rls-coverage.mjs
  */
 import { readFileSync } from 'node:fs';
@@ -20,6 +20,9 @@ const BACKEND_ONLY = new Set([
   'exercise_recognition_events',
   'outcome_cohort_signals',
   'population_outcome_aggregates',
+  // Migration forensics — never queried by the app; RLS on + no policy is correct.
+  '_backup_030_dedupe_workout_exercises',
+  '_backup_030_dedupe_workout_sets',
 ]);
 
 function loadEnv() {
@@ -48,10 +51,11 @@ if (!token || !projectRef) {
 
 const query = `
   select c.relname as table_name,
-         (select count(*) from pg_policy p where p.polrelid = c.oid) as policies
+         c.relrowsecurity as rls_enabled,
+         (select count(*)::int from pg_policy p where p.polrelid = c.oid) as policies
   from pg_class c
   join pg_namespace n on n.oid = c.relnamespace
-  where n.nspname = 'public' and c.relkind = 'r' and c.relrowsecurity
+  where n.nspname = 'public' and c.relkind = 'r'
   order by c.relname;
 `;
 
@@ -67,18 +71,35 @@ if (!response.ok) {
 }
 
 const rows = await response.json();
-const unreachable = rows.filter((row) => Number(row.policies) === 0);
+const rlsDisabled = rows.filter((row) => !row.rls_enabled);
+const withRls = rows.filter((row) => row.rls_enabled);
+const unreachable = withRls.filter((row) => Number(row.policies) === 0);
 const clientFacing = unreachable.filter((row) => !BACKEND_ONLY.has(row.table_name));
 const intentional = unreachable.filter((row) => BACKEND_ONLY.has(row.table_name));
 
-console.log(`\ntables with RLS enabled: ${rows.length}`);
+console.log(`\npublic tables: ${rows.length}`);
+console.log(`RLS disabled (Security Advisor CRITICAL): ${rlsDisabled.length}`);
+for (const row of rlsDisabled) console.log(`  ${row.table_name}`);
+console.log(`tables with RLS enabled: ${withRls.length}`);
 console.log(`of those, no policy at all: ${unreachable.length}`);
-console.log(`  backend-only, correctly closed: ${intentional.length}`);
-console.log(`  client-facing, unreachable:      ${clientFacing.length}`);
+console.log(`  backend-only / forensic, correctly closed: ${intentional.length}`);
+console.log(`  client-facing, unreachable:                ${clientFacing.length}`);
+
+let failed = false;
+
+if (rlsDisabled.length > 0) {
+  console.log('\nThese are publicly CRUD-able until RLS is enabled:\n');
+  for (const row of rlsDisabled) console.log(`  ${row.table_name}`);
+  failed = true;
+}
 
 if (clientFacing.length > 0) {
   console.log('\nThese are read or written by the app and will silently return nothing:\n');
   for (const row of clientFacing) console.log(`  ${row.table_name}`);
+  failed = true;
+}
+
+if (failed) {
   console.log('\nRLS coverage: FAIL');
   process.exit(1);
 }
