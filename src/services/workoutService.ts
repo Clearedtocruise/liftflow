@@ -6,6 +6,7 @@ import {
   namesMatchExercise,
 } from '@/lib/exerciseNameLookup';
 import { fail, fromError, ok } from '@/lib/serviceResult';
+import { canReopenSession } from '@/lib/sessionReopen';
 import type { IWorkoutService } from '@/services/interfaces';
 import { supabase } from '@/supabase/client';
 import type { CreateSetPayload, Exercise, StartSessionPayload, UpdateSetPayload, WorkoutSession } from '@/types';
@@ -511,6 +512,41 @@ export const workoutService: IWorkoutService = {
 
       const updated = await loadSession(sessionId);
       if (!updated) return fail('Failed to load completed session');
+      return ok(updated);
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
+  /**
+   * Undo an accidental "Finish Workout" tap. Only valid for a session that is still
+   * `completed` and within the reopen grace window — see `canReopenSession`.
+   */
+  async reopenSession(sessionId) {
+    try {
+      const session = await loadSession(sessionId);
+      if (!session) return fail('Session not found');
+
+      if (session.status !== 'completed') {
+        return fail('This workout is not finished, so there is nothing to continue.');
+      }
+      if (!canReopenSession(session)) {
+        return fail('This workout finished too long ago to continue — start a new session instead.');
+      }
+
+      const { error } = await supabase
+        .from('workout_sessions')
+        .update({ status: 'active', ended_at: null, duration_seconds: null })
+        .eq('id', sessionId);
+
+      if (error) return fail(error.message);
+
+      if (session.plannedWorkoutId) {
+        await syncPlannedWorkoutStatus(session.plannedWorkoutId, 'active');
+      }
+
+      const updated = await loadSession(sessionId);
+      if (!updated) return fail('Failed to load reopened session');
       return ok(updated);
     } catch (e) {
       return fromError(e);

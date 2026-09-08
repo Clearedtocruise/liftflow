@@ -90,6 +90,8 @@ export interface IWorkoutService {
   ): Promise<ServiceResult<WorkoutSession>>;
   getActiveSession(userId: string): Promise<ServiceResult<WorkoutSession | null>>;
   endSession(sessionId: string): Promise<ServiceResult<WorkoutSession>>;
+  /** Undo an accidental finish — reopens a `completed` session within the reopen grace window. */
+  reopenSession(sessionId: string): Promise<ServiceResult<WorkoutSession>>;
   /** Catalog + this user's own exercises. */
   searchExercises(
     query: string,

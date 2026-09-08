@@ -18,6 +18,9 @@ type WorkoutSummaryScreenProps = {
   challenges: WorkoutChallengeRecord[];
   onDone: () => void;
   onShare: () => void;
+  /** Present only while the just-finished session is still within the reopen grace window. */
+  onContinueWorkout?: () => void;
+  continuingWorkout?: boolean;
 };
 
 export function WorkoutSummaryScreen({
@@ -26,6 +29,8 @@ export function WorkoutSummaryScreen({
   challenges,
   onDone,
   onShare,
+  onContinueWorkout,
+  continuingWorkout,
 }: WorkoutSummaryScreenProps) {
   const units = useUnits();
 
@@ -137,6 +142,14 @@ export function WorkoutSummaryScreen({
       <View style={styles.actions}>
         <PrimaryButton label="Share Workout" onPress={onShare} size="large" />
         <PrimaryButton label="Done" onPress={onDone} variant="secondary" />
+        {onContinueWorkout ? (
+          <PrimaryButton
+            label="Finished by accident? Continue Workout"
+            onPress={onContinueWorkout}
+            variant="ghost"
+            loading={continuingWorkout}
+          />
+        ) : null}
       </View>
     </ScreenContainer>
   );
