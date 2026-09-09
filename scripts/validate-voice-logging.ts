@@ -116,24 +116,38 @@ check(
   true,
 );
 
-console.log('\nThe microphone gives the lifter their music back');
-// Recording forces iOS into PlayAndRecord. Without an explicit duck it interrupts whatever is
-// playing, and an interrupted app only resumes on a deactivation flag expo-av does not expose —
-// so the music stopped when the mic opened and never returned.
+console.log('\nThe microphone keeps the lifter\'s music playing');
+// Recording forces iOS into PlayAndRecord. expo-av's DuckOthers option does NOT also set
+// MixWithOthers, so PlayAndRecord takes the session exclusively and Spotify/Apple Music stop.
+// MixWithOthers on iOS is the mode that actually lets other audio keep playing.
 const audioSession = source('src/lib/voice/audioSession.ts');
 const recordAudio = source('src/lib/voice/recordAudio.ts');
 const coachSpeech = source('src/services/voiceCoachingService.ts');
 
-check('capture ducks other audio rather than interrupting it', audioSession.includes('InterruptionModeIOS.DuckOthers'), true);
-check('Android ducks too', audioSession.includes('InterruptionModeAndroid.DuckOthers'), true);
+check(
+  'iOS capture mixes with other audio instead of exclusive DuckOthers',
+  /enterVoiceCaptureMode[\s\S]*?interruptionModeIOS:\s*InterruptionModeIOS\.MixWithOthers/.test(audioSession),
+  true,
+);
+check(
+  'iOS spoken cues mix with other audio instead of exclusive DuckOthers',
+  /enterVoicePlaybackMode[\s\S]*?interruptionModeIOS:\s*InterruptionModeIOS\.MixWithOthers/.test(audioSession),
+  true,
+);
+check('Android still ducks', audioSession.includes('InterruptionModeAndroid.DuckOthers'), true);
 check('releasing hands playback back to other apps', audioSession.includes('InterruptionModeIOS.MixWithOthers'), true);
 check('releasing turns recording off so audio leaves the earpiece', audioSession.includes('allowsRecordingIOS: false'), true);
 check('the session is never held into the background', audioSession.includes('staysActiveInBackground: false'), true);
+check(
+  'release does not toggle Audio.setIsEnabledAsync(false) — that stops other apps and leaves the next take busy',
+  /setIsEnabledAsync\(\s*false\s*\)/.test(audioSession),
+  false,
+);
 
 console.log('\nEvery path out of recording releases the session');
 check('stopping releases it', recordAudio.includes('await releaseAudioSession()'), true);
 check('stopping unducks while the recorder still holds the session', recordAudio.includes('unduckWhileSessionActive'), true);
-check('a recorder that fails to open releases it', recordAudio.includes('await releaseAudioSession();\n    throw error;'), true);
+check('a recorder that fails to open releases it', /releaseAudioSession\(\);\s*\n\s*throw/.test(recordAudio), true);
 check('spoken replies release it when they finish', coachSpeech.includes('didJustFinish) void releaseAudioSession()'), true);
 check('device Speech fallbacks also release via speakCue', coachSpeech.includes("from '@/lib/voice/speakCue'"), true);
 
@@ -153,7 +167,7 @@ console.log('\nRest-complete and voice confirmations restore music after speakin
 const speakCue = source('src/lib/voice/speakCue.ts');
 const restTimer = source('src/state/workout/WorkoutSessionContext.tsx');
 const voiceFeedback = source('src/lib/voice/voiceFeedback.ts');
-check('speakCue ducks while the cue plays', speakCue.includes('enterVoicePlaybackMode'), true);
+check('speakCue mixes while the cue plays', speakCue.includes('enterVoicePlaybackMode'), true);
 check('speakCue releases when speech finishes', speakCue.includes('onDone: finish') && speakCue.includes('releaseAudioSession'), true);
 check('rest complete uses speakCue (not bare Speech.speak)', restTimer.includes("speakCue('Rest complete. Ready for your next set.'"), true);
 check('rest complete does not call bare Speech.speak', restTimer.includes('Speech.speak'), false);

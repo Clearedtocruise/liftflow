@@ -9,6 +9,7 @@ import {
   startRecording,
   stopRecording,
 } from '@/lib/voice/recordAudio';
+import { isRecorderSessionBusyError } from '@/lib/voice/recorderSessionError';
 import { getAccessToken } from '@/supabase/client';
 import type { VoiceInputMode } from '@/types/voice';
 
@@ -144,7 +145,11 @@ export function useVoiceRecognition(options: VoiceRecognitionOptions = {}) {
       autoStopRef.current = setTimeout(() => void stopListeningRef.current(), MAX_RECORDING_MS);
       return true;
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not start recording.');
+      if (isRecorderSessionBusyError(e)) {
+        setError('Mic was still wrapping up — tap again.');
+      } else {
+        setError(e instanceof Error ? e.message : 'Could not start recording.');
+      }
       setState('error');
       return false;
     }
