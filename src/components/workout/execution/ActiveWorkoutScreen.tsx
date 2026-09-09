@@ -76,6 +76,10 @@ import { alignPlanExercisesToSession, parseTargetReps } from '@/lib/workoutPlan'
 import { firstIncompleteExerciseIndex, resolveEffectiveTargetSets } from '@/lib/workoutSetTarget';
 import { resolveExerciseSeedWeightKg } from '@/lib/activeWorkoutWeightSeed';
 import { logWorkoutProgressionDecision } from '@/lib/workoutProgressionDebug';
+import {
+  clearRestAdvanceCoordination,
+  resolveRestSkipAdvance,
+} from '@/lib/workoutRestAdvance';
 import { resolveBetweenExerciseUpNext, resolveTabataPrepUpNext, resolveWorkoutUpNext } from '@/lib/workoutUpNext';
 import { workoutService } from '@/services/workoutService';
 import { watchPhoneBridge, type WatchDisplayContext } from '@/state/WatchPhoneBridge';
@@ -965,10 +969,24 @@ export function ActiveWorkoutScreen({
       clearTimeout(autoAdvanceTimeoutRef.current);
       autoAdvanceTimeoutRef.current = null;
     }
-    pendingAdvanceRef.current = null;
-    pendingExerciseAdvanceAfterRestRef.current = false;
+    const cleared = clearRestAdvanceCoordination({
+      pendingExerciseAdvanceAfterRest: pendingExerciseAdvanceAfterRestRef.current,
+      pendingAdvanceIndex: pendingAdvanceRef.current,
+    });
+    pendingAdvanceRef.current = cleared.pendingAdvanceIndex;
+    pendingExerciseAdvanceAfterRestRef.current = cleared.pendingExerciseAdvanceAfterRest;
     pendingAdvanceAfterChallengeRef.current = null;
     justFinishedExerciseRef.current = false;
+  }
+
+  /** Tear down a leftover between-set rest so the next exercise does not inherit it. */
+  function cancelActiveRestTimer() {
+    // Only cancel a *still counting* rest. After rest naturally hits 0 the auto-advance path
+    // also lands here, and re-skipping an already-finished period is pointless noise.
+    if (!(restSecondsRemaining != null && restSecondsRemaining > 0)) return;
+    void skipRestTimer();
+    setRestPaused(false);
+    setRestOverlayOpen(false);
   }
 
   async function handleDeleteSet(setId: string) {
@@ -990,6 +1008,7 @@ export function ActiveWorkoutScreen({
 
   function advancePastCurrentExercise() {
     clearPendingExerciseAdvance();
+    cancelActiveRestTimer();
     setShowComplete(false);
     dismissIntervalTimer();
     dismissCircuitTimer();
@@ -1066,6 +1085,7 @@ export function ActiveWorkoutScreen({
   function handlePreviousExercise() {
     if (currentIndex <= 0 || logging || intervalTimer != null || transitionActive) return;
     clearPendingExerciseAdvance();
+    cancelActiveRestTimer();
     setShowComplete(false);
     setCurrentIndex((index) => {
       const next = Math.max(0, index - 1);
@@ -1477,12 +1497,15 @@ export function ActiveWorkoutScreen({
   function beginNextTabataExercise(nextIndex: number) {
     // Advance first so prep/logging target the upcoming exercise. Prep is per exercise
     // change only — rounds keep flowing with work/rest until the block ends.
+    // Cancel any leftover last-set rest / pending auto-advance from the exercise we just left —
+    // otherwise rest→0 would fire a second advance and skip the exercise we just landed on.
+    clearPendingExerciseAdvance();
+    cancelActiveRestTimer();
     dismissIntervalTimer();
     intervalStartedForExerciseRef.current = null;
     tabataPrepDoneForExerciseRef.current = null;
     tabataExercisePrepPendingRef.current = false;
     tabataBetweenExercisePendingRef.current = false;
-    pendingAdvanceRef.current = null;
     setPendingAdvanceIndex(null);
     setIsTabataPrepActive(false);
     currentIndexRef.current = nextIndex;
@@ -1491,10 +1514,11 @@ export function ActiveWorkoutScreen({
   }
 
   function performExerciseAdvanceDirect(options?: { auto?: boolean }) {
-    if (autoAdvanceTimeoutRef.current) {
-      clearTimeout(autoAdvanceTimeoutRef.current);
-      autoAdvanceTimeoutRef.current = null;
-    }
+    // Manual Next (and the auto-advance it shares a path with) must cancel a still-running
+    // last-set rest and its pending-after-rest flag. Without this, rest hitting 0 schedules a
+    // second advance and the exercise the lifter just moved to looks skipped.
+    clearPendingExerciseAdvance();
+    cancelActiveRestTimer();
     if (usesSupersetRotation && supersetGroup && supersetGroup.memberIndices.length >= 2) {
       const incompletePartner = [...supersetGroup.memberIndices]
         .sort((a, b) => a - b)
@@ -1600,8 +1624,27 @@ export function ActiveWorkoutScreen({
 
   async function handleSkipRest() {
     setRestOverlayOpen(false);
+    // Capture (and clear) pending advance *before* tearing rest down. skipRestTimer used to
+    // leave remaining at 0 which both kept the tick interval armed forever and double-fired
+    // advance effects; it now clears to null, so Skip Rest has to honor a last-set pending
+    // advance explicitly.
+    const outcome = resolveRestSkipAdvance({
+      pendingExerciseAdvanceAfterRest: pendingExerciseAdvanceAfterRestRef.current,
+      pendingAdvanceIndex: pendingAdvanceRef.current,
+    });
+    pendingExerciseAdvanceAfterRestRef.current = outcome.cleared.pendingExerciseAdvanceAfterRest;
+    pendingAdvanceRef.current = outcome.cleared.pendingAdvanceIndex;
     await skipRestTimer();
     setRestPaused(false);
+    if (outcome.advanceToIndex != null) {
+      currentIndexRef.current = outcome.advanceToIndex;
+      setCurrentIndex(outcome.advanceToIndex);
+      setShowComplete(false);
+      return;
+    }
+    if (outcome.scheduleAutoAdvance) {
+      scheduleAutoExerciseAdvance();
+    }
   }
 
   // Rest deliberately does not block this. Being unable to step back to the exercise you are on is
@@ -1809,7 +1852,7 @@ export function ActiveWorkoutScreen({
                 </View>
               ) : null}
 
-              {restActive && !showComplete ? (
+              {restActive && !showComplete && !restOverlayOpen ? (
                 <View style={styles.intervalBanner}>
                   <AppText variant="label" color="restTimer">
                     Rest timer
@@ -1821,9 +1864,9 @@ export function ActiveWorkoutScreen({
                     {workoutPosition.currentSetLabel} · {workoutPosition.upNextLabel}
                   </AppText>
                   <PrimaryButton
-                    label={restOverlayOpen ? 'Hide timer' : 'Open timer'}
+                    label="Open timer"
                     variant="secondary"
-                    onPress={() => setRestOverlayOpen((open) => !open)}
+                    onPress={() => setRestOverlayOpen(true)}
                   />
                 </View>
               ) : null}
