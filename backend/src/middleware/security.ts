@@ -29,6 +29,9 @@ export const corsOptions: CorsOptions = {
     callback(new Error('Origin not allowed by CORS'));
   },
   credentials: false,
+  // Browser callers cannot read Retry-After unless it is exposed, and without it the web client
+  // has no way to tell a lifter how long a throttle lasts.
+  exposedHeaders: ['Retry-After', 'RateLimit', 'RateLimit-Policy'],
   maxAge: 600,
 };
 
@@ -91,10 +94,15 @@ export const globalLimiter = rateLimit({
  * Voice set-logging needs several requests per utterance (transcribe, sometimes parse). The
  * shared AI budget of 15/min was small enough that a normal workout with voice + coach TTS
  * burned it mid-session. Voice stays metered, just on its own higher ceiling.
+ *
+ * 45/min was still under two requests per second of continuous talking: a lifter whose mic keeps
+ * cutting out re-taps far faster than that and hits the wall while logging normally. Transcribe
+ * calls are cheap next to the LLM routes and globalLimiter still caps total traffic, so the
+ * ceiling is set where only a runaway client can reach it.
  */
 export const voiceLimiter = rateLimit({
   windowMs: 60_000,
-  limit: limitFromEnv('VOICE_RATE_LIMIT_MAX_PER_MINUTE', 45),
+  limit: limitFromEnv('VOICE_RATE_LIMIT_MAX_PER_MINUTE', 120),
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   keyGenerator: rateLimitKey,

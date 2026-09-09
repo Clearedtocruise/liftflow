@@ -9,6 +9,7 @@ import {
   reduceEndOfSpeech,
   type EndOfSpeechState,
 } from '@/lib/voice/endOfSpeech';
+import { isRecorderSessionBusyError } from '@/lib/voice/recorderSessionError';
 
 /**
  * HIGH_QUALITY rather than LOW_QUALITY because the low preset writes `.caf` on iOS and `.3gp` on
@@ -31,6 +32,16 @@ export const MAX_RECORDING_MS = 15_000;
 /** How often we poll metering while listening for the end of an utterance. */
 export const METERING_POLL_MS = 100;
 
+/**
+ * Below this a take is a container header with no samples. The backend rejects it anyway, so
+ * uploading one only spends a slot of the voice rate limit — which is how a run of failed taps
+ * turned into "Voice is busy" mid-workout. Mirrors MIN_AUDIO_BYTES on the server.
+ */
+export const MIN_TRANSCRIBE_BYTES = 1024;
+
+/** The native layer only allows one Recording at a time — keep the live handle here to unload it. */
+let liveRecording: Audio.Recording | null = null;
+
 export type RecordedAudio = {
   bytes: Uint8Array;
   contentType: string;
@@ -49,68 +60,92 @@ export async function hasMicrophonePermission(): Promise<boolean> {
 export async function startRecording(options?: {
   onEndOfSpeech?: () => void;
 }): Promise<{ recording: Audio.Recording; dispose: () => void }> {
+  if (liveRecording) {
+    await cancelRecording(liveRecording);
+  }
+
   await enterVoiceCaptureMode();
   try {
-    let eosState: EndOfSpeechState = createEndOfSpeechState(Date.now());
-    let stopped = false;
-    let poll: ReturnType<typeof setInterval> | null = null;
+    return await openRecording(options);
+  } catch (error) {
+    // A leftover native recorder (or a rest-complete cue that still holds the session) surfaces
+    // as "busy" / "recorder not prepared". Tear it down and try once more before failing.
+    if (!isRecorderSessionBusyError(error)) {
+      await releaseAudioSession();
+      throw error;
+    }
+    if (liveRecording) {
+      await cancelRecording(liveRecording);
+    } else {
+      await releaseAudioSession();
+    }
+    await enterVoiceCaptureMode();
+    try {
+      return await openRecording(options);
+    } catch (retryError) {
+      await releaseAudioSession();
+      throw retryError;
+    }
+  }
+}
 
-    const clearPoll = () => {
-      if (poll) {
-        clearInterval(poll);
-        poll = null;
-      }
-    };
+async function openRecording(options?: {
+  onEndOfSpeech?: () => void;
+}): Promise<{ recording: Audio.Recording; dispose: () => void }> {
+  let eosState: EndOfSpeechState = createEndOfSpeechState(Date.now());
+  let stopped = false;
+  let poll: ReturnType<typeof setInterval> | null = null;
 
-    const evaluate = (metering: number | undefined, isRecording: boolean) => {
-      if (stopped || !options?.onEndOfSpeech || !isRecording) return;
-      const decision = reduceEndOfSpeech(eosState, metering, Date.now(), DEFAULT_END_OF_SPEECH);
-      eosState = decision.state;
-      if (!decision.shouldStop) return;
+  const clearPoll = () => {
+    if (poll) {
+      clearInterval(poll);
+      poll = null;
+    }
+  };
+
+  const evaluate = (metering: number | undefined, isRecording: boolean) => {
+    if (stopped || !options?.onEndOfSpeech || !isRecording) return;
+    const decision = reduceEndOfSpeech(eosState, metering, Date.now(), DEFAULT_END_OF_SPEECH);
+    eosState = decision.state;
+    if (!decision.shouldStop) return;
+    stopped = true;
+    clearPoll();
+    options.onEndOfSpeech();
+  };
+
+  const { recording } = await Audio.Recording.createAsync(
+    RECORDING_OPTIONS,
+    (status) => evaluate(status.metering, status.isRecording),
+    METERING_POLL_MS,
+  );
+  liveRecording = recording;
+
+  /**
+   * The status callback is not delivered reliably on device — when it goes quiet nothing ever
+   * ends the capture, so the mic stays open, the transcript never arrives, no set is logged and
+   * the audio session stays held. Poll the recorder directly as well; both paths feed the same
+   * reducer, so whichever fires first ends the utterance.
+   */
+  if (options?.onEndOfSpeech) {
+    poll = setInterval(() => {
+      if (stopped) return;
+      void recording
+        .getStatusAsync()
+        .then((status) => evaluate(status.metering, status.isRecording))
+        .catch(() => {
+          clearPoll();
+        });
+    }, METERING_POLL_MS);
+  }
+
+  return {
+    recording,
+    dispose: () => {
       stopped = true;
       clearPoll();
-      options.onEndOfSpeech();
-    };
-
-    const { recording } = await Audio.Recording.createAsync(
-      RECORDING_OPTIONS,
-      (status) => evaluate(status.metering, status.isRecording),
-      METERING_POLL_MS,
-    );
-
-    /**
-     * The status callback is not delivered reliably on device — when it goes quiet nothing ever
-     * ends the capture, so the mic stays open, the transcript never arrives, no set is logged and
-     * the audio session stays ducked with the music off. Poll the recorder directly as well; both
-     * paths feed the same reducer, so whichever fires first ends the utterance.
-     */
-    if (options?.onEndOfSpeech) {
-      poll = setInterval(() => {
-        if (stopped) return;
-        void recording
-          .getStatusAsync()
-          .then((status) => evaluate(status.metering, status.isRecording))
-          .catch(() => {
-            // The recorder is already gone; stop polling rather than looping on a dead handle.
-            clearPoll();
-          });
-      }, METERING_POLL_MS);
-    }
-
-    return {
-      recording,
-      dispose: () => {
-        stopped = true;
-        clearPoll();
-        recording.setOnRecordingStatusUpdate(null);
-      },
-    };
-  } catch (error) {
-    // A recorder that never opened still left the session ducked, so the lifter's music stayed
-    // quiet with nothing listening.
-    await releaseAudioSession();
-    throw error;
-  }
+      recording.setOnRecordingStatusUpdate(null);
+    },
+  };
 }
 
 function contentTypeForUri(uri: string): string {
@@ -133,6 +168,7 @@ export async function stopRecording(recording: Audio.Recording): Promise<Recorde
     await unduckWhileSessionActive();
     await recording.stopAndUnloadAsync();
   } finally {
+    if (liveRecording === recording) liveRecording = null;
     await releaseAudioSession();
   }
 
@@ -159,5 +195,6 @@ export async function cancelRecording(recording: Audio.Recording): Promise<void>
   } catch {
     // already unloaded
   }
+  if (liveRecording === recording) liveRecording = null;
   await releaseAudioSession();
 }
