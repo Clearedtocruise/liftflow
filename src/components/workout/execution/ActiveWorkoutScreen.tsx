@@ -1,5 +1,5 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AccessibilityInfo, Alert, Pressable, StyleSheet, View } from 'react-native';
 
 import { ExerciseMusclePanel } from '@/components/exercise/ExerciseMusclePanel';
@@ -74,7 +74,7 @@ import { pickWorkoutChallenge } from '@/lib/workoutChallengeFlow';
 import { normalizeExecutionMode } from '@/lib/workoutExecutionMode';
 import { alignPlanExercisesToSession, parseTargetReps } from '@/lib/workoutPlan';
 import { firstIncompleteExerciseIndex, resolveEffectiveTargetSets } from '@/lib/workoutSetTarget';
-import { resolveExerciseSeedWeightKg } from '@/lib/activeWorkoutWeightSeed';
+import { resolveExerciseInputSeed } from '@/lib/activeWorkoutWeightSeed';
 import { logWorkoutProgressionDecision } from '@/lib/workoutProgressionDebug';
 import {
   clearRestAdvanceCoordination,
@@ -195,6 +195,11 @@ export function ActiveWorkoutScreen({
   watchDraftRepsRef.current = watchDraftReps;
   const watchDraftWeightKgRef = useRef<number | null>(null);
   watchDraftWeightKgRef.current = watchDraftWeightKg;
+  /** Live input values so a Log Set after an immediate advance cannot reuse the previous lift's load. */
+  const weightKgRef = useRef(0);
+  const repsRef = useRef(8);
+  const durationSecondsRef = useRef(30);
+  const distanceKmRef = useRef(0);
 
   const elapsedSeconds = useWorkoutElapsedSeconds(session.startedAt, session.status);
 
@@ -247,6 +252,10 @@ export function ActiveWorkoutScreen({
   const [reps, setReps] = useState(8);
   const [durationSeconds, setDurationSeconds] = useState(30);
   const [distanceKm, setDistanceKm] = useState(0);
+  weightKgRef.current = weightKg;
+  repsRef.current = reps;
+  durationSecondsRef.current = durationSeconds;
+  distanceKmRef.current = distanceKm;
   const [logging, setLogging] = useState(false);
   const [historySets, setHistorySets] = useState<ExerciseHistorySet[]>([]);
   const [coachPrescription, setCoachPrescription] = useState<ExerciseCoachPrescription | null>(null);
@@ -588,15 +597,25 @@ export function ActiveWorkoutScreen({
     setRestTargetSeconds(nextRest);
   }, [currentExercise?.id, planMeta?.restSeconds, executionMode]);
 
-  useEffect(() => {
-    // Clear exercise-specific UI that must not leak from the previous card. Weight/reps seed from
-    // this exercise's sets already logged today (critical for supersets) before async history loads.
+  useLayoutEffect(() => {
+    // Layout (not paint) so the previous lift's weight/reps never flash on the new card — that
+    // flash is what made OHP look like set 1 was already filled in after bench.
     setHistorySets([]);
     setCoachPrescription(null);
     setExerciseHadPr(false);
     setShowComplete(false);
     justFinishedExerciseRef.current = false;
     setDistanceKm(0);
+    distanceKmRef.current = 0;
+
+    // Watch drafts are per-attempt on the active lift. Leaving them armed would re-apply the
+    // previous exercise's wrist weight after history loads.
+    watchDraftRepsRef.current = null;
+    watchDraftWeightKgRef.current = null;
+    setWatchDraftReps(null);
+    watchPhoneBridge.clearPendingWatchReps();
+    setWatchDraftWeightKg(null);
+    watchPhoneBridge.clearPendingWatchWeightKg();
 
     const sessionSets = currentExercise?.sets ?? [];
     const planReps = planExercises[currentIndex]?.repRange ?? currentExercise?.suggestedReps;
@@ -613,29 +632,22 @@ export function ActiveWorkoutScreen({
       ),
     );
 
-    setWeightKg(
-      resolveExerciseSeedWeightKg({
-        sessionSets,
-        suggestedWeightKg: clampPlanWeightKgForExercise(
-          currentExercise?.suggestedWeight,
-          currentExercise?.exercise?.name,
-          currentExercise?.exercise?.slug,
-        ),
-      }),
-    );
-
-    if (lastSession?.reps != null && lastSession.reps > 0) {
-      setReps(lastSession.reps);
-    } else {
-      setReps(parseTargetReps(planReps));
-    }
-
-    if (lastSession?.durationSeconds != null && lastSession.durationSeconds > 0) {
-      setDurationSeconds(lastSession.durationSeconds);
-    } else {
-      setDurationSeconds(defaultTimedDurationSeconds(planReps));
-    }
-  }, [currentExercise?.id]);
+    const seed = resolveExerciseInputSeed({
+      sessionSets,
+      suggestedWeightKg: clampPlanWeightKgForExercise(
+        currentExercise?.suggestedWeight,
+        currentExercise?.exercise?.name,
+        currentExercise?.exercise?.slug,
+      ),
+      planRepRange: planReps,
+    });
+    weightKgRef.current = seed.weightKg;
+    repsRef.current = seed.reps;
+    durationSecondsRef.current = seed.durationSeconds;
+    setWeightKg(seed.weightKg);
+    setReps(seed.reps);
+    setDurationSeconds(seed.durationSeconds);
+  }, [currentExercise?.id, setWatchDraftReps, setWatchDraftWeightKg]);
 
   useEffect(() => {
     if (circuitTimer?.phase !== 'done') return;
@@ -656,22 +668,26 @@ export function ActiveWorkoutScreen({
 
   useEffect(() => {
     if (watchDraftReps != null) {
+      repsRef.current = watchDraftReps;
       setReps(watchDraftReps);
       return;
     }
     const pending = watchPhoneBridge.getPendingWatchReps();
     if (pending != null) {
+      repsRef.current = pending;
       setReps(pending);
     }
   }, [watchDraftReps]);
 
   useEffect(() => {
     if (watchDraftWeightKg != null) {
+      weightKgRef.current = watchDraftWeightKg;
       setWeightKg(watchDraftWeightKg);
       return;
     }
     const pending = watchPhoneBridge.getPendingWatchWeightKg();
     if (pending != null) {
+      weightKgRef.current = pending;
       setWeightKg(pending);
     }
   }, [watchDraftWeightKg]);
@@ -725,35 +741,35 @@ export function ActiveWorkoutScreen({
       }
       if (mode === 'bodyweight') {
         setReps(last?.reps ?? parseTargetReps(repRange));
+        repsRef.current = last?.reps ?? parseTargetReps(repRange);
         return;
       }
 
       // Prefer this session's last logged set for this exercise (superset rotation returns here
       // mid-workout). Only fall back to prior-session history / plan suggestion when empty.
-      const sessionLast = currentExercise.sets?.[currentExercise.sets.length - 1];
-      setWeightKg(
-        resolveExerciseSeedWeightKg({
-          sessionSets: currentExercise.sets ?? [],
-          historyWeightKg: last?.weightKg,
-          suggestedWeightKg: clampPlanWeightKgForExercise(
-            currentExercise.suggestedWeight,
-            currentExercise.exercise?.name,
-            currentExercise.exercise?.slug,
-          ),
-        }),
-      );
-      if (sessionLast?.reps != null && sessionLast.reps > 0) {
-        setReps(sessionLast.reps);
-      } else if (last?.reps != null && last.reps > 0) {
-        setReps(last.reps);
-      } else {
-        setReps(parseTargetReps(repRange));
-      }
+      const seed = resolveExerciseInputSeed({
+        sessionSets: currentExercise.sets ?? [],
+        historyWeightKg: last?.weightKg,
+        historyReps: last?.reps,
+        historyDurationSeconds: last?.durationSeconds,
+        suggestedWeightKg: clampPlanWeightKgForExercise(
+          currentExercise.suggestedWeight,
+          currentExercise.exercise?.name,
+          currentExercise.exercise?.slug,
+        ),
+        planRepRange: repRange,
+      });
+      weightKgRef.current = seed.weightKg;
+      repsRef.current = seed.reps;
+      setWeightKg(seed.weightKg);
+      setReps(seed.reps);
 
       if (watchDraftRepsRef.current != null) {
+        repsRef.current = watchDraftRepsRef.current;
         setReps(watchDraftRepsRef.current);
       }
       if (watchDraftWeightKgRef.current != null) {
+        weightKgRef.current = watchDraftWeightKgRef.current;
         setWeightKg(watchDraftWeightKgRef.current);
       }
     });
@@ -1264,18 +1280,27 @@ export function ActiveWorkoutScreen({
       return { ok: false, error: 'Finish the current rest or transition before logging the next set.' };
     }
 
-    const resolvedWeightKg = overrides?.weightKg ?? weightKg;
-    const resolvedReps = overrides?.reps ?? reps;
-    const resolvedDurationSeconds = overrides?.durationSeconds ?? durationSeconds;
-    const resolvedDistanceKm = overrides?.distanceKm ?? distanceKm;
+    const resolvedWeightKg = overrides?.weightKg ?? weightKgRef.current;
+    const resolvedReps = overrides?.reps ?? repsRef.current;
+    const resolvedDurationSeconds = overrides?.durationSeconds ?? durationSecondsRef.current;
+    const resolvedDistanceKm = overrides?.distanceKm ?? distanceKmRef.current;
 
-    if (loggingMode === 'weighted' && (!(resolvedWeightKg > 0) || resolvedWeightKg == null)) {
+    // Mode must follow the exercise we are writing to (ref index). After an immediate superset
+    // advance the render closure still has the previous card's loadingMethod.
+    const logRepRange = logPlanMeta?.repRange ?? logExercise.suggestedReps;
+    const logLoadingOptions = loadingMethodOptions(logExercise.exercise, logExercise.exercise?.slug);
+    const logLoggingMode =
+      logExercise.id === currentExercise?.id && logLoadingOptions.length > 1
+        ? loadingMethodToLoggingMode(loadingMethod)
+        : getExerciseLoggingMode(logExercise.exercise, logRepRange, logExercise.exercise?.name);
+
+    if (logLoggingMode === 'weighted' && (!(resolvedWeightKg > 0) || resolvedWeightKg == null)) {
       AccessibilityInfo.announceForAccessibility('Enter a weight before logging this set.');
       Alert.alert('Add a weight', 'This lift needs a load before you log the set.');
       return { ok: false, error: 'Enter a weight before logging this set.' };
     }
     if (
-      (loggingMode === 'weighted' || loggingMode === 'bodyweight') &&
+      (logLoggingMode === 'weighted' || logLoggingMode === 'bodyweight') &&
       (!(resolvedReps > 0) || resolvedReps == null)
     ) {
       AccessibilityInfo.announceForAccessibility('Enter reps before logging this set.');
@@ -1323,7 +1348,7 @@ export function ActiveWorkoutScreen({
         !executionModeUsesTraditionalRest(executionMode) || flowAction.skipRest;
 
       const logged =
-        loggingMode === 'cardio'
+        logLoggingMode === 'cardio'
           ? await logSet({
               ...base,
               durationSeconds: resolvedDurationSeconds,
@@ -1331,9 +1356,9 @@ export function ActiveWorkoutScreen({
               reps: 1,
               skipRest: true,
             })
-          : loggingMode === 'timed'
+          : logLoggingMode === 'timed'
           ? await logSet({ ...base, durationSeconds: resolvedDurationSeconds, reps: 1, skipRest })
-          : loggingMode === 'bodyweight'
+          : logLoggingMode === 'bodyweight'
             ? await logSet({ ...base, reps: resolvedReps, skipRest })
             : await logSet({ ...base, weight: resolvedWeightKg, reps: resolvedReps, skipRest });
 
@@ -1367,6 +1392,29 @@ export function ActiveWorkoutScreen({
         currentIndexRef.current = flowAction.immediateAdvanceIndex;
         setCurrentIndex(flowAction.immediateAdvanceIndex);
         setShowComplete(false);
+        // Reseed inputs for the destination now (not after paint) so a follow-up tap/watch log
+        // cannot write the previous lift's weight onto the partner under a "Set 1 ✓".
+        const nextExercise = sortedExercises[flowAction.immediateAdvanceIndex];
+        const nextPlan = planExercises[flowAction.immediateAdvanceIndex];
+        if (nextExercise) {
+          const seed = resolveExerciseInputSeed({
+            sessionSets: nextExercise.sets ?? [],
+            suggestedWeightKg: clampPlanWeightKgForExercise(
+              nextExercise.suggestedWeight,
+              nextExercise.exercise?.name,
+              nextExercise.exercise?.slug,
+            ),
+            planRepRange: nextPlan?.repRange ?? nextExercise.suggestedReps,
+          });
+          weightKgRef.current = seed.weightKg;
+          repsRef.current = seed.reps;
+          durationSecondsRef.current = seed.durationSeconds;
+          setWeightKg(seed.weightKg);
+          setReps(seed.reps);
+          setDurationSeconds(seed.durationSeconds);
+          setDistanceKm(0);
+          distanceKmRef.current = 0;
+        }
       } else if (flowAction.afterRestAdvanceIndex != null) {
         pendingAdvanceRef.current = flowAction.afterRestAdvanceIndex;
       } else if (
@@ -1391,25 +1439,21 @@ export function ActiveWorkoutScreen({
     bonusSets,
     circuitRound,
     clearWatchDrafts,
-    coachPrescription?.targets.sets,
-    distanceKm,
-    durationSeconds,
+    currentExercise?.id,
     executionMode,
     intervalBlocksLogging,
     intervalTimer?.config.rounds,
     isPaused,
+    loadingMethod,
     logSet,
     logging,
-    loggingMode,
     offerBetweenSetsChallenge,
     planExercises,
-    reps,
     restActive,
     restTargetSeconds,
     sortedExercises,
     startCircuitTransition,
     transitionBlocksLogging,
-    weightKg,
   ]);
 
   const handleLogSet = useCallback(() => commitSetLog(), [commitSetLog]);
