@@ -50,8 +50,8 @@ async function main() {
         headers: { Authorization: `Bearer ${expoToken}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: 'query { me { username } }' }),
       });
-      const json = (await res.json()) as { data?: { me?: { username?: string } }; errors?: unknown };
-      expoAccount = json.data?.me?.username ?? (res.ok ? 'unauthorized' : `http-${res.status}`);
+      const json = await res.json();
+      expoAccount = json?.data?.me?.username ?? (res.ok ? 'unauthorized' : `http-${res.status}`);
     } catch {
       expoAccount = 'unreachable';
     }
