@@ -23,13 +23,37 @@ type RequestOptions = {
 export class ApiError extends Error {
   readonly status: number;
   readonly code?: string;
+  /** Seconds until the caller may retry, from the server's Retry-After on a 429. */
+  readonly retryAfterSeconds?: number;
 
-  constructor(message: string, status: number, code?: string) {
+  constructor(message: string, status: number, code?: string, retryAfterSeconds?: number) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.code = code;
+    this.retryAfterSeconds = retryAfterSeconds;
   }
+}
+
+/**
+ * A throttled caller that cannot see how long the wall lasts just taps again, and every extra
+ * tap spends another slot. Read the wait off the response so the UI can say when to try again.
+ */
+function retryAfterSeconds(response: Response): number | undefined {
+  const header = response.headers?.get?.('retry-after');
+  if (!header) return undefined;
+  const seconds = Number(header.trim());
+  return Number.isFinite(seconds) && seconds >= 0 ? seconds : undefined;
+}
+
+async function throwApiError(response: Response): Promise<never> {
+  const error = await response.json().catch(() => ({ message: response.statusText }));
+  throw new ApiError(
+    error.message ?? `API error ${response.status}`,
+    response.status,
+    error.code,
+    retryAfterSeconds(response),
+  );
 }
 
 /** True when the request failed because the account lacks Pro — retrying cannot help. */
@@ -61,8 +85,7 @@ class ApiClient {
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: response.statusText }));
-      throw new ApiError(error.message ?? `API error ${response.status}`, response.status, error.code);
+      await throwApiError(response);
     }
 
     return response.json() as Promise<T>;
@@ -100,8 +123,7 @@ class ApiClient {
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: response.statusText }));
-      throw new ApiError(error.message ?? `API error ${response.status}`, response.status, error.code);
+      await throwApiError(response);
     }
 
     return response.json() as Promise<T>;

@@ -26,6 +26,8 @@ console.log('=== Voice rate-limit isolation ===\n');
 const security = read('backend/src/middleware/security.ts');
 const index = read('backend/src/index.ts');
 const voiceHook = read('src/hooks/useVoiceRecognition.ts');
+const voiceFailure = read('src/lib/voice/voiceFailure.ts');
+const apiClient = read('src/api/client.ts');
 
 record('voiceLimiter exported', security.includes('export const voiceLimiter'));
 record('separate VOICE_RATE_LIMIT env', security.includes('VOICE_RATE_LIMIT_MAX_PER_MINUTE'));
@@ -43,7 +45,20 @@ record(
 record('AI routes keep aiLimiter', index.includes("app.use('/api/ai', requireUser, aiLimiter, aiRouter)"));
 record(
   'client maps rate-limit errors',
-  voiceHook.includes('Voice is busy — wait a few seconds and try again.'),
+  voiceFailure.includes('Voice is busy — wait a few seconds and try again.'),
+);
+record(
+  'client keys off the 429 status, not the wording',
+  voiceFailure.includes('failure.status === 429') && voiceHook.includes('voiceFailureMessage'),
+);
+record('client reads Retry-After', apiClient.includes("headers?.get?.('retry-after')"));
+record(
+  'mic holds off while throttled',
+  voiceHook.includes('cooldownUntilRef') && voiceHook.includes('voiceCooldownMs'),
+);
+record(
+  'empty takes never reach the rate limit',
+  voiceHook.includes('MIN_TRANSCRIBE_BYTES'),
 );
 record('backend unit test present', fs.existsSync(path.join(root, 'backend/src/middleware/security.test.ts')));
 

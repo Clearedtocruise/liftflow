@@ -174,6 +174,9 @@ export function VoiceSetLogger({
     voice.clearTranscript();
   }
 
+  // The mic prints its own failure, so a second copy here just stacked the same sentence twice.
+  const micShowsError = voice.state === 'error' && Boolean(voice.error);
+
   return (
     <View style={styles.wrapper}>
       <MicrophoneButton
@@ -186,7 +189,7 @@ export function VoiceSetLogger({
         onPressOut={voice.handlePressOut}
       />
 
-      {voice.error ? (
+      {voice.error && !micShowsError ? (
         <AppText variant="caption" color="error" align="center">
           {voice.error}
         </AppText>

@@ -6,10 +6,17 @@ import {
   cancelRecording,
   hasMicrophonePermission,
   MAX_RECORDING_MS,
+  MIN_TRANSCRIBE_BYTES,
   startRecording,
   stopRecording,
 } from '@/lib/voice/recordAudio';
 import { isRecorderSessionBusyError } from '@/lib/voice/recorderSessionError';
+import {
+  throttledMessage,
+  toVoiceFailure,
+  voiceCooldownMs,
+  voiceFailureMessage,
+} from '@/lib/voice/voiceFailure';
 import { getAccessToken } from '@/supabase/client';
 import type { VoiceInputMode } from '@/types/voice';
 
@@ -35,6 +42,8 @@ export function useVoiceRecognition(options: VoiceRecognitionOptions = {}) {
   const stoppingRef = useRef(false);
   const mountedRef = useRef(true);
   const stopListeningRef = useRef<() => Promise<void>>(async () => undefined);
+  /** Epoch ms until which the server has asked us to stop sending audio. */
+  const cooldownUntilRef = useRef(0);
 
   const [state, setState] = useState<VoiceCaptureState>('idle');
   const [finalTranscript, setFinalTranscript] = useState('');
@@ -71,8 +80,11 @@ export function useVoiceRecognition(options: VoiceRecognitionOptions = {}) {
     setState('transcribing');
     try {
       const recorded = await stopRecording(active);
-      if (!recorded || recorded.bytes.byteLength === 0) {
-        throw new Error('No audio was recorded. Tap the mic and speak your set.');
+      // A take with no samples is worth a message, not a round trip against the voice budget.
+      if (!recorded || recorded.bytes.byteLength < MIN_TRANSCRIBE_BYTES) {
+        setError('No audio was recorded. Tap the mic and speak your set.');
+        setState('error');
+        return;
       }
 
       const token = await getAccessToken();
@@ -90,24 +102,16 @@ export function useVoiceRecognition(options: VoiceRecognitionOptions = {}) {
 
       transcriptRef.current = transcript;
       setFinalTranscript(transcript);
+      cooldownUntilRef.current = 0;
       setState('idle');
       onFinalTranscript?.(transcript);
     } catch (e) {
       if (!mountedRef.current) return;
-      const raw = e instanceof Error ? e.message : '';
-      const lower = raw.toLowerCase();
-      // Backend rate-limit copy is written for operators; surface a gym-friendly retry instead.
-      if (
-        lower.includes('too many requests') ||
-        lower.includes('rate limit') ||
-        lower.includes('voice is busy') ||
-        lower.includes('ai request limit')
-      ) {
-        setError('Voice is busy — wait a few seconds and try again.');
-      } else {
-        // The backend already returns user-facing messages; anything else gets a generic one.
-        setError(raw || 'Could not transcribe that. Try again.');
-      }
+      const failure = toVoiceFailure(e);
+      // Every tap during a throttle spends another slot, so hold the mic until the window drains.
+      const cooldown = voiceCooldownMs(failure);
+      cooldownUntilRef.current = cooldown > 0 ? Date.now() + cooldown : 0;
+      setError(voiceFailureMessage(failure));
       setState('error');
     } finally {
       stoppingRef.current = false;
@@ -118,6 +122,13 @@ export function useVoiceRecognition(options: VoiceRecognitionOptions = {}) {
 
   const startListening = useCallback(async () => {
     if (!enabled || recordingRef.current || stoppingRef.current) return false;
+
+    const cooldownRemaining = cooldownUntilRef.current - Date.now();
+    if (cooldownRemaining > 0) {
+      setError(throttledMessage(cooldownRemaining / 1000));
+      setState('error');
+      return false;
+    }
 
     setError(null);
     try {

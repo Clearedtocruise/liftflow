@@ -32,6 +32,13 @@ export const MAX_RECORDING_MS = 15_000;
 /** How often we poll metering while listening for the end of an utterance. */
 export const METERING_POLL_MS = 100;
 
+/**
+ * Below this a take is a container header with no samples. The backend rejects it anyway, so
+ * uploading one only spends a slot of the voice rate limit — which is how a run of failed taps
+ * turned into "Voice is busy" mid-workout. Mirrors MIN_AUDIO_BYTES on the server.
+ */
+export const MIN_TRANSCRIBE_BYTES = 1024;
+
 /** The native layer only allows one Recording at a time — keep the live handle here to unload it. */
 let liveRecording: Audio.Recording | null = null;
 
