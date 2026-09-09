@@ -501,8 +501,13 @@ export function WorkoutSessionProvider({
     const elapsed = Math.floor((Date.now() - new Date(activeRestPeriod.startedAt).getTime()) / 1000);
     await workoutService.endRestTimer(activeRestPeriod.id, elapsed, true);
     if (userId) void peakMusicService.onSetCompleted(userId);
+    // Must clear to null (same as endRestTimer / clearRestState), not 0. Leaving 0 kept the
+    // tick interval armed forever and made ActiveWorkoutScreen's `restSecondsRemaining === 0`
+    // advance effects re-fire against stale pending flags — the "timer acting goofy" / next
+    // exercise skipping ahead bug. Callers that need a last-set advance on Skip Rest must
+    // schedule it explicitly (see resolveRestSkipAdvance).
     setActiveRestPeriod(null);
-    setRestSecondsRemaining(0);
+    setRestSecondsRemaining(null);
     restEndAtRef.current = null;
     pausedRemainingRef.current = null;
   }, [activeRestPeriod, userId]);
