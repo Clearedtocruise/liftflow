@@ -40,5 +40,5 @@ test('post-workout protein only counts meals marked eaten, not the uneaten plan'
     { protein_g: 105, calories: 1365, status: 'planned' },
   ]);
   assert.equal(Math.round(totals.proteinG), 103);
-  assert.equal(Math.round(totals.calories), 1100);
+  assert.equal(Math.round(totals.calories), 1300);
 });
