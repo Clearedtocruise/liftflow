@@ -80,6 +80,7 @@ function templateToEditable(
         : exercise.repRange ?? exercise.reps,
     restSeconds: restFromPrescription(prescription, exercise.restSeconds),
     weightLbs: exercise.weightLbs,
+    notes: exercise.notes,
     executionMode,
     supersetGroupId: exercise.supersetGroupId,
   };
@@ -231,6 +232,7 @@ export function alignPlanExercisesToSession(
       sets: inherited?.sets ?? UNPLANNED_TARGET_SETS,
       repRange: inherited?.repRange ?? sessionExercise.suggestedReps,
       restSeconds: inherited?.restSeconds,
+      notes: inherited?.notes,
       // Keep the vacated slot's pairing so a mid-session swap does not dissolve the supersets.
       executionMode: inherited?.executionMode,
       supersetGroupId: inherited?.supersetGroupId,
@@ -262,6 +264,7 @@ export function editableExercisesToTemplate(
     repRange: exercise.repRange,
     restSeconds: exercise.restSeconds,
     weightLbs: exercise.weightLbs,
+    notes: exercise.notes,
     executionMode: exercise.executionMode,
     supersetGroupId: exercise.supersetGroupId,
   }));
