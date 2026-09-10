@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { kgToDisplayWeight } from './postWorkoutCoach.js';
+import { kgToDisplayWeight, sumConsumedMealMacros } from './postWorkoutCoach.js';
 
 test('an lbs user sees total volume converted from kg, not the raw kg number', () => {
   // 135 lb x 5 reps logged (stored as ~61.235 kg) => total_volume ~= 306.175 kg-reps.
@@ -28,4 +28,17 @@ test('a progression increase is converted to the display unit before being print
 test('zero and missing values never render as a negative or NaN weight', () => {
   assert.equal(kgToDisplayWeight(0, 'lbs'), 0);
   assert.equal(kgToDisplayWeight(0, 'kg'), 0);
+});
+
+test('post-workout protein only counts meals marked eaten, not the uneaten plan', () => {
+  // Regression: summing every meal for the day reported "Protein on track (248g / 200g)" when
+  // most of that protein still belonged to planned rows the lifter had not confirmed.
+  const totals = sumConsumedMealMacros([
+    { protein_g: 48, calories: 600, status: 'completed' },
+    { protein_g: 40, calories: 500, status: 'planned' },
+    { protein_g: 55, calories: 700, status: 'modified' },
+    { protein_g: 105, calories: 1365, status: 'planned' },
+  ]);
+  assert.equal(Math.round(totals.proteinG), 103);
+  assert.equal(Math.round(totals.calories), 1100);
 });

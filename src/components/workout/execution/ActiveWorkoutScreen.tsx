@@ -1158,6 +1158,20 @@ export function ActiveWorkoutScreen({
     });
   }
 
+  /** Peek at the next lift without marking this one skipped — Previous brings you back. */
+  function handleBrowseNextExercise() {
+    if (isLastExercise || logging || intervalTimer != null || transitionActive) return;
+    clearPendingExerciseAdvance();
+    cancelActiveRestTimer();
+    advanceGenerationRef.current += 1;
+    setShowComplete(false);
+    setCurrentIndex((index) => {
+      const next = Math.min(sortedExercises.length - 1, index + 1);
+      currentIndexRef.current = next;
+      return next;
+    });
+  }
+
   /** Jumps to a workout exercise by id, using session order so the index matches what is rendered. */
   async function focusWorkoutExercise(workoutExerciseId: string) {
     const refreshed = await workoutService.getSession(session.id);
@@ -1745,6 +1759,8 @@ export function ActiveWorkoutScreen({
   // worse than a rest timer that keeps counting while you navigate.
   const canGoToPreviousExercise =
     currentIndex > 0 && !logging && intervalTimer == null && !transitionActive;
+  const canBrowseNextExercise =
+    !isLastExercise && !logging && intervalTimer == null && !transitionActive;
 
   if (!currentExercise) {
     return (
@@ -1786,10 +1802,18 @@ export function ActiveWorkoutScreen({
           <View style={styles.headerActions}>
             {currentIndex > 0 ? (
               <PrimaryButton
-                label="Previous"
+                label="Back"
                 variant="ghost"
                 onPress={handlePreviousExercise}
                 disabled={!canGoToPreviousExercise}
+              />
+            ) : null}
+            {!isLastExercise ? (
+              <PrimaryButton
+                label="Next"
+                variant="ghost"
+                onPress={handleBrowseNextExercise}
+                disabled={!canBrowseNextExercise}
               />
             ) : null}
             {isPaused ? (

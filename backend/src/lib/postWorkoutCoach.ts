@@ -15,6 +15,32 @@ export type PostWorkoutCoachSummary = {
 const LB_PER_KG = 2.2046226218;
 
 /**
+ * Only meals the lifter actually marked eaten count toward the post-workout protein line.
+ * Summing every `meals` row for the day used to include the uneaten plan, so a 200g target
+ * could read as "248g on track" when most of that protein was still sitting on the plate.
+ */
+export function isConsumedMealRow(meal: {
+  status?: string | null;
+}): boolean {
+  return meal.status === 'completed' || meal.status === 'modified';
+}
+
+export function sumConsumedMealMacros(
+  meals: Array<{ protein_g?: number | null; calories?: number | null; status?: string | null }>,
+): { proteinG: number; calories: number } {
+  return meals.reduce(
+    (totals, meal) => {
+      if (!isConsumedMealRow(meal)) return totals;
+      return {
+        proteinG: totals.proteinG + Number(meal.protein_g ?? 0),
+        calories: totals.calories + Number(meal.calories ?? 0),
+      };
+    },
+    { proteinG: 0, calories: 0 },
+  );
+}
+
+/**
  * `workout_sessions.total_volume` and `workout_exercises.suggested_weight` are stored in kg no
  * matter what the lifter's display preference is. The workout summary and progression lines used
  * to print that raw kg number and either label it "kg" regardless of preference, or with the
@@ -89,12 +115,11 @@ export async function generatePostWorkoutCoachSummary(
 
   const { data: todayMeals } = await db
     .from('meals')
-    .select('protein_g, calories')
+    .select('protein_g, calories, status')
     .eq('user_id', userId)
     .eq('scheduled_date', today);
 
-  const proteinLogged = (todayMeals ?? []).reduce((sum, m) => sum + (m.protein_g ?? 0), 0);
-  const caloriesLogged = (todayMeals ?? []).reduce((sum, m) => sum + Number(m.calories ?? 0), 0);
+  const { proteinG: proteinLogged, calories: caloriesLogged } = sumConsumedMealMacros(todayMeals ?? []);
   // A flat constant would report the same "target" to a 55kg cutting user and a 110kg bulking one,
   // so an absent goal row falls back to the same computed targets the nutrition screens show.
   const computedTargets = calculateMacroTargets(macroContextFrom(await loadDailyMacroInputs(userId)));
