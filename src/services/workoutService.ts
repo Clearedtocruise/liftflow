@@ -7,6 +7,7 @@ import {
 } from '@/lib/exerciseNameLookup';
 import { fail, fromError, ok } from '@/lib/serviceResult';
 import { canReopenSession } from '@/lib/sessionReopen';
+import { missingPlanExerciseNames } from '@/lib/sessionPlanIntegrity';
 import type { IWorkoutService } from '@/services/interfaces';
 import { supabase } from '@/supabase/client';
 import type { CreateSetPayload, Exercise, StartSessionPayload, UpdateSetPayload, WorkoutSession } from '@/types';
@@ -203,42 +204,6 @@ async function findOrCreateExerciseByNameInternal(name: string, userId: string):
   return null;
 }
 
-async function preloadSessionExercises(
-  sessionId: string,
-  userId: string,
-  exercises: PlannedExerciseTemplate[],
-): Promise<void> {
-  // A session started from a planned workout is seeded twice: the `trg_seed_session_exercises_from_plan`
-  // trigger fires inside the session INSERT, and then this runs. The trigger skips when the client
-  // got there first, but this had no matching check, so it inserted a second copy of every exercise
-  // — the duplicated lists and split set counts users saw. Fill only empty sort_order slots so two
-  // plan rows that resolve to the same catalog exercise (e.g. left/right) are not collapsed away.
-  const { data: existingRows } = await supabase
-    .from('workout_exercises')
-    .select('exercise_id, sort_order')
-    .eq('session_id', sessionId);
-  const occupiedOrders = new Set((existingRows ?? []).map((row) => row.sort_order as number));
-
-  for (let i = 0; i < exercises.length; i++) {
-    if (occupiedOrders.has(i)) continue;
-    const template = exercises[i];
-    const exerciseId = await findOrCreateExerciseByNameInternal(template.name, userId);
-    if (!exerciseId) {
-      console.warn('[workout] could not resolve planned exercise for session seed', template.name);
-      continue;
-    }
-    occupiedOrders.add(i);
-
-    await supabase.from('workout_exercises').insert({
-      session_id: sessionId,
-      exercise_id: exerciseId,
-      sort_order: i,
-      suggested_reps: template.reps ?? undefined,
-      suggested_weight: template.weightLbs ? template.weightLbs / 2.2046226218 : undefined,
-    });
-  }
-}
-
 async function syncPlannedWorkoutStatus(
   plannedWorkoutId: string,
   status: 'planned' | 'active' | 'completed' | 'cancelled',
@@ -378,17 +343,69 @@ async function applySessionExercisePlanInternal(
         // rather than leaving a hole at this sort_order (which surfaces the next lift first).
         const refreshed = await loadSession(sessionId);
         const collided = refreshed?.exercises.find((exercise) => exercise.exerciseId === exerciseIdResult);
-        if (collided) {
+        if (collided && !claimed.has(collided.id)) {
           claimed.add(collided.id);
           await supabase.from('workout_exercises').update(suggested).eq('id', collided.id);
         } else {
-          console.warn('[workout] failed to insert planned exercise into session', normalized, insertError.message);
+          // Second plan slot resolved to an exercise_id already claimed (left/right same catalog
+          // row, or a seed collision). Inserting under the same id is impossible, so mint a
+          // custom catalog row that keeps the planned display name — dropping the slot is how
+          // RDL jumped straight to calves.
+          const customSlug = `${exerciseSlugFromName(normalized)}-${Math.random().toString(36).slice(2, 8)}`;
+          const { data: customExercise, error: customExerciseError } = await supabase
+            .from('exercises')
+            .insert({
+              name: normalized,
+              slug: customSlug,
+              category: 'other',
+              equipment: 'other',
+              muscle_groups: ['general'],
+              is_system: false,
+              created_by: userId,
+            })
+            .select('id')
+            .single();
+          if (customExerciseError || !customExercise?.id) {
+            console.warn(
+              '[workout] failed to mint custom exercise for duplicate plan slot',
+              normalized,
+              customExerciseError?.message,
+            );
+            continue;
+          }
+          const { data: customRow, error: customError } = await supabase
+            .from('workout_exercises')
+            .insert({
+              session_id: sessionId,
+              exercise_id: customExercise.id,
+              ...suggested,
+            })
+            .select('id')
+            .single();
+          if (customError || !customRow?.id) {
+            console.warn('[workout] failed to insert custom planned exercise', normalized, customError?.message);
+            continue;
+          }
+          claimed.add(customRow.id);
         }
+      } else {
+        // Reload so later slots can see this row, and so the integrity check below can pass.
+        session = (await loadSession(sessionId)) ?? session;
+        const inserted = session.exercises.find(
+          (exercise) =>
+            !claimed.has(exercise.id) &&
+            exercise.exerciseId === exerciseIdResult &&
+            exercise.sortOrder === index,
+        ) ?? session.exercises.find(
+          (exercise) => !claimed.has(exercise.id) && exercise.exerciseId === exerciseIdResult,
+        );
+        if (inserted) claimed.add(inserted.id);
       }
     }
 
     // Kept exercises the plan does not describe move after the planned ones, so plan order holds
     // and sort_order stays unique.
+    session = (await loadSession(sessionId)) ?? session;
     let tailOrder = exercises.length;
     for (const current of [...session.exercises].sort((a, b) => a.sortOrder - b.sortOrder)) {
       if (claimed.has(current.id)) continue;
@@ -398,6 +415,14 @@ async function applySessionExercisePlanInternal(
 
     const updated = await loadSession(sessionId);
     if (!updated) return fail('Failed to load session');
+
+    const missing = missingPlanExerciseNames(
+      exercises.map((exercise) => exercise.name),
+      updated.exercises.map((exercise) => exercise.exercise?.name ?? ''),
+    );
+    if (missing.length > 0) {
+      return fail(`Could not add planned exercises to the session: ${missing.join(', ')}`);
+    }
     return ok(updated);
   } catch (e) {
     return fromError(e);
@@ -441,9 +466,25 @@ export const workoutService: IWorkoutService = {
         );
         if (!applyResult.success) return applyResult;
       } else {
+        // Same reconciler as the explicit plan path. The old "fill empty sort_order slots"
+        // preload could not recover a middle lift the DB trigger had already dropped and packed
+        // over — finishing RDL then landed on calves because Walking Lunge never got a row.
         const exercises = await loadPlannedExercises(plannedWorkoutId);
         if (exercises.length > 0) {
-          await preloadSessionExercises(startResult.data.id, userId, exercises);
+          const editable: EditableWorkoutExercise[] = exercises.map((exercise, index) => ({
+            id: `planned-${index}-${exercise.name.toLowerCase().replace(/\s+/g, '-')}`,
+            name: exercise.name,
+            sets: exercise.sets ?? 3,
+            repRange: exercise.reps,
+            weightLbs: exercise.weightLbs,
+            restSeconds: exercise.restSeconds,
+          }));
+          const applyResult = await applySessionExercisePlanInternal(
+            startResult.data.id,
+            userId,
+            editable,
+          );
+          if (!applyResult.success) return applyResult;
         }
       }
 

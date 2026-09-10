@@ -72,14 +72,15 @@ import { formatWorkoutWeightForInput } from '@/lib/unitConversion';
 import { matchSpokenExercise } from '@/lib/voice/matchSpokenExercise';
 import { pickWorkoutChallenge } from '@/lib/workoutChallengeFlow';
 import { normalizeExecutionMode } from '@/lib/workoutExecutionMode';
-import { alignPlanExercisesToSession, parseTargetReps } from '@/lib/workoutPlan';
-import { firstIncompleteExerciseIndex, resolveEffectiveTargetSets } from '@/lib/workoutSetTarget';
 import { resolveExerciseInputSeed } from '@/lib/activeWorkoutWeightSeed';
+import { missingPlanExerciseNames } from '@/lib/sessionPlanIntegrity';
 import { logWorkoutProgressionDecision } from '@/lib/workoutProgressionDebug';
+import { firstIncompleteExerciseIndex, resolveEffectiveTargetSets } from '@/lib/workoutSetTarget';
 import {
   clearRestAdvanceCoordination,
   resolveRestSkipAdvance,
 } from '@/lib/workoutRestAdvance';
+import { alignPlanExercisesToSession, parseTargetReps } from '@/lib/workoutPlan';
 import { resolveBetweenExerciseUpNext, resolveTabataPrepUpNext, resolveWorkoutUpNext } from '@/lib/workoutUpNext';
 import { workoutService } from '@/services/workoutService';
 import { watchPhoneBridge, type WatchDisplayContext } from '@/state/WatchPhoneBridge';
@@ -222,6 +223,30 @@ export function ActiveWorkoutScreen({
   );
 
   /**
+   * If the seed trigger dropped a middle lift (Walking Lunge between RDL and calves), the live
+   * session is shorter than the plan. Re-apply once so the hole is filled without forcing the
+   * lifter to abandon the workout.
+   */
+  const attemptedPlanRepairRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!user?.id) return;
+    if (planExercisesProp.length === 0) return;
+    const missing = missingPlanExerciseNames(
+      planExercisesProp.map((exercise) => exercise.name),
+      sortedExercises.map((exercise) => exercise.exercise?.name ?? ''),
+    );
+    if (missing.length === 0) return;
+    const repairKey = `${session.id}:${missing.join('|')}`;
+    if (attemptedPlanRepairRef.current === repairKey) return;
+    attemptedPlanRepairRef.current = repairKey;
+    void workoutService
+      .applySessionExercisePlan(session.id, user.id, planExercisesProp)
+      .then(async (result) => {
+        if (result.success) await refreshSession();
+      });
+  }, [user?.id, session.id, planExercisesProp, sortedExercises, refreshSession]);
+
+  /**
    * Landing on index 0 unconditionally meant leaving the app mid-session (exercise 1 finished,
    * exercise 2 in progress) and coming back restarted at exercise 1 — the next set logged there
    * instead of the exercise actually in progress, which then read as skipped since it never got a
@@ -273,6 +298,8 @@ export function ActiveWorkoutScreen({
   const pendingAdvanceAfterChallengeRef = useRef<(() => void) | null>(null);
   const pendingExerciseAdvanceAfterRestRef = useRef(false);
   const autoAdvanceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Bumped on every advance so a stale auto-advance timeout cannot fire a second jump. */
+  const advanceGenerationRef = useRef(0);
   const loggingInFlightRef = useRef(false);
   const advanceExerciseRef = useRef<() => void>(() => {});
   const pendingRoundIncrementRef = useRef(false);
@@ -855,8 +882,11 @@ export function ActiveWorkoutScreen({
 
   const scheduleAutoExerciseAdvance = useCallback(() => {
     if (autoAdvanceTimeoutRef.current) clearTimeout(autoAdvanceTimeoutRef.current);
+    const generation = advanceGenerationRef.current;
     autoAdvanceTimeoutRef.current = setTimeout(() => {
       autoAdvanceTimeoutRef.current = null;
+      // A manual Next / skip that already advanced cancels this scheduled jump.
+      if (generation !== advanceGenerationRef.current) return;
       advanceExerciseRef.current();
     }, AUTO_ADVANCE_EXERCISE_MS);
   }, []);
@@ -1025,6 +1055,7 @@ export function ActiveWorkoutScreen({
   function advancePastCurrentExercise() {
     clearPendingExerciseAdvance();
     cancelActiveRestTimer();
+    advanceGenerationRef.current += 1;
     setShowComplete(false);
     dismissIntervalTimer();
     dismissCircuitTimer();
@@ -1545,6 +1576,7 @@ export function ActiveWorkoutScreen({
     // otherwise rest→0 would fire a second advance and skip the exercise we just landed on.
     clearPendingExerciseAdvance();
     cancelActiveRestTimer();
+    advanceGenerationRef.current += 1;
     dismissIntervalTimer();
     intervalStartedForExerciseRef.current = null;
     tabataPrepDoneForExerciseRef.current = null;
@@ -1563,6 +1595,7 @@ export function ActiveWorkoutScreen({
     // second advance and the exercise the lifter just moved to looks skipped.
     clearPendingExerciseAdvance();
     cancelActiveRestTimer();
+    advanceGenerationRef.current += 1;
     if (usesSupersetRotation && supersetGroup && supersetGroup.memberIndices.length >= 2) {
       const incompletePartner = [...supersetGroup.memberIndices]
         .sort((a, b) => a - b)

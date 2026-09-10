@@ -9,6 +9,8 @@ const DEFAULT_LOADING_METHODS: Record<string, LoadingMethod[]> = {
   'push-up': ['bodyweight', 'bodyweight_plus_weight'],
   'chin-up': ['bodyweight', 'bodyweight_plus_weight'],
   dip: ['bodyweight', 'bodyweight_plus_weight'],
+  'hanging-leg-raise': ['bodyweight', 'bodyweight_plus_weight'],
+  'hanging-knee-raise': ['bodyweight', 'bodyweight_plus_weight'],
   'walking-lunge': ['bodyweight', 'external_load'],
   'dumbbell-lunge': ['external_load'],
   plank: ['timed_hold'],
@@ -33,6 +35,12 @@ export function supportedLoadingMethods(
     const fromCatalog = (catalog as { loadingMethods?: LoadingMethod[] } | undefined)?.loadingMethods;
     if (fromCatalog?.length) return fromCatalog;
     if (DEFAULT_LOADING_METHODS[key]) return DEFAULT_LOADING_METHODS[key]!;
+  }
+
+  const label = `${exercise?.name ?? ''} ${slug ?? ''}`.toLowerCase();
+  // Catalog slug can be missing on a custom/imported row; still offer added weight for these.
+  if (/\bhanging\s+(leg|knee)\s+raises?\b/.test(label) || /\bhanging-leg-raise\b/.test(label)) {
+    return ['bodyweight', 'bodyweight_plus_weight'];
   }
 
   if (isTimedExercise(exercise, undefined, exercise?.name)) {
