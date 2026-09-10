@@ -275,7 +275,7 @@ export function ActiveWorkoutScreen({
     focusExerciseIdAfterRepairRef.current = sortedExercises[currentIndexRef.current]?.id ?? null;
     void workoutService
       .applySessionExercisePlan(session.id, user.id, planExercisesProp)
-      .then(async (result) => {
+      .then(async (result: { success: boolean }) => {
         if (result.success) await refreshSession();
       });
   }, [user?.id, session.id, planExercisesProp, sortedExercises, refreshSession]);

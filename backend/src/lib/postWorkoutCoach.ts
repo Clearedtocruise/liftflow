@@ -28,16 +28,14 @@ export function isConsumedMealRow(meal: {
 export function sumConsumedMealMacros(
   meals: Array<{ protein_g?: number | null; calories?: number | null; status?: string | null }>,
 ): { proteinG: number; calories: number } {
-  return meals.reduce(
-    (totals, meal) => {
-      if (!isConsumedMealRow(meal)) return totals;
-      return {
-        proteinG: totals.proteinG + Number(meal.protein_g ?? 0),
-        calories: totals.calories + Number(meal.calories ?? 0),
-      };
-    },
-    { proteinG: 0, calories: 0 },
-  );
+  let proteinG = 0;
+  let calories = 0;
+  for (const meal of meals) {
+    if (!isConsumedMealRow(meal)) continue;
+    proteinG += Number(meal.protein_g ?? 0);
+    calories += Number(meal.calories ?? 0);
+  }
+  return { proteinG, calories };
 }
 
 /**
