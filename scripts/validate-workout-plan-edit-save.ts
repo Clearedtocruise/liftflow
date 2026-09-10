@@ -102,7 +102,7 @@ check(
 );
 check(
   'the session is built from the saved workout, not the stale one',
-  dayRoute.includes('exercisesForSessionStart(\n        planned,'),
+  /exercisesForSessionStart\(\s*\n\s*planned,/.test(dayRoute),
   true,
 );
 check(

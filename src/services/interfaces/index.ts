@@ -122,6 +122,15 @@ export interface IWorkoutService {
    */
   replaceExercise(workoutExerciseId: string, exerciseId: string): Promise<ServiceResult<import('@/types').WorkoutExercise>>;
   findOrCreateExerciseByName(name: string, userId: string): Promise<ServiceResult<string>>;
+  /**
+   * Reconcile the live session's exercise list to a plan. Used when a seed left out a planned
+   * lift (or after mid-session repair) so the workout cannot skip across a hole.
+   */
+  applySessionExercisePlan(
+    sessionId: string,
+    userId: string,
+    exercises: import('@/types/workoutExecution').EditableWorkoutExercise[],
+  ): Promise<ServiceResult<WorkoutSession>>;
   /** Rest timers */
   startRestTimer(sessionId: string, setId: string, recommendedSeconds: number): Promise<ServiceResult<RestPeriod>>;
   endRestTimer(restPeriodId: string, actualSeconds: number, wasSkipped?: boolean): Promise<ServiceResult<RestPeriod>>;

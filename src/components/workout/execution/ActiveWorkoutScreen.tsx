@@ -55,6 +55,7 @@ import {
     resolvePostSetFlowAction,
     resolveSupersetWorkoutPosition,
     shouldShowSupersetPrep,
+    targetSetsForIndex,
 } from '@/lib/supersetFlow';
 import { INTERVAL_MODE_DEFAULTS } from '@/constants/workoutExecutionModes';
 import {
@@ -72,14 +73,16 @@ import { formatWorkoutWeightForInput } from '@/lib/unitConversion';
 import { matchSpokenExercise } from '@/lib/voice/matchSpokenExercise';
 import { pickWorkoutChallenge } from '@/lib/workoutChallengeFlow';
 import { normalizeExecutionMode } from '@/lib/workoutExecutionMode';
-import { alignPlanExercisesToSession, parseTargetReps } from '@/lib/workoutPlan';
-import { firstIncompleteExerciseIndex, resolveEffectiveTargetSets } from '@/lib/workoutSetTarget';
+import { eachSideLabelForSet, expandSetsForEachSide } from '@/lib/eachSideSets';
 import { resolveExerciseInputSeed } from '@/lib/activeWorkoutWeightSeed';
+import { missingPlanExerciseNames } from '@/lib/sessionPlanIntegrity';
 import { logWorkoutProgressionDecision } from '@/lib/workoutProgressionDebug';
+import { firstIncompleteExerciseIndex, resolveEffectiveTargetSets } from '@/lib/workoutSetTarget';
 import {
   clearRestAdvanceCoordination,
   resolveRestSkipAdvance,
 } from '@/lib/workoutRestAdvance';
+import { alignPlanExercisesToSession, parseTargetReps } from '@/lib/workoutPlan';
 import { resolveBetweenExerciseUpNext, resolveTabataPrepUpNext, resolveWorkoutUpNext } from '@/lib/workoutUpNext';
 import { workoutService } from '@/services/workoutService';
 import { watchPhoneBridge, type WatchDisplayContext } from '@/state/WatchPhoneBridge';
@@ -231,7 +234,7 @@ export function ActiveWorkoutScreen({
     firstIncompleteExerciseIndex(
       sortedExercises.map((exercise) => exercise.sets.length),
       planExercises.map((exercise) => ({
-        planSets: exercise.sets,
+        planSets: expandSetsForEachSide(exercise.sets, exercise.notes, exercise.repRange),
         executionMode: exercise.executionMode,
         intervalRounds: exercise.intervalRounds,
       })),
@@ -248,6 +251,46 @@ export function ActiveWorkoutScreen({
   useEffect(() => {
     setActiveExerciseIndex(currentIndex);
   }, [currentIndex, setActiveExerciseIndex]);
+
+  /**
+   * If the seed trigger dropped a middle lift (Walking Lunge between RDL and calves), the live
+   * session is shorter than the plan. Re-apply once so the hole is filled without forcing the
+   * lifter to abandon the workout. Remap currentIndex by workout_exercise id afterward —
+   * inserting a missing middle lift used to leave the ordinal pointing at the wrong card, which
+   * felt like skipping through the second set of side planks.
+   */
+  const attemptedPlanRepairRef = useRef<string | null>(null);
+  const focusExerciseIdAfterRepairRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!user?.id) return;
+    if (planExercisesProp.length === 0) return;
+    const missing = missingPlanExerciseNames(
+      planExercisesProp.map((exercise) => exercise.name),
+      sortedExercises.map((exercise) => exercise.exercise?.name ?? ''),
+    );
+    if (missing.length === 0) return;
+    const repairKey = `${session.id}:${missing.join('|')}`;
+    if (attemptedPlanRepairRef.current === repairKey) return;
+    attemptedPlanRepairRef.current = repairKey;
+    focusExerciseIdAfterRepairRef.current = sortedExercises[currentIndexRef.current]?.id ?? null;
+    void workoutService
+      .applySessionExercisePlan(session.id, user.id, planExercisesProp)
+      .then(async (result: { success: boolean }) => {
+        if (result.success) await refreshSession();
+      });
+  }, [user?.id, session.id, planExercisesProp, sortedExercises, refreshSession]);
+
+  useEffect(() => {
+    const focusedId = focusExerciseIdAfterRepairRef.current;
+    if (!focusedId) return;
+    const nextIndex = sortedExercises.findIndex((exercise) => exercise.id === focusedId);
+    if (nextIndex < 0) return;
+    focusExerciseIdAfterRepairRef.current = null;
+    if (nextIndex === currentIndexRef.current) return;
+    currentIndexRef.current = nextIndex;
+    setCurrentIndex(nextIndex);
+  }, [sortedExercises]);
+
   const [weightKg, setWeightKg] = useState(0);
   const [reps, setReps] = useState(8);
   const [durationSeconds, setDurationSeconds] = useState(30);
@@ -273,6 +316,8 @@ export function ActiveWorkoutScreen({
   const pendingAdvanceAfterChallengeRef = useRef<(() => void) | null>(null);
   const pendingExerciseAdvanceAfterRestRef = useRef(false);
   const autoAdvanceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Bumped on every advance so a stale auto-advance timeout cannot fire a second jump. */
+  const advanceGenerationRef = useRef(0);
   const loggingInFlightRef = useRef(false);
   const advanceExerciseRef = useRef<() => void>(() => {});
   const pendingRoundIncrementRef = useRef(false);
@@ -302,7 +347,7 @@ export function ActiveWorkoutScreen({
 
   const currentExercise = sortedExercises[currentIndex];
   const planMeta = planExercises[currentIndex];
-  const targetSets = planMeta?.sets ?? 3;
+  const targetSets = expandSetsForEachSide(planMeta?.sets ?? 3, planMeta?.notes, planMeta?.repRange);
   // Stick to the plan set count. Coach may *suggest* more volume in the card, but auto-inflating
   // to 4–5 working sets was too much for everyday lifters — use + Add Set if you want more.
   const coachSuggestedExtraSets = Math.max(
@@ -311,7 +356,7 @@ export function ActiveWorkoutScreen({
   );
   const effectiveTargetSets = resolveEffectiveTargetSets({
     executionMode,
-    planSets: planMeta?.sets,
+    planSets: targetSets,
     bonusSets,
     intervalRounds: intervalTimer?.config.rounds,
   });
@@ -341,6 +386,7 @@ export function ActiveWorkoutScreen({
   const coachLoggingMode =
     loggingMode === 'any' ? undefined : (loggingMode as Exclude<typeof loggingMode, 'any'>);
   const nextSetNumber = completedSets.length + 1;
+  const eachSideLabel = eachSideLabelForSet(nextSetNumber, planMeta?.notes, planMeta?.repRange);
   const tabataTimerActive =
     executionMode === 'tabata' && intervalTimer != null && intervalTimer.phase !== 'done';
   const displayCurrentSet = tabataTimerActive ? intervalTimer.round : nextSetNumber;
@@ -411,10 +457,8 @@ export function ActiveWorkoutScreen({
           planExercises,
           sortedExercises,
           (index) => {
-            const meta = planExercises[index];
-            const base = meta?.sets ?? 3;
             if (index === currentIndex) return effectiveTargetSets;
-            return base;
+            return targetSetsForIndex(index, planExercises);
           },
           isLastExercise,
         )
@@ -855,8 +899,11 @@ export function ActiveWorkoutScreen({
 
   const scheduleAutoExerciseAdvance = useCallback(() => {
     if (autoAdvanceTimeoutRef.current) clearTimeout(autoAdvanceTimeoutRef.current);
+    const generation = advanceGenerationRef.current;
     autoAdvanceTimeoutRef.current = setTimeout(() => {
       autoAdvanceTimeoutRef.current = null;
+      // A manual Next / skip that already advanced cancels this scheduled jump.
+      if (generation !== advanceGenerationRef.current) return;
       advanceExerciseRef.current();
     }, AUTO_ADVANCE_EXERCISE_MS);
   }, []);
@@ -1025,6 +1072,7 @@ export function ActiveWorkoutScreen({
   function advancePastCurrentExercise() {
     clearPendingExerciseAdvance();
     cancelActiveRestTimer();
+    advanceGenerationRef.current += 1;
     setShowComplete(false);
     dismissIntervalTimer();
     dismissCircuitTimer();
@@ -1039,7 +1087,7 @@ export function ActiveWorkoutScreen({
           if (index === currentIndexRef.current) return false;
           const exercise = sortedExercises[index];
           if (exercise?.id && skippedExerciseIdsRef.current.has(exercise.id)) return false;
-          const target = planExercises[index]?.sets ?? 3;
+          const target = targetSetsForIndex(index, planExercises);
           return (exercise?.sets?.length ?? 0) < target;
         });
       if (incompletePartner != null) {
@@ -1105,6 +1153,20 @@ export function ActiveWorkoutScreen({
     setShowComplete(false);
     setCurrentIndex((index) => {
       const next = Math.max(0, index - 1);
+      currentIndexRef.current = next;
+      return next;
+    });
+  }
+
+  /** Peek at the next lift without marking this one skipped — Previous brings you back. */
+  function handleBrowseNextExercise() {
+    if (isLastExercise || logging || intervalTimer != null || transitionActive) return;
+    clearPendingExerciseAdvance();
+    cancelActiveRestTimer();
+    advanceGenerationRef.current += 1;
+    setShowComplete(false);
+    setCurrentIndex((index) => {
+      const next = Math.min(sortedExercises.length - 1, index + 1);
       currentIndexRef.current = next;
       return next;
     });
@@ -1269,7 +1331,7 @@ export function ActiveWorkoutScreen({
     // and the logger must not disagree with what the lifter can see.
     const logTargetSets = resolveEffectiveTargetSets({
       executionMode,
-      planSets: logPlanMeta?.sets,
+      planSets: expandSetsForEachSide(logPlanMeta?.sets, logPlanMeta?.notes, logPlanMeta?.repRange),
       bonusSets,
       intervalRounds: intervalTimer?.config.rounds,
     });
@@ -1545,6 +1607,7 @@ export function ActiveWorkoutScreen({
     // otherwise rest→0 would fire a second advance and skip the exercise we just landed on.
     clearPendingExerciseAdvance();
     cancelActiveRestTimer();
+    advanceGenerationRef.current += 1;
     dismissIntervalTimer();
     intervalStartedForExerciseRef.current = null;
     tabataPrepDoneForExerciseRef.current = null;
@@ -1563,6 +1626,7 @@ export function ActiveWorkoutScreen({
     // second advance and the exercise the lifter just moved to looks skipped.
     clearPendingExerciseAdvance();
     cancelActiveRestTimer();
+    advanceGenerationRef.current += 1;
     if (usesSupersetRotation && supersetGroup && supersetGroup.memberIndices.length >= 2) {
       const incompletePartner = [...supersetGroup.memberIndices]
         .sort((a, b) => a - b)
@@ -1570,7 +1634,7 @@ export function ActiveWorkoutScreen({
           if (index === currentIndexRef.current) return false;
           const exercise = sortedExercises[index];
           if (exercise?.id && skippedExerciseIdsRef.current.has(exercise.id)) return false;
-          const target = planExercises[index]?.sets ?? 3;
+          const target = targetSetsForIndex(index, planExercises);
           return (exercise?.sets?.length ?? 0) < target;
         });
       if (incompletePartner != null) {
@@ -1695,6 +1759,8 @@ export function ActiveWorkoutScreen({
   // worse than a rest timer that keeps counting while you navigate.
   const canGoToPreviousExercise =
     currentIndex > 0 && !logging && intervalTimer == null && !transitionActive;
+  const canBrowseNextExercise =
+    !isLastExercise && !logging && intervalTimer == null && !transitionActive;
 
   if (!currentExercise) {
     return (
@@ -1736,10 +1802,18 @@ export function ActiveWorkoutScreen({
           <View style={styles.headerActions}>
             {currentIndex > 0 ? (
               <PrimaryButton
-                label="Previous"
+                label="Back"
                 variant="ghost"
                 onPress={handlePreviousExercise}
                 disabled={!canGoToPreviousExercise}
+              />
+            ) : null}
+            {!isLastExercise ? (
+              <PrimaryButton
+                label="Next"
+                variant="ghost"
+                onPress={handleBrowseNextExercise}
+                disabled={!canBrowseNextExercise}
               />
             ) : null}
             {isPaused ? (
@@ -1765,6 +1839,14 @@ export function ActiveWorkoutScreen({
                   Tap for form guide
                 </AppText>
               </Pressable>
+
+              {planMeta?.notes || eachSideLabel ? (
+                <AppText variant="footnote" color="accent">
+                  {[planMeta?.notes, eachSideLabel ? `Next: ${eachSideLabel}` : null]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </AppText>
+              ) : null}
 
               {!showComplete ? <WorkoutUpNextCard position={workoutPosition} supersetActive={usesSupersetRotation && inSuperset} /> : null}
 

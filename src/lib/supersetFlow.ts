@@ -1,4 +1,5 @@
 import { CIRCUIT_MODE_DEFAULTS } from '@/constants/workoutExecutionModes';
+import { expandSetsForEachSide } from '@/lib/eachSideSets';
 import type { WorkoutPositionLabels } from '@/lib/workoutUpNext';
 import { resolveWorkoutUpNext } from '@/lib/workoutUpNext';
 import type { WorkoutExercise } from '@/types/workout';
@@ -133,7 +134,8 @@ export function formatExerciseStationLabel(
 }
 
 export function targetSetsForIndex(index: number, planExercises: EditableWorkoutExercise[]): number {
-  return planExercises[index]?.sets ?? 3;
+  const plan = planExercises[index];
+  return expandSetsForEachSide(plan?.sets ?? 3, plan?.notes, plan?.repRange);
 }
 
 export function isSupersetGroupComplete(

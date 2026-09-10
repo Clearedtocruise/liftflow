@@ -7,6 +7,8 @@ export type EditableWorkoutExercise = {
   repRange?: string;
   restSeconds?: number;
   weightLbs?: number;
+  /** Coach/plan cue shown on the live card — e.g. "Each side". */
+  notes?: string;
   /** Rounds for interval (HIIT/Tabata) and circuit execution. Independent of `sets`. */
   intervalRounds?: number;
   intervalWorkSeconds?: number;

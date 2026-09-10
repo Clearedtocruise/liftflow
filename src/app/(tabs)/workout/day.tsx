@@ -16,7 +16,6 @@ import { isConditioningWorkout } from '@/lib/weekPlan';
 import { exercisesForSessionStart } from '@/lib/workoutPlan';
 import type { ExerciseAlternativeOption } from '@/services/exerciseAdvisoryService';
 import { trainingService } from '@/services/trainingService';
-import { workoutService } from '@/services/workoutService';
 import { useWorkoutPlanDraft } from '@/state/workout/WorkoutPlanDraftContext';
 import { useWorkoutSession } from '@/state/workout/WorkoutSessionContext';
 import type { PlannedWorkout } from '@/types/training';
@@ -117,19 +116,23 @@ export default function WorkoutDayScreen() {
       markSaved(planned);
     }
 
+    // Pass the plan at start — same path as the home "Start Workout" button. Starting without
+    // exercisePlan used to rely on the DB seed trigger + a post-hoc apply; when the trigger
+    // dropped a middle lift (Walking Lunge between RDL and calves) the session advanced across
+    // the hole even after apply, because refresh raced the insert.
+    const sessionExercises = exercisesForSessionStart(
+      planned,
+      tabataModeEnabled && !isConditioningWorkout(planned),
+    );
     const started = await startSessionFromPlanned(planned.id, {
       name: planned.name,
       gymName: location?.name ?? user.primaryGymName ?? undefined,
       trainingLocation: location?.locationType ?? user.trainingLocation,
       workoutLocationId: location?.id,
+      exercisePlan: sessionExercises,
     });
     if (started) {
-      const sessionExercises = exercisesForSessionStart(
-        planned,
-        tabataModeEnabled && !isConditioningWorkout(planned),
-      );
       setSessionPlan(sessionExercises);
-      await workoutService.applySessionExercisePlan(started.id, user.id, sessionExercises);
       await refreshSession();
       router.replace('/(tabs)/workout');
     }
