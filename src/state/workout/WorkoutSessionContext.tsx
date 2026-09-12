@@ -31,6 +31,17 @@ type WorkoutSessionState = {
   watchDraftWeightKg: number | null;
 };
 
+/**
+ * Result of adding a lift to the live session. A bare id left every failure — no signed-in user,
+ * an unresolvable catalog name, a rejected insert — looking identical to success on screen.
+ */
+export type AddExerciseOutcome = {
+  workoutExerciseId: string | null;
+  /** The lift was already in this session, so nothing was inserted. */
+  alreadyInWorkout?: boolean;
+  error?: string;
+};
+
 type WorkoutSessionActions = {
   hydrate: () => Promise<void>;
   refreshSession: () => Promise<void>;
@@ -53,7 +64,7 @@ type WorkoutSessionActions = {
   addExerciseByName: (
     name: string,
     options?: { afterWorkoutExerciseId?: string },
-  ) => Promise<string | null>;
+  ) => Promise<AddExerciseOutcome>;
   /** Swap an exercise mid-session. Resolves to the workout exercise the user should move to. */
   replaceExerciseByName: (workoutExerciseId: string, name: string) => Promise<string | null>;
   setListening: (listening: boolean) => void;
@@ -403,15 +414,21 @@ export function WorkoutSessionProvider({
   );
 
   const addExerciseByName = useCallback(
-    async (name: string, options?: { afterWorkoutExerciseId?: string }) => {
-      if (!userId || !activeSession) return null;
+    async (name: string, options?: { afterWorkoutExerciseId?: string }): Promise<AddExerciseOutcome> => {
+      if (!userId || !activeSession) {
+        return { workoutExerciseId: null, error: 'No workout is running.' };
+      }
 
       const exerciseIdResult = await workoutService.findOrCreateExerciseByName(name, userId);
-      if (!exerciseIdResult.success) return null;
+      if (!exerciseIdResult.success) {
+        return { workoutExerciseId: null, error: exerciseIdResult.error };
+      }
 
       const existing = activeSession.exercises.find((e) => e.exerciseId === exerciseIdResult.data);
-      if (existing) return existing.id;
+      if (existing) return { workoutExerciseId: existing.id, alreadyInWorkout: true };
 
+      // The cached session can be a moment behind the one the picker was opened against, and the
+      // insert order is derived from it — so read the live row rather than trusting the snapshot.
       const after = options?.afterWorkoutExerciseId
         ? activeSession.exercises.find((e) => e.id === options.afterWorkoutExerciseId)
         : undefined;
@@ -420,10 +437,12 @@ export function WorkoutSessionProvider({
         exerciseIdResult.data,
         after ? after.sortOrder + 1 : undefined,
       );
-      if (!addResult.success) return null;
+      if (!addResult.success) {
+        return { workoutExerciseId: null, error: addResult.error };
+      }
 
       await refreshSession();
-      return addResult.data.id;
+      return { workoutExerciseId: addResult.data.id };
     },
     [userId, activeSession, refreshSession],
   );

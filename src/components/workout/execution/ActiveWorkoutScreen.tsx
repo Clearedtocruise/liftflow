@@ -274,7 +274,9 @@ export function ActiveWorkoutScreen({
     attemptedPlanRepairRef.current = repairKey;
     focusExerciseIdAfterRepairRef.current = sortedExercises[currentIndexRef.current]?.id ?? null;
     void workoutService
-      .applySessionExercisePlan(session.id, user.id, planExercisesProp)
+      // Repair only fills holes. Pruning here deleted lifts the user had added by hand, because a
+      // just-added exercise has no sets yet and so looks the same as plan drift.
+      .applySessionExercisePlan(session.id, user.id, planExercisesProp, { preserveUnplanned: true })
       .then(async (result: { success: boolean }) => {
         if (result.success) await refreshSession();
       });
@@ -300,6 +302,11 @@ export function ActiveWorkoutScreen({
   durationSecondsRef.current = durationSeconds;
   distanceKmRef.current = distanceKm;
   const [logging, setLogging] = useState(false);
+  /**
+   * Confirmation for a lift inserted behind the card on screen. Adding mid-exercise deliberately
+   * does not move the user, so without this the button looked like it had done nothing.
+   */
+  const [addedExerciseNotice, setAddedExerciseNotice] = useState<string | null>(null);
   const [historySets, setHistorySets] = useState<ExerciseHistorySet[]>([]);
   const [coachPrescription, setCoachPrescription] = useState<ExerciseCoachPrescription | null>(null);
   const [showComplete, setShowComplete] = useState(false);
@@ -312,6 +319,13 @@ export function ActiveWorkoutScreen({
   const [challengeTrigger, setChallengeTrigger] = useState<WorkoutChallengeTrigger>('between_sets');
   const [challengeTargetExerciseName, setChallengeTargetExerciseName] = useState<string | null>(null);
   const [loadingMethod, setLoadingMethod] = useState<LoadingMethod>('external_load');
+
+  useEffect(() => {
+    if (!addedExerciseNotice) return;
+    const timer = setTimeout(() => setAddedExerciseNotice(null), 6000);
+    return () => clearTimeout(timer);
+  }, [addedExerciseNotice]);
+
   const pendingAdvanceRef = useRef<number | null>(null);
   const pendingAdvanceAfterChallengeRef = useRef<(() => void) | null>(null);
   const pendingExerciseAdvanceAfterRestRef = useRef(false);
@@ -1190,11 +1204,30 @@ export function ActiveWorkoutScreen({
     // The new exercise slots in directly after the current one rather than at the end of the
     // workout, and the user is only moved there once the exercise they are on is finished.
     const wasMidExercise = !allSetsDone;
-    const workoutExerciseId = await addExerciseByName(exercise.name, {
+    const added = await addExerciseByName(exercise.name, {
       afterWorkoutExerciseId: currentExercise?.id,
     });
-    if (!workoutExerciseId || wasMidExercise) return;
-    await focusWorkoutExercise(workoutExerciseId);
+
+    if (!added.workoutExerciseId) {
+      Alert.alert('Could not add exercise', added.error ?? 'Please try again.');
+      return;
+    }
+
+    if (added.alreadyInWorkout) {
+      Alert.alert(
+        'Already in this workout',
+        `${exercise.name} is already part of this session. Use Back/Next to move to it, or add sets to the one that is there.`,
+      );
+      return;
+    }
+
+    if (wasMidExercise) {
+      // Nothing on screen changes when the insert lands behind the current card, which read as the
+      // button doing nothing at all.
+      setAddedExerciseNotice(`${exercise.name} added — it's up next after this one.`);
+      return;
+    }
+    await focusWorkoutExercise(added.workoutExerciseId);
   }
 
   async function handleSwapExercise(exercise: Exercise) {
@@ -2141,6 +2174,11 @@ export function ActiveWorkoutScreen({
                     />
                   ) : null}
                   <View style={styles.extraActions}>
+                    {addedExerciseNotice ? (
+                      <AppText variant="caption" color="accent" align="center">
+                        {addedExerciseNotice}
+                      </AppText>
+                    ) : null}
                     <PrimaryButton
                       label="Skip Exercise"
                       variant="secondary"

@@ -68,9 +68,10 @@ export default function ManualLogScreen() {
   async function handleManualLog(payload: ManualSetLogPayload) {
     if (!session || session.status === 'paused') return false;
 
-    const workoutExerciseId = await addExerciseByName(payload.exerciseName);
+    const added = await addExerciseByName(payload.exerciseName);
+    const workoutExerciseId = added.workoutExerciseId;
     if (!workoutExerciseId) {
-      Alert.alert('Error', 'Could not add exercise.');
+      Alert.alert('Could not add exercise', added.error ?? 'Please try again.');
       return false;
     }
 

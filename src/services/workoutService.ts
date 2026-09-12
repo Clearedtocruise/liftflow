@@ -251,10 +251,22 @@ async function createWorkoutSession(
   return ok(session);
 }
 
+export type ApplySessionPlanOptions = {
+  /**
+   * Keep session exercises the plan does not name instead of deleting the empty ones.
+   *
+   * Mid-session repair only exists to put back a planned lift the seed dropped. It used to also
+   * prune, which deleted a lift the user had just added by hand — it has no sets yet, so it looked
+   * exactly like drift — and the Add Exercise button appeared to do nothing.
+   */
+  preserveUnplanned?: boolean;
+};
+
 async function applySessionExercisePlanInternal(
   sessionId: string,
   userId: string,
   exercises: EditableWorkoutExercise[],
+  options?: ApplySessionPlanOptions,
 ): Promise<ServiceResult<WorkoutSession>> {
   try {
     let session = await loadSession(sessionId);
@@ -281,6 +293,7 @@ async function applySessionExercisePlanInternal(
     // Canonical keys so a plan "Pull Ups" does not delete the seeded catalog "Pull Up" row.
     const desiredKeys = new Set(exercises.map((exercise) => exerciseCanonicalKey(exercise.name)));
     for (const current of session.exercises) {
+      if (options?.preserveUnplanned) continue;
       const name = current.exercise?.name ?? '';
       if (desiredKeys.has(exerciseCanonicalKey(name))) continue;
       // Logged sets are work the user actually did, so an exercise they added or swapped in
@@ -870,10 +883,13 @@ export const workoutService: IWorkoutService = {
         const shifted = (existing ?? []).filter((row) => (row.sort_order ?? 0) >= order);
         for (let index = shifted.length - 1; index >= 0; index -= 1) {
           const row = shifted[index]!;
-          await supabase
+          const { error: shiftError } = await supabase
             .from('workout_exercises')
             .update({ sort_order: (row.sort_order ?? 0) + 1 })
             .eq('id', row.id);
+          // A half-applied shift leaves two exercises on the same sort_order, which reads as the
+          // workout jumping around. Stop before inserting into an order that was never freed.
+          if (shiftError) return fail(shiftError.message);
         }
       }
 
@@ -887,10 +903,18 @@ export const workoutService: IWorkoutService = {
         .select('id')
         .single();
 
-      if (error) return fail(error.message);
-
       const session = await loadSession(sessionId);
       if (!session) return fail('Session not found');
+
+      if (error) {
+        // One row per (session_id, exercise_id) is enforced in the database. Losing the race
+        // against another writer must not read as "add failed" when the lift is now in the
+        // workout — hand back the row that won instead.
+        const collided = session.exercises.find((e) => e.exerciseId === exerciseId);
+        if (collided) return ok(collided);
+        return fail(error.message);
+      }
+
       const exercise = session.exercises.find((e) => e.id === data.id);
       if (!exercise) return fail('Exercise not found');
       return ok(exercise);
@@ -1250,7 +1274,12 @@ export const workoutService: IWorkoutService = {
     }
   },
 
-  async applySessionExercisePlan(sessionId: string, userId: string, exercises: EditableWorkoutExercise[]) {
-    return applySessionExercisePlanInternal(sessionId, userId, exercises);
+  async applySessionExercisePlan(
+    sessionId: string,
+    userId: string,
+    exercises: EditableWorkoutExercise[],
+    options?: ApplySessionPlanOptions,
+  ) {
+    return applySessionExercisePlanInternal(sessionId, userId, exercises, options);
   },
 };
