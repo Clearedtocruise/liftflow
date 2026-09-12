@@ -195,17 +195,30 @@ async function materializeUpcomingCycleDays(
   fromDate: string,
   aheadDays: number = CYCLE_LOOKAHEAD_DAYS,
 ): Promise<void> {
+  // One query for the whole window rather than one per day: this now runs on the week read path,
+  // where a round trip per day would be felt.
+  const { data: windowRows } = await db
+    .from('planned_workouts')
+    .select('scheduled_date, status, metadata')
+    .eq('user_id', userId)
+    .gte('scheduled_date', fromDate)
+    .lte('scheduled_date', addIsoDays(fromDate, Math.max(aheadDays - 1, 0)))
+    .contains('metadata', { planPack: CUSTOM_CYCLE_PLAN_PACK });
+
+  const rowsByDate = new Map<string, MaterializedCycleRow[]>();
+  for (const row of windowRows ?? []) {
+    const forDate = rowsByDate.get(row.scheduled_date) ?? [];
+    forDate.push(row as MaterializedCycleRow);
+    rowsByDate.set(row.scheduled_date, forDate);
+  }
+
   for (let offset = 0; offset < aheadDays; offset += 1) {
     const date = addIsoDays(fromDate, offset);
-    const { data: existingRows } = await db
-      .from('planned_workouts')
-      .select('status, metadata')
-      .eq('user_id', userId)
-      .eq('scheduled_date', date)
-      .contains('metadata', { planPack: CUSTOM_CYCLE_PLAN_PACK });
-
     const dayNumber = projectedCycleDayNumber(cycle, offset);
-    if (!needsCycleDayMaterialization((existingRows ?? []) as MaterializedCycleRow[], dayNumber, cycle.version)) {
+    const day = cycle.days.find((d) => d.dayNumber === dayNumber);
+    const isRest = !day || isRestDay(day) || day.exercises.length === 0;
+
+    if (!needsCycleDayMaterialization(rowsByDate.get(date) ?? [], dayNumber, cycle.version, { isRest })) {
       continue;
     }
 

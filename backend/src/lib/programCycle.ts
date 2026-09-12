@@ -269,10 +269,16 @@ export function needsCycleDayMaterialization(
   rows: MaterializedCycleRow[],
   dayNumber: number,
   cycleVersion: number,
+  options?: { isRest?: boolean },
 ): boolean {
   // Never touch a date the user has already started, finished or has in flight.
   const untouched = new Set(['completed', 'active', 'in_progress', 'paused']);
   if (rows.some((row) => untouched.has(row.status))) return false;
+
+  // A rest day writes nothing, so an empty date is already correct. Without this every rest day in
+  // the window costs a write on every pass, which is what made keeping the window topped up
+  // expensive enough to ration.
+  if (options?.isRest) return rows.length > 0;
 
   return !rows.some(
     (row) =>

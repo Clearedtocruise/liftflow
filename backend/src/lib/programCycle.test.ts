@@ -181,3 +181,14 @@ test('materialization never touches a day the lifter has already started or fini
     );
   }
 });
+
+test('a rest day with nothing scheduled is already correct', () => {
+  // Rest days write no row, so treating an empty date as "needs materializing" cost a write for
+  // every rest day on every pass — the reason topping the window up used to be expensive.
+  assert.equal(needsCycleDayMaterialization([], 2, 1, { isRest: true }), false);
+  assert.equal(
+    needsCycleDayMaterialization([{ status: 'planned', metadata: { cycleDay: 2, cycleVersion: 1 } }], 2, 1, { isRest: true }),
+    true,
+    'a leftover workout on what is now a rest day still has to be cleared',
+  );
+});
