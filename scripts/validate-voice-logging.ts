@@ -173,6 +173,19 @@ check('rest complete uses speakCue (not bare Speech.speak)', restTimer.includes(
 check('rest complete does not call bare Speech.speak', restTimer.includes('Speech.speak'), false);
 check('voice confirmations use speakCue', voiceFeedback.includes('speakCue(message'), true);
 
+console.log('\nThe lifter can read what the microphone actually heard');
+// "Voice still not working — I'd like to read what it's hearing from me": the transcript only ever
+// appeared inside the confirm sheet, so a failed parse showed an error with no way to tell whether
+// the mic, the transcription or the wording was at fault.
+check('the transcript is shown after the attempt finishes', logger.includes('Heard: &quot;{heard}&quot;'), true);
+check('the transcript is captured before parsing can reject it', logger.includes('setHeard(transcript.trim() || null)'), true);
+check('a new capture clears the previous transcript', logger.includes('setHeard(null)'), true);
+check(
+  'a failed parse opens the sheet with what was heard instead of dead-ending on a caption',
+  /if \(!result\.success\) \{[\s\S]{0,400}setPending\(\{[\s\S]{0,200}reason: result\.error/.test(logger),
+  true,
+);
+
 console.log('\nAudio mode is set in one place, so two callers cannot fight over it');
 check('the recorder does not patch the mode itself', recordAudio.includes('setAudioModeAsync'), false);
 check('the coach does not patch the mode itself', coachSpeech.includes('setAudioModeAsync'), false);
