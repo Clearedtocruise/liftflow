@@ -64,6 +64,12 @@ export function VoiceSetLogger({
   const [parseError, setParseError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+  /**
+   * The last thing transcription returned, kept on screen after the attempt finishes. Without it a
+   * misheard word is invisible: the lifter only sees "could not parse" and has no way to tell
+   * whether the mic, the transcription or the wording is what went wrong.
+   */
+  const [heard, setHeard] = useState<string | null>(null);
 
   const logParsedSet = useCallback(
     async (
@@ -102,6 +108,7 @@ export function VoiceSetLogger({
       setParseError(null);
       setSaveError(null);
       setStatus(null);
+      setHeard(transcript.trim() || null);
 
       if (!userId) {
         setParseError('Sign in to log sets by voice.');
@@ -119,7 +126,13 @@ export function VoiceSetLogger({
       });
 
       if (!result.success) {
-        setParseError(result.error);
+        // A failed parse used to dead-end on a caption. Open the sheet seeded with the transcript
+        // so the lifter can see what was heard and fix it rather than re-recording blind.
+        setPending({
+          parsed: { rawText: transcript, exercise: activeExerciseName },
+          transcript,
+          reason: result.error,
+        });
         return;
       }
 
@@ -184,8 +197,14 @@ export function VoiceSetLogger({
         inputMode={voice.inputMode}
         disabled={disabled}
         errorMessage={voice.error}
-        onPress={() => void voice.handleMicPress()}
-        onPressIn={() => void voice.handlePressIn()}
+        onPress={() => {
+          setHeard(null);
+          void voice.handleMicPress();
+        }}
+        onPressIn={() => {
+          setHeard(null);
+          void voice.handlePressIn();
+        }}
         onPressOut={voice.handlePressOut}
       />
 
@@ -199,7 +218,7 @@ export function VoiceSetLogger({
         </AppText>
       ) : voice.state === 'recording' ? (
         <AppText variant="caption" color="accent" align="center">
-          Listening… speak your set, then pause
+          {voice.isHearingSpeech ? 'Hearing you… pause when you\u2019re done' : 'Listening… speak your set'}
         </AppText>
       ) : voice.state === 'transcribing' ? (
         <AppText variant="caption" color="accent" align="center">
@@ -214,6 +233,12 @@ export function VoiceSetLogger({
           Try &quot;bench press 225 for 8&quot;
         </AppText>
       )}
+
+      {heard ? (
+        <AppText variant="caption" color="textSecondary" align="center" numberOfLines={3}>
+          Heard: &quot;{heard}&quot;
+        </AppText>
+      ) : null}
 
       <VoiceConfirmModal
         visible={pending !== null}

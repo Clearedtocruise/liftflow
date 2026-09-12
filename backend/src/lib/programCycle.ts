@@ -250,3 +250,40 @@ export function reconcileCycleForDate(cycle: ProgramCycle, today: string, option
 export function isCustomCyclePlanPack(planPack: string | null | undefined): boolean {
   return planPack === CUSTOM_CYCLE_PLAN_PACK;
 }
+
+export type MaterializedCycleRow = {
+  status: string;
+  metadata?: { cycleDay?: number; cycleVersion?: number } | null;
+};
+
+/**
+ * Whether a calendar date needs its cycle day (re)written.
+ *
+ * Materializing is destructive-ish: it cancels the existing `planned` row and inserts a new one, so
+ * the planned-workout id changes. Doing that unconditionally on every load churned the ids the
+ * Workout tab was holding, which is why keeping the week topped up had to be rationed. Skipping the
+ * dates that are already right makes the top-up cheap and id-stable, so the cycle can be refreshed
+ * often enough that a finished lap always rolls straight into the next one.
+ */
+export function needsCycleDayMaterialization(
+  rows: MaterializedCycleRow[],
+  dayNumber: number,
+  cycleVersion: number,
+  options?: { isRest?: boolean },
+): boolean {
+  // Never touch a date the user has already started, finished or has in flight.
+  const untouched = new Set(['completed', 'active', 'in_progress', 'paused']);
+  if (rows.some((row) => untouched.has(row.status))) return false;
+
+  // A rest day writes nothing, so an empty date is already correct. Without this every rest day in
+  // the window costs a write on every pass, which is what made keeping the window topped up
+  // expensive enough to ration.
+  if (options?.isRest) return rows.length > 0;
+
+  return !rows.some(
+    (row) =>
+      row.status === 'planned' &&
+      row.metadata?.cycleDay === dayNumber &&
+      row.metadata?.cycleVersion === cycleVersion,
+  );
+}

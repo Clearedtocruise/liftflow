@@ -8,6 +8,7 @@ import {
   completeCurrentCycleDay,
   currentCycleDay,
   cycleWorkoutName,
+  needsCycleDayMaterialization,
   normalizeCurrentDay,
   normalizeCycle,
   projectedCycleDayNumber,
@@ -128,4 +129,66 @@ test('cycleWorkoutName does not repeat a label that already names the day (the r
   assert.equal(cycleWorkoutName('day 3', 3), 'day 3');
   assert.equal(cycleWorkoutName('Push', 1), 'Push — Day 1');
   assert.equal(cycleWorkoutName('Day 2 — Pull', 2), 'Day 2 — Pull');
+});
+
+test('a six-day program keeps running after the cycle ends', () => {
+  // The reported behaviour: submit a 6-day plan, work through it, and the program is over.
+  const days = Array.from({ length: 6 }, (_, i) => ({ label: `Day ${i + 1}` }));
+  let cycle = normalizeCycle({ lengthDays: 6, currentDay: 1, days });
+
+  const walked: number[] = [];
+  for (let i = 0; i < 13; i += 1) {
+    walked.push(cycle.currentDay);
+    cycle = completeCurrentCycleDay(cycle);
+  }
+
+  assert.deepEqual(walked, [1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6, 1], 'the plan restarts instead of running out');
+  assert.equal(cycle.days.length, 6, 'the submitted template is still there after two full laps');
+  assert.equal(cycle.days[3]?.label, 'Day 4');
+});
+
+test('the two-week lookahead projects the next lap of a six-day program', () => {
+  const cycle = { currentDay: 1, lengthDays: 6 };
+  const window = Array.from({ length: 14 }, (_, offset) => projectedCycleDayNumber(cycle, offset));
+  assert.deepEqual(window, [1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6, 1, 2], 'day 7 onward is the plan starting over');
+});
+
+test('a date whose planned row already matches the cycle is left alone', () => {
+  // Re-materializing mints a new planned_workout id, and the Workout tab holds the id it rendered.
+  assert.equal(
+    needsCycleDayMaterialization([{ status: 'planned', metadata: { cycleDay: 3, cycleVersion: 1 } }], 3, 1),
+    false,
+  );
+  assert.equal(
+    needsCycleDayMaterialization([{ status: 'planned', metadata: { cycleDay: 4, cycleVersion: 1 } }], 3, 1),
+    true,
+    'the cycle moved on, so the date has to be rewritten',
+  );
+  assert.equal(
+    needsCycleDayMaterialization([{ status: 'planned', metadata: { cycleDay: 3, cycleVersion: 1 } }], 3, 2),
+    true,
+    'an edited template is a new version and must replace the old day',
+  );
+  assert.equal(needsCycleDayMaterialization([], 1, 1), true, 'an empty date needs filling');
+});
+
+test('materialization never touches a day the lifter has already started or finished', () => {
+  for (const status of ['completed', 'active', 'in_progress', 'paused']) {
+    assert.equal(
+      needsCycleDayMaterialization([{ status, metadata: { cycleDay: 9, cycleVersion: 1 } }], 1, 1),
+      false,
+      `${status} is history or in flight — never rewrite it`,
+    );
+  }
+});
+
+test('a rest day with nothing scheduled is already correct', () => {
+  // Rest days write no row, so treating an empty date as "needs materializing" cost a write for
+  // every rest day on every pass — the reason topping the window up used to be expensive.
+  assert.equal(needsCycleDayMaterialization([], 2, 1, { isRest: true }), false);
+  assert.equal(
+    needsCycleDayMaterialization([{ status: 'planned', metadata: { cycleDay: 2, cycleVersion: 1 } }], 2, 1, { isRest: true }),
+    true,
+    'a leftover workout on what is now a rest day still has to be cleared',
+  );
 });

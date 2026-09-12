@@ -44,10 +44,13 @@ export function useVoiceRecognition(options: VoiceRecognitionOptions = {}) {
   const stopListeningRef = useRef<() => Promise<void>>(async () => undefined);
   /** Epoch ms until which the server has asked us to stop sending audio. */
   const cooldownUntilRef = useRef(0);
+  /** Whether metering crossed the speech threshold during the take now in progress. */
+  const heardSpeechRef = useRef(false);
 
   const [state, setState] = useState<VoiceCaptureState>('idle');
   const [finalTranscript, setFinalTranscript] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [isHearingSpeech, setIsHearingSpeech] = useState(false);
 
   const clearAutoStop = useCallback(() => {
     if (autoStopRef.current) {
@@ -83,6 +86,14 @@ export function useVoiceRecognition(options: VoiceRecognitionOptions = {}) {
       // A take with no samples is worth a message, not a round trip against the voice budget.
       if (!recorded || recorded.bytes.byteLength < MIN_TRANSCRIBE_BYTES) {
         setError('No audio was recorded. Tap the mic and speak your set.');
+        setState('error');
+        return;
+      }
+
+      // Silence reads as a broken feature, and the generic "didn't catch that" sends the lifter
+      // back to say it louder when the real problem is that the input never opened.
+      if (!heardSpeechRef.current) {
+        setError('The mic never picked up any sound. Check ONE MORE\u2019s microphone access in Settings.');
         setState('error');
         return;
       }
@@ -131,6 +142,8 @@ export function useVoiceRecognition(options: VoiceRecognitionOptions = {}) {
     }
 
     setError(null);
+    heardSpeechRef.current = false;
+    setIsHearingSpeech(false);
     try {
       if (!(await hasMicrophonePermission())) {
         setError(PERMISSION_DENIED);
@@ -141,6 +154,10 @@ export function useVoiceRecognition(options: VoiceRecognitionOptions = {}) {
       const { recording, dispose } = await startRecording({
         onEndOfSpeech: () => {
           void stopListeningRef.current();
+        },
+        onSpeechDetected: () => {
+          heardSpeechRef.current = true;
+          if (mountedRef.current) setIsHearingSpeech(true);
         },
       });
       if (!mountedRef.current) {
@@ -213,6 +230,8 @@ export function useVoiceRecognition(options: VoiceRecognitionOptions = {}) {
     state,
     isListening: state === 'recording',
     isTranscribing: state === 'transcribing',
+    /** Metering has crossed the speech threshold during this take — the mic is picking the user up. */
+    isHearingSpeech,
     /** Kept for compatibility: this pipeline has no partial results, only a final transcript. */
     interimTranscript: '',
     finalTranscript,
