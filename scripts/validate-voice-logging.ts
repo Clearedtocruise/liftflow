@@ -186,6 +186,16 @@ check(
   true,
 );
 
+console.log('\nA mic that hears nothing is told apart from a mic that misheard');
+check('the recorder reports the first frame of speech', recordAudio.includes('onSpeechDetected'), true);
+check('the hook tracks whether the take heard anything', voiceHook.includes('heardSpeechRef'), true);
+check(
+  'a silent take names the microphone rather than blaming the wording',
+  voiceHook.includes('The mic never picked up any sound.'),
+  true,
+);
+check('the caption confirms the mic is picking the lifter up', logger.includes('voice.isHearingSpeech'), true);
+
 console.log('\nAudio mode is set in one place, so two callers cannot fight over it');
 check('the recorder does not patch the mode itself', recordAudio.includes('setAudioModeAsync'), false);
 check('the coach does not patch the mode itself', coachSpeech.includes('setAudioModeAsync'), false);

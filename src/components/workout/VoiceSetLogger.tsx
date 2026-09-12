@@ -218,7 +218,7 @@ export function VoiceSetLogger({
         </AppText>
       ) : voice.state === 'recording' ? (
         <AppText variant="caption" color="accent" align="center">
-          Listening… speak your set, then pause
+          {voice.isHearingSpeech ? 'Hearing you… pause when you\u2019re done' : 'Listening… speak your set'}
         </AppText>
       ) : voice.state === 'transcribing' ? (
         <AppText variant="caption" color="accent" align="center">
