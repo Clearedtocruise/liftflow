@@ -139,7 +139,7 @@ check(
 );
 check(
   'a lift already in the session says so instead of silently doing nothing',
-  activeWorkoutSource.includes("Alert.alert(\n        'Already in this workout'"),
+  /Alert\.alert\(\s*'Already in this workout'/.test(activeWorkoutSource),
   true,
 );
 check(
@@ -149,7 +149,7 @@ check(
 );
 check(
   'mid-session plan repair no longer prunes exercises the user added',
-  /applySessionExercisePlan\([^)]*preserveUnplanned:\s*true/s.test(activeWorkoutSource),
+  /applySessionExercisePlan\([\s\S]{0,200}?preserveUnplanned:\s*true/.test(activeWorkoutSource),
   true,
 );
 check(
