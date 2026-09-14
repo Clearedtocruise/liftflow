@@ -203,6 +203,14 @@ export function ActiveWorkoutScreen({
   const repsRef = useRef(8);
   const durationSecondsRef = useRef(30);
   const distanceKmRef = useRef(0);
+  /**
+   * Whether the lifter has set a value on this exercise card themselves.
+   *
+   * Seeding runs again whenever this screen re-renders with new session objects, which happens
+   * after every logged set. Without this, a 60 second plank was pushed back to the plan's 30 the
+   * moment the session refreshed — either between sets or out from under the lifter mid-entry.
+   */
+  const inputsTouchedRef = useRef(false);
 
   const elapsedSeconds = useWorkoutElapsedSeconds(session.startedAt, session.status);
 
@@ -572,8 +580,34 @@ export function ActiveWorkoutScreen({
     [planMeta, currentExercise?.exercise?.name, coachLoggingMode],
   );
 
+  /**
+   * Entering a value claims the card. Seeding runs again on every session refresh, so without
+   * this a value typed while history was still loading was thrown away before Log Set.
+   */
+  const handleChangeWeight = useCallback((value: number) => {
+    inputsTouchedRef.current = true;
+    setWeightKg(value);
+  }, []);
+
+  const handleChangeReps = useCallback((value: number) => {
+    inputsTouchedRef.current = true;
+    setReps(value);
+  }, []);
+
+  const handleChangeDuration = useCallback((value: number) => {
+    inputsTouchedRef.current = true;
+    setDurationSeconds(value);
+  }, []);
+
+  const handleChangeDistance = useCallback((value: number) => {
+    inputsTouchedRef.current = true;
+    setDistanceKm(value);
+  }, []);
+
   const handleApplyCoachTarget = useCallback(
     (recommended: { weightKg: number; reps: number; durationSeconds?: number }) => {
+      // Taking the coach's number is the lifter choosing it, so later seeding must not undo it.
+      inputsTouchedRef.current = true;
       if (loggingMode === 'timed') {
         setDurationSeconds(recommended.durationSeconds ?? durationSeconds);
         setReps(1);
@@ -660,6 +694,10 @@ export function ActiveWorkoutScreen({
     watchPhoneBridge.clearPendingWatchReps();
     setWatchDraftWeightKg(null);
     watchPhoneBridge.clearPendingWatchWeightKg();
+
+    // A fresh card, so nothing the lifter typed on the previous one is theirs to keep. Anything
+    // seeded from here on is only a suggestion until they touch a field.
+    inputsTouchedRef.current = false;
 
     const sessionSets = currentExercise?.sets ?? [];
     const planReps = planExercises[currentIndex]?.repRange ?? currentExercise?.suggestedReps;
@@ -748,7 +786,6 @@ export function ActiveWorkoutScreen({
       loadingMethodOptions(currentExercise.exercise, currentExercise.exercise?.slug).length > 1
         ? ('any' as const)
         : mode;
-    setDurationSeconds(defaultTimedDurationSeconds(repRange));
 
     let cancelled = false;
     void workoutService
@@ -766,11 +803,23 @@ export function ActiveWorkoutScreen({
       );
       setLoadingMethod(inferredMethod);
 
+      // History arriving is never a reason to discard a value the lifter has already set. This
+      // request is in flight while the card is usable, and it re-runs on every session refresh.
+      if (inputsTouchedRef.current) return;
+
       if (mode === 'timed') {
         setReps(1);
-        if (last?.durationSeconds) {
-          setDurationSeconds(last.durationSeconds);
-        }
+        repsRef.current = 1;
+        // Same precedence as every other mode: what this session already logged for this
+        // exercise, then this movement's prior sessions, then the plan. A second plank set now
+        // opens on the 60 seconds just held rather than back at the plan's 30.
+        setDurationSeconds(
+          resolveExerciseInputSeed({
+            sessionSets: currentExercise.sets ?? [],
+            historyDurationSeconds: last?.durationSeconds,
+            planRepRange: repRange,
+          }).durationSeconds,
+        );
         return;
       }
       if (mode === 'cardio') {
@@ -1459,6 +1508,7 @@ export function ActiveWorkoutScreen({
         const nextExercise = sortedExercises[flowAction.immediateAdvanceIndex];
         const nextPlan = planExercises[flowAction.immediateAdvanceIndex];
         if (nextExercise) {
+          inputsTouchedRef.current = false;
           const seed = resolveExerciseInputSeed({
             sessionSets: nextExercise.sets ?? [],
             suggestedWeightKg: clampPlanWeightKgForExercise(
@@ -2083,10 +2133,10 @@ export function ActiveWorkoutScreen({
                     reps={reps}
                     durationSeconds={durationSeconds}
                     distanceKm={distanceKm}
-                    onChangeWeight={setWeightKg}
-                    onChangeReps={setReps}
-                    onChangeDuration={setDurationSeconds}
-                    onChangeDistance={setDistanceKm}
+                    onChangeWeight={handleChangeWeight}
+                    onChangeReps={handleChangeReps}
+                    onChangeDuration={handleChangeDuration}
+                    onChangeDistance={handleChangeDistance}
                     // Weight stays editable while paused (session or Tabata timer) so load can
                     // change mid-block. Logging/voice still require an active, unblocked window.
                     disabled={
