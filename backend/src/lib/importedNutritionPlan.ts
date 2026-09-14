@@ -12,7 +12,7 @@ import {
   type MealCleanupRow,
 } from './mealCleanup.js';
 import { persistNutritionGoals } from './nutritionGoals.js';
-import type { ImportedNutritionPlan } from './pdfProgramParse.js';
+import type { ImportedMeal, ImportedNutritionDay, ImportedNutritionPlan } from './pdfProgramParse.js';
 import { addDays } from './programTypes.js';
 import { cutPlanWeekWindow } from './personalPlans/cutPlanWeek.js';
 import { requireAdmin } from './supabase.js';
@@ -26,6 +26,87 @@ export type ApplyImportedNutritionResult = {
   mealsCleared: number;
   goalsUpdated: boolean;
 };
+
+const KNOWN_MEAL_TYPES: ImportedMeal['mealType'][] = [
+  'breakfast',
+  'lunch',
+  'dinner',
+  'snack',
+  'pre_workout',
+  'post_workout',
+];
+const DAYS_IN_WEEK = 7;
+const MAX_MEALS_PER_DAY = 12;
+const MAX_TEXT = 160;
+
+function clampNumber(value: unknown, max: number): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return undefined;
+  return Math.min(Math.round(value), max);
+}
+
+function clampText(value: unknown, max = MAX_TEXT): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed ? trimmed.slice(0, max) : undefined;
+}
+
+/**
+ * Bring an imported plan back inside the bounds the rest of the pipeline assumes.
+ *
+ * The commit endpoint accepts the plan the user reviewed and corrected on device, so `dayIndex` and
+ * every macro now arrive from the client rather than from this server's own parser. `dayIndex` is
+ * added directly to the week start, so an out-of-range one would scatter meals outside the week it
+ * is meant to fill.
+ */
+export function normalizeImportedNutritionPlan(plan: ImportedNutritionPlan): ImportedNutritionPlan {
+  const byDayIndex = new Map<number, ImportedNutritionDay>();
+
+  for (const day of plan.days ?? []) {
+    const dayIndex = Math.trunc(Number(day?.dayIndex));
+    if (!Number.isInteger(dayIndex) || dayIndex < 0 || dayIndex >= DAYS_IN_WEEK) continue;
+
+    const meals: ImportedMeal[] = [];
+    for (const meal of day.meals ?? []) {
+      const name = clampText(meal?.name, 120);
+      if (!name) continue;
+      const mealType = (clampText(meal?.mealType, 24) ?? '').toLowerCase();
+      meals.push({
+        mealType: KNOWN_MEAL_TYPES.find((known) => known === mealType) ?? 'snack',
+        name,
+        scheduledTime: clampText(meal?.scheduledTime, 16),
+        calories: clampNumber(meal?.calories, 5_000),
+        proteinG: clampNumber(meal?.proteinG, 1_000),
+        carbsG: clampNumber(meal?.carbsG, 1_000),
+        fatG: clampNumber(meal?.fatG, 1_000),
+        notes: clampText(meal?.notes, 400),
+      });
+      if (meals.length >= MAX_MEALS_PER_DAY) break;
+    }
+
+    const existing = byDayIndex.get(dayIndex);
+    if (existing) {
+      existing.meals = [...existing.meals, ...meals].slice(0, MAX_MEALS_PER_DAY);
+      existing.label = existing.label ?? clampText(day.label, 60);
+      continue;
+    }
+    byDayIndex.set(dayIndex, { dayIndex, label: clampText(day.label, 60), meals });
+  }
+
+  const goals = {
+    calories: clampNumber(plan.goals?.calories, 10_000),
+    proteinG: clampNumber(plan.goals?.proteinG, 2_000),
+    carbsG: clampNumber(plan.goals?.carbsG, 2_000),
+    fatG: clampNumber(plan.goals?.fatG, 2_000),
+    waterMl: clampNumber(plan.goals?.waterMl, 20_000),
+  };
+  const hasGoal = Object.values(goals).some((value) => value != null);
+
+  return {
+    name: clampText(plan.name, 80),
+    goals: hasGoal ? goals : undefined,
+    days: [...byDayIndex.values()].sort((a, b) => a.dayIndex - b.dayIndex),
+  };
+}
 
 function mealClientKey(date: string, mealType: string, name: string, index: number): string {
   const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40);
@@ -113,11 +194,14 @@ export async function loadStoredImportedNutrition(
 
 export async function applyImportedNutritionPlan(
   userId: string,
-  plan: ImportedNutritionPlan,
+  rawPlan: ImportedNutritionPlan,
   options?: { persistBlueprint?: boolean },
 ): Promise<ApplyImportedNutritionResult> {
   const db = requireAdmin();
   const persistBlueprint = options?.persistBlueprint !== false;
+  // Normalized here rather than at the route so the blueprint stored for weekly reload is the same
+  // bounded plan that gets written this week.
+  const plan = normalizeImportedNutritionPlan(rawPlan);
 
   const { data: profile } = await db
     .from('profiles')
