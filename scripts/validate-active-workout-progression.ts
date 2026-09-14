@@ -163,5 +163,43 @@ check(
   true,
 );
 
+console.log('\nSwapping an exercise is not undone by plan repair');
+// Reported as "tried to swap the 1st exercise, it skipped the one I swapped to and stayed on the
+// old one": the plan still named the original, the repair effect read that as a dropped lift, put
+// it back in the planned slot and pushed the chosen replacement to the end of the workout.
+check(
+  'the plan entry is rewritten to the lift the user chose',
+  activeWorkoutSource.includes('setSwappedPlanNames(') && activeWorkoutSource.includes('effectivePlanExercises'),
+  true,
+);
+check(
+  'the swap is recorded before the session refresh can trigger a repair',
+  /const replacedKey[\s\S]{0,600}setSwappedPlanNames\([\s\S]{0,200}await replaceExerciseByName/.test(activeWorkoutSource),
+  true,
+);
+check(
+  'repair reads the post-swap plan, not the original',
+  /applySessionExercisePlan\(session\.id, user\.id, effectivePlanExercises/.test(activeWorkoutSource),
+  true,
+);
+check(
+  'a session row standing in for a planned lift is not treated as a hole',
+  activeWorkoutSource.includes('if (unclaimed.length >= missing.length) return;'),
+  true,
+);
+
+// A swap leaves plan and session the same length with one name replaced; align must still hand out
+// exactly one entry per session exercise, and the replacement inherits the planned set target.
+const swapPlan: EditableWorkoutExercise[] = [
+  { id: 's0', name: 'Dumbbell Bench Press', sets: 5, repRange: '5' },
+  { id: 's1', name: 'Hammer Row', sets: 4, repRange: '10-12' },
+];
+const afterSwap = alignPlanExercisesToSession(swapPlan, [
+  sessionExercise('a', 'Dumbbell Bench Press', 0, 0),
+  sessionExercise('b', 'Hammer Row', 1, 0),
+]);
+check('a swapped-in lift inherits the planned set target', afterSwap[0]?.sets, 5);
+check('the swap does not displace the rest of the plan', afterSwap[1]?.sets, 4);
+
 console.log(`\n${failures === 0 ? 'Active workout progression: PASS' : `Active workout progression: ${failures} FAILURE(S)`}`);
 process.exit(failures === 0 ? 0 : 1);

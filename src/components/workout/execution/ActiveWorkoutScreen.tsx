@@ -216,12 +216,31 @@ export function ActiveWorkoutScreen({
   );
 
   /**
+   * Planned lifts the user swapped away this session: planned name → what they chose instead.
+   *
+   * A swap leaves the plan naming a lift the session no longer has, which the repair effect below
+   * read as a dropped lift — it re-inserted the original at the planned slot and pushed the
+   * replacement to the end of the workout, leaving the user on the exercise they had just swapped
+   * out. Rewriting the plan entry keeps the swap, and hands the replacement the prescription (sets,
+   * rep range, notes) of the lift it stands in for.
+   */
+  const [swappedPlanNames, setSwappedPlanNames] = useState<Record<string, string>>({});
+
+  const effectivePlanExercises = useMemo(() => {
+    if (Object.keys(swappedPlanNames).length === 0) return planExercisesProp;
+    return planExercisesProp.map((entry) => {
+      const replacement = swappedPlanNames[entry.name.trim().toLowerCase()];
+      return replacement ? { ...entry, name: replacement } : entry;
+    });
+  }, [planExercisesProp, swappedPlanNames]);
+
+  /**
    * Every index below (superset groups, circuit stations, set targets) is a session index, so the
    * plan has to be re-ordered to match the session exactly — one entry per session exercise.
    */
   const planExercises = useMemo(
-    () => alignPlanExercisesToSession(planExercisesProp, sortedExercises),
-    [planExercisesProp, sortedExercises],
+    () => alignPlanExercisesToSession(effectivePlanExercises, sortedExercises),
+    [effectivePlanExercises, sortedExercises],
   );
 
   /**
@@ -263,12 +282,19 @@ export function ActiveWorkoutScreen({
   const focusExerciseIdAfterRepairRef = useRef<string | null>(null);
   useEffect(() => {
     if (!user?.id) return;
-    if (planExercisesProp.length === 0) return;
-    const missing = missingPlanExerciseNames(
-      planExercisesProp.map((exercise) => exercise.name),
-      sortedExercises.map((exercise) => exercise.exercise?.name ?? ''),
-    );
+    if (effectivePlanExercises.length === 0) return;
+    const plannedNames = effectivePlanExercises.map((exercise) => exercise.name);
+    const sessionNames = sortedExercises.map((exercise) => exercise.exercise?.name ?? '');
+    const missing = missingPlanExerciseNames(plannedNames, sessionNames);
     if (missing.length === 0) return;
+
+    // A dropped lift leaves a hole: a planned name with no session row and nothing standing in its
+    // place. A swap or a manual add instead leaves a session row the plan does not name, paired
+    // with the planned name it displaced. Repairing on a bare name mismatch is what reverted a
+    // swap — it put the original back in the planned slot and pushed the chosen lift to the end.
+    const unclaimed = missingPlanExerciseNames(sessionNames, plannedNames);
+    if (unclaimed.length >= missing.length) return;
+
     const repairKey = `${session.id}:${missing.join('|')}`;
     if (attemptedPlanRepairRef.current === repairKey) return;
     attemptedPlanRepairRef.current = repairKey;
@@ -276,11 +302,11 @@ export function ActiveWorkoutScreen({
     void workoutService
       // Repair only fills holes. Pruning here deleted lifts the user had added by hand, because a
       // just-added exercise has no sets yet and so looks the same as plan drift.
-      .applySessionExercisePlan(session.id, user.id, planExercisesProp, { preserveUnplanned: true })
+      .applySessionExercisePlan(session.id, user.id, effectivePlanExercises, { preserveUnplanned: true })
       .then(async (result: { success: boolean }) => {
         if (result.success) await refreshSession();
       });
-  }, [user?.id, session.id, planExercisesProp, sortedExercises, refreshSession]);
+  }, [user?.id, session.id, effectivePlanExercises, sortedExercises, refreshSession]);
 
   useEffect(() => {
     const focusedId = focusExerciseIdAfterRepairRef.current;
@@ -1232,8 +1258,24 @@ export function ActiveWorkoutScreen({
 
   async function handleSwapExercise(exercise: Exercise) {
     if (!currentExercise) return;
+    const replacedKey = (currentExercise.exercise?.name ?? '').trim().toLowerCase();
+
+    // Recorded before the swap lands, not after: replacing refreshes the session, and the render
+    // in between would otherwise see the plan naming a lift the session no longer has and repair
+    // the swap away before this could be written.
+    if (replacedKey) {
+      setSwappedPlanNames((current) => ({ ...current, [replacedKey]: exercise.name }));
+    }
+
     const workoutExerciseId = await replaceExerciseByName(currentExercise.id, exercise.name);
     if (!workoutExerciseId) {
+      if (replacedKey) {
+        setSwappedPlanNames((current) => {
+          const next = { ...current };
+          delete next[replacedKey];
+          return next;
+        });
+      }
       Alert.alert('Could not swap exercise', 'Please try again.');
       return;
     }
@@ -2164,6 +2206,7 @@ export function ActiveWorkoutScreen({
                       activeExerciseName={currentExercise.exercise?.name}
                       lastWeightKg={completedSets[completedSets.length - 1]?.weight ?? (weightKg > 0 ? weightKg : undefined)}
                       lastReps={completedSets[completedSets.length - 1]?.reps ?? (reps > 0 ? reps : undefined)}
+                      requiresWeight={loggingMode === 'weighted'}
                       disabled={
                         isPaused ||
                         logging ||
