@@ -7,8 +7,10 @@
  */
 
 import { clampCycleLength, CYCLE_MAX_DAYS, CYCLE_MIN_DAYS } from '@/lib/programCycle';
+import { isIntervalExecutionMode, normalizeExecutionMode } from '@/lib/workoutExecutionMode';
 import type { CycleProgramInput } from '@/types/programCycle';
 import type { TemplateExercise } from '@/types/training';
+import type { WorkoutExecutionMode } from '@/types/workoutExecutionMode';
 
 export type DraftExercise = {
   name: string;
@@ -17,12 +19,30 @@ export type DraftExercise = {
   weightLbs?: number;
   notes?: string;
   exerciseId?: string;
+  /**
+   * Not editable in the UI, but carried so an edit does not silently reset them. A plan that
+   * prescribes three minutes between heavy singles used to come back out of the editor at the 90s
+   * default simply because the draft had nowhere to put the value.
+   */
+  restSeconds?: number;
+  executionMode?: WorkoutExecutionMode;
+  supersetGroupId?: string;
 };
 
 export type DraftDay = {
   label: string;
   isRest: boolean;
   exercises: DraftExercise[];
+  /**
+   * How the whole day is run. Drives the session: a day saved as `tabata` materializes with that
+   * mode on the planned workout, which is what puts the lifter on the interval timer instead of
+   * straight sets.
+   */
+  executionMode?: WorkoutExecutionMode;
+  /** A document's own interval prescription, when it gave one, in place of the mode defaults. */
+  intervalWorkSeconds?: number;
+  intervalRestSeconds?: number;
+  intervalRounds?: number;
 };
 
 export const CYCLE_LENGTH_MIN = CYCLE_MIN_DAYS;
@@ -131,6 +151,9 @@ function toTemplateExercise(exercise: DraftExercise): TemplateExercise {
     weightLbs: exercise.weightLbs && exercise.weightLbs > 0 ? exercise.weightLbs : undefined,
     notes: exercise.notes,
     exerciseId: exercise.exerciseId,
+    restSeconds: exercise.restSeconds,
+    executionMode: exercise.executionMode,
+    supersetGroupId: exercise.supersetGroupId,
   };
 }
 
@@ -141,16 +164,39 @@ export function draftToCycleInput(name: string | undefined, days: DraftDay[]): C
     days: days.map((day) => ({
       label: day.label?.trim() || undefined,
       isRest: day.isRest,
+      executionMode: day.isRest ? undefined : day.executionMode,
+      // Interval timings only mean something on a mode that runs on a clock.
+      ...(day.isRest || !isIntervalExecutionMode(day.executionMode)
+        ? {}
+        : {
+            intervalWorkSeconds: day.intervalWorkSeconds,
+            intervalRestSeconds: day.intervalRestSeconds,
+            intervalRounds: day.intervalRounds,
+          }),
       exercises: day.isRest ? [] : day.exercises.map(toTemplateExercise),
     })),
   };
 }
 
 /** Load an existing cycle (from the API) back into editable draft form. */
-export function cycleToDraft(days: Array<{ label?: string; isRest?: boolean; exercises?: TemplateExercise[] }>): DraftDay[] {
+export function cycleToDraft(
+  days: Array<{
+    label?: string;
+    isRest?: boolean;
+    exercises?: TemplateExercise[];
+    executionMode?: string;
+    intervalWorkSeconds?: number;
+    intervalRestSeconds?: number;
+    intervalRounds?: number;
+  }>,
+): DraftDay[] {
   return days.map((day, i) => ({
     label: day.label ?? defaultLabel(i, Boolean(day.isRest)),
     isRest: Boolean(day.isRest),
+    executionMode: day.executionMode ? normalizeExecutionMode(day.executionMode) : undefined,
+    intervalWorkSeconds: day.intervalWorkSeconds,
+    intervalRestSeconds: day.intervalRestSeconds,
+    intervalRounds: day.intervalRounds,
     exercises: (day.exercises ?? []).map((ex) => ({
       name: ex.name ?? ex.exerciseName ?? 'Exercise',
       sets: ex.sets ?? 3,
@@ -158,8 +204,37 @@ export function cycleToDraft(days: Array<{ label?: string; isRest?: boolean; exe
       weightLbs: ex.weightLbs,
       notes: ex.notes,
       exerciseId: ex.exerciseId,
+      restSeconds: ex.restSeconds,
+      executionMode: ex.executionMode,
+      supersetGroupId: ex.supersetGroupId,
     })),
   }));
+}
+
+export function setDayExecutionMode(
+  days: DraftDay[],
+  index: number,
+  mode: WorkoutExecutionMode | undefined,
+): DraftDay[] {
+  return days.map((day, i) => {
+    if (i !== index) return day;
+    if (!mode || mode === 'traditional') {
+      return { ...day, executionMode: undefined, intervalWorkSeconds: undefined, intervalRestSeconds: undefined, intervalRounds: undefined };
+    }
+    if (!isIntervalExecutionMode(mode)) {
+      return { ...day, executionMode: mode, intervalWorkSeconds: undefined, intervalRestSeconds: undefined, intervalRounds: undefined };
+    }
+    return { ...day, executionMode: mode };
+  });
+}
+
+export function setDayIntervalField(
+  days: DraftDay[],
+  index: number,
+  key: 'intervalWorkSeconds' | 'intervalRestSeconds' | 'intervalRounds',
+  value: number,
+): DraftDay[] {
+  return days.map((day, i) => (i === index ? { ...day, [key]: value > 0 ? value : undefined } : day));
 }
 
 export function isDraftValid(days: DraftDay[]): { valid: boolean; reason?: string } {
