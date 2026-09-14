@@ -1214,13 +1214,20 @@ export function ActiveWorkoutScreen({
 
   /** Jumps to a workout exercise by id, using session order so the index matches what is rendered. */
   async function focusWorkoutExercise(workoutExerciseId: string) {
+    // Same teardown as Next / Previous / Skip. Swapping and adding used to leave the rest clock of
+    // the lift being left still counting, which blocks Log Set and the mic on the exercise the
+    // lifter just chose — up to three minutes of a strength rest they never asked for. Done before
+    // the round trip below so a scheduled auto-advance cannot fire part way through it.
+    clearPendingExerciseAdvance();
+    cancelActiveRestTimer();
+    advanceGenerationRef.current += 1;
+
     const refreshed = await workoutService.getSession(session.id);
     if (!refreshed.success) return;
     const nextIndex = [...refreshed.data.exercises]
       .sort((a, b) => a.sortOrder - b.sortOrder)
       .findIndex((item) => item.id === workoutExerciseId);
     if (nextIndex < 0) return;
-    clearPendingExerciseAdvance();
     currentIndexRef.current = nextIndex;
     setCurrentIndex(nextIndex);
     setShowComplete(false);
@@ -1256,6 +1263,15 @@ export function ActiveWorkoutScreen({
     await focusWorkoutExercise(added.workoutExerciseId);
   }
 
+  function forgetPlanSwap(replacedKey: string) {
+    setSwappedPlanNames((current) => {
+      if (!(replacedKey in current)) return current;
+      const next = { ...current };
+      delete next[replacedKey];
+      return next;
+    });
+  }
+
   async function handleSwapExercise(exercise: Exercise) {
     if (!currentExercise) return;
     const replacedKey = (currentExercise.exercise?.name ?? '').trim().toLowerCase();
@@ -1269,16 +1285,19 @@ export function ActiveWorkoutScreen({
 
     const workoutExerciseId = await replaceExerciseByName(currentExercise.id, exercise.name);
     if (!workoutExerciseId) {
-      if (replacedKey) {
-        setSwappedPlanNames((current) => {
-          const next = { ...current };
-          delete next[replacedKey];
-          return next;
-        });
-      }
+      if (replacedKey) forgetPlanSwap(replacedKey);
       Alert.alert('Could not swap exercise', 'Please try again.');
       return;
     }
+
+    // Swapping a lift that already has sets keeps the original in the workout and slots the
+    // replacement in after it, so the original still belongs to its plan entry — only an in-place
+    // swap actually vacates one. Rewriting it either way would cost the completed lift its
+    // prescription and leave it showing a default set target.
+    if (replacedKey && workoutExerciseId !== currentExercise.id) {
+      forgetPlanSwap(replacedKey);
+    }
+
     await focusWorkoutExercise(workoutExerciseId);
   }
 

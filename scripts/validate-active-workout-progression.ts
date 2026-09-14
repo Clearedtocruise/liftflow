@@ -188,6 +188,13 @@ check(
   true,
 );
 
+check(
+  'a swap that keeps the original lift leaves its plan entry alone',
+  activeWorkoutSource.includes('workoutExerciseId !== currentExercise.id') &&
+    activeWorkoutSource.includes('forgetPlanSwap('),
+  true,
+);
+
 // A swap leaves plan and session the same length with one name replaced; align must still hand out
 // exactly one entry per session exercise, and the replacement inherits the planned set target.
 const swapPlan: EditableWorkoutExercise[] = [
@@ -200,6 +207,30 @@ const afterSwap = alignPlanExercisesToSession(swapPlan, [
 ]);
 check('a swapped-in lift inherits the planned set target', afterSwap[0]?.sets, 5);
 check('the swap does not displace the rest of the plan', afterSwap[1]?.sets, 4);
+
+console.log('\nSwaps and adds tear down the rest clock they are leaving behind');
+// Next / Previous / Skip all cancel a still-counting rest before moving. focusWorkoutExercise —
+// the path a swap and an add both take — did not, so the lifter landed on the exercise they had
+// just chosen with the previous lift's rest still running, which blocks Log Set and the mic for
+// up to a full strength rest.
+const focusBody =
+  /async function focusWorkoutExercise\([\s\S]*?\n  \}/.exec(activeWorkoutSource)?.[0] ?? '';
+check('focusWorkoutExercise exists', focusBody.length > 0, true);
+check('it clears a pending auto-advance', focusBody.includes('clearPendingExerciseAdvance()'), true);
+check('it cancels a still-counting rest', focusBody.includes('cancelActiveRestTimer()'), true);
+check('it invalidates a scheduled advance', focusBody.includes('advanceGenerationRef.current += 1'), true);
+check(
+  'the teardown runs before the session round trip, not after it',
+  focusBody.indexOf('cancelActiveRestTimer()') < focusBody.indexOf('await workoutService.getSession'),
+  true,
+);
+// An add that lands behind the current card leaves the lifter where they are, so their rest must
+// keep running — only an add that actually moves them goes through focusWorkoutExercise.
+check(
+  'an add made mid-exercise does not move the lifter, so its rest is untouched',
+  /if \(wasMidExercise\)[\s\S]{0,400}return;[\s\S]{0,200}await focusWorkoutExercise/.test(activeWorkoutSource),
+  true,
+);
 
 console.log(`\n${failures === 0 ? 'Active workout progression: PASS' : `Active workout progression: ${failures} FAILURE(S)`}`);
 process.exit(failures === 0 ? 0 : 1);
