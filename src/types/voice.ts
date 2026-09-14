@@ -56,6 +56,8 @@ export type ParsedVoiceCommandExtended = Omit<ParsedVoiceCommand, 'intent'> & {
   ambiguousOrder?: boolean;
   /** The utterance described more sets than were parsed. */
   multipleSetsHeard?: boolean;
+  /** A hold heard as a length of time, e.g. "plank for 60 seconds". */
+  durationSeconds?: number;
   validationReason?: string;
 };
 

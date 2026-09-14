@@ -14,6 +14,8 @@ export type ConfirmedVoiceSet = {
   /** Already converted out of the display unit — the logging path stores kilograms. */
   weightKg?: number;
   reps?: number;
+  /** Set for a hold, where the time held is the effort rather than a rep count. */
+  durationSeconds?: number;
 };
 
 type VoiceConfirmModalProps = {
@@ -62,6 +64,7 @@ export function VoiceConfirmModal({
   const [exercise, setExercise] = useState('');
   const [weight, setWeight] = useState('');
   const [reps, setReps] = useState('');
+  const [duration, setDuration] = useState('');
 
   // Reseed whenever a new parse opens the sheet, so an edit from a previous attempt is not reused.
   useEffect(() => {
@@ -74,19 +77,27 @@ export function VoiceConfirmModal({
     setExercise(seededExercise);
     setWeight(formatWorkoutWeightForInput(weightKg, units.preferredWeightUnit));
     setReps(parsed?.reps != null ? String(parsed.reps) : '');
+    setDuration(parsed?.durationSeconds != null ? String(parsed.durationSeconds) : '');
   }, [visible, parsed, weightKg, units.preferredWeightUnit, activeExerciseName]);
 
   const isSetIntent = !parsed?.intent || parsed.intent === 'log_set';
+  const isHold = parsed?.durationSeconds != null;
   const resolvedExercise = exercise.trim() || activeExerciseName?.trim() || '';
-  const canSave = isSetIntent && resolvedExercise.length > 0 && reps.trim().length > 0;
+  // A hold is saved on its time, so an empty rep box must not block it.
+  const canSave =
+    isSetIntent &&
+    resolvedExercise.length > 0 &&
+    (isHold ? parseInt(duration, 10) > 0 : reps.trim().length > 0);
 
   function handleConfirm() {
     if (!canSave || saving) return;
     const weightText = sanitizeWeightInput(weight);
+    const heldSeconds = parseInt(duration, 10);
     void onConfirm({
       exercise: resolvedExercise,
       weightKg: weightText ? units.parseWeight(weightText) : undefined,
-      reps: reps.trim() ? parseInt(reps, 10) : undefined,
+      reps: isHold ? 1 : reps.trim() ? parseInt(reps, 10) : undefined,
+      durationSeconds: isHold && heldSeconds > 0 ? heldSeconds : undefined,
     });
   }
 
@@ -144,33 +155,49 @@ export function VoiceConfirmModal({
                 />
               </View>
 
-              <View style={styles.inputRow}>
+              {isHold ? (
                 <View style={styles.field}>
                   <AppText variant="caption" color="textSecondary">
-                    Weight ({units.weightLabel})
-                  </AppText>
-                  <TextInput
-                    style={styles.input}
-                    keyboardType="decimal-pad"
-                    value={weight}
-                    onChangeText={(text) => setWeight(sanitizeWeightInput(text))}
-                    placeholder="0"
-                    placeholderTextColor={LiftFlowColors.textTertiary}
-                  />
-                </View>
-                <View style={styles.field}>
-                  <AppText variant="caption" color="textSecondary">
-                    Reps
+                    Duration (sec)
                   </AppText>
                   <TextInput
                     style={styles.input}
                     keyboardType="number-pad"
-                    value={reps}
-                    onChangeText={setReps}
+                    value={duration}
+                    onChangeText={(text) => setDuration(text.replace(/[^\d]/g, ''))}
+                    placeholder="60"
                     placeholderTextColor={LiftFlowColors.textTertiary}
                   />
                 </View>
-              </View>
+              ) : (
+                <View style={styles.inputRow}>
+                  <View style={styles.field}>
+                    <AppText variant="caption" color="textSecondary">
+                      Weight ({units.weightLabel})
+                    </AppText>
+                    <TextInput
+                      style={styles.input}
+                      keyboardType="decimal-pad"
+                      value={weight}
+                      onChangeText={(text) => setWeight(sanitizeWeightInput(text))}
+                      placeholder="0"
+                      placeholderTextColor={LiftFlowColors.textTertiary}
+                    />
+                  </View>
+                  <View style={styles.field}>
+                    <AppText variant="caption" color="textSecondary">
+                      Reps
+                    </AppText>
+                    <TextInput
+                      style={styles.input}
+                      keyboardType="number-pad"
+                      value={reps}
+                      onChangeText={setReps}
+                      placeholderTextColor={LiftFlowColors.textTertiary}
+                    />
+                  </View>
+                </View>
+              )}
             </>
           )}
 

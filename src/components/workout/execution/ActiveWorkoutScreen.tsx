@@ -1593,23 +1593,38 @@ export function ActiveWorkoutScreen({
         }
       }
 
+      const activeMode = getExerciseLoggingMode(
+        activeExercise?.exercise,
+        planExercises[currentIndexRef.current]?.repRange ?? activeExercise?.suggestedReps,
+        activeName,
+      );
+      // On a hold, a bare number is the time held. "Plank 60" means a minute, not 60 reps, and
+      // used to commit whatever the duration stepper was showing instead.
+      const isHold = activeMode === 'timed' || activeMode === 'cardio';
+      const durationSeconds =
+        payload.durationSeconds ?? (isHold && payload.reps != null ? payload.reps : undefined);
+
       if (payload.weight != null) {
         setWeightKg(payload.weight);
       }
-      if (payload.reps != null) {
+      if (durationSeconds != null) {
+        inputsTouchedRef.current = true;
+        setDurationSeconds(durationSeconds);
+      } else if (payload.reps != null) {
         setReps(payload.reps);
       }
 
       const result = await commitSetLog({
         weightKg: payload.weight,
-        reps: payload.reps,
+        reps: durationSeconds != null ? 1 : payload.reps,
+        durationSeconds,
       });
       // `commitSetLog` already explains rest timers, paused sessions and completed set targets.
       // Dropping that to a boolean is what made every voice failure read the same.
       if (!result.ok) return { ok: false, reason: result.error };
       return { ok: true, loggedAs: activeName };
     },
-    [commitSetLog, sortedExercises],
+    [commitSetLog, sortedExercises, planExercises],
   );
 
   const handleLogSetRef = useRef(handleLogSet);

@@ -17,6 +17,8 @@ export type VoiceSetLogPayload = {
   exerciseName: string;
   weight?: number;
   reps?: number;
+  /** A hold said as a length of time, e.g. "plank for 60 seconds". */
+  durationSeconds?: number;
 };
 
 export type VoiceSetLogResult = {
@@ -71,8 +73,14 @@ export function VoiceSetLogger({
       weightKg: number | undefined,
       reps: number | undefined,
       command?: ParsedVoiceCommandExtended,
+      durationSeconds?: number,
     ): Promise<{ ok: true } | { ok: false; reason: string }> => {
-      const outcome = await onLogSet({ exerciseName: exercise, weight: weightKg, reps });
+      const outcome = await onLogSet({
+        exerciseName: exercise,
+        weight: weightKg,
+        reps,
+        durationSeconds,
+      });
       const result: VoiceSetLogResult = typeof outcome === 'boolean' ? { ok: outcome } : outcome;
 
       if (!result.ok) {
@@ -128,9 +136,14 @@ export function VoiceSetLogger({
       const isSetIntent = !parsed.intent || parsed.intent === 'log_set';
       const exerciseName = parsed.exercise?.trim() || activeExerciseName?.trim() || '';
 
+      // A hold is complete once a duration is heard — there is no weight to wait for, and
+      // "plank for 60 seconds" should not need confirming any more than "bench 225 for 8".
+      const isHold = parsed.durationSeconds != null;
+      const missingValues = isHold ? false : parsed.reps == null || weightKg == null;
+
       // Anything other than a set — and anything the hardened parser flagged — goes to the sheet
       // rather than straight to the log.
-      if (!isSetIntent || requiresConfirmation || !exerciseName || parsed.reps == null || weightKg == null) {
+      if (!isSetIntent || requiresConfirmation || !exerciseName || missingValues) {
         setPending({
           parsed: { ...parsed, exercise: exerciseName || parsed.exercise },
           transcript,
@@ -140,7 +153,7 @@ export function VoiceSetLogger({
         return;
       }
 
-      await logParsedSet(exerciseName, weightKg, parsed.reps, parsed);
+      await logParsedSet(exerciseName, weightKg, parsed.reps, parsed, parsed.durationSeconds);
     },
     [userId, activeExerciseName, lastWeightKg, lastReps, units.preferredWeightUnit, logParsedSet],
   );
@@ -155,7 +168,13 @@ export function VoiceSetLogger({
     setSaving(true);
     setSaveError(null);
     const exerciseName = set.exercise.trim() || activeExerciseName?.trim() || '';
-    const result = await logParsedSet(exerciseName, set.weightKg, set.reps, pending?.parsed);
+    const result = await logParsedSet(
+      exerciseName,
+      set.weightKg,
+      set.reps,
+      pending?.parsed,
+      set.durationSeconds,
+    );
     setSaving(false);
     if (result.ok) {
       setPending(null);
