@@ -1,10 +1,11 @@
 import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { Card } from '@/components/layout/Card';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
+import { CycleDayEditor } from '@/components/program/CycleDayEditor';
 import { AppText } from '@/components/ui/AppText';
 import { ExercisePickerModal } from '@/components/workout/execution/ExercisePickerModal';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
@@ -145,77 +146,17 @@ export default function CustomProgramScreen() {
       </Card>
 
       {days.map((day, dayIndex) => (
-        <Card key={dayIndex} style={styles.dayCard}>
-          <View style={styles.dayHeader}>
-            <AppText variant="label" color="accent">
-              Day {dayIndex + 1}
-            </AppText>
-            <Pressable
-              accessibilityRole="button"
-              style={[styles.restToggle, day.isRest && styles.restToggleActive]}
-              onPress={() => setDays((d) => toggleRestDay(d, dayIndex))}>
-              <AppText variant="caption" color={day.isRest ? 'accent' : 'textSecondary'}>
-                {day.isRest ? 'Rest day' : 'Workout day'}
-              </AppText>
-            </Pressable>
-          </View>
-
-          {day.isRest ? (
-            <AppText variant="body" color="textSecondary">
-              Rest — no workout scheduled.
-            </AppText>
-          ) : (
-            <>
-              <TextInput
-                style={styles.dayLabel}
-                placeholder={`Day ${dayIndex + 1} name (e.g. Push)`}
-                placeholderTextColor={LiftFlowColors.textTertiary}
-                value={day.label}
-                onChangeText={(text) => setDays((d) => setDayLabel(d, dayIndex, text))}
-              />
-
-              {day.exercises.map((exercise, exIndex) => (
-                <View key={exIndex} style={styles.exerciseRow}>
-                  <View style={styles.exerciseMain}>
-                    <AppText variant="bodyBold">{exercise.name}</AppText>
-                    <View style={styles.exerciseFields}>
-                      <NumberField
-                        label="Sets"
-                        value={exercise.sets}
-                        onChange={(v) => setDays((d) => updateExerciseField(d, dayIndex, exIndex, { sets: v }))}
-                      />
-                      <TextField
-                        label="Reps"
-                        value={exercise.reps}
-                        onChange={(v) => setDays((d) => updateExerciseField(d, dayIndex, exIndex, { reps: v }))}
-                      />
-                      <NumberField
-                        label="Weight (lb)"
-                        value={exercise.weightLbs ?? 0}
-                        onChange={(v) => setDays((d) => updateExerciseField(d, dayIndex, exIndex, { weightLbs: v }))}
-                      />
-                    </View>
-                  </View>
-                  <View style={styles.exerciseActions}>
-                    <TinyButton label="↑" disabled={exIndex === 0} onPress={() => setDays((d) => moveExercise(d, dayIndex, exIndex, exIndex - 1))} />
-                    <TinyButton
-                      label="↓"
-                      disabled={exIndex === day.exercises.length - 1}
-                      onPress={() => setDays((d) => moveExercise(d, dayIndex, exIndex, exIndex + 1))}
-                    />
-                    <TinyButton label="✕" onPress={() => setDays((d) => removeExercise(d, dayIndex, exIndex))} />
-                  </View>
-                </View>
-              ))}
-
-              <Pressable style={styles.addExercise} onPress={() => setPicker({ dayIndex })}>
-                <AppText variant="bodyBold" color="accent">
-                  + Add exercise
-                </AppText>
-              </Pressable>
-            </>
-          )}
-        </Card>
+        <CycleDayEditor
+          key={dayIndex}
+          day={day}
+          dayIndex={dayIndex}
+          onToggleRest={() => setDays((d) => toggleRestDay(d, dayIndex))}
+          onLabelChange={(text) => setDays((d) => setDayLabel(d, dayIndex, text))}
+          onExerciseField={(exIndex, patch) => setDays((d) => updateExerciseField(d, dayIndex, exIndex, patch))}
+          onMoveExercise={(exIndex, to) => setDays((d) => moveExercise(d, dayIndex, exIndex, to))}
+          onRemoveExercise={(exIndex) => setDays((d) => removeExercise(d, dayIndex, exIndex))}
+          onAddExercise={() => setPicker({ dayIndex })}
+        />
       ))}
 
       {!validation.valid ? (
@@ -258,56 +199,6 @@ function Stepper({ label, onPress, disabled }: { label: string; onPress: () => v
   );
 }
 
-function TinyButton({ label, onPress, disabled }: { label: string; onPress: () => void; disabled?: boolean }) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      hitSlop={8}
-      style={[styles.tinyButton, disabled && styles.tinyButtonDisabled]}
-      disabled={disabled}
-      onPress={onPress}>
-      <AppText variant="bodyBold" color={disabled ? 'textTertiary' : 'textSecondary'}>
-        {label}
-      </AppText>
-    </Pressable>
-  );
-}
-
-function NumberField({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
-  return (
-    <View style={styles.field}>
-      <AppText variant="caption" color="textTertiary">
-        {label}
-      </AppText>
-      <TextInput
-        style={styles.fieldInput}
-        keyboardType="number-pad"
-        value={value > 0 ? String(value) : ''}
-        placeholder="0"
-        placeholderTextColor={LiftFlowColors.textTertiary}
-        onChangeText={(text) => onChange(parseInt(text.replace(/[^0-9]/g, ''), 10) || 0)}
-      />
-    </View>
-  );
-}
-
-function TextField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
-  return (
-    <View style={styles.field}>
-      <AppText variant="caption" color="textTertiary">
-        {label}
-      </AppText>
-      <TextInput
-        style={styles.fieldInput}
-        value={value}
-        placeholder="8-10"
-        placeholderTextColor={LiftFlowColors.textTertiary}
-        onChangeText={onChange}
-      />
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   content: { gap: Spacing.md, paddingBottom: Spacing.huge },
   gate: { gap: Spacing.md, alignItems: 'flex-start' },
@@ -333,58 +224,4 @@ const styles = StyleSheet.create({
     backgroundColor: LiftFlowColors.surfaceElevated,
   },
   stepperDisabled: { opacity: 0.4 },
-  dayCard: { gap: Spacing.sm },
-  dayHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  restToggle: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs,
-    borderRadius: Radius.full,
-    borderWidth: 1,
-    borderColor: LiftFlowColors.border,
-  },
-  restToggleActive: { borderColor: LiftFlowColors.accentMuted, backgroundColor: LiftFlowColors.accentGlow },
-  dayLabel: {
-    backgroundColor: LiftFlowColors.surface,
-    borderRadius: Radius.md,
-    padding: Spacing.sm,
-    color: LiftFlowColors.textPrimary,
-    borderWidth: 1,
-    borderColor: LiftFlowColors.border,
-  },
-  exerciseRow: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
-    padding: Spacing.sm,
-    borderRadius: Radius.md,
-    backgroundColor: LiftFlowColors.surface,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: LiftFlowColors.border,
-  },
-  exerciseMain: { flex: 1, gap: Spacing.xs },
-  exerciseFields: { flexDirection: 'row', gap: Spacing.sm },
-  exerciseActions: { justifyContent: 'space-between', alignItems: 'center' },
-  field: { flex: 1, gap: 2 },
-  fieldInput: {
-    backgroundColor: LiftFlowColors.surfaceElevated,
-    borderRadius: Radius.sm,
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: Spacing.xs,
-    color: LiftFlowColors.textPrimary,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: LiftFlowColors.border,
-  },
-  tinyButton: {
-    width: 32,
-    height: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  tinyButtonDisabled: { opacity: 0.35 },
-  addExercise: {
-    paddingVertical: Spacing.sm,
-    alignItems: 'center',
-    borderRadius: Radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: LiftFlowColors.accentMuted,
-  },
 });
