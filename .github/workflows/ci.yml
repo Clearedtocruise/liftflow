@@ -138,6 +138,7 @@ jobs:
             validate:exercise-guide
             validate:voice-logging
             validate:workout-plan-edit-save
+            validate:pdf-import-review
             validate:active-workout-progression
             validate:superset-logging
             validate:sprint6-smart-logging
