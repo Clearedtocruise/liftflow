@@ -104,7 +104,7 @@ export function useVoiceRecognition(options: VoiceRecognitionOptions = {}) {
       });
       // A take with no samples is worth a message, not a round trip against the voice budget.
       if (!recorded || recorded.bytes.byteLength < MIN_TRANSCRIBE_BYTES) {
-        setError(MIC_SILENT);
+        setError('No audio was recorded. Tap the mic and speak your set.');
         setState('error');
         return;
       }

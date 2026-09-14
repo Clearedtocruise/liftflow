@@ -62,10 +62,10 @@ export function reduceEndOfSpeech(
   config: EndOfSpeechConfig = DEFAULT_END_OF_SPEECH,
 ): EndOfSpeechDecision {
   const elapsed = nowMs - state.startedAtMs;
-  const hasLevel = meteringDb != null && Number.isFinite(meteringDb);
-  let next: EndOfSpeechState = state.meteringSeen || !hasLevel ? state : { ...state, meteringSeen: true };
+  const level = meteringDb != null && Number.isFinite(meteringDb) ? meteringDb : null;
+  let next: EndOfSpeechState = state.meteringSeen || level == null ? state : { ...state, meteringSeen: true };
 
-  if (hasLevel && (meteringDb as number) >= config.speechThresholdDb) {
+  if (level != null && level >= config.speechThresholdDb) {
     next = {
       ...next,
       speechHeard: true,
