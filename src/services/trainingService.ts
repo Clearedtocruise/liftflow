@@ -8,6 +8,7 @@ import { getAccessToken, supabase } from '@/supabase/client';
 /** Avoid hammering full program rebuilds when Home/Workout remount. */
 let lastRegenCheckAt = 0;
 const REGEN_CHECK_COOLDOWN_MS = 60_000;
+
 import type {
     CreateProgramPayload,
     PlannedWorkout,
@@ -19,6 +20,18 @@ import type {
     WorkoutTemplate,
 } from '@/types';
 import type { CycleProgramInput, PreviousPerformance } from '@/types/programCycle';
+
+/** The plan pack on the user's active program, or null when they have none. */
+async function activeProgramPlanPack(userId: string): Promise<string | null> {
+  const { data } = await supabase
+    .from('training_programs')
+    .select('metadata')
+    .eq('user_id', userId)
+    .eq('is_active', true)
+    .maybeSingle();
+  const metadata = (data?.metadata ?? null) as { planPack?: string } | null;
+  return metadata?.planPack ?? null;
+}
 
 type PlannedRow = {
   id: string;
@@ -401,7 +414,13 @@ export const trainingService: ITrainingService = {
       // Custom day-based cycles own their own scheduling — reconcile the cycle day and materialize
       // today's workout instead of running the calendar-week generator (which would clobber it).
       const { CUSTOM_CYCLE_PLAN_PACK } = await import('@/lib/programCycle');
-      if (coachProfile?.planPack === CUSTOM_CYCLE_PLAN_PACK) {
+      // The profile flag is a marker, not the program itself: any later write to coachProfile that
+      // drops it would strand an imported cycle with nothing keeping its days on the calendar. The
+      // active program is the source of truth, so fall back to it.
+      const hasCycleProgram =
+        coachProfile?.planPack === CUSTOM_CYCLE_PLAN_PACK ||
+        (await activeProgramPlanPack(userId)) === CUSTOM_CYCLE_PLAN_PACK;
+      if (hasCycleProgram) {
         lastRegenCheckAt = now;
         const ensured = await this.ensureProgramCycle(timeZone);
         return ok({ regenerated: ensured.success && ensured.data != null });

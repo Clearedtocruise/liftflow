@@ -7,6 +7,11 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import {
+  createEndOfSpeechState,
+  DEFAULT_END_OF_SPEECH,
+  reduceEndOfSpeech,
+} from '@/lib/voice/endOfSpeech';
 import { matchSpokenExercise } from '@/lib/voice/matchSpokenExercise';
 
 let failures = 0;
@@ -172,6 +177,80 @@ check('speakCue releases when speech finishes', speakCue.includes('onDone: finis
 check('rest complete uses speakCue (not bare Speech.speak)', restTimer.includes("speakCue('Rest complete. Ready for your next set.'"), true);
 check('rest complete does not call bare Speech.speak', restTimer.includes('Speech.speak'), false);
 check('voice confirmations use speakCue', voiceFeedback.includes('speakCue(message'), true);
+
+console.log('\nThe lifter can read what the microphone actually heard');
+// "Voice still not working — I'd like to read what it's hearing from me": the transcript only ever
+// appeared inside the confirm sheet, so a failed parse showed an error with no way to tell whether
+// the mic, the transcription or the wording was at fault.
+check('the transcript is shown after the attempt finishes', logger.includes('Heard: &quot;{heard}&quot;'), true);
+check('the transcript is captured before parsing can reject it', logger.includes('setHeard(transcript.trim() || null)'), true);
+check('a new capture clears the previous transcript', logger.includes('setHeard(null)'), true);
+check(
+  'a failed parse opens the sheet with what was heard instead of dead-ending on a caption',
+  /if \(!result\.success\) \{[\s\S]{0,400}setPending\(\{[\s\S]{0,200}reason: result\.error/.test(logger),
+  true,
+);
+
+console.log('\nA mic that hears nothing is told apart from a mic that misheard');
+check('the recorder reports the first frame of speech', recordAudio.includes('onSpeechDetected'), true);
+check('the hook tracks whether the take heard anything', voiceHook.includes('heardSpeechRef'), true);
+check(
+  'a silent take names the microphone rather than blaming the wording',
+  voiceHook.includes('The mic never picked up any sound.'),
+  true,
+);
+check('the caption confirms the mic is picking the lifter up', logger.includes('voice.isHearingSpeech'), true);
+check(
+  'a failed take reports what it captured so the report is diagnosable',
+  voiceHook.includes('setLastCapture(') && logger.includes('voice.lastCapture'),
+  true,
+);
+
+console.log('\nMetering never decides whether audio is worth transcribing');
+// Several devices report no metering at all. Gating the upload on it turned every take on those
+// phones into "the mic heard nothing" when the recording was fine — voice simply never worked.
+check(
+  'a recorded take is transcribed before any speech-detection verdict',
+  voiceHook.indexOf('api.transcribeVoice') < voiceHook.indexOf('heardSpeechRef.current ?'),
+  true,
+);
+check(
+  'speech detection only chooses the wording for an empty transcript',
+  /if \(!transcript\.trim\(\)\)[\s\S]{0,200}heardSpeechRef\.current \?/.test(voiceHook),
+  true,
+);
+check(
+  'a device with no metering still closes the take instead of holding the mic to the hard cap',
+  endOfSpeech.includes('noMeteringStopMs') && endOfSpeech.includes("reason: 'no_metering'"),
+  true,
+);
+
+const noMetering = reduceEndOfSpeech(
+  reduceEndOfSpeech(createEndOfSpeechState(0), undefined, 500, DEFAULT_END_OF_SPEECH).state,
+  undefined,
+  DEFAULT_END_OF_SPEECH.noMeteringStopMs,
+  DEFAULT_END_OF_SPEECH,
+);
+check('the fallback stop fires without a single metering reading', noMetering.shouldStop, true);
+// Read from source rather than imported: recordAudio pulls in expo-av, which will not load here.
+const hardCapMs = Number(/MAX_RECORDING_MS = ([\d_]+)/.exec(recordAudio)?.[1].replace(/_/g, '') ?? 0);
+check('the fallback stop lands well inside the hard cap', DEFAULT_END_OF_SPEECH.noMeteringStopMs < hardCapMs, true);
+
+console.log('\nA bodyweight lift can be logged by voice');
+// Pull-ups and hanging leg raises never have a weight, so treating a missing one as "needs
+// confirming" meant every bodyweight utterance stopped at the sheet waiting for a number that
+// does not exist — voice never logged one on its own.
+check('the logger is told whether the lift takes a load', logger.includes('requiresWeight'), true);
+check(
+  'a missing weight only forces confirmation when the lift takes one',
+  /requiresWeight && weightKg == null/.test(logger),
+  true,
+);
+check(
+  'the active workout passes the real logging mode through',
+  activeWorkout.includes("requiresWeight={loggingMode === 'weighted'}"),
+  true,
+);
 
 console.log('\nAudio mode is set in one place, so two callers cannot fight over it');
 check('the recorder does not patch the mode itself', recordAudio.includes('setAudioModeAsync'), false);

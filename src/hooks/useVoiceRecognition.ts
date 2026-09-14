@@ -23,6 +23,17 @@ import type { VoiceInputMode } from '@/types/voice';
 /** The real states of a capture attempt — the UI shows one hint per state instead of guessing. */
 export type VoiceCaptureState = 'idle' | 'recording' | 'transcribing' | 'error';
 
+/**
+ * What the last take actually captured. A failed voice attempt is otherwise invisible from the
+ * outside: "it doesn't work" covers a mic that never opened, a recorder that produced no samples
+ * and speech that transcribed to nothing, and those need different fixes.
+ */
+export type VoiceCaptureReport = {
+  seconds: number;
+  kilobytes: number;
+  heardSpeech: boolean;
+};
+
 export type VoiceRecognitionOptions = {
   enabled?: boolean;
   inputMode?: VoiceInputMode;
@@ -31,6 +42,7 @@ export type VoiceRecognitionOptions = {
 };
 
 const PERMISSION_DENIED = 'Microphone access is off. Enable it in Settings to log sets by voice.';
+const MIC_SILENT = 'The mic never picked up any sound. Check ONE MORE\u2019s microphone access in Settings.';
 
 export function useVoiceRecognition(options: VoiceRecognitionOptions = {}) {
   const { enabled = true, inputMode = 'tap_toggle', onFinalTranscript } = options;
@@ -44,10 +56,15 @@ export function useVoiceRecognition(options: VoiceRecognitionOptions = {}) {
   const stopListeningRef = useRef<() => Promise<void>>(async () => undefined);
   /** Epoch ms until which the server has asked us to stop sending audio. */
   const cooldownUntilRef = useRef(0);
+  /** Whether metering crossed the speech threshold during the take now in progress. */
+  const heardSpeechRef = useRef(false);
+  const startedAtRef = useRef(0);
 
   const [state, setState] = useState<VoiceCaptureState>('idle');
   const [finalTranscript, setFinalTranscript] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [isHearingSpeech, setIsHearingSpeech] = useState(false);
+  const [lastCapture, setLastCapture] = useState<VoiceCaptureReport | null>(null);
 
   const clearAutoStop = useCallback(() => {
     if (autoStopRef.current) {
@@ -80,6 +97,11 @@ export function useVoiceRecognition(options: VoiceRecognitionOptions = {}) {
     setState('transcribing');
     try {
       const recorded = await stopRecording(active);
+      setLastCapture({
+        seconds: Math.round((Date.now() - startedAtRef.current) / 100) / 10,
+        kilobytes: Math.round(((recorded?.bytes.byteLength ?? 0) / 1024) * 10) / 10,
+        heardSpeech: heardSpeechRef.current,
+      });
       // A take with no samples is worth a message, not a round trip against the voice budget.
       if (!recorded || recorded.bytes.byteLength < MIN_TRANSCRIBE_BYTES) {
         setError('No audio was recorded. Tap the mic and speak your set.');
@@ -93,9 +115,12 @@ export function useVoiceRecognition(options: VoiceRecognitionOptions = {}) {
       if (!mountedRef.current) return;
 
       // Silent audio transcribes successfully to an empty string, which downstream parsing reports
-      // as bad phrasing — telling a user who mumbled that their wording was wrong.
+      // as bad phrasing — telling a user who mumbled that their wording was wrong. Metering says
+      // which of the two happened, but it is advisory only: several devices never report it at
+      // all, so letting it decide whether to transcribe would turn every take on those phones
+      // into "the mic heard nothing" when the recording was perfectly good.
       if (!transcript.trim()) {
-        setError("Didn't catch that. Tap the mic and speak clearly.");
+        setError(heardSpeechRef.current ? "Didn't catch that. Tap the mic and speak clearly." : MIC_SILENT);
         setState('error');
         return;
       }
@@ -131,6 +156,10 @@ export function useVoiceRecognition(options: VoiceRecognitionOptions = {}) {
     }
 
     setError(null);
+    heardSpeechRef.current = false;
+    startedAtRef.current = Date.now();
+    setIsHearingSpeech(false);
+    setLastCapture(null);
     try {
       if (!(await hasMicrophonePermission())) {
         setError(PERMISSION_DENIED);
@@ -141,6 +170,10 @@ export function useVoiceRecognition(options: VoiceRecognitionOptions = {}) {
       const { recording, dispose } = await startRecording({
         onEndOfSpeech: () => {
           void stopListeningRef.current();
+        },
+        onSpeechDetected: () => {
+          heardSpeechRef.current = true;
+          if (mountedRef.current) setIsHearingSpeech(true);
         },
       });
       if (!mountedRef.current) {
@@ -213,6 +246,10 @@ export function useVoiceRecognition(options: VoiceRecognitionOptions = {}) {
     state,
     isListening: state === 'recording',
     isTranscribing: state === 'transcribing',
+    /** Metering has crossed the speech threshold during this take — the mic is picking the user up. */
+    isHearingSpeech,
+    /** What the last finished take captured, for showing on screen when it did not work. */
+    lastCapture,
     /** Kept for compatibility: this pipeline has no partial results, only a final transcript. */
     interimTranscript: '',
     finalTranscript,

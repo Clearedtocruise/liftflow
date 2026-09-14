@@ -57,9 +57,18 @@ export async function hasMicrophonePermission(): Promise<boolean> {
  * Starts a recording and optionally watches metering to call `onEndOfSpeech` when the user
  * finishes talking (or never starts). Returns a dispose function that clears the status listener.
  */
-export async function startRecording(options?: {
+export type RecordingCallbacks = {
   onEndOfSpeech?: () => void;
-}): Promise<{ recording: Audio.Recording; dispose: () => void }> {
+  /**
+   * Fired once, the first time metering crosses the speech threshold. "The mic isn't working" and
+   * "it misheard me" look identical without this — the screen can now say which one happened.
+   */
+  onSpeechDetected?: () => void;
+};
+
+export async function startRecording(
+  options?: RecordingCallbacks,
+): Promise<{ recording: Audio.Recording; dispose: () => void }> {
   if (liveRecording) {
     await cancelRecording(liveRecording);
   }
@@ -89,9 +98,9 @@ export async function startRecording(options?: {
   }
 }
 
-async function openRecording(options?: {
-  onEndOfSpeech?: () => void;
-}): Promise<{ recording: Audio.Recording; dispose: () => void }> {
+async function openRecording(
+  options?: RecordingCallbacks,
+): Promise<{ recording: Audio.Recording; dispose: () => void }> {
   let eosState: EndOfSpeechState = createEndOfSpeechState(Date.now());
   let stopped = false;
   let poll: ReturnType<typeof setInterval> | null = null;
@@ -104,10 +113,12 @@ async function openRecording(options?: {
   };
 
   const evaluate = (metering: number | undefined, isRecording: boolean) => {
-    if (stopped || !options?.onEndOfSpeech || !isRecording) return;
+    if (stopped || !isRecording) return;
     const decision = reduceEndOfSpeech(eosState, metering, Date.now(), DEFAULT_END_OF_SPEECH);
+    const wasSilent = !eosState.speechHeard;
     eosState = decision.state;
-    if (!decision.shouldStop) return;
+    if (wasSilent && eosState.speechHeard) options?.onSpeechDetected?.();
+    if (!options?.onEndOfSpeech || !decision.shouldStop) return;
     stopped = true;
     clearPoll();
     options.onEndOfSpeech();
@@ -126,7 +137,7 @@ async function openRecording(options?: {
    * the audio session stays held. Poll the recorder directly as well; both paths feed the same
    * reducer, so whichever fires first ends the utterance.
    */
-  if (options?.onEndOfSpeech) {
+  if (options?.onEndOfSpeech || options?.onSpeechDetected) {
     poll = setInterval(() => {
       if (stopped) return;
       void recording

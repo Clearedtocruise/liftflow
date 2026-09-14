@@ -40,6 +40,12 @@ type VoiceSetLoggerProps = {
   activeExerciseName?: string;
   lastWeightKg?: number;
   lastReps?: number;
+  /**
+   * Whether the lift on screen takes a load. A pull-up or a hanging leg raise never has a weight,
+   * so treating a missing one as "needs confirming" meant voice could not log a bodyweight set at
+   * all — every utterance stopped at the sheet waiting for a number that does not exist.
+   */
+  requiresWeight?: boolean;
   disabled?: boolean;
 };
 
@@ -56,6 +62,7 @@ export function VoiceSetLogger({
   activeExerciseName,
   lastWeightKg,
   lastReps,
+  requiresWeight = true,
   disabled,
 }: VoiceSetLoggerProps) {
   const units = useUnits();
@@ -66,6 +73,12 @@ export function VoiceSetLogger({
   const [parseError, setParseError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+  /**
+   * The last thing transcription returned, kept on screen after the attempt finishes. Without it a
+   * misheard word is invisible: the lifter only sees "could not parse" and has no way to tell
+   * whether the mic, the transcription or the wording is what went wrong.
+   */
+  const [heard, setHeard] = useState<string | null>(null);
 
   const logParsedSet = useCallback(
     async (
@@ -110,6 +123,7 @@ export function VoiceSetLogger({
       setParseError(null);
       setSaveError(null);
       setStatus(null);
+      setHeard(transcript.trim() || null);
 
       if (!userId) {
         setParseError('Sign in to log sets by voice.');
@@ -127,7 +141,13 @@ export function VoiceSetLogger({
       });
 
       if (!result.success) {
-        setParseError(result.error);
+        // A failed parse used to dead-end on a caption. Open the sheet seeded with the transcript
+        // so the lifter can see what was heard and fix it rather than re-recording blind.
+        setPending({
+          parsed: { rawText: transcript, exercise: activeExerciseName },
+          transcript,
+          reason: result.error,
+        });
         return;
       }
 
@@ -136,10 +156,13 @@ export function VoiceSetLogger({
       const isSetIntent = !parsed.intent || parsed.intent === 'log_set';
       const exerciseName = parsed.exercise?.trim() || activeExerciseName?.trim() || '';
 
-      // A hold is complete once a duration is heard — there is no weight to wait for, and
-      // "plank for 60 seconds" should not need confirming any more than "bench 225 for 8".
+      // What a set needs before it can be saved depends on the exercise. A hold is complete once
+      // a duration is heard, since the time carries the effort. Everything else needs reps, and
+      // needs a weight only when the exercise is actually loaded.
       const isHold = parsed.durationSeconds != null;
-      const missingValues = isHold ? false : parsed.reps == null || weightKg == null;
+      const missingValues = isHold
+        ? false
+        : parsed.reps == null || (requiresWeight && weightKg == null);
 
       // Anything other than a set — and anything the hardened parser flagged — goes to the sheet
       // rather than straight to the log.
@@ -155,7 +178,7 @@ export function VoiceSetLogger({
 
       await logParsedSet(exerciseName, weightKg, parsed.reps, parsed, parsed.durationSeconds);
     },
-    [userId, activeExerciseName, lastWeightKg, lastReps, units.preferredWeightUnit, logParsedSet],
+    [userId, activeExerciseName, lastWeightKg, lastReps, requiresWeight, units.preferredWeightUnit, logParsedSet],
   );
 
   const voice = useVoiceRecognition({
@@ -203,8 +226,14 @@ export function VoiceSetLogger({
         inputMode={voice.inputMode}
         disabled={disabled}
         errorMessage={voice.error}
-        onPress={() => void voice.handleMicPress()}
-        onPressIn={() => void voice.handlePressIn()}
+        onPress={() => {
+          setHeard(null);
+          void voice.handleMicPress();
+        }}
+        onPressIn={() => {
+          setHeard(null);
+          void voice.handlePressIn();
+        }}
         onPressOut={voice.handlePressOut}
       />
 
@@ -218,7 +247,7 @@ export function VoiceSetLogger({
         </AppText>
       ) : voice.state === 'recording' ? (
         <AppText variant="caption" color="accent" align="center">
-          Listening… speak your set, then pause
+          {voice.isHearingSpeech ? 'Hearing you… pause when you\u2019re done' : 'Listening… speak your set'}
         </AppText>
       ) : voice.state === 'transcribing' ? (
         <AppText variant="caption" color="accent" align="center">
@@ -233,6 +262,20 @@ export function VoiceSetLogger({
           Try &quot;bench press 225 for 8&quot;
         </AppText>
       )}
+
+      {heard ? (
+        <AppText variant="caption" color="textSecondary" align="center" numberOfLines={3}>
+          Heard: &quot;{heard}&quot;
+        </AppText>
+      ) : null}
+
+      {voice.state === 'error' && voice.lastCapture ? (
+        <AppText variant="caption" color="textTertiary" align="center">
+          {`Mic: ${voice.lastCapture.seconds}s · ${voice.lastCapture.kilobytes} KB · ${
+            voice.lastCapture.heardSpeech ? 'speech detected' : 'no speech detected'
+          }`}
+        </AppText>
+      ) : null}
 
       <VoiceConfirmModal
         visible={pending !== null}

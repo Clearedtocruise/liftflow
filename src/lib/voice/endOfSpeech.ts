@@ -14,6 +14,12 @@ export type EndOfSpeechConfig = {
   minRecordingMs: number;
   /** If the user never speaks, stop so music is not ducked forever. */
   noSpeechTimeoutMs: number;
+  /**
+   * Fallback cap for devices that never report metering at all. Without a level to read there is
+   * no end-of-speech signal, so the take used to run to the hard cap — fifteen seconds of open mic
+   * after a two-second sentence, which is indistinguishable from voice logging being broken.
+   */
+  noMeteringStopMs: number;
 };
 
 export const DEFAULT_END_OF_SPEECH: EndOfSpeechConfig = {
@@ -28,22 +34,25 @@ export const DEFAULT_END_OF_SPEECH: EndOfSpeechConfig = {
    * Hard MAX_RECORDING_MS / a second tap end the take instead.
    */
   noSpeechTimeoutMs: Number.POSITIVE_INFINITY,
+  noMeteringStopMs: 6_000,
 };
 
 export type EndOfSpeechState = {
   startedAtMs: number;
   speechHeard: boolean;
   lastSpeechAtMs: number | null;
+  /** Whether any readable level has arrived — false means this device reports no metering. */
+  meteringSeen: boolean;
 };
 
 export type EndOfSpeechDecision = {
   state: EndOfSpeechState;
   shouldStop: boolean;
-  reason?: 'end_silence' | 'no_speech';
+  reason?: 'end_silence' | 'no_speech' | 'no_metering';
 };
 
 export function createEndOfSpeechState(startedAtMs: number): EndOfSpeechState {
-  return { startedAtMs, speechHeard: false, lastSpeechAtMs: null };
+  return { startedAtMs, speechHeard: false, lastSpeechAtMs: null, meteringSeen: false };
 }
 
 export function reduceEndOfSpeech(
@@ -53,20 +62,25 @@ export function reduceEndOfSpeech(
   config: EndOfSpeechConfig = DEFAULT_END_OF_SPEECH,
 ): EndOfSpeechDecision {
   const elapsed = nowMs - state.startedAtMs;
-  let next: EndOfSpeechState = state;
+  const level = meteringDb != null && Number.isFinite(meteringDb) ? meteringDb : null;
+  let next: EndOfSpeechState = state.meteringSeen || level == null ? state : { ...state, meteringSeen: true };
 
-  if (meteringDb != null && Number.isFinite(meteringDb)) {
-    if (meteringDb >= config.speechThresholdDb) {
-      next = {
-        ...state,
-        speechHeard: true,
-        lastSpeechAtMs: nowMs,
-      };
-      return { state: next, shouldStop: false };
-    }
+  if (level != null && level >= config.speechThresholdDb) {
+    next = {
+      ...next,
+      speechHeard: true,
+      lastSpeechAtMs: nowMs,
+    };
+    return { state: next, shouldStop: false };
   }
 
   if (!next.speechHeard) {
+    // No level has ever arrived, so there is nothing to detect the end of speech with. Close the
+    // take on a timer instead of holding the mic open to the hard cap; the audio still gets
+    // transcribed, which is what matters.
+    if (!next.meteringSeen && elapsed >= config.noMeteringStopMs) {
+      return { state: next, shouldStop: true, reason: 'no_metering' };
+    }
     // Do not auto-stop before speech is heard. Missing metering, constant low dB readings, and
     // slow talkers all used to trip no_speech → unduck → empty transcript (music dips then
     // returns with nothing logged). Hard MAX_RECORDING_MS / a second tap still end the take.

@@ -224,12 +224,31 @@ export function ActiveWorkoutScreen({
   );
 
   /**
+   * Planned lifts the user swapped away this session: planned name → what they chose instead.
+   *
+   * A swap leaves the plan naming a lift the session no longer has, which the repair effect below
+   * read as a dropped lift — it re-inserted the original at the planned slot and pushed the
+   * replacement to the end of the workout, leaving the user on the exercise they had just swapped
+   * out. Rewriting the plan entry keeps the swap, and hands the replacement the prescription (sets,
+   * rep range, notes) of the lift it stands in for.
+   */
+  const [swappedPlanNames, setSwappedPlanNames] = useState<Record<string, string>>({});
+
+  const effectivePlanExercises = useMemo(() => {
+    if (Object.keys(swappedPlanNames).length === 0) return planExercisesProp;
+    return planExercisesProp.map((entry) => {
+      const replacement = swappedPlanNames[entry.name.trim().toLowerCase()];
+      return replacement ? { ...entry, name: replacement } : entry;
+    });
+  }, [planExercisesProp, swappedPlanNames]);
+
+  /**
    * Every index below (superset groups, circuit stations, set targets) is a session index, so the
    * plan has to be re-ordered to match the session exactly — one entry per session exercise.
    */
   const planExercises = useMemo(
-    () => alignPlanExercisesToSession(planExercisesProp, sortedExercises),
-    [planExercisesProp, sortedExercises],
+    () => alignPlanExercisesToSession(effectivePlanExercises, sortedExercises),
+    [effectivePlanExercises, sortedExercises],
   );
 
   /**
@@ -271,22 +290,31 @@ export function ActiveWorkoutScreen({
   const focusExerciseIdAfterRepairRef = useRef<string | null>(null);
   useEffect(() => {
     if (!user?.id) return;
-    if (planExercisesProp.length === 0) return;
-    const missing = missingPlanExerciseNames(
-      planExercisesProp.map((exercise) => exercise.name),
-      sortedExercises.map((exercise) => exercise.exercise?.name ?? ''),
-    );
+    if (effectivePlanExercises.length === 0) return;
+    const plannedNames = effectivePlanExercises.map((exercise) => exercise.name);
+    const sessionNames = sortedExercises.map((exercise) => exercise.exercise?.name ?? '');
+    const missing = missingPlanExerciseNames(plannedNames, sessionNames);
     if (missing.length === 0) return;
+
+    // A dropped lift leaves a hole: a planned name with no session row and nothing standing in its
+    // place. A swap or a manual add instead leaves a session row the plan does not name, paired
+    // with the planned name it displaced. Repairing on a bare name mismatch is what reverted a
+    // swap — it put the original back in the planned slot and pushed the chosen lift to the end.
+    const unclaimed = missingPlanExerciseNames(sessionNames, plannedNames);
+    if (unclaimed.length >= missing.length) return;
+
     const repairKey = `${session.id}:${missing.join('|')}`;
     if (attemptedPlanRepairRef.current === repairKey) return;
     attemptedPlanRepairRef.current = repairKey;
     focusExerciseIdAfterRepairRef.current = sortedExercises[currentIndexRef.current]?.id ?? null;
     void workoutService
-      .applySessionExercisePlan(session.id, user.id, planExercisesProp)
+      // Repair only fills holes. Pruning here deleted lifts the user had added by hand, because a
+      // just-added exercise has no sets yet and so looks the same as plan drift.
+      .applySessionExercisePlan(session.id, user.id, effectivePlanExercises, { preserveUnplanned: true })
       .then(async (result: { success: boolean }) => {
         if (result.success) await refreshSession();
       });
-  }, [user?.id, session.id, planExercisesProp, sortedExercises, refreshSession]);
+  }, [user?.id, session.id, effectivePlanExercises, sortedExercises, refreshSession]);
 
   useEffect(() => {
     const focusedId = focusExerciseIdAfterRepairRef.current;
@@ -308,6 +336,11 @@ export function ActiveWorkoutScreen({
   durationSecondsRef.current = durationSeconds;
   distanceKmRef.current = distanceKm;
   const [logging, setLogging] = useState(false);
+  /**
+   * Confirmation for a lift inserted behind the card on screen. Adding mid-exercise deliberately
+   * does not move the user, so without this the button looked like it had done nothing.
+   */
+  const [addedExerciseNotice, setAddedExerciseNotice] = useState<string | null>(null);
   const [historySets, setHistorySets] = useState<ExerciseHistorySet[]>([]);
   const [coachPrescription, setCoachPrescription] = useState<ExerciseCoachPrescription | null>(null);
   const [showComplete, setShowComplete] = useState(false);
@@ -320,6 +353,13 @@ export function ActiveWorkoutScreen({
   const [challengeTrigger, setChallengeTrigger] = useState<WorkoutChallengeTrigger>('between_sets');
   const [challengeTargetExerciseName, setChallengeTargetExerciseName] = useState<string | null>(null);
   const [loadingMethod, setLoadingMethod] = useState<LoadingMethod>('external_load');
+
+  useEffect(() => {
+    if (!addedExerciseNotice) return;
+    const timer = setTimeout(() => setAddedExerciseNotice(null), 6000);
+    return () => clearTimeout(timer);
+  }, [addedExerciseNotice]);
+
   const pendingAdvanceRef = useRef<number | null>(null);
   const pendingAdvanceAfterChallengeRef = useRef<(() => void) | null>(null);
   const pendingExerciseAdvanceAfterRestRef = useRef(false);
@@ -1223,13 +1263,20 @@ export function ActiveWorkoutScreen({
 
   /** Jumps to a workout exercise by id, using session order so the index matches what is rendered. */
   async function focusWorkoutExercise(workoutExerciseId: string) {
+    // Same teardown as Next / Previous / Skip. Swapping and adding used to leave the rest clock of
+    // the lift being left still counting, which blocks Log Set and the mic on the exercise the
+    // lifter just chose — up to three minutes of a strength rest they never asked for. Done before
+    // the round trip below so a scheduled auto-advance cannot fire part way through it.
+    clearPendingExerciseAdvance();
+    cancelActiveRestTimer();
+    advanceGenerationRef.current += 1;
+
     const refreshed = await workoutService.getSession(session.id);
     if (!refreshed.success) return;
     const nextIndex = [...refreshed.data.exercises]
       .sort((a, b) => a.sortOrder - b.sortOrder)
       .findIndex((item) => item.id === workoutExerciseId);
     if (nextIndex < 0) return;
-    clearPendingExerciseAdvance();
     currentIndexRef.current = nextIndex;
     setCurrentIndex(nextIndex);
     setShowComplete(false);
@@ -1239,20 +1286,67 @@ export function ActiveWorkoutScreen({
     // The new exercise slots in directly after the current one rather than at the end of the
     // workout, and the user is only moved there once the exercise they are on is finished.
     const wasMidExercise = !allSetsDone;
-    const workoutExerciseId = await addExerciseByName(exercise.name, {
+    const added = await addExerciseByName(exercise.name, {
       afterWorkoutExerciseId: currentExercise?.id,
     });
-    if (!workoutExerciseId || wasMidExercise) return;
-    await focusWorkoutExercise(workoutExerciseId);
+
+    if (!added.workoutExerciseId) {
+      Alert.alert('Could not add exercise', added.error ?? 'Please try again.');
+      return;
+    }
+
+    if (added.alreadyInWorkout) {
+      Alert.alert(
+        'Already in this workout',
+        `${exercise.name} is already part of this session. Use Back/Next to move to it, or add sets to the one that is there.`,
+      );
+      return;
+    }
+
+    if (wasMidExercise) {
+      // Nothing on screen changes when the insert lands behind the current card, which read as the
+      // button doing nothing at all.
+      setAddedExerciseNotice(`${exercise.name} added — it's up next after this one.`);
+      return;
+    }
+    await focusWorkoutExercise(added.workoutExerciseId);
+  }
+
+  function forgetPlanSwap(replacedKey: string) {
+    setSwappedPlanNames((current) => {
+      if (!(replacedKey in current)) return current;
+      const next = { ...current };
+      delete next[replacedKey];
+      return next;
+    });
   }
 
   async function handleSwapExercise(exercise: Exercise) {
     if (!currentExercise) return;
+    const replacedKey = (currentExercise.exercise?.name ?? '').trim().toLowerCase();
+
+    // Recorded before the swap lands, not after: replacing refreshes the session, and the render
+    // in between would otherwise see the plan naming a lift the session no longer has and repair
+    // the swap away before this could be written.
+    if (replacedKey) {
+      setSwappedPlanNames((current) => ({ ...current, [replacedKey]: exercise.name }));
+    }
+
     const workoutExerciseId = await replaceExerciseByName(currentExercise.id, exercise.name);
     if (!workoutExerciseId) {
+      if (replacedKey) forgetPlanSwap(replacedKey);
       Alert.alert('Could not swap exercise', 'Please try again.');
       return;
     }
+
+    // Swapping a lift that already has sets keeps the original in the workout and slots the
+    // replacement in after it, so the original still belongs to its plan entry — only an in-place
+    // swap actually vacates one. Rewriting it either way would cost the completed lift its
+    // prescription and leave it showing a default set target.
+    if (replacedKey && workoutExerciseId !== currentExercise.id) {
+      forgetPlanSwap(replacedKey);
+    }
+
     await focusWorkoutExercise(workoutExerciseId);
   }
 
@@ -2196,6 +2290,7 @@ export function ActiveWorkoutScreen({
                       activeExerciseName={currentExercise.exercise?.name}
                       lastWeightKg={completedSets[completedSets.length - 1]?.weight ?? (weightKg > 0 ? weightKg : undefined)}
                       lastReps={completedSets[completedSets.length - 1]?.reps ?? (reps > 0 ? reps : undefined)}
+                      requiresWeight={loggingMode === 'weighted'}
                       disabled={
                         isPaused ||
                         logging ||
@@ -2206,6 +2301,11 @@ export function ActiveWorkoutScreen({
                     />
                   ) : null}
                   <View style={styles.extraActions}>
+                    {addedExerciseNotice ? (
+                      <AppText variant="caption" color="accent" align="center">
+                        {addedExerciseNotice}
+                      </AppText>
+                    ) : null}
                     <PrimaryButton
                       label="Skip Exercise"
                       variant="secondary"

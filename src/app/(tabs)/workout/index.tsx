@@ -118,7 +118,10 @@ export default function WorkoutScreen() {
     // A custom day-based cycle only materializes the rest of the week on demand; without this,
     // a program that already only had today filled in would stay stuck showing "Rest Day" for
     // every day after today until the weekly rollover next ran.
-    if (!user?.id || isSelfDirectedTraining(user)) return;
+    // The self-directed check lives inside regenerateProgramIfNeeded, which handles a custom cycle
+    // first — skipping the call here left self-directed athletes running an imported cycle with
+    // nothing to keep their days on the calendar, so the program ran out at the end of the week.
+    if (!user?.id) return;
     void trainingService.regenerateProgramIfNeeded(user.id, user.timezone).then((regen) => {
       if (regen.success && regen.data.regenerated) void loadWeekPlan({ silent: true });
     });
@@ -127,7 +130,6 @@ export default function WorkoutScreen() {
   useLocalWeekRollover(user?.timezone, () => {
     if (!user?.id) return;
     void loadWeekPlan({ silent: true });
-    if (isSelfDirectedTraining(user)) return;
     void trainingService.regenerateProgramIfNeeded(user.id, user.timezone).then((regen) => {
       if (regen.success && regen.data.regenerated) void loadWeekPlan({ silent: true });
     });
@@ -163,12 +165,10 @@ export default function WorkoutScreen() {
       // Backfill the rest of the week for a custom cycle whose materialization window fell
       // behind (e.g. a program imported before the rolling week-ahead fix shipped) as soon as
       // the tab opens, rather than waiting for the next day/week rollover.
-      if (!isSelfDirectedTraining(user)) {
-        void trainingService.regenerateProgramIfNeeded(user.id, user?.timezone).then((regen) => {
-          if (cancelled) return;
-          if (regen.success && regen.data.regenerated) void loadWeekPlan({ silent: true });
-        });
-      }
+      void trainingService.regenerateProgramIfNeeded(user.id, user?.timezone).then((regen) => {
+        if (cancelled) return;
+        if (regen.success && regen.data.regenerated) void loadWeekPlan({ silent: true });
+      });
     })();
 
     return () => {
@@ -335,10 +335,14 @@ export default function WorkoutScreen() {
       // Custom day-based programs advance to the next day (looping Day N → Day 1) when the current
       // day's workout completes. No-ops for calendar programs. Runs before navigation so the next
       // day is materialized by the time the user returns to the Workout tab.
+      //
+      // Awaited, because this is the only thing that moves the cycle pointer: a dropped request
+      // left the program stuck repeating the day the user had just finished. `ensureProgramCycle`
+      // is the fallback — it reconciles and re-materializes even when the advance itself failed.
       if (completed.plannedWorkoutId) {
-        void trainingService
-          .advanceProgramCycle(completed.plannedWorkoutId, user.timezone)
-          .then(() => loadWeekPlan({ silent: true }));
+        const advanced = await trainingService.advanceProgramCycle(completed.plannedWorkoutId, user.timezone);
+        if (!advanced.success) await trainingService.ensureProgramCycle(user.timezone);
+        void loadWeekPlan({ silent: true });
       }
 
       const challengesPayload = challengeRecords;

@@ -130,6 +130,7 @@ export interface IWorkoutService {
     sessionId: string,
     userId: string,
     exercises: import('@/types/workoutExecution').EditableWorkoutExercise[],
+    options?: { preserveUnplanned?: boolean },
   ): Promise<ServiceResult<WorkoutSession>>;
   /** Rest timers */
   startRestTimer(sessionId: string, setId: string, recommendedSeconds: number): Promise<ServiceResult<RestPeriod>>;

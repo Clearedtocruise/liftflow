@@ -881,7 +881,33 @@ export async function getPlannedWorkoutsInRangeWithRefresh(userId: string, from:
   // Never force-regenerate on a read path. Thin exercise counts used to trigger
   // regenerateActiveProgram here, which cancelled the IDs the Workout tab was
   // displaying — every day tap then showed "Workout not found".
+  //
+  // A custom day-based cycle is the exception: it only exists as a rolling window of materialized
+  // days, so without a top-up here the program visibly ran out once the window elapsed. This is
+  // safe where a full regenerate is not, because materialization now leaves a day alone when the
+  // row already matches the cycle — no row is cancelled and no id changes.
+  await ensureCustomCycleWindow(userId);
   return getPlannedWorkoutsInRange(userId, from, to);
+}
+
+async function ensureCustomCycleWindow(userId: string): Promise<void> {
+  try {
+    const db = requireAdmin();
+    const { data: program } = await db
+      .from('training_programs')
+      .select('metadata')
+      .eq('user_id', userId)
+      .eq('is_active', true)
+      .maybeSingle();
+    const meta = (program?.metadata ?? {}) as { planPack?: string };
+    if (meta.planPack !== CUSTOM_CYCLE_PLAN_PACK) return;
+
+    const { ensureCycleMaterialized } = await import('./programCycleService.js');
+    await ensureCycleMaterialized(userId);
+  } catch (error) {
+    // Topping up the window is best effort — never fail the week the user is trying to read.
+    console.warn('[program] custom cycle top-up failed', error instanceof Error ? error.message : error);
+  }
 }
 
 export type { DaySlot, ProgramFrequency, ProgramType };
