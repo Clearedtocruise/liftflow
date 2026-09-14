@@ -25,6 +25,7 @@ export type CycleTemplateExercise = {
   notes?: string;
   exerciseId?: string;
   executionMode?: string;
+  supersetGroupId?: string;
 };
 
 export type CycleDay = {
@@ -32,7 +33,38 @@ export type CycleDay = {
   isRest: boolean;
   label: string;
   exercises: CycleTemplateExercise[];
+  /**
+   * How the day is run. Materialized onto the planned workout as its execution mode, which is what
+   * puts an imported Tabata day on the interval timer instead of straight sets.
+   */
+  executionMode?: string;
+  /** The day's own interval prescription, honored ahead of the app's mode defaults. */
+  intervalWorkSeconds?: number;
+  intervalRestSeconds?: number;
+  intervalRounds?: number;
 };
+
+/** The execution modes a cycle day may declare. Anything else is treated as traditional. */
+export const CYCLE_EXECUTION_MODES = [
+  'traditional',
+  'hypertrophy',
+  'strength',
+  'hiit',
+  'tabata',
+  'circuit',
+  'superset',
+] as const;
+
+export function normalizeCycleExecutionMode(mode: unknown): string | undefined {
+  if (typeof mode !== 'string') return undefined;
+  const lowered = mode.trim().toLowerCase();
+  const match = CYCLE_EXECUTION_MODES.find((known) => known === lowered);
+  return match && match !== 'traditional' ? match : undefined;
+}
+
+export function isIntervalCycleMode(mode: string | undefined): boolean {
+  return mode === 'tabata' || mode === 'hiit';
+}
 
 export type ProgramCycle = {
   version: number;
@@ -115,10 +147,16 @@ function sanitizeExercises(exercises: unknown): CycleTemplateExercise[] {
       weightLbs: Number.isFinite(Number(row.weightLbs)) && Number(row.weightLbs) > 0 ? Number(row.weightLbs) : undefined,
       notes: typeof row.notes === 'string' ? (row.notes as string) : undefined,
       exerciseId: typeof row.exerciseId === 'string' ? (row.exerciseId as string) : undefined,
-      executionMode: typeof row.executionMode === 'string' ? (row.executionMode as string) : undefined,
+      executionMode: normalizeCycleExecutionMode(row.executionMode),
+      supersetGroupId: typeof row.supersetGroupId === 'string' ? (row.supersetGroupId as string) : undefined,
     });
   }
   return cleaned;
+}
+
+function positiveSeconds(value: unknown): number | undefined {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric > 0 ? Math.round(numeric) : undefined;
 }
 
 function defaultDayLabel(dayNumber: number, isRest: boolean): string {
@@ -141,11 +179,17 @@ export function normalizeCycle(input: {
     const raw = rawDays[i] ?? {};
     const isRest = Boolean(raw.isRest);
     const label = typeof raw.label === 'string' && raw.label.trim() ? raw.label.trim() : defaultDayLabel(i + 1, isRest);
+    const executionMode = isRest ? undefined : normalizeCycleExecutionMode(raw.executionMode);
+    const interval = isIntervalCycleMode(executionMode);
     days.push({
       dayNumber: i + 1,
       isRest,
       label,
       exercises: isRest ? [] : sanitizeExercises(raw.exercises),
+      executionMode,
+      intervalWorkSeconds: interval ? positiveSeconds(raw.intervalWorkSeconds) : undefined,
+      intervalRestSeconds: interval ? positiveSeconds(raw.intervalRestSeconds) : undefined,
+      intervalRounds: interval ? positiveSeconds(raw.intervalRounds) : undefined,
     });
   }
 

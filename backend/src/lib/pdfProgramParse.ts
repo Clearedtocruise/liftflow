@@ -158,6 +158,12 @@ function sanitizeExercises(raw: unknown): CycleTemplateExercise[] {
   return out;
 }
 
+function positiveInt(value: unknown, max: number): number | undefined {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) return undefined;
+  return Math.min(Math.round(numeric), max);
+}
+
 function sanitizeWorkout(raw: unknown): CycleProgramInput | null {
   if (!raw || typeof raw !== 'object') return null;
   const row = raw as Record<string, unknown>;
@@ -168,15 +174,31 @@ function sanitizeWorkout(raw: unknown): CycleProgramInput | null {
     const d = (day && typeof day === 'object' ? day : {}) as Record<string, unknown>;
     const isRest = d.isRest === true || String(d.label ?? '').toLowerCase().includes('rest');
     const exercises = isRest ? [] : sanitizeExercises(d.exercises);
+    const label =
+      typeof d.label === 'string' && d.label.trim()
+        ? d.label.trim()
+        : isRest
+          ? `Day ${index + 1} Rest`
+          : `Day ${index + 1}`;
+    // Trust the model's own mode when it gives a usable one; otherwise read the label, which is
+    // where a protocol most often survives ("Day 4 — Tabata Finisher").
+    const declared = detectExecutionHint(String(d.executionMode ?? '')) ?? {};
+    const hint = executionHintForDay(
+      mergeExecutionHint(
+        {
+          executionMode: declared.executionMode,
+          intervalWorkSeconds: positiveInt(d.intervalWorkSeconds, 600),
+          intervalRestSeconds: positiveInt(d.intervalRestSeconds, 600),
+          intervalRounds: positiveInt(d.intervalRounds, 30),
+        },
+        detectExecutionHint(label) ?? {},
+      ),
+    );
     return {
-      label:
-        typeof d.label === 'string' && d.label.trim()
-          ? d.label.trim()
-          : isRest
-            ? `Day ${index + 1} Rest`
-            : `Day ${index + 1}`,
+      label,
       isRest: isRest || exercises.length === 0,
       exercises,
+      ...(isRest ? {} : hint),
     };
   });
 
@@ -313,6 +335,92 @@ function parseDayHeader(line: string): { dayNumber: number | null; labelTail: st
   return { dayNumber, labelTail, focus, isRest };
 }
 
+export type DayExecutionHint = {
+  executionMode?: string;
+  intervalWorkSeconds?: number;
+  intervalRestSeconds?: number;
+  intervalRounds?: number;
+};
+
+const MODE_MARKERS: Array<{ re: RegExp; mode: string }> = [
+  { re: /\btabata\b/i, mode: 'tabata' },
+  { re: /\bhiit\b/i, mode: 'hiit' },
+  { re: /\bhigh[-\s]?intensity\s+interval/i, mode: 'hiit' },
+  { re: /\bintervals?\s+(?:training|day|session)\b/i, mode: 'hiit' },
+  { re: /\bcircuits?\b/i, mode: 'circuit' },
+];
+
+/**
+ * "20s on / 10s off", "20 sec work, 10 sec rest", "30 seconds on 15 seconds off". Requires the
+ * on/off or work/rest wording: a bare "20/10" in a training document is far more likely to be a
+ * date, a percentage or a rep scheme than an interval.
+ */
+const WORK_REST_RE =
+  /(\d{1,3})\s*(?:s|sec|secs|second|seconds)?\s*(?:on|work(?:ing)?)\b[\s,;/·—–-]*(\d{1,3})\s*(?:s|sec|secs|second|seconds)?\s*(?:off|rest)\b/i;
+
+const ROUNDS_RE = /(?:[x×]\s*)?(\d{1,2})\s*(?:rounds?|intervals?)\b/i;
+
+/**
+ * Read how a day is meant to be run out of a line of the document.
+ *
+ * A plan that says "Day 4 — Tabata: 20s on / 10s off × 8" is asking for the interval timer, not
+ * for straight sets. Without this the import had no way to express that and every imported day
+ * became traditional.
+ */
+export function detectExecutionHint(line: string): DayExecutionHint | null {
+  const hint: DayExecutionHint = {};
+
+  for (const marker of MODE_MARKERS) {
+    if (marker.re.test(line)) {
+      hint.executionMode = marker.mode;
+      break;
+    }
+  }
+
+  const workRest = line.match(WORK_REST_RE);
+  if (workRest) {
+    const work = Number(workRest[1]);
+    const rest = Number(workRest[2]);
+    if (work > 0 && work <= 600 && rest > 0 && rest <= 600) {
+      hint.intervalWorkSeconds = work;
+      hint.intervalRestSeconds = rest;
+      // Work/rest wording without a named protocol is still interval training.
+      hint.executionMode = hint.executionMode ?? 'hiit';
+    }
+  }
+
+  // Rounds alone never implies a mode — "3 rounds" is how plenty of straight-set circuits of
+  // accessories are written — so only read it once something else established one.
+  if (hint.executionMode && hint.executionMode !== 'traditional') {
+    const rounds = line.match(ROUNDS_RE);
+    if (rounds) {
+      const value = Number(rounds[1]);
+      if (value > 0 && value <= 30) hint.intervalRounds = value;
+    }
+  }
+
+  return Object.keys(hint).length > 0 ? hint : null;
+}
+
+/** Later lines fill gaps left by the day header without overwriting what it already said. */
+export function mergeExecutionHint(base: DayExecutionHint, next: DayExecutionHint): DayExecutionHint {
+  return {
+    executionMode: base.executionMode ?? next.executionMode,
+    intervalWorkSeconds: base.intervalWorkSeconds ?? next.intervalWorkSeconds,
+    intervalRestSeconds: base.intervalRestSeconds ?? next.intervalRestSeconds,
+    intervalRounds: base.intervalRounds ?? next.intervalRounds,
+  };
+}
+
+/** Interval timings belong only to a mode that runs on a clock. */
+export function executionHintForDay(hint: DayExecutionHint): DayExecutionHint {
+  if (!hint.executionMode || hint.executionMode === 'traditional') return {};
+  if (hint.executionMode !== 'tabata' && hint.executionMode !== 'hiit') {
+    return { executionMode: hint.executionMode };
+  }
+  return hint;
+}
+
 function parseExerciseLine(line: string): CycleTemplateExercise | null {
   const ex = line.match(EX_RE) || line.match(SETS_REPS_RE);
   if (ex) {
@@ -348,10 +456,19 @@ export function heuristicParseProgramText(text: string, kind: ImportKind): Progr
   const lines = normalized.split('\n').filter(Boolean);
 
   const workoutDays: CycleProgramInput['days'] = [];
-  let current: { label: string; isRest: boolean; exercises: CycleTemplateExercise[] } | null = null;
+  let current:
+    | { label: string; isRest: boolean; exercises: CycleTemplateExercise[]; hint: DayExecutionHint }
+    | null = null;
+
+  // A protocol stated before the first day header ("This block is run Tabata style") applies to
+  // the whole document rather than to one day.
+  let documentHint: DayExecutionHint = {};
 
   const flush = () => {
-    if (current) workoutDays.push(current);
+    if (current) {
+      const { hint, ...day } = current;
+      workoutDays.push({ ...day, ...executionHintForDay(mergeExecutionHint(hint, documentHint)) });
+    }
     current = null;
   };
 
@@ -366,7 +483,7 @@ export function heuristicParseProgramText(text: string, kind: ImportKind): Progr
       const label = n
         ? `Day ${n}${focusLabel ? ` — ${focusLabel}` : ''}`
         : line.slice(0, 48);
-      current = { label, isRest: header.isRest, exercises: [] };
+      current = { label, isRest: header.isRest, exercises: [], hint: detectExecutionHint(line) ?? {} };
 
       // Same line may carry the first exercise after the header (collapsed paste).
       if (header.labelTail && !header.isRest) {
@@ -385,16 +502,27 @@ export function heuristicParseProgramText(text: string, kind: ImportKind): Progr
       }
       continue;
     }
-    if (!current) continue;
-    if (/\brest\b/i.test(line) && line.length < 40 && !parseExerciseLine(line)) {
-      current.isRest = true;
+    if (!current) {
+      const preamble = detectExecutionHint(line);
+      if (preamble) documentHint = mergeExecutionHint(documentHint, preamble);
       continue;
     }
     const exercise = parseExerciseLine(line);
-    if (exercise) {
-      current.isRest = false;
-      current.exercises.push(exercise);
+    // A protocol line is read before the rest-day check, so "Tabata: 20s on / 10s off" is not
+    // mistaken for a rest day just because it contains the word "rest".
+    if (!exercise) {
+      const hint = detectExecutionHint(line);
+      if (hint) {
+        current.hint = mergeExecutionHint(current.hint, hint);
+        continue;
+      }
+      if (/\brest\b/i.test(line) && line.length < 40) {
+        current.isRest = true;
+      }
+      continue;
     }
+    current.isRest = false;
+    current.exercises.push(exercise);
   }
   flush();
 
@@ -485,10 +613,11 @@ export async function parseProgramDocument(options: {
   if (hasOpenAI()) {
     const system = `You extract workout programs and/or nutrition meal plans from user-supplied document text.
 Return JSON only with keys: title, summary, workout, nutrition, warnings (string array).
-workout is null or { name, lengthDays (1-30), days: [{ label, isRest, exercises: [{ name, sets, reps, restSeconds, weightLbs, notes }] }] }.
+workout is null or { name, lengthDays (1-30), days: [{ label, isRest, executionMode, intervalWorkSeconds, intervalRestSeconds, intervalRounds, exercises: [{ name, sets, reps, restSeconds, weightLbs, notes }] }] }.
 CRITICAL: Emit EVERY training day present in the document (Day 1, Day 2, …). Never collapse a 6-day plan into a single day. If the text lists six workouts, return six days with exercises.
 Use day-based cycles (Day 1..N), not calendar weeks. Mark rest days with isRest true and empty exercises.
 Default restSeconds to 90 when the document does not specify rest.
+executionMode is how the day is run: omit it for ordinary straight sets, or use tabata|hiit|circuit when the document says so ("Tabata", "HIIT", "intervals", "circuit"). When the document gives interval timing, set intervalWorkSeconds, intervalRestSeconds and intervalRounds from it — "20s on / 10s off x 8" is 20, 10, 8. Never invent a mode or a timing the document does not state.
 nutrition is null or { name, goals: { calories, proteinG, carbsG, fatG, waterMl }, days: [{ dayIndex 0=Mon..6=Sun, label, meals: [{ mealType, name, scheduledTime, calories, proteinG, carbsG, fatG, notes }] }] }.
 mealType must be one of breakfast|lunch|dinner|snack|pre_workout|post_workout.
 Only include workout and/or nutrition matching the requested kind ("${kind}"). Do not invent exercises that are not in the text.

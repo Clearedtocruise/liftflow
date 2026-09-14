@@ -27,6 +27,15 @@ function isIntervalMode(mode: WorkoutExecutionMode): mode is keyof typeof INTERV
   return mode === 'hiit' || mode === 'tabata';
 }
 
+/** Whether a mode runs on a work/rest clock, and so has interval timings worth prescribing. */
+export function isIntervalExecutionMode(mode: unknown): mode is 'hiit' | 'tabata' {
+  return mode === 'hiit' || mode === 'tabata';
+}
+
+function positive(value: number | undefined): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.round(value) : undefined;
+}
+
 /**
  * Resolve how a single exercise should be executed under a workout mode.
  */
@@ -49,11 +58,13 @@ export function prescribeExerciseExecution(input: ExercisePrescriptionInput): Ex
     return {
       scheme: 'interval',
       mode,
-      workSeconds: defaults.workSeconds,
-      restSeconds: defaults.restSeconds,
+      // A plan that spells out its own intervals wins over this app's defaults; an imported
+      // Tabata day asking for 30 on / 15 off should not quietly run at 20 / 10.
+      workSeconds: positive(input.intervalWorkSeconds) ?? defaults.workSeconds,
+      restSeconds: positive(input.intervalRestSeconds) ?? defaults.restSeconds,
       // Prefer the plan's set count when remapping a strength day onto Tabata/HIIT so
       // beginners stay on 3 rounds instead of drifting to the classic 8-round protocol.
-      rounds: sets ?? defaults.rounds,
+      rounds: positive(input.intervalRounds) ?? sets ?? defaults.rounds,
     };
   }
 

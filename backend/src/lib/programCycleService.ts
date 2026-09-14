@@ -40,7 +40,16 @@ const CYCLE_LOOKAHEAD_DAYS = 7;
 export type CycleProgramInput = {
   name?: string;
   lengthDays: number;
-  days: Array<{ label?: string; isRest?: boolean; exercises?: CycleTemplateExercise[] }>;
+  days: Array<{
+    label?: string;
+    isRest?: boolean;
+    exercises?: CycleTemplateExercise[];
+    /** How the day is run — becomes the materialized workout's execution mode. */
+    executionMode?: string;
+    intervalWorkSeconds?: number;
+    intervalRestSeconds?: number;
+    intervalRounds?: number;
+  }>;
 };
 
 export type CycleStatus = {
@@ -127,7 +136,8 @@ async function materializeCycleDay(
     restSeconds: exercise.restSeconds ?? 90,
     weightLbs: exercise.weightLbs,
     notes: exercise.notes,
-    executionMode: exercise.executionMode,
+    executionMode: exercise.executionMode ?? day.executionMode,
+    supersetGroupId: exercise.supersetGroupId,
   }));
   const muscleGroups = muscleGroupsForDay(day);
 
@@ -162,6 +172,13 @@ async function materializeCycleDay(
         cycleDay: dayNumber,
         cycleVersion: cycle.version,
         dayLabel: day.label,
+        // The session reads this as the day's default mode, which is what puts an imported Tabata
+        // day on the interval timer. Interval timings ride along so a document that prescribed its
+        // own work/rest/rounds is run the way it asked rather than at this app's defaults.
+        executionMode: day.executionMode,
+        intervalWorkSeconds: day.intervalWorkSeconds,
+        intervalRestSeconds: day.intervalRestSeconds,
+        intervalRounds: day.intervalRounds,
         exercises,
         plannedVolume: totalPlannedVolume(
           exercises.map((e) => ({ sets: e.sets, reps: e.reps, weightLbs: e.weightLbs })),

@@ -155,7 +155,8 @@
     "beta:daily-report": "node scripts/beta-daily-report.mjs",
     "validate:sprint87": "node scripts/validate-sprint87-closed-beta.mjs",
     "build:android:apk": "eas build --platform android --profile production-apk --non-interactive",
-    "build:android:aab": "eas build --platform android --profile production --non-interactive"
+    "build:android:aab": "eas build --platform android --profile production --non-interactive",
+    "validate:pdf-import-review": "npx tsx scripts/validate-pdf-import-review.ts"
   },
   "private": true,
   "overrides": {

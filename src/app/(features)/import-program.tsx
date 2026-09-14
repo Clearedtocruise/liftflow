@@ -1,19 +1,50 @@
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { Card } from '@/components/layout/Card';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
+import { CycleDayEditor } from '@/components/program/CycleDayEditor';
+import { NutritionPlanEditor } from '@/components/program/NutritionPlanEditor';
 import { AppText } from '@/components/ui/AppText';
+import { ExercisePickerModal } from '@/components/workout/execution/ExercisePickerModal';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import { usePlanAdjustment } from '@/contexts/PlanAdjustmentContext';
 import { useAuth } from '@/hooks/useAuth';
 import { useSubscription } from '@/hooks/useSubscription';
 import { planDataCache } from '@/lib/planDataCache';
 import { invalidateWeekPlanPrefetch, warmWeekPlanData } from '@/lib/planDataPrefetch';
+import {
+  addExercise,
+  moveExercise,
+  removeExercise,
+  setCycleLength,
+  setDayExecutionMode,
+  setDayIntervalField,
+  setDayLabel,
+  toggleRestDay,
+  updateExerciseField,
+  CYCLE_LENGTH_MAX,
+  CYCLE_LENGTH_MIN,
+} from '@/lib/programCycleEditor';
+import {
+  addMeal,
+  describeImportDraft,
+  importDraftIssue,
+  importDraftToPreview,
+  previewToImportDraft,
+  removeMeal,
+  setNutritionDayLabel,
+  setNutritionGoal,
+  setNutritionName,
+  setWorkoutDays,
+  setWorkoutName,
+  updateMeal,
+  type ImportDraft,
+} from '@/lib/programImportDraft';
 import { trainingService } from '@/services/trainingService';
 import type { ProgramImportKind, ProgramImportPreview } from '@/types/programImport';
 
@@ -33,8 +64,17 @@ export default function ImportProgramScreen() {
   const [fileName, setFileName] = useState<string | null>(null);
   const [pdfBase64, setPdfBase64] = useState<string | null>(null);
   const [pastedText, setPastedText] = useState('');
-  const [preview, setPreview] = useState<ProgramImportPreview | null>(null);
   const [busy, setBusy] = useState(false);
+
+  /**
+   * The parse exactly as the server returned it. Kept alongside the draft so warnings, page count
+   * and the parser's own summary still reach commit even though the user only edits the draft.
+   */
+  const [parsed, setParsed] = useState<ProgramImportPreview | null>(null);
+  const [draft, setDraft] = useState<ImportDraft | null>(null);
+  const [picker, setPicker] = useState<{ dayIndex: number } | null>(null);
+
+  const issue = useMemo(() => (draft ? importDraftIssue(draft, kind) : undefined), [draft, kind]);
 
   if (!canUse) {
     return (
@@ -50,6 +90,11 @@ export default function ImportProgramScreen() {
     );
   }
 
+  const discardDraft = () => {
+    setParsed(null);
+    setDraft(null);
+  };
+
   const pickPdf = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
@@ -64,7 +109,7 @@ export default function ImportProgramScreen() {
       });
       setFileName(asset.name ?? 'program.pdf');
       setPdfBase64(base64);
-      setPreview(null);
+      discardDraft();
     } catch (error) {
       Alert.alert('Could not open PDF', error instanceof Error ? error.message : 'Unknown error');
     }
@@ -92,22 +137,28 @@ export default function ImportProgramScreen() {
           'Nothing usable found',
           result.data.warnings.join('\n') || 'Try a clearer PDF or paste the plan text.',
         );
-        setPreview(result.data);
         return;
       }
-      setPreview(result.data);
+      setParsed(result.data);
+      setDraft(previewToImportDraft(result.data));
     } finally {
       setBusy(false);
     }
   };
 
   const runCommit = async () => {
-    if (!preview || !user) return;
+    if (!parsed || !draft || !user) return;
+    if (issue) {
+      Alert.alert('Not ready yet', issue);
+      return;
+    }
     setBusy(true);
     try {
+      // The edited draft, not the parse. Following a plan the user just corrected and having the
+      // uncorrected version go live is the whole reason this review step exists.
       const result = await trainingService.commitProgramImport({
         kind,
-        preview,
+        preview: importDraftToPreview(draft, parsed),
         timeZone: user.timezone,
       });
       if (!result.success) {
@@ -146,19 +197,179 @@ export default function ImportProgramScreen() {
       if (result.data.nutrition) {
         buttons.push({ text: 'Open Nutrition', onPress: () => router.push('/(tabs)/nutrition') });
       }
-      Alert.alert('Plan applied', parts.join('\n') || preview.summary, buttons);
+      Alert.alert('Plan applied', parts.join('\n') || describeImportDraft(draft), buttons);
     } finally {
       setBusy(false);
     }
   };
+
+  if (draft) {
+    return (
+      <>
+        <ScreenContainer contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+          <AppText variant="title">Review your plan</AppText>
+          <AppText style={styles.muted}>
+            This is what we read from {fileName ?? 'your plan'}. Fix anything that came through wrong —
+            names, sets, reps, meals — then follow it. Nothing is saved until you do.
+          </AppText>
+          <AppText style={styles.detail}>{describeImportDraft(draft)}</AppText>
+
+          {parsed?.warnings.length ? (
+            <AppText style={styles.warn}>{parsed.warnings.join('\n')}</AppText>
+          ) : null}
+
+          {draft.workout ? (
+            <>
+              <Card style={styles.card}>
+                <AppText variant="subhead" color="textSecondary">
+                  Program name
+                </AppText>
+                <TextInput
+                  style={styles.input}
+                  accessibilityLabel="Program name"
+                  placeholder="e.g. My PPL Split"
+                  placeholderTextColor={LiftFlowColors.textTertiary}
+                  value={draft.workout.name}
+                  onChangeText={(text) => setDraft((d) => (d ? setWorkoutName(d, text) : d))}
+                />
+
+                <AppText variant="subhead" color="textSecondary">
+                  Cycle length — {draft.workout.days.length}{' '}
+                  {draft.workout.days.length === 1 ? 'day' : 'days'}
+                </AppText>
+                <View style={styles.lengthRow}>
+                  <Stepper
+                    label="−"
+                    accessibilityLabel="Remove a day from the cycle"
+                    disabled={draft.workout.days.length <= CYCLE_LENGTH_MIN}
+                    onPress={() =>
+                      setDraft((d) =>
+                        d?.workout ? setWorkoutDays(d, setCycleLength(d.workout.days, d.workout.days.length - 1)) : d,
+                      )
+                    }
+                  />
+                  <AppText variant="metric" style={styles.lengthValue}>
+                    {draft.workout.days.length}
+                  </AppText>
+                  <Stepper
+                    label="+"
+                    accessibilityLabel="Add a day to the cycle"
+                    disabled={draft.workout.days.length >= CYCLE_LENGTH_MAX}
+                    onPress={() =>
+                      setDraft((d) =>
+                        d?.workout ? setWorkoutDays(d, setCycleLength(d.workout.days, d.workout.days.length + 1)) : d,
+                      )
+                    }
+                  />
+                </View>
+                <AppText variant="caption" color="textTertiary">
+                  Day 1 → Day {draft.workout.days.length}, then back to Day 1. Not tied to a Mon–Sun week.
+                </AppText>
+              </Card>
+
+              {draft.workout.days.map((day, dayIndex) => (
+                <CycleDayEditor
+                  key={dayIndex}
+                  day={day}
+                  dayIndex={dayIndex}
+                  onToggleRest={() =>
+                    setDraft((d) => (d?.workout ? setWorkoutDays(d, toggleRestDay(d.workout.days, dayIndex)) : d))
+                  }
+                  onLabelChange={(text) =>
+                    setDraft((d) => (d?.workout ? setWorkoutDays(d, setDayLabel(d.workout.days, dayIndex, text)) : d))
+                  }
+                  onExerciseField={(exIndex, patch) =>
+                    setDraft((d) =>
+                      d?.workout ? setWorkoutDays(d, updateExerciseField(d.workout.days, dayIndex, exIndex, patch)) : d,
+                    )
+                  }
+                  onMoveExercise={(exIndex, to) =>
+                    setDraft((d) =>
+                      d?.workout ? setWorkoutDays(d, moveExercise(d.workout.days, dayIndex, exIndex, to)) : d,
+                    )
+                  }
+                  onRemoveExercise={(exIndex) =>
+                    setDraft((d) =>
+                      d?.workout ? setWorkoutDays(d, removeExercise(d.workout.days, dayIndex, exIndex)) : d,
+                    )
+                  }
+                  onAddExercise={() => setPicker({ dayIndex })}
+                  onModeChange={(mode) =>
+                    setDraft((d) => (d?.workout ? setWorkoutDays(d, setDayExecutionMode(d.workout.days, dayIndex, mode)) : d))
+                  }
+                  onIntervalChange={(key, value) =>
+                    setDraft((d) =>
+                      d?.workout ? setWorkoutDays(d, setDayIntervalField(d.workout.days, dayIndex, key, value)) : d,
+                    )
+                  }
+                />
+              ))}
+            </>
+          ) : null}
+
+          {draft.nutrition ? (
+            <NutritionPlanEditor
+              nutrition={draft.nutrition}
+              onNameChange={(text) => setDraft((d) => (d ? setNutritionName(d, text) : d))}
+              onGoalChange={(key, value) => setDraft((d) => (d ? setNutritionGoal(d, key, value) : d))}
+              onDayLabelChange={(dayIndex, label) =>
+                setDraft((d) => (d ? setNutritionDayLabel(d, dayIndex, label) : d))
+              }
+              onMealChange={(dayIndex, mealIndex, patch) =>
+                setDraft((d) => (d ? updateMeal(d, dayIndex, mealIndex, patch) : d))
+              }
+              onRemoveMeal={(dayIndex, mealIndex) => setDraft((d) => (d ? removeMeal(d, dayIndex, mealIndex) : d))}
+              onAddMeal={(dayIndex) => setDraft((d) => (d ? addMeal(d, dayIndex) : d))}
+            />
+          ) : null}
+
+          {issue ? (
+            <AppText variant="caption" color="textTertiary">
+              {issue}
+            </AppText>
+          ) : null}
+
+          <PrimaryButton
+            label={busy ? 'Applying…' : 'Follow this plan'}
+            onPress={() => void runCommit()}
+            disabled={busy || Boolean(issue)}
+            loading={busy}
+          />
+          <PrimaryButton label="Start over" variant="secondary" onPress={discardDraft} disabled={busy} />
+        </ScreenContainer>
+
+        <ExercisePickerModal
+          visible={picker != null}
+          title="Add Exercise"
+          onClose={() => setPicker(null)}
+          onSelect={(exercise) => {
+            if (picker == null) return;
+            setDraft((d) =>
+              d?.workout
+                ? setWorkoutDays(
+                    d,
+                    addExercise(d.workout.days, picker.dayIndex, {
+                      name: exercise.name,
+                      sets: 3,
+                      reps: '8-10',
+                      exerciseId: exercise.id,
+                    }),
+                  )
+                : d,
+            );
+          }}
+        />
+      </>
+    );
+  }
 
   return (
     <ScreenContainer>
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         <AppText variant="title">Import program PDF</AppText>
         <AppText style={styles.muted}>
-          Upload a workout program, a nutrition plan, or both. Workouts become a looping Day 1–N cycle you
-          can track; nutrition loads as this week’s meals and targets.
+          Upload a workout program, a nutrition plan, or both. You get to review and fix everything we
+          read before any of it goes live.
         </AppText>
 
         <AppText style={styles.section}>What to import</AppText>
@@ -168,9 +379,11 @@ export default function ImportProgramScreen() {
             return (
               <Pressable
                 key={option.id}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: active }}
                 onPress={() => {
                   setKind(option.id);
-                  setPreview(null);
+                  discardDraft();
                 }}
                 style={[styles.kindChip, active && styles.kindChipActive]}>
                 <AppText style={[styles.kindLabel, active && styles.kindLabelActive]}>{option.label}</AppText>
@@ -199,7 +412,7 @@ export default function ImportProgramScreen() {
                 setPdfBase64(null);
                 setFileName(null);
               }
-              setPreview(null);
+              discardDraft();
             }}
             placeholder={'Day 1 — Push\nBench Press 4x8\n…'}
             placeholderTextColor={LiftFlowColors.textTertiary}
@@ -209,10 +422,10 @@ export default function ImportProgramScreen() {
         </Card>
 
         <PrimaryButton
-          label={busy && !preview ? 'Reading…' : 'Read plan'}
+          label={busy ? 'Reading…' : 'Read plan'}
           onPress={() => void runPreview()}
           disabled={busy}
-          loading={busy && !preview}
+          loading={busy}
         />
 
         {busy ? (
@@ -220,57 +433,38 @@ export default function ImportProgramScreen() {
             <ActivityIndicator color={LiftFlowColors.accent} />
           </View>
         ) : null}
-
-        {preview ? (
-          <Card style={styles.card}>
-            <AppText style={styles.cardTitle}>{preview.title ?? 'Preview'}</AppText>
-            <AppText>{preview.summary}</AppText>
-            {preview.workout ? (
-              <>
-                <AppText style={styles.detail}>
-                  Workout: {preview.workout.lengthDays} days ·{' '}
-                  {preview.workout.days.filter((d) => !d.isRest).length} training ·{' '}
-                  {preview.workout.days.filter((d) => d.isRest).length} rest
-                </AppText>
-                {preview.workout.days.map((day, index) => (
-                  <AppText key={`${day.label}-${index}`} style={styles.dayLine}>
-                    {day.isRest
-                      ? `Day ${index + 1}: Rest`
-                      : `Day ${index + 1}: ${day.label?.replace(/^Day\s*\d+\s*[—–-]?\s*/i, '') || 'Training'} · ${day.exercises?.length ?? 0} exercises`}
-                  </AppText>
-                ))}
-              </>
-            ) : null}
-            {preview.nutrition ? (
-              <AppText style={styles.detail}>
-                Nutrition:{' '}
-                {preview.nutrition.days.reduce((n, d) => n + d.meals.length, 0)} meals
-                {preview.nutrition.goals?.calories
-                  ? ` · ~${preview.nutrition.goals.calories} kcal`
-                  : ''}
-                {preview.nutrition.goals?.proteinG
-                  ? ` · ${preview.nutrition.goals.proteinG}g protein`
-                  : ''}
-              </AppText>
-            ) : null}
-            {preview.warnings.length > 0 ? (
-              <AppText style={styles.warn}>{preview.warnings.join('\n')}</AppText>
-            ) : null}
-            <PrimaryButton
-              label={busy ? 'Applying…' : 'Follow this plan'}
-              onPress={() => void runCommit()}
-              disabled={busy || (!preview.workout && !preview.nutrition)}
-              loading={busy}
-            />
-          </Card>
-        ) : null}
       </ScrollView>
     </ScreenContainer>
   );
 }
 
+function Stepper({
+  label,
+  onPress,
+  disabled,
+  accessibilityLabel,
+}: {
+  label: string;
+  onPress: () => void;
+  disabled?: boolean;
+  accessibilityLabel?: string;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      style={[styles.stepper, disabled && styles.stepperDisabled]}
+      disabled={disabled}
+      onPress={onPress}>
+      <AppText variant="title" color={disabled ? 'textTertiary' : 'accent'}>
+        {label}
+      </AppText>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
-  scroll: { gap: Spacing.md, paddingBottom: Spacing.xl },
+  scroll: { gap: Spacing.md, paddingBottom: Spacing.huge },
   muted: { color: LiftFlowColors.textSecondary, marginTop: Spacing.xs },
   section: { marginTop: Spacing.sm, fontWeight: '600', color: LiftFlowColors.textPrimary },
   kindRow: { gap: Spacing.sm },
@@ -291,6 +485,14 @@ const styles = StyleSheet.create({
   card: { gap: Spacing.sm },
   cardTitle: { fontWeight: '600', color: LiftFlowColors.textPrimary },
   fileName: { color: LiftFlowColors.textSecondary },
+  input: {
+    backgroundColor: LiftFlowColors.surface,
+    borderRadius: Radius.md,
+    padding: Spacing.sm,
+    color: LiftFlowColors.textPrimary,
+    borderWidth: 1,
+    borderColor: LiftFlowColors.border,
+  },
   textArea: {
     minHeight: 140,
     borderWidth: 1,
@@ -301,8 +503,20 @@ const styles = StyleSheet.create({
     backgroundColor: LiftFlowColors.surfaceElevated,
     textAlignVertical: 'top',
   },
+  lengthRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.xl },
+  lengthValue: { minWidth: 48, textAlign: 'center' },
+  stepper: {
+    width: 52,
+    height: 52,
+    borderRadius: Radius.full,
+    borderWidth: 1,
+    borderColor: LiftFlowColors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: LiftFlowColors.surfaceElevated,
+  },
+  stepperDisabled: { opacity: 0.4 },
   busy: { alignItems: 'center', padding: Spacing.md },
   detail: { color: LiftFlowColors.textSecondary, marginTop: Spacing.xs },
-  dayLine: { color: LiftFlowColors.textSecondary, fontSize: 13, marginTop: 2 },
   warn: { color: LiftFlowColors.warning, marginTop: Spacing.xs },
 });

@@ -6,6 +6,11 @@ export type CycleDayInput = {
   label?: string;
   isRest?: boolean;
   exercises?: TemplateExercise[];
+  /** How the day is run. Becomes the planned workout's execution mode when materialized. */
+  executionMode?: import('./workoutExecutionMode').WorkoutExecutionMode;
+  intervalWorkSeconds?: number;
+  intervalRestSeconds?: number;
+  intervalRounds?: number;
 };
 
 export type CycleProgramInput = {

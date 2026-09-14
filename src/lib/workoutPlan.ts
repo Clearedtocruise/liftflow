@@ -51,10 +51,18 @@ function intervalTimingFromPrescription(
   };
 }
 
+/** A plan's own interval prescription, when the workout carries one. */
+export type PlanIntervalTiming = {
+  intervalWorkSeconds?: number;
+  intervalRestSeconds?: number;
+  intervalRounds?: number;
+};
+
 function templateToEditable(
   exercise: TemplateExercise,
   index: number,
   defaultMode?: WorkoutExecutionMode,
+  intervalTiming?: PlanIntervalTiming,
 ): EditableWorkoutExercise {
   const name = exercise.exerciseName ?? exercise.name ?? 'Exercise';
   const executionMode = normalizeExecutionMode(exercise.executionMode ?? defaultMode ?? 'traditional');
@@ -64,6 +72,7 @@ function templateToEditable(
     sets: exercise.sets,
     repRange: exercise.repRange ?? exercise.reps,
     restSeconds: exercise.restSeconds,
+    ...intervalTiming,
   });
 
   return {
@@ -89,8 +98,13 @@ function templateToEditable(
 export function exercisesFromPlannedWorkout(workout: PlannedWorkout | null): EditableWorkoutExercise[] {
   const raw = workout?.metadata?.exercises ?? [];
   const defaultMode = normalizeExecutionMode(workout?.metadata?.executionMode);
+  const intervalTiming: PlanIntervalTiming = {
+    intervalWorkSeconds: workout?.metadata?.intervalWorkSeconds,
+    intervalRestSeconds: workout?.metadata?.intervalRestSeconds,
+    intervalRounds: workout?.metadata?.intervalRounds,
+  };
   return enrichWithSupersetGroups(
-    raw.map((exercise, index) => templateToEditable(exercise, index, defaultMode)),
+    raw.map((exercise, index) => templateToEditable(exercise, index, defaultMode, intervalTiming)),
     defaultMode,
   );
 }
