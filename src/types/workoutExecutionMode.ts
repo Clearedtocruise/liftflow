@@ -83,6 +83,13 @@ export type ExercisePrescriptionInput = {
   sets?: number;
   repRange?: string;
   restSeconds?: number;
+  /**
+   * A plan's own interval prescription, honored ahead of the mode defaults. A document that asks
+   * for 20 on / 10 off for 8 rounds should be run that way rather than at this app's defaults.
+   */
+  intervalWorkSeconds?: number;
+  intervalRestSeconds?: number;
+  intervalRounds?: number;
 };
 
 export type PrescribedWorkoutExercise = {

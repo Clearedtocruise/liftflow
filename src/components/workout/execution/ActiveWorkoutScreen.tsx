@@ -68,7 +68,7 @@ import {
     resolveTraditionalRestSeconds,
     type IntervalTimerConfig,
 } from '@/lib/timerEngine';
-import { TABATA_BETWEEN_EXERCISE_REST_BOUNDS, TABATA_BETWEEN_EXERCISE_REST_DEFAULT, TABATA_INTERVAL_BOUNDS, clampTabataBetweenExerciseRest, clampTabataIntervalSeconds } from '@/lib/trainingPreferences';
+import { TABATA_BETWEEN_EXERCISE_REST_BOUNDS, TABATA_BETWEEN_EXERCISE_REST_DEFAULT, TABATA_INTERVAL_BOUNDS, clampTabataBetweenExerciseRest, clampTabataIntervalSeconds, tabataConfigFromPlan } from '@/lib/trainingPreferences';
 import { formatWorkoutWeightForInput } from '@/lib/unitConversion';
 import { matchSpokenExercise } from '@/lib/voice/matchSpokenExercise';
 import { pickWorkoutChallenge } from '@/lib/workoutChallengeFlow';
@@ -141,9 +141,9 @@ export function ActiveWorkoutScreen({
     setTimersPaused,
   } = useWorkoutTimerEngine(executionMode);
 
-  const [tabataSessionConfig, setTabataSessionConfig] = useState<IntervalTimerConfig>(() => ({
-    ...INTERVAL_MODE_DEFAULTS.tabata,
-  }));
+  const [tabataSessionConfig, setTabataSessionConfig] = useState<IntervalTimerConfig>(() =>
+    tabataConfigFromPlan(planExercises, clampIntervalRounds),
+  );
 
   const handleIntervalConfigChange = useCallback(
     (patch: Partial<IntervalTimerConfig>) => {
