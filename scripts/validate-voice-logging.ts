@@ -195,6 +195,27 @@ check(
   true,
 );
 check('the caption confirms the mic is picking the lifter up', logger.includes('voice.isHearingSpeech'), true);
+check(
+  'a failed take reports what it captured so the report is diagnosable',
+  voiceHook.includes('setLastCapture(') && logger.includes('voice.lastCapture'),
+  true,
+);
+
+console.log('\nA bodyweight lift can be logged by voice');
+// Pull-ups and hanging leg raises never have a weight, so treating a missing one as "needs
+// confirming" meant every bodyweight utterance stopped at the sheet waiting for a number that
+// does not exist — voice never logged one on its own.
+check('the logger is told whether the lift takes a load', logger.includes('requiresWeight'), true);
+check(
+  'a missing weight only forces confirmation when the lift takes one',
+  logger.includes('const missingWeight = requiresWeight && weightKg == null;'),
+  true,
+);
+check(
+  'the active workout passes the real logging mode through',
+  activeWorkout.includes("requiresWeight={loggingMode === 'weighted'}"),
+  true,
+);
 
 console.log('\nAudio mode is set in one place, so two callers cannot fight over it');
 check('the recorder does not patch the mode itself', recordAudio.includes('setAudioModeAsync'), false);

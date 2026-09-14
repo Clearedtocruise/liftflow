@@ -38,6 +38,12 @@ type VoiceSetLoggerProps = {
   activeExerciseName?: string;
   lastWeightKg?: number;
   lastReps?: number;
+  /**
+   * Whether the lift on screen takes a load. A pull-up or a hanging leg raise never has a weight,
+   * so treating a missing one as "needs confirming" meant voice could not log a bodyweight set at
+   * all — every utterance stopped at the sheet waiting for a number that does not exist.
+   */
+  requiresWeight?: boolean;
   disabled?: boolean;
 };
 
@@ -54,6 +60,7 @@ export function VoiceSetLogger({
   activeExerciseName,
   lastWeightKg,
   lastReps,
+  requiresWeight = true,
   disabled,
 }: VoiceSetLoggerProps) {
   const units = useUnits();
@@ -143,7 +150,8 @@ export function VoiceSetLogger({
 
       // Anything other than a set — and anything the hardened parser flagged — goes to the sheet
       // rather than straight to the log.
-      if (!isSetIntent || requiresConfirmation || !exerciseName || parsed.reps == null || weightKg == null) {
+      const missingWeight = requiresWeight && weightKg == null;
+      if (!isSetIntent || requiresConfirmation || !exerciseName || parsed.reps == null || missingWeight) {
         setPending({
           parsed: { ...parsed, exercise: exerciseName || parsed.exercise },
           transcript,
@@ -155,7 +163,7 @@ export function VoiceSetLogger({
 
       await logParsedSet(exerciseName, weightKg, parsed.reps, parsed);
     },
-    [userId, activeExerciseName, lastWeightKg, lastReps, units.preferredWeightUnit, logParsedSet],
+    [userId, activeExerciseName, lastWeightKg, lastReps, requiresWeight, units.preferredWeightUnit, logParsedSet],
   );
 
   const voice = useVoiceRecognition({
@@ -237,6 +245,14 @@ export function VoiceSetLogger({
       {heard ? (
         <AppText variant="caption" color="textSecondary" align="center" numberOfLines={3}>
           Heard: &quot;{heard}&quot;
+        </AppText>
+      ) : null}
+
+      {voice.state === 'error' && voice.lastCapture ? (
+        <AppText variant="caption" color="textTertiary" align="center">
+          {`Mic: ${voice.lastCapture.seconds}s · ${voice.lastCapture.kilobytes} KB · ${
+            voice.lastCapture.heardSpeech ? 'speech detected' : 'no speech detected'
+          }`}
         </AppText>
       ) : null}
 
