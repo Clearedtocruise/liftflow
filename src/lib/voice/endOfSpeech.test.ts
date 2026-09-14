@@ -45,23 +45,33 @@ test('optional no-speech timeout still works when explicitly configured', () => 
   assert.equal(done.reason, 'no_speech');
 });
 
-test('a recorder that never reports metering keeps recording (hard cap / tap stop)', () => {
-  let state = createEndOfSpeechState(0);
+test('a recorder that never reports metering closes the take on the fallback timer', () => {
+  const state = createEndOfSpeechState(0);
   const early = reduceEndOfSpeech(state, undefined, 1000, cfg);
   assert.equal(early.shouldStop, false);
+  assert.equal(early.state.meteringSeen, false);
 
-  const later = reduceEndOfSpeech(early.state, undefined, 20_000, cfg);
-  assert.equal(later.shouldStop, false);
-  assert.equal(later.reason, undefined);
+  const later = reduceEndOfSpeech(early.state, undefined, cfg.noMeteringStopMs, cfg);
+  assert.equal(later.shouldStop, true);
+  assert.equal(later.reason, 'no_metering');
 });
 
 test('non-finite metering is treated as no reading rather than as speech or no-speech', () => {
   const state = createEndOfSpeechState(0);
   const nan = reduceEndOfSpeech(state, Number.NaN, 1000, cfg);
   assert.equal(nan.state.speechHeard, false);
+  assert.equal(nan.state.meteringSeen, false);
   assert.equal(nan.shouldStop, false);
+});
 
-  const later = reduceEndOfSpeech(nan.state, Number.NaN, 20_000, cfg);
+test('a device that does report metering is never cut short by the fallback timer', () => {
+  // A quiet lifter still reads out as levels below the speech threshold; only the total absence of
+  // a reading means there is no end-of-speech signal to wait for.
+  let state = createEndOfSpeechState(0);
+  state = reduceEndOfSpeech(state, -70, 200, cfg).state;
+  assert.equal(state.meteringSeen, true);
+
+  const later = reduceEndOfSpeech(state, -70, cfg.noMeteringStopMs + 5_000, cfg);
   assert.equal(later.shouldStop, false);
 });
 

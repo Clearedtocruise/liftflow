@@ -42,6 +42,7 @@ export type VoiceRecognitionOptions = {
 };
 
 const PERMISSION_DENIED = 'Microphone access is off. Enable it in Settings to log sets by voice.';
+const MIC_SILENT = 'The mic never picked up any sound. Check ONE MORE\u2019s microphone access in Settings.';
 
 export function useVoiceRecognition(options: VoiceRecognitionOptions = {}) {
   const { enabled = true, inputMode = 'tap_toggle', onFinalTranscript } = options;
@@ -103,15 +104,7 @@ export function useVoiceRecognition(options: VoiceRecognitionOptions = {}) {
       });
       // A take with no samples is worth a message, not a round trip against the voice budget.
       if (!recorded || recorded.bytes.byteLength < MIN_TRANSCRIBE_BYTES) {
-        setError('No audio was recorded. Tap the mic and speak your set.');
-        setState('error');
-        return;
-      }
-
-      // Silence reads as a broken feature, and the generic "didn't catch that" sends the lifter
-      // back to say it louder when the real problem is that the input never opened.
-      if (!heardSpeechRef.current) {
-        setError('The mic never picked up any sound. Check ONE MORE\u2019s microphone access in Settings.');
+        setError(MIC_SILENT);
         setState('error');
         return;
       }
@@ -122,9 +115,12 @@ export function useVoiceRecognition(options: VoiceRecognitionOptions = {}) {
       if (!mountedRef.current) return;
 
       // Silent audio transcribes successfully to an empty string, which downstream parsing reports
-      // as bad phrasing — telling a user who mumbled that their wording was wrong.
+      // as bad phrasing — telling a user who mumbled that their wording was wrong. Metering says
+      // which of the two happened, but it is advisory only: several devices never report it at
+      // all, so letting it decide whether to transcribe would turn every take on those phones
+      // into "the mic heard nothing" when the recording was perfectly good.
       if (!transcript.trim()) {
-        setError("Didn't catch that. Tap the mic and speak clearly.");
+        setError(heardSpeechRef.current ? "Didn't catch that. Tap the mic and speak clearly." : MIC_SILENT);
         setState('error');
         return;
       }

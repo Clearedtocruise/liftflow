@@ -7,6 +7,11 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import {
+  createEndOfSpeechState,
+  DEFAULT_END_OF_SPEECH,
+  reduceEndOfSpeech,
+} from '@/lib/voice/endOfSpeech';
 import { matchSpokenExercise } from '@/lib/voice/matchSpokenExercise';
 
 let failures = 0;
@@ -200,6 +205,36 @@ check(
   voiceHook.includes('setLastCapture(') && logger.includes('voice.lastCapture'),
   true,
 );
+
+console.log('\nMetering never decides whether audio is worth transcribing');
+// Several devices report no metering at all. Gating the upload on it turned every take on those
+// phones into "the mic heard nothing" when the recording was fine — voice simply never worked.
+check(
+  'a recorded take is transcribed before any speech-detection verdict',
+  voiceHook.indexOf('api.transcribeVoice') < voiceHook.indexOf('heardSpeechRef.current ?'),
+  true,
+);
+check(
+  'speech detection only chooses the wording for an empty transcript',
+  /if \(!transcript\.trim\(\)\)[\s\S]{0,200}heardSpeechRef\.current \?/.test(voiceHook),
+  true,
+);
+check(
+  'a device with no metering still closes the take instead of holding the mic to the hard cap',
+  endOfSpeech.includes('noMeteringStopMs') && endOfSpeech.includes("reason: 'no_metering'"),
+  true,
+);
+
+const noMetering = reduceEndOfSpeech(
+  reduceEndOfSpeech(createEndOfSpeechState(0), undefined, 500, DEFAULT_END_OF_SPEECH).state,
+  undefined,
+  DEFAULT_END_OF_SPEECH.noMeteringStopMs,
+  DEFAULT_END_OF_SPEECH,
+);
+check('the fallback stop fires without a single metering reading', noMetering.shouldStop, true);
+// Read from source rather than imported: recordAudio pulls in expo-av, which will not load here.
+const hardCapMs = Number(/MAX_RECORDING_MS = ([\d_]+)/.exec(recordAudio)?.[1].replace(/_/g, '') ?? 0);
+check('the fallback stop lands well inside the hard cap', DEFAULT_END_OF_SPEECH.noMeteringStopMs < hardCapMs, true);
 
 console.log('\nA bodyweight lift can be logged by voice');
 // Pull-ups and hanging leg raises never have a weight, so treating a missing one as "needs
