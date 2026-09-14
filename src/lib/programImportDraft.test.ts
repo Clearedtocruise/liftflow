@@ -164,6 +164,47 @@ test('a nutrition-only import is not asked for a training day', () => {
   assert.equal(importDraftIssue(draft, 'nutrition'), undefined);
 });
 
+test('a Tabata day read from the document survives the review round trip', () => {
+  const original = preview();
+  original.workout!.days[1] = {
+    label: 'Day 2 — Tabata Conditioning',
+    isRest: false,
+    executionMode: 'tabata',
+    intervalWorkSeconds: 30,
+    intervalRestSeconds: 15,
+    intervalRounds: 8,
+    exercises: [{ name: 'Burpees', sets: 4, repRange: '15' }],
+  };
+
+  const draft = previewToImportDraft(original);
+  assert.equal(draft.workout?.days[1]?.executionMode, 'tabata');
+  assert.equal(draft.workout?.days[1]?.intervalRounds, 8);
+
+  const next = importDraftToPreview(draft, original);
+  assert.equal(next.workout?.days[1]?.executionMode, 'tabata');
+  assert.equal(next.workout?.days[1]?.intervalWorkSeconds, 30);
+  assert.equal(next.workout?.days[1]?.intervalRestSeconds, 15);
+  assert.equal(next.workout?.days[1]?.intervalRounds, 8);
+});
+
+test('the summary says which days do not run as straight sets', () => {
+  const original = preview();
+  original.workout!.days[1] = {
+    label: 'Conditioning',
+    isRest: false,
+    executionMode: 'tabata',
+    intervalWorkSeconds: 30,
+    intervalRestSeconds: 15,
+    intervalRounds: 8,
+    exercises: [{ name: 'Burpees', sets: 4, repRange: '15' }],
+  };
+
+  const summary = describeImportDraft(previewToImportDraft(original));
+  assert.match(summary, /Day 2 runs as Tabata \(30s\/15s × 8\)/);
+  // An ordinary day is not called out.
+  assert.doesNotMatch(summary, /Day 1 runs as/);
+});
+
 test('the summary is recomputed from the draft, not from the parse', () => {
   const original = preview();
   let draft = previewToImportDraft(original);

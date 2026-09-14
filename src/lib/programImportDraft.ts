@@ -13,6 +13,7 @@
 
 import { cycleToDraft, draftToCycleInput, type DraftDay } from '@/lib/programCycleEditor';
 import type { ProgramImportKind, ProgramImportPreview } from '@/types/programImport';
+import { WORKOUT_EXECUTION_MODE_LABELS, type WorkoutExecutionMode } from '@/types/workoutExecutionMode';
 
 export type DraftMeal = {
   mealType: string;
@@ -264,6 +265,20 @@ export function describeImportDraft(draft: ImportDraft): string {
     parts.push(
       `${draft.workout.days.length}-day cycle · ${training} training · ${rest} rest · ${exercises} exercises`,
     );
+
+    // Worth calling out: a day read as Tabata runs on the interval timer rather than as straight
+    // sets, and that is the kind of thing a lifter wants to confirm before following the plan.
+    const modeDays = draft.workout.days
+      .map((day, index) => ({ day, number: index + 1 }))
+      .filter(({ day }) => day.executionMode && day.executionMode !== 'traditional');
+    for (const { day, number } of modeDays) {
+      const mode = WORKOUT_EXECUTION_MODE_LABELS[day.executionMode as WorkoutExecutionMode];
+      const timing =
+        day.intervalWorkSeconds && day.intervalRestSeconds
+          ? ` (${day.intervalWorkSeconds}s/${day.intervalRestSeconds}s${day.intervalRounds ? ` × ${day.intervalRounds}` : ''})`
+          : '';
+      parts.push(`Day ${number} runs as ${mode}${timing}`);
+    }
   }
   if (draft.nutrition) {
     const meals = draft.nutrition.days.reduce((total, day) => total + day.meals.length, 0);

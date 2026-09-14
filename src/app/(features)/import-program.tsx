@@ -22,6 +22,8 @@ import {
   moveExercise,
   removeExercise,
   setCycleLength,
+  setDayExecutionMode,
+  setDayIntervalField,
   setDayLabel,
   toggleRestDay,
   updateExerciseField,
@@ -292,6 +294,14 @@ export default function ImportProgramScreen() {
                     )
                   }
                   onAddExercise={() => setPicker({ dayIndex })}
+                  onModeChange={(mode) =>
+                    setDraft((d) => (d?.workout ? setWorkoutDays(d, setDayExecutionMode(d.workout.days, dayIndex, mode)) : d))
+                  }
+                  onIntervalChange={(key, value) =>
+                    setDraft((d) =>
+                      d?.workout ? setWorkoutDays(d, setDayIntervalField(d.workout.days, dayIndex, key, value)) : d,
+                    )
+                  }
                 />
               ))}
             </>

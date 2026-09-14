@@ -12,6 +12,11 @@ import { Card } from '@/components/layout/Card';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import type { DraftDay, DraftExercise } from '@/lib/programCycleEditor';
+import { isIntervalExecutionMode } from '@/lib/workoutExecutionMode';
+import { WORKOUT_EXECUTION_MODE_LABELS, type WorkoutExecutionMode } from '@/types/workoutExecutionMode';
+
+/** Offered per day. Hypertrophy and strength are set/rep variants chosen per exercise, not per day. */
+const DAY_MODES: WorkoutExecutionMode[] = ['traditional', 'tabata', 'hiit', 'circuit'];
 
 type CycleDayEditorProps = {
   day: DraftDay;
@@ -22,6 +27,11 @@ type CycleDayEditorProps = {
   onMoveExercise: (exerciseIndex: number, to: number) => void;
   onRemoveExercise: (exerciseIndex: number) => void;
   onAddExercise: () => void;
+  onModeChange?: (mode: WorkoutExecutionMode) => void;
+  onIntervalChange?: (
+    key: 'intervalWorkSeconds' | 'intervalRestSeconds' | 'intervalRounds',
+    value: number,
+  ) => void;
 };
 
 export function CycleDayEditor({
@@ -33,7 +43,11 @@ export function CycleDayEditor({
   onMoveExercise,
   onRemoveExercise,
   onAddExercise,
+  onModeChange,
+  onIntervalChange,
 }: CycleDayEditorProps) {
+  const mode = day.executionMode ?? 'traditional';
+  const isInterval = isIntervalExecutionMode(mode);
   return (
     <Card style={styles.dayCard}>
       <View style={styles.dayHeader}>
@@ -68,6 +82,57 @@ export function CycleDayEditor({
         </AppText>
       ) : (
         <>
+          {onModeChange ? (
+            <>
+              <AppText variant="caption" color="textTertiary">
+                How this day is run
+              </AppText>
+              <View style={styles.modeRow}>
+                {DAY_MODES.map((option) => {
+                  const active = mode === option;
+                  return (
+                    <Pressable
+                      key={option}
+                      accessibilityRole="radio"
+                      accessibilityState={{ selected: active }}
+                      accessibilityLabel={`${WORKOUT_EXECUTION_MODE_LABELS[option]} for day ${dayIndex + 1}`}
+                      style={[styles.modeChip, active && styles.modeChipActive]}
+                      onPress={() => onModeChange(option)}>
+                      <AppText variant="caption" color={active ? 'accent' : 'textSecondary'}>
+                        {WORKOUT_EXECUTION_MODE_LABELS[option]}
+                      </AppText>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </>
+          ) : null}
+
+          {isInterval && onIntervalChange ? (
+            <>
+              <AppText variant="caption" color="textTertiary">
+                Leave these at zero to use the {WORKOUT_EXECUTION_MODE_LABELS[mode]} defaults.
+              </AppText>
+              <View style={styles.exerciseFields}>
+                <NumberField
+                  label="Work (s)"
+                  value={day.intervalWorkSeconds ?? 0}
+                  onChange={(value) => onIntervalChange('intervalWorkSeconds', value)}
+                />
+                <NumberField
+                  label="Rest (s)"
+                  value={day.intervalRestSeconds ?? 0}
+                  onChange={(value) => onIntervalChange('intervalRestSeconds', value)}
+                />
+                <NumberField
+                  label="Rounds"
+                  value={day.intervalRounds ?? 0}
+                  onChange={(value) => onIntervalChange('intervalRounds', value)}
+                />
+              </View>
+            </>
+          ) : null}
+
           {day.exercises.map((exercise, exIndex) => (
             <View key={exIndex} style={styles.exerciseRow}>
               <View style={styles.exerciseMain}>
@@ -240,6 +305,15 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: LiftFlowColors.border,
   },
+  modeRow: { flexDirection: 'row', gap: Spacing.xs, flexWrap: 'wrap' },
+  modeChip: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 4,
+    borderRadius: Radius.full,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: LiftFlowColors.border,
+  },
+  modeChipActive: { borderColor: LiftFlowColors.accentMuted, backgroundColor: LiftFlowColors.accentGlow },
   exerciseMain: { flex: 1, gap: Spacing.xs },
   exerciseFields: { flexDirection: 'row', gap: Spacing.sm },
   exerciseActions: { justifyContent: 'space-between', alignItems: 'center' },

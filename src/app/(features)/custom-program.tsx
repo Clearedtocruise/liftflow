@@ -20,6 +20,8 @@ import {
   moveExercise,
   removeExercise,
   setCycleLength,
+  setDayExecutionMode,
+  setDayIntervalField,
   setDayLabel,
   toggleRestDay,
   updateExerciseField,
@@ -156,6 +158,8 @@ export default function CustomProgramScreen() {
           onMoveExercise={(exIndex, to) => setDays((d) => moveExercise(d, dayIndex, exIndex, to))}
           onRemoveExercise={(exIndex) => setDays((d) => removeExercise(d, dayIndex, exIndex))}
           onAddExercise={() => setPicker({ dayIndex })}
+          onModeChange={(mode) => setDays((d) => setDayExecutionMode(d, dayIndex, mode))}
+          onIntervalChange={(key, value) => setDays((d) => setDayIntervalField(d, dayIndex, key, value))}
         />
       ))}
 
