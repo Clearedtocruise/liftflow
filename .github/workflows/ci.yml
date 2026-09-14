@@ -154,6 +154,7 @@ jobs:
             validate:critical-paths
             validate:sprint5-active-workout
             validate:sprint1-exercise-classification
+            validate:timed-hold-logging
           "
           failed=0
           for guard in $guards; do
