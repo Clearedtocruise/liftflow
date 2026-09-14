@@ -1,5 +1,6 @@
 import type { ParsedVoiceCommandExtended, VoiceIntent, VoiceParseContext } from '@/types/voice';
 
+import { parseSpokenDurationSeconds } from './holdDuration';
 import {
   AMBIGUOUS_CONFIDENCE,
   checkSetValues,
@@ -266,6 +267,21 @@ const CONTROL_PATTERNS: PatternDef[] = [
   },
 ];
 
+/**
+ * Holds, said as a length of time rather than a count. Matched ahead of the rep patterns so
+ * "plank for 60 seconds" is never read as a weight or a rep count.
+ */
+const HOLD_PATTERNS: RegExp[] = [
+  // "plank for 60 seconds", "side plank 45 seconds each side", "dead hang a minute".
+  // The lookahead keeps "held for 60 seconds" out of the exercise group — that wording names no
+  // lift and belongs to the pattern below.
+  /^(?!(?:held?|hold|holding)\s)(?<exercise>.+?)\s+(?:for\s+)?(?<duration>(?:\d+|a|an|one|two|three|four|five|thirty|forty-five|sixty|ninety)\s*(?:s|secs?|seconds?|m|mins?|minutes?)\b.*)$/i,
+  // "plank 1:30"
+  /^(?!(?:held?|hold|holding)\s)(?<exercise>.+?)\s+(?:for\s+)?(?<duration>\d+\s*:\s*[0-5]\d)$/i,
+  // Mid-set, on whatever is already on screen: "held for 60 seconds", "hold a minute"
+  /^(?:held?|hold|holding)\s+(?:it\s+)?(?:for\s+)?(?<duration>.+)$/i,
+];
+
 type SetPattern = {
   pattern: RegExp;
   confidence: number;
@@ -326,6 +342,13 @@ function finalizeSetCommand(
     next.validationReason ??= 'Could not tell weight from reps — please confirm.';
   }
 
+  // A hold longer than half an hour is a mishearing, not a plank.
+  if (next.durationSeconds != null && (next.durationSeconds < 1 || next.durationSeconds > 1_800)) {
+    next.implausible = true;
+    next.validationReason = `Heard ${next.durationSeconds} seconds — that does not look right. Please confirm or re-enter.`;
+    next.confidence = Math.min(next.confidence ?? 1, IMPLAUSIBLE_CONFIDENCE);
+  }
+
   const check = checkSetValues({ weight: next.weight, reps: next.reps, weightUnit: next.weightUnit });
   if (check.implausible) {
     next.implausible = true;
@@ -353,6 +376,26 @@ export function parseVoiceCommandLocal(
       const result = build(match, raw, context);
       if (result) return result.intent === 'log_set' ? finalizeSetCommand(result) : result;
     }
+  }
+
+  for (const pattern of HOLD_PATTERNS) {
+    const match = text.match(pattern) ?? matchable.match(pattern);
+    if (!match?.groups) continue;
+
+    const durationSeconds = parseSpokenDurationSeconds(match.groups.duration);
+    if (durationSeconds == null) continue;
+
+    const spokenExercise = match.groups.exercise;
+    return finalizeSetCommand({
+      intent: 'log_set',
+      exercise: spokenExercise ?? context.activeExerciseName,
+      usesContextExercise: !spokenExercise,
+      durationSeconds,
+      // A hold is one set of one; the duration carries the effort.
+      reps: 1,
+      rawText: raw,
+      confidence: spokenExercise || context.activeExerciseName ? 0.9 : 0.7,
+    });
   }
 
   for (const { pattern, confidence, orderExplicit } of SET_PATTERNS) {

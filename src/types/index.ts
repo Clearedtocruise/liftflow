@@ -20,9 +20,3 @@ export * from './workout';
 export * from './workoutExecutionMode';
 export * from './workoutLocation';
 export * from './workoutRecommendation';
-
-/** @deprecated Import from ./user instead */
-export type { AuthState, PasswordResetPayload, SignInPayload, SignUpPayload, UserProfile } from './user';
-
-/** Re-export confirmation mode for settings screen compatibility */
-export type { ConfirmationMode } from './common';

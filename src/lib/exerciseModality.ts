@@ -86,12 +86,46 @@ export function getExerciseLoggingModeByName(name: string): ExerciseLoggingMode 
   return exerciseTypeToLoggingMode(classifyExercise({ name }));
 }
 
+const FALLBACK_TIMED_DURATION_SECONDS = 30;
+
+/**
+ * How long a hold is prescribed for, in seconds.
+ *
+ * Only consulted for exercises already known to be timed, so a prescription written as a bare
+ * number is a duration rather than a rep count — a plank programmed as "60" used to seed the
+ * duration field at the 30 second fallback and have to be corrected by hand on every set.
+ *
+ * A range takes its upper bound: "30-60 sec" is an instruction to work up to a minute, and the
+ * lifter can always step down.
+ */
 export function defaultTimedDurationSeconds(repRange?: string | null): number {
-  const match = (repRange ?? '').match(/(\d+)\s*(s|sec|secs|second|seconds|min|mins|minute|minutes)\b/i);
-  if (!match) return 30;
-  const value = Number.parseInt(match[1], 10);
-  if (Number.isNaN(value) || value <= 0) return 30;
-  return /min/i.test(match[2]) ? value * 60 : value;
+  const raw = (repRange ?? '').trim();
+  if (!raw) return FALLBACK_TIMED_DURATION_SECONDS;
+
+  // "1:30" is a minute and a half, not a first number of 1.
+  const clock = raw.match(/(\d+)\s*:\s*([0-5]\d)\b/);
+  if (clock) {
+    const seconds = Number.parseInt(clock[1], 10) * 60 + Number.parseInt(clock[2], 10);
+    if (seconds > 0) return seconds;
+  }
+
+  const units = [...raw.matchAll(/(\d+)\s*(s|sec|secs|second|seconds|m|min|mins|minute|minutes)\b/gi)];
+  if (units.length > 0) {
+    const values = units
+      .map((match) => {
+        const value = Number.parseInt(match[1], 10);
+        return Number.isNaN(value) || value <= 0 ? 0 : /^m/i.test(match[2]) ? value * 60 : value;
+      })
+      .filter((value) => value > 0);
+    if (values.length > 0) return Math.max(...values);
+  }
+
+  const bare = [...raw.matchAll(/\d+/g)]
+    .map((match) => Number.parseInt(match[0], 10))
+    .filter((value) => value > 0);
+  if (bare.length > 0) return Math.max(...bare);
+
+  return FALLBACK_TIMED_DURATION_SECONDS;
 }
 
 export function formatCardioDuration(totalSeconds: number): string {
