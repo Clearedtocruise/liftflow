@@ -130,6 +130,64 @@ check(
   true,
 );
 
+console.log('\nTabata survives the trip from PDF to session');
+const parseLib = source('backend/src/lib/pdfProgramParse.ts');
+const editorLib = source('src/lib/programCycleEditor.ts');
+const planLib = source('src/lib/workoutPlan.ts');
+const activeWorkout = source('src/components/workout/execution/ActiveWorkoutScreen.tsx');
+
+check('the parser looks for a named protocol', parseLib.includes('detectExecutionHint'), true);
+check(
+  'the LLM is asked for the day mode and its interval timing',
+  /executionMode is how the day is run/.test(parseLib) && /intervalWorkSeconds, intervalRestSeconds and intervalRounds/.test(parseLib),
+  true,
+);
+check('a day can declare how it is run', cycleLib.includes('executionMode?: string;') && cycleLib.includes('isIntervalCycleMode'), true);
+check(
+  'the day mode is materialized onto the planned workout, which is what the session reads',
+  cycleService.includes('executionMode: day.executionMode'),
+  true,
+);
+check(
+  "the day's interval timing is materialized with it",
+  cycleService.includes('intervalWorkSeconds: day.intervalWorkSeconds') &&
+    cycleService.includes('intervalRounds: day.intervalRounds'),
+  true,
+);
+check(
+  'the session reads the plan mode as the default for every exercise',
+  planLib.includes("normalizeExecutionMode(workout?.metadata?.executionMode)"),
+  true,
+);
+check(
+  "the plan's own work/rest/rounds beat the mode defaults",
+  /workSeconds: positive\(input\.intervalWorkSeconds\) \?\? defaults\.workSeconds/.test(
+    source('src/lib/workoutExecutionMode.ts'),
+  ),
+  true,
+);
+check(
+  'the session Tabata clock opens on what the plan asked for',
+  activeWorkout.includes('tabataConfigFromPlan(planExercises, clampIntervalRounds)'),
+  true,
+);
+check('the day mode is editable, not only parsed', dayEditor.includes('onModeChange'), true);
+check('interval timings are editable on an interval day', dayEditor.includes('onIntervalChange'), true);
+check(
+  'both program screens expose the mode picker',
+  importScreen.includes('onModeChange') && customProgram.includes('onModeChange'),
+  true,
+);
+
+console.log('\nThe editor stops erasing what it cannot show');
+for (const field of ['restSeconds', 'executionMode', 'supersetGroupId']) {
+  check(
+    `an edit preserves ${field}`,
+    new RegExp(`${field}: exercise\\.${field}`).test(editorLib) && new RegExp(`${field}: ex\\.${field}`).test(editorLib),
+    true,
+  );
+}
+
 console.log('\nThe draft model itself');
 const parsed: ProgramImportPreview = {
   kind: 'both',
