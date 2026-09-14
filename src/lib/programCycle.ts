@@ -23,6 +23,15 @@ export type CycleDay = {
   label: string;
   /** Reused plan-exercise shape so materialized workouts feed the existing session pipeline. */
   exercises: TemplateExercise[];
+  /**
+   * How the day is run. Materialized onto the planned workout, where it becomes the session's
+   * execution mode — a day saved as `tabata` puts the lifter on the interval timer.
+   */
+  executionMode?: TemplateExercise['executionMode'];
+  /** The day's own interval prescription, used ahead of the mode defaults when present. */
+  intervalWorkSeconds?: number;
+  intervalRestSeconds?: number;
+  intervalRounds?: number;
 };
 
 export type ProgramCycle = {
@@ -88,10 +97,16 @@ function sanitizeExercises(exercises: unknown): TemplateExercise[] {
       notes: typeof row.notes === 'string' ? (row.notes as string) : undefined,
       exerciseId: typeof row.exerciseId === 'string' ? (row.exerciseId as string) : undefined,
       executionMode: (row.executionMode as TemplateExercise['executionMode']) ?? undefined,
+      supersetGroupId: typeof row.supersetGroupId === 'string' ? (row.supersetGroupId as string) : undefined,
     };
     cleaned.push(exercise);
   }
   return cleaned;
+}
+
+function positiveSeconds(value: unknown): number | undefined {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric > 0 ? Math.round(numeric) : undefined;
 }
 
 function defaultDayLabel(dayNumber: number, isRest: boolean): string {
@@ -119,11 +134,17 @@ export function normalizeCycle(input: {
     const raw = rawDays[i] ?? {};
     const isRest = Boolean(raw.isRest);
     const label = typeof raw.label === 'string' && raw.label.trim() ? raw.label.trim() : defaultDayLabel(i + 1, isRest);
+    const executionMode = isRest ? undefined : ((raw.executionMode as CycleDay['executionMode']) ?? undefined);
+    const isInterval = executionMode === 'tabata' || executionMode === 'hiit';
     days.push({
       dayNumber: i + 1,
       isRest,
       label,
       exercises: isRest ? [] : sanitizeExercises(raw.exercises),
+      executionMode,
+      intervalWorkSeconds: isInterval ? positiveSeconds(raw.intervalWorkSeconds) : undefined,
+      intervalRestSeconds: isInterval ? positiveSeconds(raw.intervalRestSeconds) : undefined,
+      intervalRounds: isInterval ? positiveSeconds(raw.intervalRounds) : undefined,
     });
   }
 

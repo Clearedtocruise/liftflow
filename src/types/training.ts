@@ -57,6 +57,10 @@ export type PlannedWorkoutMetadata = {
   sprintPhase?: string;
   /** Default Sprint 2 execution mode for exercises in this workout. */
   executionMode?: import('./workoutExecutionMode').WorkoutExecutionMode;
+  /** The plan's own interval prescription, used ahead of the mode defaults on an interval day. */
+  intervalWorkSeconds?: number;
+  intervalRestSeconds?: number;
+  intervalRounds?: number;
   exercises?: TemplateExercise[];
   plannedVolume?: number;
   locationId?: string;
