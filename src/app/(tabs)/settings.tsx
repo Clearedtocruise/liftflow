@@ -4,11 +4,10 @@ import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, StyleSheet, TextInput, View } from 'react-native';
 
-import { Card } from '@/components/layout/Card';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { SectionHeader } from '@/components/layout/SectionHeader';
-import { ConfirmationModePicker, SettingsRow } from '@/components/settings/SettingsRow';
+import { ConfirmationModePicker, SettingsGroup, SettingsRow } from '@/components/settings/SettingsRow';
 import { AppSymbol, SYMBOL_FALLBACKS } from '@/components/ui/AppSymbol';
 import { AppText } from '@/components/ui/AppText';
 import {
@@ -302,7 +301,7 @@ export default function SettingsScreen() {
 
       <SectionHeader title="Voice & Logging" />
       <ConfirmationModePicker value={confirmationMode} onChange={handleConfirmationChange} />
-      <Card style={styles.group}>
+      <SettingsGroup>
         <SettingsRow
           label="Auto-log high confidence"
           value={voiceAutoLog ? 'On' : 'Off'}
@@ -347,7 +346,7 @@ export default function SettingsScreen() {
           }}
         />
         <SettingsRow label="Wake phrase" value="Coming soon" />
-      </Card>
+      </SettingsGroup>
 
       <View style={styles.sectionGap}>
         <SectionHeader
@@ -355,10 +354,11 @@ export default function SettingsScreen() {
           subtitle="Tabata only when enabled — work and rest timers adjustable 10–45s in workout"
         />
       </View>
-      <Card style={styles.group}>
+      <SettingsGroup>
         <SettingsRow
           label="Tabata mode"
-          value={tabataMode ? `On · ${tabataModeSummary()}` : 'Off'}
+          value={tabataMode ? 'On' : 'Off'}
+          description={tabataMode ? tabataModeSummary() : undefined}
           icon={
             <AppSymbol name="timer" fallback="⏱" size={20} tintColor={LiftFlowColors.textSecondary} />
           }
@@ -373,12 +373,12 @@ export default function SettingsScreen() {
             });
           }}
         />
-      </Card>
+      </SettingsGroup>
 
       <View style={styles.sectionGap}>
         <SectionHeader title="Location" subtitle="Detect when you arrive at a saved gym" />
       </View>
-      <Card style={styles.group}>
+      <SettingsGroup>
         <SettingsRow
           label="Gym arrival detection"
           value={locationDetection ? 'On' : 'Off'}
@@ -410,7 +410,7 @@ export default function SettingsScreen() {
             }
           }}
         />
-      </Card>
+      </SettingsGroup>
 
       <View style={styles.sectionGap}>
         <SectionHeader
@@ -418,10 +418,10 @@ export default function SettingsScreen() {
           subtitle="Turn off coach autopilot when you want to run your own sessions and meals"
         />
       </View>
-      <Card style={styles.group}>
+      <SettingsGroup>
         <SettingsRow
           label="Custom program"
-          value="Build a 1–30 day looping cycle"
+          description="Build a 1–30 day looping cycle"
           icon={
             <AppSymbol name="calendar" fallback="📆" size={20} tintColor={LiftFlowColors.textSecondary} />
           }
@@ -429,7 +429,7 @@ export default function SettingsScreen() {
         />
         <SettingsRow
           label="Import program PDF"
-          value="Upload workout and/or nutrition to follow"
+          description="Upload workout and/or nutrition to follow"
           icon={
             <AppSymbol name="doc.fill" fallback="📄" size={20} tintColor={LiftFlowColors.textSecondary} />
           }
@@ -437,7 +437,7 @@ export default function SettingsScreen() {
         />
         <SettingsRow
           label="Load Aggressive Cut plan"
-          value="193→180 · 6-day + meals"
+          description="193→180 · 6-day + meals"
           icon={
             <AppSymbol name="target" fallback="🎯" size={20} tintColor={LiftFlowColors.textSecondary} />
           }
@@ -486,7 +486,8 @@ export default function SettingsScreen() {
         />
         <SettingsRow
           label="My own workouts"
-          value={selfDirectedTrainingSummary(isSelfDirectedTraining(user))}
+          value={isSelfDirectedTraining(user) ? 'On' : 'Off'}
+          description={selfDirectedTrainingSummary(isSelfDirectedTraining(user))}
           icon={
             <AppSymbol name="dumbbell.fill" fallback="🏋" size={20} tintColor={LiftFlowColors.textSecondary} />
           }
@@ -543,7 +544,8 @@ export default function SettingsScreen() {
         />
         <SettingsRow
           label="My own nutrition"
-          value={selfDirectedNutritionSummary(isSelfDirectedNutrition(user))}
+          value={isSelfDirectedNutrition(user) ? 'On' : 'Off'}
+          description={selfDirectedNutritionSummary(isSelfDirectedNutrition(user))}
           icon={
             <AppSymbol name="leaf.fill" fallback="🥗" size={20} tintColor={LiftFlowColors.textSecondary} />
           }
@@ -603,12 +605,12 @@ export default function SettingsScreen() {
             );
           }}
         />
-      </Card>
+      </SettingsGroup>
 
       <View style={styles.sectionGap}>
         <SectionHeader title="Training & Preferences" subtitle="How ONE MORE plans your training" />
       </View>
-      <Card style={styles.group}>
+      <SettingsGroup>
         <SettingsRow
           label="Workouts per week"
           value={user ? summarizeTrainingSchedule(resolveDaysPerWeek(user)) : 'Not set'}
@@ -679,12 +681,12 @@ export default function SettingsScreen() {
           }
           onPress={() => router.push('/(features)/training-profile')}
         />
-      </Card>
+      </SettingsGroup>
 
       <View style={styles.sectionGap}>
         <SectionHeader title="Profile" />
       </View>
-      <Card style={styles.group}>
+      <SettingsGroup>
         {editingDisplayName ? (
           <View style={styles.displayNameEditor}>
             <AppText variant="caption" color="textSecondary">
@@ -755,12 +757,12 @@ export default function SettingsScreen() {
           }
           onPress={() => router.push('/(features)/recovery-check-in')}
         />
-      </Card>
+      </SettingsGroup>
 
       <View style={styles.sectionGap}>
         <SectionHeader title="Export" />
       </View>
-      <Card style={styles.group}>
+      <SettingsGroup>
         <SettingsRow
           label="Workout PDF"
           icon={
@@ -782,7 +784,7 @@ export default function SettingsScreen() {
           }
           onPress={() => handleExport('meal_plan', 'Nutrition Export')}
         />
-      </Card>
+      </SettingsGroup>
       {exporting ? (
         <AppText variant="caption" color="textSecondary" align="center">
           Generating PDF…
@@ -792,7 +794,7 @@ export default function SettingsScreen() {
       <View style={styles.sectionGap}>
         <SectionHeader title="ONE MORE Pro" />
       </View>
-      <Card style={styles.group}>
+      <SettingsGroup>
         <SettingsRow
           label="Subscription"
           value={
@@ -817,42 +819,42 @@ export default function SettingsScreen() {
           }
           onPress={() => router.push('/(features)/subscription')}
         />
-      </Card>
+      </SettingsGroup>
 
       <View style={styles.sectionGap}>
         <SectionHeader title="Integrations" />
       </View>
-      <Card style={styles.group}>
+      <SettingsGroup>
         <SettingsRow
           label="Health & Strava"
-          value="Sync settings"
+          description="Sync settings"
           icon={
             <AppSymbol name="heart.text.square.fill" fallback={SYMBOL_FALLBACKS['heart.text.square.fill']} size={20} tintColor={LiftFlowColors.textSecondary} />
           }
           onPress={() => router.push('/(features)/healthkit')}
         />
-      </Card>
+      </SettingsGroup>
 
       <View style={styles.sectionGap}>
         <SectionHeader title="Explore" subtitle="Everything ONE MORE can do" />
       </View>
-      <Card style={styles.group}>
+      <SettingsGroup>
         {/* Only entry point into the Explore hub: its tab is hidden via `href: null`, so without
             this row the screen was unreachable in the shipped app. */}
         <SettingsRow
           label="Explore features"
-          value="Live and coming soon"
+          description="Live and coming soon"
           icon={
             <AppSymbol name="sparkles" fallback="✦" size={20} tintColor={LiftFlowColors.textSecondary} />
           }
           onPress={() => router.push('/(tabs)/explore')}
         />
-      </Card>
+      </SettingsGroup>
 
       <View style={styles.sectionGap}>
         <SectionHeader title="Legal & Support" />
       </View>
-      <Card style={styles.group}>
+      <SettingsGroup>
         <SettingsRow
           label="Privacy Policy"
           icon={
@@ -897,26 +899,26 @@ export default function SettingsScreen() {
           label="Release notes"
           onPress={() => router.push('/(features)/release-notes')}
         />
-      </Card>
+      </SettingsGroup>
 
       <View style={styles.sectionGap}>
         <SectionHeader title="Beta" subtitle="Closed beta program" />
       </View>
-      <Card style={styles.group}>
+      <SettingsGroup>
         <BetaInviteRow userId={user?.id} isBetaTester={isBetaTester} onRedeemed={refreshProfile} />
-      </Card>
+      </SettingsGroup>
 
       <View style={styles.sectionGap}>
         <SectionHeader title="Validation" subtitle="Current app state for testing" />
       </View>
-      <Card style={styles.group}>
+      <SettingsGroup>
         <ValidationDebugPanel state={validationState} onRefresh={refreshValidationState} />
-      </Card>
+      </SettingsGroup>
 
       <View style={styles.sectionGap}>
         <SectionHeader title="Account" />
       </View>
-      <Card style={styles.group}>
+      <SettingsGroup>
         <SettingsRow
           label="Reset Workout Data"
           value={resetting ? 'Resetting…' : undefined}
@@ -949,7 +951,7 @@ export default function SettingsScreen() {
           }
           onPress={resetting ? undefined : handleFullTestReset}
         />
-      </Card>
+      </SettingsGroup>
       <PrimaryButton label="Log Out" onPress={handleSignOut} variant="secondary" />
       <PrimaryButton label="Delete Account" onPress={handleDeleteAccount} variant="secondary" />
 
@@ -1111,9 +1113,6 @@ const styles = StyleSheet.create({
   },
   sectionGap: {
     marginTop: Spacing.xxl,
-  },
-  group: {
-    gap: Spacing.xs,
   },
   footer: {
     marginTop: Spacing.xxxl,
