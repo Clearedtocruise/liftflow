@@ -166,9 +166,12 @@ check(
   ),
   true,
 );
+// Seeded from the prop rather than the aligned `planExercises`, which is declared below this
+// hook: a useState initialiser runs on the first render, so reading that const handed the helper
+// undefined and every workout start died on the `.find` inside it.
 check(
   'the session Tabata clock opens on what the plan asked for',
-  activeWorkout.includes('tabataConfigFromPlan(planExercises, clampIntervalRounds)'),
+  activeWorkout.includes('tabataConfigFromPlan(planExercisesProp, clampIntervalRounds)'),
   true,
 );
 check('the day mode is editable, not only parsed', dayEditor.includes('onModeChange'), true);

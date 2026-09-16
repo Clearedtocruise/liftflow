@@ -141,8 +141,11 @@ export function ActiveWorkoutScreen({
     setTimersPaused,
   } = useWorkoutTimerEngine(executionMode);
 
+  // Seeded from the prop, not the aligned `planExercises` below: this initialiser runs on the
+  // first render, before that const exists. Alignment only reorders the plan to match the session,
+  // and the interval prescription this reads is the same either way.
   const [tabataSessionConfig, setTabataSessionConfig] = useState<IntervalTimerConfig>(() =>
-    tabataConfigFromPlan(planExercises, clampIntervalRounds),
+    tabataConfigFromPlan(planExercisesProp, clampIntervalRounds),
   );
 
   const handleIntervalConfigChange = useCallback(

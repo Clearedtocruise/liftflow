@@ -155,6 +155,7 @@ jobs:
             validate:sprint5-active-workout
             validate:sprint1-exercise-classification
             validate:timed-hold-logging
+            validate:hook-initializer-order
           "
           failed=0
           for guard in $guards; do
