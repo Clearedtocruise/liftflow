@@ -8,6 +8,7 @@ import { persistNutritionGoals } from '../nutritionGoals.js';
 import { totalPlannedVolume } from '../programProgression.js';
 import { addDays, currentProgramWeek, dayLabel, weekStartFromDate } from '../programTypes.js';
 import { requireAdmin } from '../supabase.js';
+import { loadTrainingWeek } from '../trainingHistoryWeek.js';
 import type { GeneratedWorkoutExercise } from '../workoutPlanner.js';
 import {
   AGGRESSIVE_CUT_NUTRITION_DAYS,
@@ -151,6 +152,10 @@ export async function loadAggressiveCutPlan(userId: string): Promise<LoadAggress
   const elapsedWeek = currentProgramWeek(startDate, today);
   if (elapsedWeek > durationWeeks) durationWeeks = elapsedWeek + 4;
 
+  // Loading this plan writes a fresh program record, so the calendar week above restarts at 1.
+  // The week the athlete is told is the one their history says they are in.
+  const trainingWeek = await loadTrainingWeek(db, userId, today);
+
   const schedule = [
     ...AGGRESSIVE_CUT_WORKOUT_DAYS.map((day) => ({
       label: day.label,
@@ -219,14 +224,14 @@ export async function loadAggressiveCutPlan(userId: string): Promise<LoadAggress
     const { error: plannedError } = await db.from('planned_workouts').insert({
       user_id: userId,
       template_id: template.id,
-      name: `${day.label} — Week ${elapsedWeek}`,
+      name: `${day.label} — Week ${trainingWeek}`,
       scheduled_date: date,
       status: 'planned',
       suggested_muscle_groups: day.muscleGroups,
       ai_rationale: `${dayLabel(day.dayIndex)} · Aggressive cut PDF plan`,
       metadata: {
         programId: program.id,
-        weekNumber: elapsedWeek,
+        weekNumber: trainingWeek,
         dayIndex: day.dayIndex,
         dayLabel: dayLabel(day.dayIndex),
         slotLabel: day.label,

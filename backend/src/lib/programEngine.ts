@@ -22,6 +22,7 @@ import {
 } from './programTypes.js';
 import { requireAdmin } from './supabase.js';
 import { resolveRankedGoals } from './trainingGoals.js';
+import { loadTrainingWeek } from './trainingHistoryWeek.js';
 import {
     buildAdaptiveWorkoutPlan,
     getLastPerformanceBySlug,
@@ -297,6 +298,11 @@ export async function generateTrainingProgram(input: CreateProgramInput) {
   // Current calendar week only. Building 3 weeks × 7 lift days was timing out the
   // app's 60s rebuild (Render free tier). Next weeks fill in on later opens/regen.
   const WEEKS_AHEAD = 0;
+  // What the athlete is told, and what gets stored as the workout's week. The loop's `week` below
+  // is a position on the calendar — it places the dates and picks the phase — and restarts at 1
+  // with every new program record. This is how much training is actually behind them.
+  const trainingWeek = await loadTrainingWeek(db, input.userId);
+
   const firstWeekToGenerate = Math.max(1, Math.min(elapsedWeek, durationWeeks));
   const lastWeekToGenerate = Math.min(durationWeeks, firstWeekToGenerate + WEEKS_AHEAD);
   const cancelTo = addDays(startDate, lastWeekToGenerate * 7 - 1);
@@ -316,14 +322,14 @@ export async function generateTrainingProgram(input: CreateProgramInput) {
           .insert({
             user_id: input.userId,
             training_phase_id: phaseId,
-            name: `${slot.label} — Week ${week}`,
+            name: `${slot.label} — Week ${trainingWeek}`,
             scheduled_date: date,
             status: 'planned',
             suggested_muscle_groups: slot.muscleGroups,
             ai_rationale: `${dayLabel(slot.dayIndex)} · Cardio / HIIT · ${programTypeLabel(input.programType)}`,
             metadata: {
               programId: program.id,
-              weekNumber: week,
+              weekNumber: trainingWeek,
               dayIndex: slot.dayIndex,
               dayLabel: dayLabel(slot.dayIndex),
               slotLabel: slot.label,
@@ -448,14 +454,14 @@ export async function generateTrainingProgram(input: CreateProgramInput) {
           user_id: input.userId,
           template_id: templateId,
           training_phase_id: phaseId,
-          name: `${slot.label} — Week ${week}`,
+          name: `${slot.label} — Week ${trainingWeek}`,
           scheduled_date: date,
           status: 'planned',
           suggested_muscle_groups: slot.muscleGroups,
           ai_rationale: `${dayLabel(slot.dayIndex)} · ${phaseSpec.sprintPhase} phase · ${programTypeLabel(input.programType)}`,
           metadata: {
             programId: program.id,
-            weekNumber: week,
+            weekNumber: trainingWeek,
             dayIndex: slot.dayIndex,
             dayLabel: dayLabel(slot.dayIndex),
             slotLabel: slot.label,
@@ -690,8 +696,7 @@ export async function getProgramDashboard(userId: string): Promise<ProgramDashbo
 
   if (!program) return null;
 
-  const startDate = (program.metadata as { startDate?: string })?.startDate ?? program.created_at.slice(0, 10);
-  const currentWeek = currentProgramWeek(startDate, today);
+  const currentWeek = await loadTrainingWeek(db, userId, today);
 
   const { data: phase } = await db
     .from('training_phases')
@@ -747,32 +752,20 @@ export async function reschedulePlannedWorkout(plannedWorkoutId: string, newDate
   if (ownerUserId && existing.user_id !== ownerUserId) throw new Error('Planned workout not found');
 
   const prevMeta = (existing.metadata ?? {}) as Record<string, unknown>;
-  let weekNumber =
-    typeof prevMeta.weekNumber === 'number' ? (prevMeta.weekNumber as number) : undefined;
-
-  const { data: program } = await db
-    .from('training_programs')
-    .select('metadata, created_at')
-    .eq('user_id', existing.user_id)
-    .eq('is_active', true)
-    .maybeSingle();
-  const startDate =
-    (program?.metadata as { startDate?: string } | null)?.startDate ??
-    program?.created_at?.slice(0, 10);
-  if (startDate) {
-    weekNumber = currentProgramWeek(startDate, newDate);
-  }
+  // Moving a workout to a later date can carry it into a new training week, so the title is
+  // rewritten for where it lands rather than kept from where it came from.
+  const weekNumber = await loadTrainingWeek(db, existing.user_id, newDate);
 
   const slotLabel =
     (typeof prevMeta.slotLabel === 'string' && prevMeta.slotLabel) ||
     String(existing.name ?? 'Workout').replace(/\s*—\s*Week\s*\d+\s*$/i, '').trim();
-  const nextName = weekNumber != null ? `${slotLabel} — Week ${weekNumber}` : existing.name;
+  const nextName = slotLabel ? `${slotLabel} — Week ${weekNumber}` : existing.name;
 
   const metadata = {
     ...prevMeta,
     rescheduledFrom: existing.scheduled_date,
     rescheduledAt: new Date().toISOString(),
-    ...(weekNumber != null ? { weekNumber } : null),
+    weekNumber,
     ...(slotLabel ? { slotLabel } : null),
   };
 
