@@ -297,7 +297,7 @@ export function isCustomCyclePlanPack(planPack: string | null | undefined): bool
 
 export type MaterializedCycleRow = {
   status: string;
-  metadata?: { cycleDay?: number; cycleVersion?: number } | null;
+  metadata?: { cycleDay?: number; cycleVersion?: number; rescheduledAt?: string } | null;
 };
 
 /**
@@ -318,6 +318,11 @@ export function needsCycleDayMaterialization(
   // Never touch a date the user has already started, finished or has in flight.
   const untouched = new Set(['completed', 'active', 'in_progress', 'paused']);
   if (rows.some((row) => untouched.has(row.status))) return false;
+
+  // Nor a day the user put here themselves. Materializing cancels whatever is on the date and
+  // writes the projected day back, so a swap or a move was undone by the next refresh: the day
+  // moved away reappeared, and the day moved in vanished.
+  if (rows.some((row) => row.status === 'planned' && row.metadata?.rescheduledAt)) return false;
 
   // A rest day writes nothing, so an empty date is already correct. Without this every rest day in
   // the window costs a write on every pass, which is what made keeping the window topped up

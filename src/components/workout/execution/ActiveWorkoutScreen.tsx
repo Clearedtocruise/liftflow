@@ -1698,8 +1698,13 @@ export function ActiveWorkoutScreen({
       // On a hold, a bare number is the time held. "Plank 60" means a minute, not 60 reps, and
       // used to commit whatever the duration stepper was showing instead.
       const isHold = activeMode === 'timed' || activeMode === 'cardio';
-      const durationSeconds =
-        payload.durationSeconds ?? (isHold && payload.reps != null ? payload.reps : undefined);
+      // A time only means something on a hold. Applying one to a loaded lift committed a single
+      // rep with no weight on it, which is how a spoken weight came back as "— lb × 1".
+      const durationSeconds = isHold ? (payload.durationSeconds ?? payload.reps) : undefined;
+
+      if (!isHold && payload.weight == null && payload.durationSeconds != null) {
+        return { ok: false, reason: 'Heard a time, not a weight. Try "225 for 8".' };
+      }
 
       if (payload.weight != null) {
         setWeightKg(payload.weight);
