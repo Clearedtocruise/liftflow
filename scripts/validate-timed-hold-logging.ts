@@ -144,10 +144,40 @@ check('the voice payload carries a duration', /durationSeconds\?: number;/.test(
 check('a heard duration is committed', /commitSetLog\(\{[\s\S]{0,160}durationSeconds,/.test(activeWorkout), true);
 check(
   'on a hold a bare number is seconds, not reps',
-  /isHold && payload\.reps != null \? payload\.reps : undefined/.test(activeWorkout),
+  /const durationSeconds = isHold \? \(payload\.durationSeconds \?\? payload\.reps\) : undefined;/.test(activeWorkout),
   true,
 );
-check('a hold does not wait for a weight it will never have', /const isHold = parsed\.durationSeconds != null;/.test(source('src/components/workout/VoiceSetLogger.tsx')), true);
+check(
+  'a hold does not wait for a weight it will never have',
+  /const isHold = parsed\.durationSeconds != null && !requiresWeight;/.test(
+    source('src/components/workout/VoiceSetLogger.tsx'),
+  ),
+  true,
+);
+
+// A time heard on a loaded lift is a mis-parse. Committing it logs a single rep carrying nothing,
+// which is what turned a spoken weight into "— lb × 1" on screen.
+check(
+  'a loaded lift never has a duration applied to it',
+  /const durationSeconds = isHold \? [^\n]*: undefined;/.test(activeWorkout),
+  true,
+);
+check(
+  'a weight heard as a time is refused rather than logged empty',
+  /Heard a time, not a weight/.test(activeWorkout),
+  true,
+);
+check(
+  'a weight named in the plural keeps its load',
+  parseVoiceCommandLocal('dumbbell press 50s for 10', {})?.weight,
+  50,
+);
+check(
+  'a weight named in the plural is not read as a hold',
+  parseVoiceCommandLocal('dumbbell press 50s for 10', {})?.durationSeconds,
+  undefined,
+);
+check('the shorthand said mid-set carries its weight', parseVoiceCommandLocal('225 for 8', {})?.weight, 225);
 check('a misheard hold can be corrected in seconds', /Duration \(sec\)/.test(confirmModal), true);
 check('an empty rep box does not block saving a hold', /isHold \? parseInt\(duration, 10\) > 0/.test(confirmModal), true);
 

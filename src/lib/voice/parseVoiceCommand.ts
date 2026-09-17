@@ -193,8 +193,11 @@ const CONTROL_PATTERNS: PatternDef[] = [
     }),
   },
   {
+    // "225 for 8" — the shorthand a lifter uses with the exercise already on screen. The word
+    // "reps" is optional: nobody says it with a bar in their hands, and requiring it left the
+    // most natural way to log a set unparsed.
     pattern:
-      /^(?<weight>\d+(?:\.\d+)?)\s*(?<unit>lbs?|pounds?|kg|kilos?)?\s*(?:for|x|\*|×)\s*(?<reps>\d+)\s*reps?\.?$/i,
+      /^(?<weight>\d+(?:\.\d+)?)s?\s*(?<unit>lbs?|pounds?|kg|kilos?)?\s*(?:for|x|\*|×|times|by)\s*(?<reps>\d+)(?:\s*reps?)?\.?$/i,
     build: (m, raw, ctx) => ({
       intent: 'log_set',
       exercise: ctx.activeExerciseName,
@@ -282,6 +285,22 @@ const HOLD_PATTERNS: RegExp[] = [
   /^(?:held?|hold|holding)\s+(?:it\s+)?(?:for\s+)?(?<duration>.+)$/i,
 ];
 
+/** "for 10", "x 10", "10 reps", or a bare "10" — something counting the effort off. */
+const COUNT_AFTER_DURATION = /\b(?:for|x|\*|×|times|by)\s*\d+|\b\d+\s*reps?\b|^\s*\d+\s*$/i;
+
+/**
+ * Whether a "duration" is really a plural weight.
+ *
+ * Lifters name dumbbells in the plural — "the fifties" comes through as "50s", which reads as
+ * fifty seconds. The tell is what follows: a hold is one unbroken effort, so nothing counts it
+ * off, whereas "50s for 10" is ten reps. Only the bare letter is ambiguous; "60 seconds" spells
+ * out its unit and stays a hold whatever follows it.
+ */
+function bareUnitIsPluralWeight(duration: string | undefined): boolean {
+  const bare = /^\s*\d+\s*[sm]\b(.*)$/i.exec(duration ?? '');
+  return bare != null && COUNT_AFTER_DURATION.test(bare[1]!);
+}
+
 type SetPattern = {
   pattern: RegExp;
   confidence: number;
@@ -289,10 +308,15 @@ type SetPattern = {
   orderExplicit: boolean;
 };
 
+/**
+ * The `s?` on each weight is the plural lifters speak in — "press the 50s for 10". It also keeps
+ * that phrasing away from the hold patterns above, where "50s" would otherwise read as seconds
+ * and log a single rep with no weight on it.
+ */
 const SET_PATTERNS: SetPattern[] = [
   {
     pattern:
-      /^(?<exercise>.+?)\s+(?<weight>\d+(?:\.\d+)?)\s*(?<unit>lbs?|pounds?|kg|kilos?)?\s*(?:for|x|\*|×)\s*(?<reps>\d+)/i,
+      /^(?<exercise>.+?)\s+(?<weight>\d+(?:\.\d+)?)(?<plural>s)?\s*(?<unit>lbs?|pounds?|kg|kilos?)?\s*(?:for|x|\*|×|times|by)\s*(?<reps>\d+)/i,
     confidence: 0.92,
     orderExplicit: true,
   },
@@ -303,8 +327,9 @@ const SET_PATTERNS: SetPattern[] = [
     orderExplicit: true,
   },
   {
-    // "bench press 225 8" — only a unit on the first number says which one is the weight.
-    pattern: /^(?<exercise>.+?)\s+(?<weight>\d+(?:\.\d+)?)\s*(?<unit>lbs?|pounds?|kg|kilos?)?\s+(?<reps>\d+)/i,
+    // "bench press 225 8" — only a unit or a plural on the first number says which is the weight.
+    pattern:
+      /^(?<exercise>.+?)\s+(?<weight>\d+(?:\.\d+)?)(?<plural>s)?\s*(?<unit>lbs?|pounds?|kg|kilos?)?\s+(?<reps>\d+)/i,
     confidence: 0.88,
     orderExplicit: false,
   },
@@ -382,6 +407,8 @@ export function parseVoiceCommandLocal(
     const match = text.match(pattern) ?? matchable.match(pattern);
     if (!match?.groups) continue;
 
+    if (bareUnitIsPluralWeight(match.groups.duration)) continue;
+
     const durationSeconds = parseSpokenDurationSeconds(match.groups.duration);
     if (durationSeconds == null) continue;
 
@@ -409,7 +436,9 @@ export function parseVoiceCommandLocal(
     let weight = first;
     let reps = second;
     let ambiguousOrder = false;
-    if (!orderExplicit && !match.groups.unit && first != null && second != null) {
+    // A plural says the number is a weight as plainly as a unit does — nobody does "the 10s" reps.
+    const orderSpoken = orderExplicit || Boolean(match.groups.unit) || Boolean(match.groups.plural);
+    if (!orderSpoken && first != null && second != null) {
       ({ weight, reps } = orderWeightAndReps(first, second));
       ambiguousOrder = true;
     }

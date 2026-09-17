@@ -159,16 +159,20 @@ export function VoiceSetLogger({
       // What a set needs before it can be saved depends on the exercise. A hold is complete once
       // a duration is heard, since the time carries the effort. Everything else needs reps, and
       // needs a weight only when the exercise is actually loaded.
-      const isHold = parsed.durationSeconds != null;
+      //
+      // A duration heard on a loaded lift is a mis-parse, not a hold — the time is dropped so the
+      // sheet opens on weight and reps, which is what the lifter was trying to say.
+      const isHold = parsed.durationSeconds != null && !requiresWeight;
+      const heard = isHold ? parsed : { ...parsed, durationSeconds: undefined };
       const missingValues = isHold
         ? false
-        : parsed.reps == null || (requiresWeight && weightKg == null);
+        : heard.reps == null || (requiresWeight && weightKg == null);
 
       // Anything other than a set — and anything the hardened parser flagged — goes to the sheet
       // rather than straight to the log.
       if (!isSetIntent || requiresConfirmation || !exerciseName || missingValues) {
         setPending({
-          parsed: { ...parsed, exercise: exerciseName || parsed.exercise },
+          parsed: { ...heard, exercise: exerciseName || heard.exercise },
           transcript,
           weightKg,
           reason: confirmationReason,
@@ -176,7 +180,7 @@ export function VoiceSetLogger({
         return;
       }
 
-      await logParsedSet(exerciseName, weightKg, parsed.reps, parsed, parsed.durationSeconds);
+      await logParsedSet(exerciseName, weightKg, heard.reps, heard, heard.durationSeconds);
     },
     [userId, activeExerciseName, lastWeightKg, lastReps, requiresWeight, units.preferredWeightUnit, logParsedSet],
   );
