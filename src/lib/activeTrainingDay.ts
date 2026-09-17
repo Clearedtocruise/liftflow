@@ -13,6 +13,15 @@ export type ActiveTrainingDay = {
   date: string;
   workout: PlannedWorkout | null;
   scheduledWorkout: PlannedWorkout | null;
+  /**
+   * A session finished on this date, whatever else the date is also carrying.
+   *
+   * Reported separately because one row cannot answer both questions. Picking a single canonical
+   * row per date ranks a startable workout above a finished one, so a planned row landing on a day
+   * already trained — a day moved there, or a cycle day rewritten after a swap — took the finished
+   * session off the screen and asked the lifter to start what they had just done.
+   */
+  completedWorkout: PlannedWorkout | null;
   workoutId: string | null;
   workoutName: string | null;
   /** True only when no planned workout is scheduled for this date. */
@@ -62,11 +71,15 @@ export function resolveActiveTrainingDay(
   const deduped = dedupePlannedWorkoutsByDate(workouts, reference, options?.timeZone);
   const scheduledWorkout = deduped.find((w) => w.scheduledDate === date && isScheduledWorkoutStatus(w.status)) ?? null;
   const workout = scheduledWorkout && isStartableWorkoutStatus(scheduledWorkout.status) ? scheduledWorkout : null;
+  // Read from every row for the date rather than the deduped one, which is chosen for what can be
+  // started next and so cannot be trusted to have kept the finished session.
+  const completedWorkout = workouts.find((w) => w.scheduledDate === date && w.status === 'completed') ?? null;
 
   return {
     date,
     workout,
     scheduledWorkout,
+    completedWorkout,
     workoutId: scheduledWorkout?.id ?? null,
     workoutName: scheduledWorkout?.name ?? null,
     isScheduledRestDay: scheduledWorkout == null,

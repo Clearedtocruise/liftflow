@@ -182,6 +182,26 @@ test('materialization never touches a day the lifter has already started or fini
   }
 });
 
+test('a day the lifter moved here themselves survives the next refresh', () => {
+  // Swapping two days retitles and restamps both rows. The projection disagrees with where they
+  // now sit, and rewriting the date cancels what is on it — so the swap came undone on the next
+  // load, putting the old day back and dropping the one swapped in.
+  assert.equal(
+    needsCycleDayMaterialization(
+      [{ status: 'planned', metadata: { cycleDay: 4, cycleVersion: 1, rescheduledAt: '2026-09-17T12:00:00.000Z' } }],
+      1,
+      1,
+    ),
+    false,
+    'the projection does not get to overrule a day the lifter placed',
+  );
+  assert.equal(
+    needsCycleDayMaterialization([{ status: 'planned', metadata: { cycleDay: 4, cycleVersion: 1 } }], 1, 1),
+    true,
+    'an untouched projection is still refreshed',
+  );
+});
+
 test('a rest day with nothing scheduled is already correct', () => {
   // Rest days write no row, so treating an empty date as "needs materializing" cost a write for
   // every rest day on every pass — the reason topping the window up used to be expensive.

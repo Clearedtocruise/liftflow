@@ -138,7 +138,9 @@ export function useTodayDashboard(): TodayDashboardState {
       setTodaysWorkout(active.isStartableWorkoutDay ? active.workout : null);
       const scheduled = active.scheduledWorkout;
       const status = scheduled?.status ?? null;
-      setCompletedTodaysWorkout(status === 'completed' ? scheduled : null);
+      // Not read off the canonical row: that row is whichever one can be started next, so a day
+      // moved onto today, or a cycle day rewritten after a swap, used to hide a finished session.
+      setCompletedTodaysWorkout(active.completedWorkout);
       setInProgressTodaysWorkout(status === 'active' || status === 'paused' ? scheduled : null);
       setUpcomingWorkout(
         nextResult.success && nextResult.data
