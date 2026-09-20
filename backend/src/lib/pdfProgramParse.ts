@@ -3,7 +3,7 @@
  * that can be committed into existing sinks (custom_cycle + meal_plans/meals).
  */
 
-import { asPromptData, chatCompletionJson, hasOpenAI } from './openai.js';
+import { asPromptData, chatCompletionJsonResult, hasOpenAI, type ChatFailureReason } from './openai.js';
 import {
   CYCLE_MAX_DAYS,
   CYCLE_MIN_DAYS,
@@ -449,9 +449,12 @@ function parseExerciseLine(line: string): CycleTemplateExercise | null {
   return null;
 }
 
+/** The heuristic's note about itself, rewritten by the caller once it knows what the AI did. */
+const NO_AI_WARNING = 'Parsed without AI — review carefully before applying.';
+
 /** Heuristic fallback when OpenAI is unavailable — best-effort day/exercise extraction. */
 export function heuristicParseProgramText(text: string, kind: ImportKind): ProgramImportPreview {
-  const warnings: string[] = ['Parsed without AI — review carefully before applying.'];
+  const warnings: string[] = [NO_AI_WARNING];
   const normalized = normalizePlanText(text);
   const lines = normalized.split('\n').filter(Boolean);
 
@@ -598,10 +601,77 @@ type LlmShape = {
   warnings?: string[];
 };
 
+/**
+ * How long the model gets to read a document.
+ *
+ * Reading a seven-day plan takes the model about fourteen seconds, so the old twenty-second
+ * ceiling — the one meant for a sentence of coaching — left no room for a longer document or a
+ * busy afternoon, and the import kept falling back to pattern-matching. The phone stops waiting
+ * on a request of its own accord at about a minute, and extraction has already spent some of
+ * that, so this is roughly what is left to give.
+ */
+export const MAX_AI_PARSE_MS = 40_000;
+
+function replaceNoAiWarning(warnings: string[], replacement?: string): string[] {
+  const rest = warnings.filter((warning) => warning !== NO_AI_WARNING);
+  return replacement ? [replacement, ...rest] : rest;
+}
+
+/**
+ * What to tell someone whose plan was read by pattern-matching after the AI read did not land.
+ *
+ * "Parsed without AI" said the outcome and not the cause, so a timeout that a second attempt would
+ * have got through looked the same as having no AI at all.
+ */
+function aiUnavailableWarning(reason: ChatFailureReason): string {
+  switch (reason) {
+    case 'timeout':
+      return (
+        'The AI read of this plan took too long, so it was read by pattern-matching instead. ' +
+        'Everything below is still yours to fix — or go back and read the plan again, which often gets through.'
+      );
+    case 'unparseable':
+      return (
+        'The AI read of this plan came back unusable, so it was read by pattern-matching instead. ' +
+        'Check the days below before applying.'
+      );
+    case 'no_provider':
+      return NO_AI_WARNING;
+    default:
+      return (
+        'The AI read of this plan was unavailable, so it was read by pattern-matching instead. ' +
+        'Check the days below before applying.'
+      );
+  }
+}
+
+/** The model's answer, or why there isn't one. Injectable so the fallbacks can be tested. */
+export type AiDocumentRead =
+  | { ok: true; data: LlmShape }
+  | { ok: false; reason: ChatFailureReason };
+
+function readDocumentWithAi(
+  prompt: { system: string; user: string },
+  timeoutMs: number,
+): Promise<AiDocumentRead> {
+  return chatCompletionJsonResult<LlmShape>({
+    ...prompt,
+    temperature: 0.1,
+    maxTokens: 8000,
+    timeoutMs,
+    // No retry: a second attempt would run past the phone's own patience, and an answer nobody is
+    // still waiting for is no answer. The heuristic parse below is the better use of what is left.
+    retries: 0,
+  });
+}
+
 export async function parseProgramDocument(options: {
   text: string;
   kind: ImportKind;
   fileName?: string;
+  /** What is left of the caller's own deadline. Capped at {@link MAX_AI_PARSE_MS}. */
+  timeoutMs?: number;
+  readWithAi?: (prompt: { system: string; user: string }) => Promise<AiDocumentRead>;
 }): Promise<ProgramImportPreview> {
   const { kind, fileName } = options;
   const text = normalizePlanText(options.text);
@@ -610,7 +680,7 @@ export async function parseProgramDocument(options: {
   // under-fills or is unavailable. LLM can refine when it returns at least as many training days.
   const heuristic = heuristicParseProgramText(text, kind);
 
-  if (hasOpenAI()) {
+  if (options.readWithAi || hasOpenAI()) {
     const system = `You extract workout programs and/or nutrition meal plans from user-supplied document text.
 Return JSON only with keys: title, summary, workout, nutrition, warnings (string array).
 workout is null or { name, lengthDays (1-30), days: [{ label, isRest, executionMode, intervalWorkSeconds, intervalRestSeconds, intervalRounds, exercises: [{ name, sets, reps, restSeconds, weightLbs, notes }] }] }.
@@ -631,12 +701,17 @@ If the document is only goals without meals, return goals and empty days.`;
       .filter(Boolean)
       .join('\n\n');
 
-    const llm = await chatCompletionJson<LlmShape>({
-      system,
-      user,
-      temperature: 0.1,
-      maxTokens: 8000,
-    });
+    const budget = Math.min(options.timeoutMs ?? MAX_AI_PARSE_MS, MAX_AI_PARSE_MS);
+    const readWithAi = options.readWithAi ?? ((prompt) => readDocumentWithAi(prompt, budget));
+    const attempt = await readWithAi({ system, user });
+
+    if (!attempt.ok) {
+      return {
+        ...heuristic,
+        warnings: replaceNoAiWarning(heuristic.warnings, aiUnavailableWarning(attempt.reason)),
+      };
+    }
+    const llm = attempt.data;
 
     if (llm) {
       const workout = kind === 'nutrition' ? null : sanitizeWorkout(llm.workout);
@@ -655,7 +730,9 @@ If the document is only goals without meals, return goals and empty days.`;
         );
         return {
           ...heuristic,
-          warnings: [...heuristic.warnings, ...warnings],
+          // The AI did run here — it just read fewer days than the document has — so the
+          // heuristic's note about having run without it would be untrue.
+          warnings: [...replaceNoAiWarning(heuristic.warnings), ...warnings],
           nutrition: nutrition ?? heuristic.nutrition,
         };
       }

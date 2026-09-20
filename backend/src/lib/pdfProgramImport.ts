@@ -4,6 +4,7 @@
 
 import { applyImportedNutritionPlan } from './importedNutritionPlan.js';
 import {
+  MAX_AI_PARSE_MS,
   parseProgramDocument,
   type ImportKind,
   type ProgramImportPreview,
@@ -57,15 +58,30 @@ export async function resolveImportText(source: ImportSource): Promise<{
   };
 }
 
+/**
+ * How long the whole preview may take before the phone gives up on it.
+ *
+ * Getting the words out of the file costs time of its own, and whatever it costs has to come out
+ * of the same minute the reader is willing to wait. Spending part of that on extraction and then
+ * starting a fresh full-length read is how an import ends in a network error instead of a plan.
+ */
+const PREVIEW_BUDGET_MS = 52_000;
+
+/** Never bother the model with less time than a plan takes to read; go straight to the fallback. */
+const MIN_AI_PARSE_MS = 10_000;
+
 export async function previewProgramImport(
   source: ImportSource,
   kind: ImportKind,
 ): Promise<ProgramImportPreview & { pageCount?: number }> {
+  const startedAt = Date.now();
   const resolved = await resolveImportText(source);
+  const remaining = PREVIEW_BUDGET_MS - (Date.now() - startedAt);
   const preview = await parseProgramDocument({
     text: resolved.text,
     kind,
     fileName: resolved.fileName,
+    timeoutMs: Math.min(Math.max(remaining, MIN_AI_PARSE_MS), MAX_AI_PARSE_MS),
   });
   const warnings = resolved.recovered
     ? [
