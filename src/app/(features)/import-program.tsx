@@ -45,6 +45,7 @@ import {
   updateMeal,
   type ImportDraft,
 } from '@/lib/programImportDraft';
+import { base64Bytes, oversizedPdfMessage } from '@/lib/programImportUpload';
 import { trainingService } from '@/services/trainingService';
 import type { ProgramImportKind, ProgramImportPreview } from '@/types/programImport';
 
@@ -104,9 +105,25 @@ export default function ImportProgramScreen() {
       });
       if (result.canceled || !result.assets?.[0]) return;
       const asset = result.assets[0];
+
+      // Checked before the file is read, not after: loading twenty megabytes into a base64 string
+      // to then refuse it costs the same memory as sending it would have.
+      const tooLarge = oversizedPdfMessage(asset.size);
+      if (tooLarge) {
+        Alert.alert('PDF is too large', tooLarge);
+        return;
+      }
+
       const base64 = await FileSystem.readAsStringAsync(asset.uri, {
         encoding: FileSystem.EncodingType.Base64,
       });
+      // Not every picker reports a size, so the file is measured once it is in hand as well.
+      const tooLargeOnRead = oversizedPdfMessage(base64Bytes(base64));
+      if (tooLargeOnRead) {
+        Alert.alert('PDF is too large', tooLargeOnRead);
+        return;
+      }
+
       setFileName(asset.name ?? 'program.pdf');
       setPdfBase64(base64);
       discardDraft();
