@@ -11,6 +11,9 @@
  *  3. Failing that, a message naming what the reader can do about it.
  *
  * A page that throws is skipped rather than failing the import: most of a plan beats none of it.
+ *
+ * None of that helps a file with no words in it — a scan, or a photo of a printout. For those,
+ * {@link readPlanPdfText} reads the pages instead of the file.
  */
 
 import { createRequire } from 'module';
@@ -322,6 +325,40 @@ export async function extractPdfText(buffer: Buffer): Promise<PdfTextResult> {
     'Could not read this PDF — it may be damaged or a scan. Try exporting or printing it to PDF ' +
       'again, or paste the plan as text.',
   );
+}
+
+export type PlanTextResult = PdfTextResult & {
+  /** True when the words came from reading the pages as images rather than out of the file. */
+  transcribed: boolean;
+};
+
+/**
+ * The plan text of a PDF, however it has to be got at.
+ *
+ * {@link extractPdfText} handles every file with words in it, damaged or not. What it cannot help
+ * with is a file with no words in it at all — a scan, or a photo of a printout — where there is
+ * nothing to extract and the pages have to be read instead.
+ *
+ * The reader is injectable so the decision to fall back can be tested without a provider.
+ */
+export async function readPlanPdfText(
+  buffer: Buffer,
+  options?: {
+    fileName?: string;
+    transcribe?: (buffer: Buffer, fileName?: string) => Promise<string>;
+  },
+): Promise<PlanTextResult> {
+  try {
+    const extracted = await extractPdfText(buffer);
+    if (looksUseful(extracted.text)) return { ...extracted, transcribed: false };
+  } catch (error) {
+    // An empty file is empty whoever reads it, and a vision call would only bill for saying so.
+    if (!buffer?.length) throw error;
+  }
+
+  const transcribe = options?.transcribe ?? (await import('./pdfVisionText.js')).readPdfWithVision;
+  const text = await transcribe(buffer, options?.fileName);
+  return { ...finish(text, 0, false), transcribed: true };
 }
 
 export function assertUsefulPdfText(text: string): void {
