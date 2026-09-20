@@ -38,6 +38,8 @@ export async function resolveImportText(source: ImportSource): Promise<{
   text: string;
   fileName?: string;
   pageCount?: number;
+  /** The file was damaged and the text came from a best-effort scan rather than a clean read. */
+  recovered?: boolean;
 }> {
   if (source.type === 'text') {
     const text = source.text.trim();
@@ -47,7 +49,12 @@ export async function resolveImportText(source: ImportSource): Promise<{
   const buffer = decodePdfBase64(source.base64);
   const extracted = await extractPdfText(buffer);
   assertUsefulPdfText(extracted.text);
-  return { text: extracted.text, fileName: source.fileName, pageCount: extracted.pageCount };
+  return {
+    text: extracted.text,
+    fileName: source.fileName,
+    pageCount: extracted.pageCount,
+    recovered: extracted.recovered,
+  };
 }
 
 export async function previewProgramImport(
@@ -60,7 +67,13 @@ export async function previewProgramImport(
     kind,
     fileName: resolved.fileName,
   });
-  return { ...preview, pageCount: resolved.pageCount };
+  const warnings = resolved.recovered
+    ? [
+        'This PDF was damaged, so we read what we could of it. Check the days below before applying.',
+        ...preview.warnings,
+      ]
+    : preview.warnings;
+  return { ...preview, warnings, pageCount: resolved.pageCount };
 }
 
 export async function commitProgramImport(options: {
