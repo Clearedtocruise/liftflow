@@ -5,6 +5,12 @@ import {
   exerciseSlugFromName,
   namesMatchExercise,
 } from '@/lib/exerciseNameLookup';
+import {
+  buildExerciseHistory,
+  type ExerciseHistorySession,
+  type ExerciseHistorySetRow,
+  type ExerciseSessionRow,
+} from '@/lib/exerciseHistory';
 import { fail, fromError, ok } from '@/lib/serviceResult';
 import { canReopenSession } from '@/lib/sessionReopen';
 import { missingPlanExerciseNames } from '@/lib/sessionPlanIntegrity';
@@ -1269,6 +1275,65 @@ export const workoutService: IWorkoutService = {
         .slice(0, limit);
 
       return ok(sets);
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
+  /**
+   * Every set of one exercise, gathered into the sessions it was performed in.
+   *
+   * The sets themselves carry no session — only the workout_exercise row they were logged under —
+   * so the days are read first and the sets hung off them.
+   */
+  async getExerciseHistory(userId: string, exerciseId: string, sessionLimit = 20) {
+    try {
+      const { data: exerciseRows, error: exerciseError } = await supabase
+        .from('workout_exercises')
+        .select('id, session_id, workout_sessions!inner(id, user_id, name, started_at)')
+        .eq('exercise_id', exerciseId)
+        .eq('workout_sessions.user_id', userId);
+
+      if (exerciseError) return fail(exerciseError.message);
+
+      const sessions: ExerciseSessionRow[] = (exerciseRows ?? []).map((row) => {
+        const session = (Array.isArray(row.workout_sessions)
+          ? row.workout_sessions[0]
+          : row.workout_sessions) as { id: string; name: string; started_at: string } | null;
+        return {
+          workoutExerciseId: row.id as string,
+          sessionId: session?.id ?? (row.session_id as string),
+          sessionName: session?.name ?? 'Workout',
+          performedAt: session?.started_at ?? new Date().toISOString(),
+        };
+      });
+
+      if (sessions.length === 0) return ok([] as ExerciseHistorySession[]);
+
+      const { data, error } = await supabase
+        .from('workout_sets')
+        .select('workout_exercise_id, set_number, weight, reps, duration_seconds, is_pr, logged_at')
+        .in(
+          'workout_exercise_id',
+          sessions.map((row) => row.workoutExerciseId),
+        )
+        .order('logged_at', { ascending: false })
+        // Generous enough to fill the session window above for any realistic set count per day.
+        .limit(sessionLimit * 20);
+
+      if (error) return fail(error.message);
+
+      const sets: ExerciseHistorySetRow[] = (data ?? []).map((row) => ({
+        workoutExerciseId: row.workout_exercise_id as string,
+        setNumber: (row.set_number as number) ?? 1,
+        weightKg: row.weight != null ? (row.weight as number) : undefined,
+        reps: row.reps != null ? (row.reps as number) : undefined,
+        durationSeconds: row.duration_seconds != null ? (row.duration_seconds as number) : undefined,
+        isPr: row.is_pr === true,
+        loggedAt: row.logged_at as string,
+      }));
+
+      return ok(buildExerciseHistory(sets, sessions, { limit: sessionLimit }));
     } catch (e) {
       return fromError(e);
     }

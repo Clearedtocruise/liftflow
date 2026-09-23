@@ -142,7 +142,28 @@ export default function SessionDetailScreen() {
       ) : (
         session.exercises.map((exercise) => (
           <Card key={exercise.id} style={styles.exerciseCard}>
-            <AppText variant="bodyBold">{exercise.exercise?.name ?? 'Exercise'}</AppText>
+            {exercise.exerciseId ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`History for ${exercise.exercise?.name ?? 'this exercise'}`}
+                onPress={() =>
+                  router.push({
+                    pathname: '/exercise/[id]',
+                    params: {
+                      id: exercise.exerciseId as string,
+                      name: exercise.exercise?.name ?? 'Exercise',
+                    },
+                  })
+                }
+                style={styles.exerciseHeading}>
+                <AppText variant="bodyBold">{exercise.exercise?.name ?? 'Exercise'}</AppText>
+                <AppText variant="caption" color="accent">
+                  History →
+                </AppText>
+              </Pressable>
+            ) : (
+              <AppText variant="bodyBold">{exercise.exercise?.name ?? 'Exercise'}</AppText>
+            )}
             {exercise.sets.length === 0 ? (
               <AppText variant="footnote" color="textTertiary">
                 No sets
@@ -227,6 +248,11 @@ const styles = StyleSheet.create({
   exerciseCard: {
     marginBottom: Spacing.md,
     gap: Spacing.sm,
+  },
+  exerciseHeading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   setRow: {
     flexDirection: 'row',
