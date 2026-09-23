@@ -111,7 +111,12 @@ export interface IWorkoutService {
   resumeSession(sessionId: string): Promise<ServiceResult<WorkoutSession>>;
   cancelSession(sessionId: string): Promise<ServiceResult<WorkoutSession>>;
   /** History */
-  getHistory(userId: string, page?: number): Promise<ServiceResult<PaginatedResponse<WorkoutHistoryItem>>>;
+  /** `before` reads past page one; it is inclusive, so the caller drops what it has already seen. */
+  getHistory(
+    userId: string,
+    page?: number,
+    options?: { before?: string | null; pageSize?: number },
+  ): Promise<ServiceResult<PaginatedResponse<WorkoutHistoryItem>>>;
   getSession(sessionId: string): Promise<ServiceResult<WorkoutSession>>;
   deleteSession(sessionId: string): Promise<ServiceResult<void>>;
   updateSession(sessionId: string, updates: { name?: string; notes?: string }): Promise<ServiceResult<WorkoutSession>>;

@@ -797,23 +797,39 @@ export const workoutService: IWorkoutService = {
     }
   },
 
-  async getHistory(userId, page = 1) {
+  /**
+   * Completed sessions, newest first.
+   *
+   * `before` reads further back than page one: it is inclusive, because a session can share a
+   * timestamp with the one the previous page stopped at and would otherwise fall between pages.
+   * The caller drops what it has already seen.
+   */
+  async getHistory(userId, page = 1, options?: { before?: string | null; pageSize?: number }) {
     try {
-      const pageSize = 20;
-      const from = (page - 1) * pageSize;
-      const to = from + pageSize - 1;
+      const pageSize = options?.pageSize ?? 20;
 
-      const { data, error, count } = await supabase
+      let query = supabase
         .from('workout_sessions')
         .select('*, workout_exercises(id, workout_sets(is_pr))', { count: 'exact' })
         .eq('user_id', userId)
         .eq('status', 'completed')
-        .order('started_at', { ascending: false })
-        .range(from, to);
+        .order('started_at', { ascending: false });
+
+      if (options?.before) {
+        // One extra row answers "is there more" without a second round trip.
+        query = query.lte('started_at', options.before).limit(pageSize + 1);
+      } else {
+        const from = (page - 1) * pageSize;
+        query = query.range(from, from + pageSize - 1);
+      }
+
+      const { data, error, count } = await query;
 
       if (error) return fail(error.message);
 
-      const items = (data ?? []).map((row) =>
+      const rows = data ?? [];
+      const trimmed = options?.before ? rows.slice(0, pageSize) : rows;
+      const items = trimmed.map((row) =>
         mapHistoryItem({ ...row, workout_exercises: row.workout_exercises }),
       );
 
@@ -822,7 +838,7 @@ export const workoutService: IWorkoutService = {
         total: count ?? items.length,
         page,
         pageSize,
-        hasMore: (count ?? 0) > page * pageSize,
+        hasMore: options?.before ? rows.length > pageSize : (count ?? 0) > page * pageSize,
       });
     } catch (e) {
       return fromError(e);
