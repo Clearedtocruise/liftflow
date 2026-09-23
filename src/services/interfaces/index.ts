@@ -133,7 +133,12 @@ export interface IWorkoutService {
     options?: { preserveUnplanned?: boolean },
   ): Promise<ServiceResult<WorkoutSession>>;
   /** Rest timers */
-  startRestTimer(sessionId: string, setId: string, recommendedSeconds: number): Promise<ServiceResult<RestPeriod>>;
+  /** `setId` is null for a rest taken between exercises, which belongs to no set. */
+  startRestTimer(
+    sessionId: string,
+    setId: string | null,
+    recommendedSeconds: number,
+  ): Promise<ServiceResult<RestPeriod>>;
   endRestTimer(restPeriodId: string, actualSeconds: number, wasSkipped?: boolean): Promise<ServiceResult<RestPeriod>>;
   /** Recent performance for exercise history UI */
   getRecentSetsForExercise(
