@@ -54,7 +54,28 @@ type ChatOptions = {
   temperature?: number;
   maxTokens?: number;
   json?: boolean;
+  /**
+   * How long this one call may take, when the default is the wrong budget for it.
+   *
+   * The default suits a sentence of coaching. A call that writes out a whole document — a six-day
+   * program as JSON — is a different shape of request, and holding it to the same budget meant it
+   * timed out every time and the caller silently fell back to its heuristic.
+   */
+  timeoutMs?: number;
+  /** Retries for this call. Set 0 when a retry would run the caller past its own deadline. */
+  retries?: number;
 };
+
+/** Why a completion produced nothing, for callers whose users deserve to know which it was. */
+export type ChatFailureReason = 'no_provider' | 'timeout' | 'provider_error' | 'unparseable';
+
+export function describeChatFailure(error: unknown): ChatFailureReason {
+  const name = error instanceof Error ? error.name : '';
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  // The SDK reports its own deadline as a connection timeout; upstream 504s read the same way.
+  if (/timeout/i.test(name) || /timed out|timeout/i.test(message)) return 'timeout';
+  return 'provider_error';
+}
 
 /**
  * Single funnel for chat completions. Returns null on any provider failure (timeout, rate limit,
@@ -64,36 +85,63 @@ export async function chatCompletionText(options: ChatOptions): Promise<{
   content: string;
   tokensUsed?: number;
 } | null> {
+  const result = await chatCompletionResult(options);
+  return result.ok ? { content: result.content, tokensUsed: result.tokensUsed } : null;
+}
+
+/** {@link chatCompletionText}, keeping hold of why it failed. */
+export async function chatCompletionResult(options: ChatOptions): Promise<
+  { ok: true; content: string; tokensUsed?: number } | { ok: false; reason: ChatFailureReason }
+> {
   const openai = getOpenAI();
-  if (!openai || !hasOpenAI()) return null;
+  if (!openai || !hasOpenAI()) return { ok: false, reason: 'no_provider' };
 
   try {
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      temperature: options.temperature,
-      max_tokens: options.maxTokens ?? 1200,
-      ...(options.json ? { response_format: { type: 'json_object' as const } } : {}),
-      messages: [
-        { role: 'system', content: `${options.system}\n\n${PROMPT_INJECTION_GUARD}` },
-        { role: 'user', content: options.user },
-      ],
-    });
+    const completion = await openai.chat.completions.create(
+      {
+        model: 'gpt-4o-mini',
+        temperature: options.temperature,
+        max_tokens: options.maxTokens ?? 1200,
+        ...(options.json ? { response_format: { type: 'json_object' as const } } : {}),
+        messages: [
+          { role: 'system', content: `${options.system}\n\n${PROMPT_INJECTION_GUARD}` },
+          { role: 'user', content: options.user },
+        ],
+      },
+      {
+        ...(options.timeoutMs != null ? { timeout: options.timeoutMs } : {}),
+        ...(options.retries != null ? { maxRetries: options.retries } : {}),
+      },
+    );
     const content = completion.choices[0]?.message?.content;
-    if (!content) return null;
-    return { content, tokensUsed: completion.usage?.total_tokens };
+    // A completion stopped at the token ceiling is truncated, and truncated JSON will not parse.
+    if (!content) return { ok: false, reason: 'provider_error' };
+    if (completion.choices[0]?.finish_reason === 'length' && options.json) {
+      console.error('[openai] response hit the output ceiling and was truncated');
+      return { ok: false, reason: 'unparseable' };
+    }
+    return { ok: true, content, tokensUsed: completion.usage?.total_tokens };
   } catch (error) {
     console.error('[openai] chat completion failed:', error instanceof Error ? error.message : error);
-    return null;
+    return { ok: false, reason: describeChatFailure(error) };
   }
 }
 
 export async function chatCompletionJson<T>(options: Omit<ChatOptions, 'json'>): Promise<T | null> {
-  const result = await chatCompletionText({ ...options, json: true });
-  if (!result) return null;
+  const result = await chatCompletionJsonResult<T>(options);
+  return result.ok ? result.data : null;
+}
+
+/** {@link chatCompletionJson}, keeping hold of why it failed. */
+export async function chatCompletionJsonResult<T>(
+  options: Omit<ChatOptions, 'json'>,
+): Promise<{ ok: true; data: T } | { ok: false; reason: ChatFailureReason }> {
+  const result = await chatCompletionResult({ ...options, json: true });
+  if (!result.ok) return result;
   try {
-    return JSON.parse(result.content) as T;
+    return { ok: true, data: JSON.parse(result.content) as T };
   } catch {
     console.error('[openai] model returned unparseable JSON');
-    return null;
+    return { ok: false, reason: 'unparseable' };
   }
 }
