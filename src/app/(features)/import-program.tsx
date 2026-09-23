@@ -448,6 +448,9 @@ export default function ImportProgramScreen() {
         {busy ? (
           <View style={styles.busy}>
             <ActivityIndicator color={LiftFlowColors.accent} />
+            <AppText variant="caption" color="textSecondary">
+              A scanned or photographed plan takes longer — we read the pages themselves.
+            </AppText>
           </View>
         ) : null}
       </ScrollView>
@@ -533,7 +536,7 @@ const styles = StyleSheet.create({
     backgroundColor: LiftFlowColors.surfaceElevated,
   },
   stepperDisabled: { opacity: 0.4 },
-  busy: { alignItems: 'center', padding: Spacing.md },
+  busy: { alignItems: 'center', gap: Spacing.sm, padding: Spacing.md },
   detail: { color: LiftFlowColors.textSecondary, marginTop: Spacing.xs },
   warn: { color: LiftFlowColors.warning, marginTop: Spacing.xs },
 });

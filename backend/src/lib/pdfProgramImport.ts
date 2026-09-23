@@ -8,7 +8,7 @@ import {
   type ImportKind,
   type ProgramImportPreview,
 } from './pdfProgramParse.js';
-import { assertUsefulPdfText, extractPdfText } from './pdfText.js';
+import { assertUsefulPdfText, readPlanPdfText } from './pdfText.js';
 import { createOrReplaceCycle, type CycleStatus } from './programCycleService.js';
 import type { ApplyImportedNutritionResult } from './importedNutritionPlan.js';
 
@@ -40,6 +40,8 @@ export async function resolveImportText(source: ImportSource): Promise<{
   pageCount?: number;
   /** The file was damaged and the text came from a best-effort scan rather than a clean read. */
   recovered?: boolean;
+  /** The file had no text in it, so the pages were read as images. */
+  transcribed?: boolean;
 }> {
   if (source.type === 'text') {
     const text = source.text.trim();
@@ -47,14 +49,33 @@ export async function resolveImportText(source: ImportSource): Promise<{
     return { text, fileName: source.fileName };
   }
   const buffer = decodePdfBase64(source.base64);
-  const extracted = await extractPdfText(buffer);
+  const extracted = await readPlanPdfText(buffer, { fileName: source.fileName });
   assertUsefulPdfText(extracted.text);
   return {
     text: extracted.text,
     fileName: source.fileName,
     pageCount: extracted.pageCount,
     recovered: extracted.recovered,
+    transcribed: extracted.transcribed,
   };
+}
+
+/**
+ * What the reader should know about how the words were got out of their file, before they read
+ * the days below them. Both of these mean "this came out of a file that fought us" — the review
+ * step is there either way, but these are the two times it really matters.
+ */
+function sourceWarnings(resolved: { recovered?: boolean; transcribed?: boolean }): string[] {
+  if (resolved.transcribed) {
+    return [
+      'This PDF had no text in it, so we read the pages as images. Check every day, set and rep ' +
+        'below before applying.',
+    ];
+  }
+  if (resolved.recovered) {
+    return ['This PDF was damaged, so we read what we could of it. Check the days below before applying.'];
+  }
+  return [];
 }
 
 export async function previewProgramImport(
@@ -67,12 +88,7 @@ export async function previewProgramImport(
     kind,
     fileName: resolved.fileName,
   });
-  const warnings = resolved.recovered
-    ? [
-        'This PDF was damaged, so we read what we could of it. Check the days below before applying.',
-        ...preview.warnings,
-      ]
-    : preview.warnings;
+  const warnings = [...sourceWarnings(resolved), ...preview.warnings];
   return { ...preview, warnings, pageCount: resolved.pageCount };
 }
 

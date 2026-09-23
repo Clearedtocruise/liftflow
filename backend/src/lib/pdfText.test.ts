@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { extractPdfText } from './pdfText.js';
+import { extractPdfText, readPlanPdfText } from './pdfText.js';
 
 const LINES = [
   'Day 1 - Push',
@@ -114,5 +114,60 @@ describe('extractPdfText', () => {
 
   it('rejects an empty file', async () => {
     await assert.rejects(extractPdfText(Buffer.alloc(0)), /empty/i);
+  });
+});
+
+describe('readPlanPdfText', () => {
+  /** A well-formed PDF with no text layer — what a scan or a photographed printout looks like. */
+  const SCAN = '%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF\n';
+
+  function transcriber(text: string) {
+    const calls: { fileName?: string }[] = [];
+    return {
+      calls,
+      transcribe: async (_buffer: Buffer, fileName?: string) => {
+        calls.push({ fileName });
+        return text;
+      },
+    };
+  }
+
+  it('reads the file, and nothing else, when the file has words in it', async () => {
+    const reader = transcriber('should not be reached');
+    const { pdf } = buildPdf();
+    const result = await readPlanPdfText(bytes(pdf), { transcribe: reader.transcribe });
+
+    assert.equal(result.transcribed, false);
+    assert.equal(reader.calls.length, 0, 'a readable plan was sent to be transcribed anyway');
+    assert.ok(result.text.includes('Bench Press 4x8'));
+  });
+
+  it('reads the pages when there are no words in the file to read', async () => {
+    const plan = 'Day 1 — Push\nBench Press 4x8\nDay 2 — Pull\nBarbell Row 4x8';
+    const reader = transcriber(plan);
+    const result = await readPlanPdfText(bytes(SCAN), {
+      fileName: 'coach-plan.pdf',
+      transcribe: reader.transcribe,
+    });
+
+    assert.equal(result.transcribed, true);
+    assert.equal(result.text, plan);
+    assert.deepEqual(reader.calls, [{ fileName: 'coach-plan.pdf' }]);
+  });
+
+  it('does not spend a page read on an empty file', async () => {
+    const reader = transcriber('never');
+    await assert.rejects(readPlanPdfText(Buffer.alloc(0), { transcribe: reader.transcribe }), /empty/i);
+    assert.equal(reader.calls.length, 0);
+  });
+
+  it('lets the page reader say why it could not help', async () => {
+    const refuse = async () => {
+      throw new Error('Could not make out a plan on these pages.');
+    };
+    await assert.rejects(
+      readPlanPdfText(bytes(SCAN), { transcribe: refuse }),
+      /could not make out a plan/i,
+    );
   });
 });
