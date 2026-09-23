@@ -1,3 +1,4 @@
+import { mergeActivityHistoryPage } from '@/lib/activityHistoryPage';
 import { dedupeOverlappingCardio } from '@/lib/cardioHistoryDedupe';
 import { cardioService } from '@/services/cardioService';
 import { workoutService } from '@/services/workoutService';
@@ -19,13 +20,35 @@ function cardioTypeLabel(type: string): string {
   return labels[type] ?? 'Cardio';
 }
 
+export type ActivityHistoryPageResult = {
+  data: WorkoutHistoryItem[];
+  /** Where the next page starts. Null when the history has been read to its end. */
+  nextBefore: string | null;
+  hasMore: boolean;
+  /**
+   * Everything on record up to the cursor, which is not the same as everything read so far. On the
+   * first page that is the whole history, so that is the page worth quoting a total from.
+   */
+  totals: { strength: number; cardio: number; all: number };
+};
+
+/**
+ * One page of a training history, lifts and cardio merged by date.
+ *
+ * Reading further back is a `before` cursor rather than a page number: the two records are paged
+ * independently and only become one history once merged, so each page is cut where both records
+ * are still complete. See {@link mergeActivityHistoryPage}.
+ */
 export async function getCombinedActivityHistory(
   userId: string,
-  page = 1,
-): Promise<ServiceResult<{ data: WorkoutHistoryItem[]; hasMore: boolean }>> {
+  options?: { before?: string | null; pageSize?: number },
+): Promise<ServiceResult<ActivityHistoryPageResult>> {
+  const pageSize = options?.pageSize ?? 20;
+  const before = options?.before ?? null;
+
   const [workoutResult, cardioResult] = await Promise.all([
-    workoutService.getHistory(userId, page),
-    cardioService.getRecent(userId, 50),
+    workoutService.getHistory(userId, 1, { before, pageSize }),
+    cardioService.getRecent(userId, pageSize, { before }),
   ]);
 
   const strengthItems: WorkoutHistoryItem[] = workoutResult.success
@@ -57,21 +80,28 @@ export async function getCombinedActivityHistory(
       )
     : [];
 
-  const merged = [...strengthItems, ...cardioItems].sort(
-    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
-  );
-
   if (!workoutResult.success && !cardioResult.success) {
-    return workoutResult.success === false
-      ? { success: false, error: workoutResult.error }
-      : { success: false, error: cardioResult.error };
+    return { success: false, error: workoutResult.error };
   }
+
+  const page = mergeActivityHistoryPage({
+    strength: strengthItems,
+    cardio: cardioItems,
+    // A record that failed to load has nothing more to offer this page; the other still pages on.
+    strengthHasMore: workoutResult.success ? workoutResult.data.hasMore : false,
+    cardioHasMore: cardioResult.success ? (cardioResult.hasMore ?? false) : false,
+  });
+
+  const strengthTotal = workoutResult.success ? workoutResult.data.total : 0;
+  const cardioTotal = cardioResult.success ? (cardioResult.total ?? cardioItems.length) : 0;
 
   return {
     success: true,
     data: {
-      data: merged,
-      hasMore: workoutResult.success ? workoutResult.data.hasMore : false,
+      data: page.items,
+      nextBefore: page.nextBefore,
+      hasMore: page.hasMore,
+      totals: { strength: strengthTotal, cardio: cardioTotal, all: strengthTotal + cardioTotal },
     },
   };
 }

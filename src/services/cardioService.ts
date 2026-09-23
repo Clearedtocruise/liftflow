@@ -82,19 +82,37 @@ export const cardioService = {
     }
   },
 
-  async getRecent(userId: string, limit = 10): Promise<ServiceResult<CardioSessionRecord[]>> {
+  /**
+   * Recent activities, newest first.
+   *
+   * `before` reads further back for history paging, and is inclusive so an activity sharing a
+   * timestamp with the previous page's last entry is not lost between pages. `total` is the whole
+   * count, not the page, so a screen can say how much there is rather than how much it has.
+   */
+  async getRecent(
+    userId: string,
+    limit = 10,
+    options?: { before?: string | null },
+  ): Promise<ServiceResult<CardioSessionRecord[]> & { total?: number; hasMore?: boolean }> {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('cardio_sessions')
-        .select('*')
+        .select('*', { count: 'exact' })
         .eq('user_id', userId)
-        .order('started_at', { ascending: false })
-        .limit(limit);
+        .order('started_at', { ascending: false });
+
+      if (options?.before) query = query.lte('started_at', options.before);
+
+      // One extra row answers "is there more" without a second round trip.
+      const { data, error, count } = await query.limit(limit + 1);
 
       if (error) return fail(error.message);
 
-      return ok(
-        (data ?? []).map((row: {
+      const all = data ?? [];
+      const rows = all.slice(0, limit);
+      return {
+        ...ok(
+        rows.map((row: {
           id: string;
           cardio_type: CardioType;
           started_at: string;
@@ -117,7 +135,10 @@ export const cardioService = {
           notes: row.notes ?? undefined,
           metadata: (row.metadata ?? {}) as Record<string, unknown>,
         })),
-      );
+        ),
+        total: count ?? rows.length,
+        hasMore: all.length > limit,
+      };
     } catch (e) {
       return fail(e instanceof Error ? e.message : 'Failed to load activities');
     }
