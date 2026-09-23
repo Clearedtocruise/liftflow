@@ -98,13 +98,23 @@ export default function TabsLayout() {
           ),
         }}
       />
-      {/* Reachable from the dashboard: History via the streak pill, Settings via the header gear. */}
+      {/* A streak pill on the dashboard was the only way in, and it reads as a stat rather than a
+          door, so training already done was effectively unreachable. */}
       <Tabs.Screen
         name="history"
         options={{
-          href: null,
+          title: 'History',
+          tabBarIcon: ({ color, focused }) => (
+            <AppSymbol
+              name="clock.arrow.circlepath"
+              fallback={SYMBOL_FALLBACKS['clock.arrow.circlepath']}
+              size={focused ? 24 : 22}
+              tintColor={color}
+            />
+          ),
         }}
       />
+      {/* Reachable from the dashboard: Settings via the header gear. */}
       <Tabs.Screen
         name="settings"
         options={{
