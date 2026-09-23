@@ -68,7 +68,11 @@ type WorkoutSessionActions = {
   /** Swap an exercise mid-session. Resolves to the workout exercise the user should move to. */
   replaceExerciseByName: (workoutExerciseId: string, name: string) => Promise<string | null>;
   setListening: (listening: boolean) => void;
-  startRestTimer: (setId: string, seconds?: number) => Promise<void>;
+  /**
+   * Start a rest clock. `setId` is null for a rest nobody logged a set for — the minute taken
+   * after swapping a lift, or stepping back to one, is still rest and still wants a clock.
+   */
+  startRestTimer: (setId: string | null, seconds?: number) => Promise<void>;
   adjustRestTimer: (deltaSeconds: number) => void;
   setRestTimer: (seconds: number) => void;
   pauseRestTimer: () => void;
@@ -464,7 +468,7 @@ export function WorkoutSessionProvider({
   );
 
   const startRestTimer = useCallback(
-    async (setId: string, seconds = DEFAULT_REST_SECONDS) => {
+    async (setId: string | null, seconds = DEFAULT_REST_SECONDS) => {
       if (!activeSession) return;
       const result = await workoutService.startRestTimer(activeSession.id, setId, seconds);
       if (result.success) {

@@ -73,6 +73,7 @@ import { formatWorkoutWeightForInput } from '@/lib/unitConversion';
 import { matchSpokenExercise } from '@/lib/voice/matchSpokenExercise';
 import { pickWorkoutChallenge } from '@/lib/workoutChallengeFlow';
 import { normalizeExecutionMode } from '@/lib/workoutExecutionMode';
+import { exerciseIsFinished, shouldShowExerciseComplete } from '@/lib/workoutExerciseCompletion';
 import { eachSideLabelForSet, expandSetsForEachSide } from '@/lib/eachSideSets';
 import { resolveExerciseInputSeed } from '@/lib/activeWorkoutWeightSeed';
 import { missingPlanExerciseNames } from '@/lib/sessionPlanIntegrity';
@@ -186,6 +187,7 @@ export function ActiveWorkoutScreen({
     adjustRestTimer,
     setRestTimer,
     skipRestTimer,
+    startRestTimer,
     refreshSession,
     deleteSet,
     addExerciseByName,
@@ -1090,14 +1092,22 @@ export function ActiveWorkoutScreen({
   useEffect(() => {
     // Interval modes own their own completion signal; a set count must not override it.
     if (executionModeUsesIntervalTimer(executionMode)) return;
-    if (groupComplete && completedSets.length > 0 && allSetsDone) {
-      setShowComplete(true);
-      setExerciseHadPr(completedSets.some((set) => set.isPr));
-    } else {
+    const completion = {
+      groupComplete,
+      loggedSets: completedSets.length,
+      allSetsDone,
+      restActive,
+    };
+    if (!exerciseIsFinished(completion)) {
       setShowComplete(false);
       justFinishedExerciseRef.current = false;
+      return;
     }
-  }, [groupComplete, completedSets, allSetsDone, executionMode]);
+    // The last set starts a rest like any other set, and that rest is the one before the next
+    // exercise. The complete card renders in its place, so it waits until the clock runs out.
+    setShowComplete(shouldShowExerciseComplete(completion));
+    setExerciseHadPr(completedSets.some((set) => set.isPr));
+  }, [groupComplete, completedSets, allSetsDone, executionMode, restActive]);
 
   function handleAddSet() {
     setShowComplete(false);
@@ -2240,6 +2250,19 @@ export function ActiveWorkoutScreen({
                   </Pressable>
                 ))}
               </View>
+              ) : null}
+
+              {/* Rest is not only what follows a logged set. Swapping a lift, or stepping back to
+                  one, is rest too, and until now there was no way to put a clock on it. */}
+              {executionModeUsesTraditionalRest(executionMode) && !restActive ? (
+                <PrimaryButton
+                  label={`Start ${restTargetSeconds}s rest`}
+                  variant="secondary"
+                  disabled={isPaused || logging}
+                  onPress={() => {
+                    void startRestTimer(null, restTargetSeconds);
+                  }}
+                />
               ) : null}
 
               {!showComplete ? (
