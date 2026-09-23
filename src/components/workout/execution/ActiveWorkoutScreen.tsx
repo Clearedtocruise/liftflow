@@ -1,4 +1,5 @@
 import { LinearGradient } from 'expo-linear-gradient';
+import { router } from 'expo-router';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AccessibilityInfo, Alert, Pressable, StyleSheet, View } from 'react-native';
 
@@ -2095,6 +2096,18 @@ export function ActiveWorkoutScreen({
                   weightLabel={units.weightLabel}
                   distanceUnit={units.preferredDistanceUnit}
                   fallbackWeightKg={safeFallbackWeightKg}
+                  onOpenHistory={
+                    currentExercise.exerciseId
+                      ? () =>
+                          router.push({
+                            pathname: '/exercise/[id]',
+                            params: {
+                              id: currentExercise.exerciseId as string,
+                              name: currentExercise.exercise?.name ?? 'Exercise',
+                            },
+                          })
+                      : undefined
+                  }
                 />
               ) : null}
 

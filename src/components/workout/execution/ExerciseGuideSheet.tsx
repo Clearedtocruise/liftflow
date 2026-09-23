@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Linking, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
@@ -203,6 +204,19 @@ export function ExerciseGuideSheet({
         <View style={styles.footer}>
           {onAddToWorkout ? (
             <PrimaryButton label="Add to Workout" size="large" onPress={onAddToWorkout} />
+          ) : null}
+          {exercise?.id ? (
+            <PrimaryButton
+              label="View history"
+              variant="secondary"
+              onPress={() => {
+                onClose();
+                router.push({
+                  pathname: '/exercise/[id]',
+                  params: { id: exercise.id, name },
+                });
+              }}
+            />
           ) : null}
           <PrimaryButton
             label={onAddToWorkout ? 'Cancel' : 'Back to workout'}

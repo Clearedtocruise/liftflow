@@ -1,4 +1,4 @@
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
@@ -29,6 +29,8 @@ type GuidedWorkoutMetricsProps = {
   weightLabel: string;
   distanceUnit: DistanceUnit;
   fallbackWeightKg?: number;
+  /** Opens the full history for this lift. Omitted where there is nowhere to navigate to. */
+  onOpenHistory?: () => void;
 };
 
 export function GuidedWorkoutMetrics({
@@ -44,6 +46,7 @@ export function GuidedWorkoutMetrics({
   weightLabel,
   distanceUnit,
   fallbackWeightKg,
+  onOpenHistory,
 }: GuidedWorkoutMetricsProps) {
   const planFallback = formatPlanTargetPerformance(
     loggingMode,
@@ -114,9 +117,22 @@ export function GuidedWorkoutMetrics({
       </View>
 
       <View style={styles.block}>
-        <AppText variant="label" color="textSecondary">
-          Previous Performance
-        </AppText>
+        <View style={styles.blockHeader}>
+          <AppText variant="label" color="textSecondary">
+            Previous Performance
+          </AppText>
+          {onOpenHistory ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="See all history for this exercise"
+              hitSlop={12}
+              onPress={onOpenHistory}>
+              <AppText variant="caption" color="accent">
+                See all →
+              </AppText>
+            </Pressable>
+          ) : null}
+        </View>
         {historySets.length > 0 ? (
           historySets.slice(0, 3).map((set, index) => (
             <AppText key={`${set.loggedAt}-${index}`} variant="footnote" color="textSecondary">
@@ -203,6 +219,11 @@ const styles = StyleSheet.create({
   },
   block: {
     gap: Spacing.xs,
+  },
+  blockHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   progressWrap: {
     gap: Spacing.xs,

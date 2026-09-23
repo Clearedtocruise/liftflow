@@ -40,6 +40,7 @@ function RootLayout() {
                 <Stack.Screen name="(onboarding)" />
                 <Stack.Screen name="(tabs)" />
                 <Stack.Screen name="session/[id]" options={{ animation: 'slide_from_right' }} />
+                <Stack.Screen name="exercise/[id]" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen
                   name="(features)"
                   options={{ animation: 'slide_from_right', headerShown: false }}

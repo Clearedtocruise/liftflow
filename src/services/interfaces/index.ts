@@ -135,6 +135,12 @@ export interface IWorkoutService {
   /** Rest timers */
   startRestTimer(sessionId: string, setId: string, recommendedSeconds: number): Promise<ServiceResult<RestPeriod>>;
   endRestTimer(restPeriodId: string, actualSeconds: number, wasSkipped?: boolean): Promise<ServiceResult<RestPeriod>>;
+  /** Past work on one exercise, gathered into the sessions it was performed in. */
+  getExerciseHistory(
+    userId: string,
+    exerciseId: string,
+    sessionLimit?: number,
+  ): Promise<ServiceResult<import('@/lib/exerciseHistory').ExerciseHistorySession[]>>;
   /** Recent performance for exercise history UI */
   getRecentSetsForExercise(
     userId: string,
