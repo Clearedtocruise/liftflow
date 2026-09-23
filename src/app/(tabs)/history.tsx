@@ -1,9 +1,10 @@
 import { router } from 'expo-router';
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Alert, RefreshControl, StyleSheet, View } from 'react-native';
 
 import { HistoryCard } from '@/components/history/HistoryCard';
 import { Card } from '@/components/layout/Card';
+import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { SectionHeader } from '@/components/layout/SectionHeader';
 import { SkeletonBlock } from '@/components/layout/SkeletonBlock';
@@ -11,6 +12,7 @@ import { EmptyStateCard } from '@/components/layout/StateCard';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
+import { appendActivityHistory, groupHistoryByMonth } from '@/lib/activityHistoryPage';
 import { screenDataCache } from '@/lib/screenDataCache';
 import { getCombinedActivityHistory } from '@/services/activityHistoryService';
 import { analyticsService } from '@/services/analyticsService';
@@ -22,10 +24,19 @@ export default function HistoryScreen() {
   const { user } = useAuth();
   const [history, setHistory] = useState<WorkoutHistoryItem[]>([]);
   const [streak, setStreak] = useState(0);
+  const [totalSessions, setTotalSessions] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [olderError, setOlderError] = useState<string | null>(null);
+  const [cursor, setCursor] = useState<{ before: string | null; hasMore: boolean }>({
+    before: null,
+    hasMore: false,
+  });
   const loadGenerationRef = useRef(0);
   const hydratedFromCacheRef = useRef(false);
+  // Refreshing in the background must not yank away pages the reader has already pulled up.
+  const readingOlderRef = useRef(false);
 
   const load = useCallback(
     async (options?: { silent?: boolean }) => {
@@ -35,13 +46,19 @@ export default function HistoryScreen() {
       const silent = options?.silent ?? hydratedFromCacheRef.current;
 
       if (!silent) setLoading(true);
+      readingOlderRef.current = false;
+      setOlderError(null);
 
       // Load history immediately; pull Apple Fitness in the background so History never freezes.
       const historyResult = await getCombinedActivityHistory(user.id);
       if (generation !== loadGenerationRef.current) return;
 
       const items = historyResult.success ? historyResult.data.data : [];
-      if (historyResult.success) setHistory(items);
+      if (historyResult.success) {
+        setHistory(items);
+        setTotalSessions(historyResult.data.totals.all);
+        setCursor({ before: historyResult.data.nextBefore, hasMore: historyResult.data.hasMore });
+      }
       setLoading(false);
       setRefreshing(false);
 
@@ -61,13 +78,45 @@ export default function HistoryScreen() {
 
         const nextItems = refreshed.success ? refreshed.data.data : items;
         const streakValue = streakResult.success ? streakResult.data : 0;
-        if (refreshed.success) setHistory(nextItems);
+        if (refreshed.success && !readingOlderRef.current) {
+          setHistory(nextItems);
+          setTotalSessions(refreshed.data.totals.all);
+          setCursor({ before: refreshed.data.nextBefore, hasMore: refreshed.data.hasMore });
+        }
         if (streakResult.success) setStreak(streakValue);
-        screenDataCache.writeHistory(user.id, { items: nextItems, streak: streakValue });
+        screenDataCache.writeHistory(user.id, {
+          items: nextItems,
+          streak: streakValue,
+          totalSessions: refreshed.success ? refreshed.data.totals.all : undefined,
+        });
       })();
     },
     [user],
   );
+
+  const loadOlder = useCallback(async () => {
+    if (!user || loadingOlder || !cursor.hasMore || !cursor.before) return;
+
+    readingOlderRef.current = true;
+    setLoadingOlder(true);
+    setOlderError(null);
+
+    const result = await getCombinedActivityHistory(user.id, { before: cursor.before });
+
+    setLoadingOlder(false);
+    if (!result.success) {
+      setOlderError(result.error);
+      return;
+    }
+
+    // A page that neither adds anything nor moves the cursor would repeat forever; call it the end.
+    const stalled = result.data.nextBefore === cursor.before;
+    setHistory((current) => appendActivityHistory(current, result.data.data));
+    setCursor({
+      before: result.data.nextBefore,
+      hasMore: result.data.hasMore && !stalled,
+    });
+  }, [user, loadingOlder, cursor]);
 
   useEffect(() => {
     if (!user?.id) {
@@ -84,6 +133,7 @@ export default function HistoryScreen() {
       if (cached) {
         setHistory(cached.items);
         setStreak(cached.streak);
+        if (cached.totalSessions != null) setTotalSessions(cached.totalSessions);
         setLoading(false);
         hydratedFromCacheRef.current = true;
       }
@@ -95,6 +145,8 @@ export default function HistoryScreen() {
       cancelled = true;
     };
   }, [user?.id, load]);
+
+  const months = useMemo(() => groupHistoryByMonth(history), [history]);
 
   async function handleDelete(id: string, sessionKind?: WorkoutHistoryItem['sessionKind']) {
     if (sessionKind === 'cardio') {
@@ -108,8 +160,13 @@ export default function HistoryScreen() {
         style: 'destructive',
         onPress: async () => {
           const result = await workoutService.deleteSession(id);
-          if (result.success) load({ silent: true });
-          else Alert.alert('Error', result.error);
+          if (!result.success) {
+            Alert.alert('Error', result.error);
+            return;
+          }
+          // Drop it in place rather than reloading, which would throw away older pages.
+          setHistory((current) => current.filter((item) => item.id !== id));
+          setTotalSessions((current) => (current == null ? current : Math.max(0, current - 1)));
         },
       },
     ]);
@@ -155,12 +212,12 @@ export default function HistoryScreen() {
           </AppText>
         </MetricTile>
         <MetricTile label="Sessions">
-          <AppText variant="title">{history.length}</AppText>
+          <AppText variant="title">{totalSessions ?? history.length}</AppText>
         </MetricTile>
       </View>
 
       <SectionHeader
-        title="Recent Sessions"
+        title="All Sessions"
         subtitle="Includes Apple Fitness workouts · Pull to refresh · Long press to delete"
       />
 
@@ -172,17 +229,47 @@ export default function HistoryScreen() {
           onAction={() => router.push('/(tabs)/workout')}
         />
       ) : (
-        history.map((item) => (
-          <HistoryCard
-            key={item.id}
-            item={item}
-            onPress={
-              item.sessionKind === 'cardio' ? undefined : () => router.push(`/session/${item.id}`)
-            }
-            onLongPress={() => handleDelete(item.id, item.sessionKind)}
-          />
+        months.map((month) => (
+          <View key={month.key} style={styles.month}>
+            <AppText variant="caption" color="textSecondary" style={styles.monthLabel}>
+              {month.label.toUpperCase()} · {month.items.length}
+            </AppText>
+            {month.items.map((item) => (
+              <HistoryCard
+                key={item.id}
+                item={item}
+                onPress={
+                  item.sessionKind === 'cardio'
+                    ? undefined
+                    : () => router.push(`/session/${item.id}`)
+                }
+                onLongPress={() => handleDelete(item.id, item.sessionKind)}
+              />
+            ))}
+          </View>
         ))
       )}
+
+      {olderError ? (
+        <AppText variant="caption" color="textSecondary" style={styles.olderNote}>
+          {olderError}
+        </AppText>
+      ) : null}
+
+      {cursor.hasMore ? (
+        <PrimaryButton
+          label="Load older sessions"
+          variant="secondary"
+          loading={loadingOlder}
+          onPress={() => {
+            void loadOlder();
+          }}
+        />
+      ) : history.length > 0 ? (
+        <AppText variant="caption" color="textSecondary" style={styles.olderNote}>
+          That&apos;s every session on record.
+        </AppText>
+      ) : null}
     </ScreenContainer>
   );
 }
@@ -211,5 +298,16 @@ const styles = StyleSheet.create({
     padding: Spacing.md,
     borderRadius: Radius.md,
     alignItems: 'flex-start',
+  },
+  month: {
+    gap: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  monthLabel: {
+    letterSpacing: 1,
+  },
+  olderNote: {
+    textAlign: 'center',
+    marginBottom: Spacing.md,
   },
 });

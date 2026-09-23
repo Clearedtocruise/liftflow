@@ -41,6 +41,8 @@ export type ProgressSnapshot = {
 export type HistorySnapshot = {
   items: WorkoutHistoryItem[];
   streak: number;
+  /** Everything on record, not just the first page. Absent in snapshots written before paging. */
+  totalSessions?: number;
 };
 
 export const screenDataCache = {
