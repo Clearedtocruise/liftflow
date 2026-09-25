@@ -243,7 +243,7 @@ export function VoiceSetLogger({
 
       {heard ? (
         <AppText variant="body" align="center" numberOfLines={4}>
-          &quot;{heard}&quot;
+          Heard: &quot;{heard}&quot;
         </AppText>
       ) : null}
 
