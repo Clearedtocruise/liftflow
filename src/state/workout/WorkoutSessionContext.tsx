@@ -13,6 +13,7 @@ import { AccessibilityInfo, AppState, Vibration } from 'react-native';
 import { DEFAULT_REST_SECONDS } from '@/constants/workout';
 import { isStaleWorkoutSession } from '@/lib/staleWorkoutSession';
 import { speakCue } from '@/lib/voice/speakCue';
+import { workoutSessionSyncKey } from '@/lib/workoutSessionSyncKey';
 import { peakMusicService } from '@/services/peakMusicService';
 import { workoutService } from '@/services/workoutService';
 import type { CreateSetPayload, RestPeriod, StartSessionPayload, UpdateSetPayload, WorkoutSession, WorkoutSet } from '@/types';
@@ -139,7 +140,13 @@ export function WorkoutSessionProvider({
       setActiveSession(null);
       return;
     }
-    setActiveSession(result.data);
+    // An unchanged session must stay the same object. A new one every refetch re-runs the
+    // effects that decide which exercise is on screen, so the card skips ahead or snaps back.
+    setActiveSession((current) =>
+      current && workoutSessionSyncKey(current) === workoutSessionSyncKey(result.data)
+        ? current
+        : result.data,
+    );
   }, []);
 
   const hydrate = useCallback(async () => {

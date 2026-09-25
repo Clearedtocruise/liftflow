@@ -241,6 +241,12 @@ export function VoiceSetLogger({
         onPressOut={voice.handlePressOut}
       />
 
+      {heard ? (
+        <AppText variant="body" align="center" numberOfLines={4}>
+          &quot;{heard}&quot;
+        </AppText>
+      ) : null}
+
       {voice.error && !micShowsError ? (
         <AppText variant="caption" color="error" align="center">
           {voice.error}
@@ -266,12 +272,6 @@ export function VoiceSetLogger({
           Try &quot;bench press 225 for 8&quot;
         </AppText>
       )}
-
-      {heard ? (
-        <AppText variant="caption" color="textSecondary" align="center" numberOfLines={3}>
-          Heard: &quot;{heard}&quot;
-        </AppText>
-      ) : null}
 
       {voice.state === 'error' && voice.lastCapture ? (
         <AppText variant="caption" color="textTertiary" align="center">

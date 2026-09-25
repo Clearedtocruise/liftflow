@@ -32,7 +32,14 @@ const apiClient = read('src/api/client.ts');
 record('voiceLimiter exported', security.includes('export const voiceLimiter'));
 record('separate VOICE_RATE_LIMIT env', security.includes('VOICE_RATE_LIMIT_MAX_PER_MINUTE'));
 record('JWT subject helper for /api keys', security.includes('untrustedJwtSubject'));
-record('health skipped by global limiter', security.includes("req.path.startsWith('/health')"));
+record(
+  'health skipped by global limiter',
+  security.includes("path.startsWith('/health')") && security.includes('isExemptFromGlobalRateLimit'),
+);
+record(
+  'voice is exempt from the shared ceiling',
+  security.includes('isExemptFromGlobalRateLimit') && security.includes("path.startsWith('/api/voice')"),
+);
 record('health mounted before globalLimiter', /app\.use\('\/health'[\s\S]*app\.use\(globalLimiter\)/.test(index));
 record(
   'voice routes use voiceLimiter',

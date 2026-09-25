@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { rateLimitKey, untrustedJwtSubject } from './security.ts';
+import { isExemptFromGlobalRateLimit, rateLimitKey, untrustedJwtSubject } from './security.ts';
 
 function bearerForSub(sub: string): string {
   const payload = Buffer.from(JSON.stringify({ sub })).toString('base64url');
@@ -35,6 +35,15 @@ test('rateLimitKey uses JWT sub for /api traffic before requireUser runs', () =>
     } as Parameters<typeof rateLimitKey>[0]),
     'user:jwt-user',
   );
+});
+
+test('voice routes are outside the shared ceiling so a refetch loop cannot starve a spoken set', () => {
+  assert.equal(isExemptFromGlobalRateLimit('/api/voice/transcribe'), true);
+  assert.equal(isExemptFromGlobalRateLimit('/api/voice/parse'), true);
+  assert.equal(isExemptFromGlobalRateLimit('/api/parse'), true);
+  assert.equal(isExemptFromGlobalRateLimit('/health'), true);
+  assert.equal(isExemptFromGlobalRateLimit('/api/training/programs/planned'), false);
+  assert.equal(isExemptFromGlobalRateLimit('/api/training/recovery/intelligence'), false);
 });
 
 test('rateLimitKey ignores JWT sub outside /api so auth routes stay IP-keyed', () => {

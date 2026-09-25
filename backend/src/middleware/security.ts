@@ -78,6 +78,23 @@ export function rateLimitKey(req: Request): string {
   return ipKeyGenerator(req.ip ?? '0.0.0.0');
 }
 
+/**
+ * Paths the broad ceiling must not count.
+ *
+ * Health probes have to stay up during a burst. Voice has its own limiter, and it has to be the
+ * only one: a workout screen that refetches in a loop burns the shared 180/min on plan and
+ * recovery calls, and the set the lifter just spoke is then refused with the same 429 as that
+ * loop. From the mic that reads as "voice is busy" when the mic, the recording and the speech
+ * were all fine.
+ */
+export function isExemptFromGlobalRateLimit(path: string): boolean {
+  return (
+    path.startsWith('/health') ||
+    path.startsWith('/api/voice') ||
+    path.startsWith('/api/parse')
+  );
+}
+
 /** Broad ceiling on all traffic — blunts enumeration and accidental client retry storms. */
 export const globalLimiter = rateLimit({
   windowMs: 60_000,
@@ -85,8 +102,8 @@ export const globalLimiter = rateLimit({
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   keyGenerator: rateLimitKey,
-  // Render's uptime probe must remain responsive even during bursts.
-  skip: (req) => req.path.startsWith('/health') || req.originalUrl.startsWith('/health'),
+  skip: (req) =>
+    isExemptFromGlobalRateLimit(req.path) || isExemptFromGlobalRateLimit(req.originalUrl ?? ''),
   message: { message: 'Too many requests — slow down', code: 'RATE_LIMITED' },
 });
 
@@ -97,8 +114,9 @@ export const globalLimiter = rateLimit({
  *
  * 45/min was still under two requests per second of continuous talking: a lifter whose mic keeps
  * cutting out re-taps far faster than that and hits the wall while logging normally. Transcribe
- * calls are cheap next to the LLM routes and globalLimiter still caps total traffic, so the
- * ceiling is set where only a runaway client can reach it.
+ * calls are cheap next to the LLM routes. They are exempt from the shared ceiling — voiceLimiter
+ * is the one budget a spoken set can run into — and that budget sits where only a runaway client
+ * can reach it.
  */
 export const voiceLimiter = rateLimit({
   windowMs: 60_000,

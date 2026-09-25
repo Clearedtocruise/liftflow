@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { AppState } from 'react-native';
 
 import { resolveWatchSetPayload } from '@/lib/watchLogSet';
@@ -121,15 +121,19 @@ export function useWatchCompanionSync(userId: string | undefined) {
     return () => watchPhoneBridge.setFallbackLogSetHandler(null);
   }, [userId, logSet, setWatchDraftReps, setWatchDraftWeightKg]);
 
-  const pushFullState = () => {
+  const activeSessionRef = useRef(activeSession);
+  activeSessionRef.current = activeSession;
+
+  const pushFullState = useCallback(() => {
     if (!userId) return;
+    const session = activeSessionRef.current;
     void watchCompanionService.pushPhoneWorkoutState(userId, {
-      session: activeSession,
-      restSecondsRemaining,
-      activeExerciseIndex,
-      forceClear: !activeSession,
+      session,
+      restSecondsRemaining: restSecondsRef.current,
+      activeExerciseIndex: exerciseIndexRef.current,
+      forceClear: !session,
     });
-  };
+  }, [userId]);
 
   useEffect(() => {
     if (!userId) return;
@@ -144,11 +148,13 @@ export function useWatchCompanionSync(userId: string | undefined) {
 
   useEffect(() => {
     pushFullState();
-    if (activeSession && !watchSyncTracked.current) {
+    if (activeSessionRef.current && !watchSyncTracked.current) {
       watchSyncTracked.current = true;
       void productAnalyticsService.trackWatchSync(userId!);
     }
-  }, [userId, sessionStructureKey, activeSession]);
+    // sessionStructureKey already changes when the session's shape does. Depending on the session
+    // object as well pushed a full enrich — three API calls — on every identical refetch.
+  }, [userId, pushFullState, sessionStructureKey]);
 
   /**
    * The watch runs its own countdown once armed, so it only needs the deadline — not every tick.
@@ -177,10 +183,10 @@ export function useWatchCompanionSync(userId: string | undefined) {
   }, [userId]);
 
   useEffect(() => {
-    if (!userId || !activeSession) return;
+    if (!userId || !activeSessionRef.current) return;
     const subscription = AppState.addEventListener('change', (state) => {
       if (state === 'active') pushFullState();
     });
     return () => subscription.remove();
-  }, [userId, activeSession?.id, sessionStructureKey]);
+  }, [userId, activeSession?.id, sessionStructureKey, pushFullState]);
 };

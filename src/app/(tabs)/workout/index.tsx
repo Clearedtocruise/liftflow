@@ -67,6 +67,8 @@ export default function WorkoutScreen() {
   const hydratedFromCacheRef = useRef(false);
   const skipFocusLoadRef = useRef(true);
   const cleanedInvalidSessionRef = useRef<string | null>(null);
+  const weekDayCountRef = useRef(0);
+  weekDayCountRef.current = weekDays.length;
 
   const loadWeekPlan = useCallback(
     async (options?: { silent?: boolean }) => {
@@ -76,7 +78,7 @@ export default function WorkoutScreen() {
       }
 
       const generation = ++loadGenerationRef.current;
-      const silent = options?.silent ?? (weekDays.length > 0 || hydratedFromCacheRef.current);
+      const silent = options?.silent ?? (weekDayCountRef.current > 0 || hydratedFromCacheRef.current);
 
       if (!silent) setLoadingPlan(true);
       else setRefreshingPlan(true);
@@ -110,7 +112,7 @@ export default function WorkoutScreen() {
         }
       }
     },
-    [user?.id, user?.timezone, setPlannedWorkout, weekDays.length],
+    [user?.id, user?.timezone, setPlannedWorkout],
   );
 
   useLocalDayRollover(user?.timezone, () => {
@@ -176,15 +178,25 @@ export default function WorkoutScreen() {
     };
   }, [user?.id, user?.timezone, loadWeekPlan, setPlannedWorkout]);
 
+  // Refs, not dependencies. `session` is a new object every refetch and `loadWeekPlan` used to
+  // change whenever the week length did, so this focus callback re-subscribed and ran again the
+  // moment either finished — a loop of plan fetches for as long as a workout was on screen.
+  const loadWeekPlanRef = useRef(loadWeekPlan);
+  loadWeekPlanRef.current = loadWeekPlan;
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
+  const refreshSessionRef = useRef(refreshSession);
+  refreshSessionRef.current = refreshSession;
+
   useFocusEffect(
     useCallback(() => {
       if (skipFocusLoadRef.current) {
         skipFocusLoadRef.current = false;
         return;
       }
-      if (user?.id) void loadWeekPlan({ silent: true });
-      if (session) void refreshSession();
-    }, [user?.id, loadWeekPlan, session, refreshSession]),
+      if (user?.id) void loadWeekPlanRef.current({ silent: true });
+      if (sessionRef.current) void refreshSessionRef.current();
+    }, [user?.id]),
   );
 
   useAppResume(() => {
