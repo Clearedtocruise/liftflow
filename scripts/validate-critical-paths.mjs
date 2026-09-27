@@ -160,6 +160,16 @@ const REQUIRED = [
     ],
   },
   {
+    file: 'src/services/workoutService.ts',
+    label: 'Exercise history can exclude the running session',
+    patterns: ["exerciseQuery.neq('session_id', excludeSessionId)"],
+  },
+  {
+    file: 'src/components/workout/execution/ActiveWorkoutScreen.tsx',
+    label: 'Logging card history skips the workout in progress',
+    patterns: ['getRecentSetsForExercise(user.id, currentExercise.exerciseId, 5, historyMode, session.id)'],
+  },
+  {
     file: 'src/lib/navigateAfterAuth.ts',
     label: 'Login post-auth navigation',
     patterns: ['authHomeRoute', 'router.replace(authHomeRoute'],

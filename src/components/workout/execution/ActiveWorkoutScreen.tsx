@@ -84,7 +84,7 @@ import {
   clearRestAdvanceCoordination,
   resolveRestSkipAdvance,
 } from '@/lib/workoutRestAdvance';
-import { alignPlanExercisesToSession, parseTargetReps } from '@/lib/workoutPlan';
+import { alignPlanExercisesToSession } from '@/lib/workoutPlan';
 import { resolveBetweenExerciseUpNext, resolveTabataPrepUpNext, resolveWorkoutUpNext } from '@/lib/workoutUpNext';
 import { workoutService } from '@/services/workoutService';
 import { watchPhoneBridge, type WatchDisplayContext } from '@/state/WatchPhoneBridge';
@@ -835,17 +835,24 @@ export function ActiveWorkoutScreen({
 
     let cancelled = false;
     void workoutService
-      .getRecentSetsForExercise(user.id, currentExercise.exerciseId, 5, historyMode)
+      // The running session is excluded: history is what this lift looked like on other days,
+      // not a replay of the set logged ten seconds ago.
+      .getRecentSetsForExercise(user.id, currentExercise.exerciseId, 5, historyMode, session.id)
       .then((result: Awaited<ReturnType<typeof workoutService.getRecentSetsForExercise>>) => {
       if (cancelled || !result.success) return;
       setHistorySets(result.data);
 
       const last = result.data[0];
+      // What this session already did outranks other days. Without it, loading a weighted pull-up
+      // set and then refreshing would flip the card back to bodyweight because that is how the
+      // movement was logged last week.
+      const sessionSetsSoFar = currentExercise.sets ?? [];
+      const lastSessionSet = sessionSetsSoFar[sessionSetsSoFar.length - 1];
       const inferredMethod = inferLoadingMethodFromHistory(
         currentExercise.exercise,
         currentExercise.exercise?.slug,
-        last?.weightKg,
-        last?.durationSeconds,
+        lastSessionSet?.weight ?? last?.weightKg,
+        lastSessionSet?.durationSeconds ?? last?.durationSeconds,
       );
       setLoadingMethod(inferredMethod);
 
@@ -870,17 +877,26 @@ export function ActiveWorkoutScreen({
       }
       if (mode === 'cardio') {
         setReps(1);
-        if (last?.durationSeconds) {
-          setDurationSeconds(last.durationSeconds);
+        // History no longer contains this session, so the interval just finished has to come from
+        // the session's own sets rather than from the history row it used to appear in.
+        const seededDuration = lastSessionSet?.durationSeconds ?? last?.durationSeconds;
+        if (seededDuration) {
+          setDurationSeconds(seededDuration);
         }
-        if (last?.distanceMeters) {
-          setDistanceKm(last.distanceMeters / 1000);
+        const seededDistance = lastSessionSet?.distanceMeters ?? last?.distanceMeters;
+        if (seededDistance) {
+          setDistanceKm(seededDistance / 1000);
         }
         return;
       }
       if (mode === 'bodyweight') {
-        setReps(last?.reps ?? parseTargetReps(repRange));
-        repsRef.current = last?.reps ?? parseTargetReps(repRange);
+        const seededReps = resolveExerciseInputSeed({
+          sessionSets: currentExercise.sets ?? [],
+          historyReps: last?.reps,
+          planRepRange: repRange,
+        }).reps;
+        setReps(seededReps);
+        repsRef.current = seededReps;
         return;
       }
 
@@ -916,7 +932,7 @@ export function ActiveWorkoutScreen({
     return () => {
       cancelled = true;
     };
-  }, [currentExercise?.id, currentExercise?.exerciseId, currentExercise?.exercise, currentExercise?.suggestedWeight, repRange, user]);
+  }, [currentExercise?.id, currentExercise?.exerciseId, currentExercise?.exercise, currentExercise?.suggestedWeight, repRange, user, session.id]);
 
   /**
    * Prep countdown and interval start are one decision keyed on the exercise, so re-running this
