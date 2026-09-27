@@ -232,5 +232,34 @@ check(
   true,
 );
 
+console.log('\nA set written but not yet refreshed in still counts');
+// logSet refreshes the session, but that refresh only reaches the logger on the next render. A
+// wrist tap or a fast second press arriving first read one set too few, repeated the set number
+// and slipped a set past the plan target.
+check(
+  'the ceiling check counts the ledger, not the rendered set list',
+  activeWorkoutSource.includes(
+    'countLoggedSets(logExercise.sets, loggedSetLedgerRef.current, logExercise.id)',
+  ),
+  true,
+);
+check(
+  'the set number counts the ledger too',
+  activeWorkoutSource.includes('const completedAfterLog = logCompletedCount + 1;'),
+  true,
+);
+check(
+  'a written set joins the ledger before the next await',
+  /loggedSetLedgerRef\.current = recordLoggedSet\(loggedSetLedgerRef\.current, logExercise\.id, logged\.id\)/.test(
+    activeWorkoutSource,
+  ),
+  true,
+);
+check(
+  'a deleted set leaves the ledger',
+  activeWorkoutSource.includes('forgetLoggedSet(loggedSetLedgerRef.current, setId)'),
+  true,
+);
+
 console.log(`\n${failures === 0 ? 'Active workout progression: PASS' : `Active workout progression: ${failures} FAILURE(S)`}`);
 process.exit(failures === 0 ? 0 : 1);
