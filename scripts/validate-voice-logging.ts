@@ -172,8 +172,23 @@ console.log('\nRest-complete and voice confirmations restore music after speakin
 const speakCue = source('src/lib/voice/speakCue.ts');
 const restTimer = source('src/state/workout/WorkoutSessionContext.tsx');
 const voiceFeedback = source('src/lib/voice/voiceFeedback.ts');
-check('speakCue mixes while the cue plays', speakCue.includes('enterVoicePlaybackMode'), true);
-check('speakCue releases when speech finishes', speakCue.includes('onDone: finish') && speakCue.includes('releaseAudioSession'), true);
+// The confirmation used to duck the shared session. expo-av never deactivates that session with
+// the flag other apps need in order to resume, so the music stayed down after the phrase.
+check(
+  'iOS cues use a private speech session so the system restores the music',
+  speakCue.includes('useApplicationAudioSession: false'),
+  true,
+);
+check(
+  'iOS cues drop the shared duck before the phrase, not after it',
+  speakCue.includes('void releaseAudioSession().finally'),
+  true,
+);
+check(
+  'Android cues still duck and release the shared session',
+  speakCue.includes('enterVoicePlaybackMode') && speakCue.includes('unduckWhileSessionActive'),
+  true,
+);
 check('rest complete uses speakCue (not bare Speech.speak)', restTimer.includes("speakCue('Rest complete. Ready for your next set.'"), true);
 check('rest complete does not call bare Speech.speak', restTimer.includes('Speech.speak'), false);
 check('voice confirmations use speakCue', voiceFeedback.includes('speakCue(message'), true);
