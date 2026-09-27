@@ -46,6 +46,34 @@ function positive(value: number | null | undefined): number | undefined {
 }
 
 /**
+ * "+ Add Set" tallied per workout exercise rather than once for the whole screen.
+ *
+ * One shared counter, cleared by an effect when the card changed, disagreed with itself twice
+ * over. A superset rotation moves the exercise being written to synchronously, so a set logged
+ * straight after the rotation was measured against the previous lift's ceiling — the effect that
+ * resets the counter had not run yet, and the lifter either got "All planned sets are already
+ * logged" on a fresh exercise or an extra set they never asked for. Leaving an exercise and
+ * coming back also silently dropped the set they had added.
+ */
+export type BonusSetsByExercise = Record<string, number>;
+
+export function bonusSetsFor(
+  bonusSets: BonusSetsByExercise,
+  workoutExerciseId: string | null | undefined,
+): number {
+  if (!workoutExerciseId) return 0;
+  return positive(bonusSets[workoutExerciseId]) ?? 0;
+}
+
+export function addBonusSet(
+  bonusSets: BonusSetsByExercise,
+  workoutExerciseId: string | null | undefined,
+): BonusSetsByExercise {
+  if (!workoutExerciseId) return bonusSets;
+  return { ...bonusSets, [workoutExerciseId]: bonusSetsFor(bonusSets, workoutExerciseId) + 1 };
+}
+
+/**
  * Which exercise a resumed/remounted workout screen should land on.
  *
  * `ActiveWorkoutScreen` used to always start at index 0, so leaving the app mid-session (e.g.

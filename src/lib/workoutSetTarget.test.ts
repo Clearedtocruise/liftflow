@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { DEFAULT_TARGET_SETS, firstIncompleteExerciseIndex, resolveEffectiveTargetSets } from './workoutSetTarget';
+import {
+  DEFAULT_TARGET_SETS,
+  addBonusSet,
+  bonusSetsFor,
+  firstIncompleteExerciseIndex,
+  resolveEffectiveTargetSets,
+} from './workoutSetTarget';
 
 test('a traditional exercise finishes on its planned sets', () => {
   assert.equal(resolveEffectiveTargetSets({ executionMode: 'traditional', planSets: 4 }), 4);
@@ -94,4 +100,37 @@ test('a brand-new session with nothing logged resumes on the first exercise', ()
 
 test('an empty session resumes at index 0 rather than a negative index', () => {
   assert.equal(firstIncompleteExerciseIndex([], []), 0);
+});
+
+test('an added set belongs to the exercise it was added to', () => {
+  // One screen-wide counter meant a superset rotation carried Bench's extra set over to Row, and
+  // the set logged on Row was measured against a ceiling the lifter never raised for it.
+  const afterBench = addBonusSet({}, 'we-bench');
+  assert.equal(bonusSetsFor(afterBench, 'we-bench'), 1);
+  assert.equal(bonusSetsFor(afterBench, 'we-row'), 0);
+
+  const afterBoth = addBonusSet(afterBench, 'we-row');
+  assert.equal(bonusSetsFor(afterBoth, 'we-bench'), 1);
+  assert.equal(bonusSetsFor(afterBoth, 'we-row'), 1);
+});
+
+test('added sets stack on the same exercise and survive leaving it', () => {
+  const twice = addBonusSet(addBonusSet({}, 'we-bench'), 'we-bench');
+  assert.equal(bonusSetsFor(twice, 'we-bench'), 2);
+  assert.equal(
+    resolveEffectiveTargetSets({
+      executionMode: 'traditional',
+      planSets: 3,
+      bonusSets: bonusSetsFor(twice, 'we-bench'),
+    }),
+    5,
+  );
+});
+
+test('an unknown or missing exercise has no added sets', () => {
+  assert.equal(bonusSetsFor({}, 'we-bench'), 0);
+  assert.equal(bonusSetsFor({ 'we-bench': 2 }, undefined), 0);
+  assert.equal(bonusSetsFor({ 'we-bench': -1 }, 'we-bench'), 0);
+  // Nothing to credit the set to, so the tally is left alone rather than gaining a blank key.
+  assert.deepEqual(addBonusSet({ 'we-bench': 1 }, null), { 'we-bench': 1 });
 });

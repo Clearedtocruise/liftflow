@@ -79,7 +79,13 @@ import { eachSideLabelForSet, expandSetsForEachSide } from '@/lib/eachSideSets';
 import { resolveExerciseInputSeed } from '@/lib/activeWorkoutWeightSeed';
 import { missingPlanExerciseNames } from '@/lib/sessionPlanIntegrity';
 import { logWorkoutProgressionDecision } from '@/lib/workoutProgressionDebug';
-import { firstIncompleteExerciseIndex, resolveEffectiveTargetSets } from '@/lib/workoutSetTarget';
+import {
+  addBonusSet,
+  bonusSetsFor,
+  firstIncompleteExerciseIndex,
+  resolveEffectiveTargetSets,
+  type BonusSetsByExercise,
+} from '@/lib/workoutSetTarget';
 import {
   clearRestAdvanceCoordination,
   resolveRestSkipAdvance,
@@ -379,7 +385,14 @@ export function ActiveWorkoutScreen({
   /** Only auto-advance when THIS visit just finished the last set — not when landing on an already-done exercise. */
   const justFinishedExerciseRef = useRef(false);
   const [circuitRound, setCircuitRound] = useState(1);
-  const [bonusSets, setBonusSets] = useState(0);
+  /**
+   * Keyed by workout_exercise id so the ceiling always belongs to the lift being written to.
+   * The ref is what the logger reads: a superset rotation moves the write index in the same tick,
+   * long before any state update lands.
+   */
+  const [bonusSetsByExercise, setBonusSetsByExercise] = useState<BonusSetsByExercise>({});
+  const bonusSetsRef = useRef<BonusSetsByExercise>(bonusSetsByExercise);
+  bonusSetsRef.current = bonusSetsByExercise;
   const [exercisePickerVisible, setExercisePickerVisible] = useState(false);
   const [exercisePickerMode, setExercisePickerMode] = useState<'add' | 'swap'>('add');
   const [exerciseGuideOpen, setExerciseGuideOpen] = useState(false);
@@ -411,9 +424,20 @@ export function ActiveWorkoutScreen({
   const effectiveTargetSets = resolveEffectiveTargetSets({
     executionMode,
     planSets: targetSets,
-    bonusSets,
+    bonusSets: bonusSetsFor(bonusSetsByExercise, currentExercise?.id),
     intervalRounds: intervalTimer?.config.rounds,
   });
+  /**
+   * Set target for any exercise in the session, added sets included. Superset partner checks used
+   * the bare plan count, so a partner the lifter had added a set to read as finished and the
+   * rotation walked straight past it.
+   */
+  const targetSetsAtIndex = useCallback(
+    (index: number) =>
+      targetSetsForIndex(index, planExercises) +
+      bonusSetsFor(bonusSetsByExercise, sortedExercises[index]?.id),
+    [planExercises, sortedExercises, bonusSetsByExercise],
+  );
   const repRange = planMeta?.repRange ?? currentExercise?.suggestedReps ?? '8-10';
   const completedSets = currentExercise?.sets ?? [];
   const completedSetsCountRef = useRef(0);
@@ -510,10 +534,7 @@ export function ActiveWorkoutScreen({
           currentIndex,
           planExercises,
           sortedExercises,
-          (index) => {
-            if (index === currentIndex) return effectiveTargetSets;
-            return targetSetsForIndex(index, planExercises);
-          },
+          (index) => (index === currentIndex ? effectiveTargetSets : targetSetsAtIndex(index)),
           isLastExercise,
         )
       : resolveWorkoutUpNext({
@@ -543,6 +564,7 @@ export function ActiveWorkoutScreen({
     currentIndex,
     usesSupersetRotation,
     inSuperset,
+    targetSetsAtIndex,
   ]);
 
   const workoutSetProgress = useMemo(
@@ -1066,10 +1088,12 @@ export function ActiveWorkoutScreen({
 
   useEffect(() => {
     skippedExerciseIdsRef.current.clear();
+    // Added sets belong to the exercise, so they survive leaving it and coming back. Only a new
+    // workout starts the tally over.
+    setBonusSetsByExercise({});
   }, [session.id]);
 
   useEffect(() => {
-    setBonusSets(0);
     if (executionMode === 'tabata') {
       setTabataSessionConfig({
         workSeconds: clampTabataIntervalSeconds(
@@ -1122,7 +1146,10 @@ export function ActiveWorkoutScreen({
       }
       return;
     }
-    setBonusSets((count) => count + 1);
+    // The lift on screen right now, read from the ref so a rotation that just moved the card
+    // cannot credit the extra set to the exercise the lifter has already left.
+    const addTo = sortedExercises[currentIndexRef.current]?.id;
+    setBonusSetsByExercise((current) => addBonusSet(current, addTo));
     if (intervalTimer && intervalTimer.phase !== 'done') {
       handleIntervalConfigChange({
         rounds: clampIntervalRounds(intervalTimer.config.rounds + 1),
@@ -1190,7 +1217,7 @@ export function ActiveWorkoutScreen({
           if (index === currentIndexRef.current) return false;
           const exercise = sortedExercises[index];
           if (exercise?.id && skippedExerciseIdsRef.current.has(exercise.id)) return false;
-          const target = targetSetsForIndex(index, planExercises);
+          const target = targetSetsAtIndex(index);
           return (exercise?.sets?.length ?? 0) < target;
         });
       if (incompletePartner != null) {
@@ -1489,7 +1516,9 @@ export function ActiveWorkoutScreen({
     const logTargetSets = resolveEffectiveTargetSets({
       executionMode,
       planSets: expandSetsForEachSide(logPlanMeta?.sets, logPlanMeta?.notes, logPlanMeta?.repRange),
-      bonusSets,
+      // Added sets belong to the exercise being written to. A single screen-wide counter handed
+      // the previous lift's extra sets to whatever a superset rotation landed on next.
+      bonusSets: bonusSetsFor(bonusSetsRef.current, logExercise.id),
       intervalRounds: intervalTimer?.config.rounds,
     });
     if (logCompletedSets.length >= logTargetSets) {
@@ -1656,7 +1685,6 @@ export function ActiveWorkoutScreen({
       setLogging(false);
     }
   }, [
-    bonusSets,
     circuitRound,
     clearWatchDrafts,
     currentExercise?.id,
@@ -1812,7 +1840,7 @@ export function ActiveWorkoutScreen({
           if (index === currentIndexRef.current) return false;
           const exercise = sortedExercises[index];
           if (exercise?.id && skippedExerciseIdsRef.current.has(exercise.id)) return false;
-          const target = targetSetsForIndex(index, planExercises);
+          const target = targetSetsAtIndex(index);
           return (exercise?.sets?.length ?? 0) < target;
         });
       if (incompletePartner != null) {
