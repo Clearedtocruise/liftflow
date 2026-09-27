@@ -22,6 +22,11 @@ export type WatchSetResolution =
 export type WatchLogSetInput = {
   session: WorkoutSession | null;
   activeExerciseIndex: number;
+  /**
+   * The workout_exercise the watch face is currently showing, as last pushed from the phone.
+   * It wins over the index: the set belongs to the lift named on the wrist.
+   */
+  displayedWorkoutExerciseId?: string | null;
   /** Reps dictated from the watch, if any. */
   draftReps?: number | null;
   /** Weight dictated from the watch, if any. */
@@ -31,6 +36,36 @@ export type WatchLogSetInput = {
 };
 
 const DEFAULT_REPS = 8;
+
+/**
+ * The exercise a wrist tap belongs to.
+ *
+ * The phone pushes the watch face by clamping the active index into range; the log path used to
+ * read `sorted[index] ?? sorted[0]` instead. When the index ran past the end — an exercise deleted
+ * mid-workout, a stale index after a session refresh — the wrist showed the last lift and the set
+ * was written to the first one. Same input, two answers, and the set landed under a lift the
+ * user never touched.
+ *
+ * Both sides call this now, and the id the watch is displaying wins over any index at all.
+ */
+export function resolveWatchActiveExercise<T extends { id: string; isActive?: boolean }>(
+  sortedExercises: T[],
+  options: { activeExerciseIndex?: number | null; displayedWorkoutExerciseId?: string | null },
+): T | undefined {
+  if (sortedExercises.length === 0) return undefined;
+
+  if (options.displayedWorkoutExerciseId) {
+    const displayed = sortedExercises.find((exercise) => exercise.id === options.displayedWorkoutExerciseId);
+    if (displayed) return displayed;
+  }
+
+  const flagged = sortedExercises.find((exercise) => exercise.isActive);
+  if (flagged) return flagged;
+
+  const requested = options.activeExerciseIndex ?? 0;
+  const clamped = Math.min(Math.max(requested, 0), sortedExercises.length - 1);
+  return sortedExercises[clamped];
+}
 
 /** "8-10" → 8; "12" → 12. */
 export function parseFirstNumber(value: string | undefined): number | undefined {
@@ -55,7 +90,10 @@ export function resolveWatchSetPayload(input: WatchLogSetInput): WatchSetResolut
   }
 
   const sorted = [...session.exercises].sort((a, b) => a.sortOrder - b.sortOrder);
-  const exercise = sorted[input.activeExerciseIndex] ?? sorted[0];
+  const exercise = resolveWatchActiveExercise(sorted, {
+    activeExerciseIndex: input.activeExerciseIndex,
+    displayedWorkoutExerciseId: input.displayedWorkoutExerciseId,
+  });
   if (!exercise) {
     return { ok: false, error: 'No exercise selected.' };
   }

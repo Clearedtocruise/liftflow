@@ -9,6 +9,7 @@ import {
     type WatchWorkoutMessage,
 } from '@/integrations/watch';
 import { fail, fromError, ok } from '@/lib/serviceResult';
+import { resolveWatchActiveExercise } from '@/lib/watchLogSet';
 import { workoutService } from '@/services/workoutService';
 import { watchPhoneBridge } from '@/state/WatchPhoneBridge';
 import { supabase } from '@/supabase/client';
@@ -173,8 +174,13 @@ export const watchWorkoutService = {
         return fail('Workout has no exercises yet.');
       }
 
-      const index = Math.min(Math.max(options?.exerciseIndex ?? 0, 0), sorted.length - 1);
-      const activeExercise = sorted.find((e) => e.isActive) ?? sorted[index];
+      // Shared with the wrist log path so the face and the write can never name different lifts.
+      const activeExercise = resolveWatchActiveExercise(sorted, {
+        activeExerciseIndex: options?.exerciseIndex,
+      });
+      if (!activeExercise) {
+        return fail('Workout has no exercises yet.');
+      }
       const exerciseName =
         activeExercise.exercise?.name ?? (await resolveExerciseName(activeExercise.exerciseId)) ?? 'Exercise';
 
