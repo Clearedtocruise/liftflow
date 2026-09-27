@@ -1229,18 +1229,32 @@ export const workoutService: IWorkoutService = {
     }
   },
 
+  /**
+   * Recent sets of one exercise, newest first.
+   *
+   * `excludeSessionId` keeps the workout in progress out of its own history. Without it the
+   * "previous performance" row on the logging card turns into a mirror of the sets just logged,
+   * and the weight it suggests for the next set is read back off that mirror.
+   */
   async getRecentSetsForExercise(
     userId: string,
     exerciseId: string,
     limit = 5,
     mode: import('@/lib/exerciseModality').ExerciseLoggingMode = 'weighted',
+    excludeSessionId?: string | null,
   ) {
     try {
-      const { data: exerciseRows, error: exerciseError } = await supabase
+      let exerciseQuery = supabase
         .from('workout_exercises')
         .select('id, workout_sessions!inner(user_id)')
         .eq('exercise_id', exerciseId)
         .eq('workout_sessions.user_id', userId);
+
+      if (excludeSessionId) {
+        exerciseQuery = exerciseQuery.neq('session_id', excludeSessionId);
+      }
+
+      const { data: exerciseRows, error: exerciseError } = await exerciseQuery;
 
       if (exerciseError) return fail(exerciseError.message);
 
@@ -1301,14 +1315,23 @@ export const workoutService: IWorkoutService = {
    *
    * The sets themselves carry no session — only the workout_exercise row they were logged under —
    * so the days are read first and the sets hung off them.
+   *
+   * `excludeSessionId` drops the workout in progress. It is not a past session, so listing today's
+   * half-finished work alongside real history reads as if the lift were already done.
    */
-  async getExerciseHistory(userId: string, exerciseId: string, sessionLimit = 20) {
+  async getExerciseHistory(userId: string, exerciseId: string, sessionLimit = 20, excludeSessionId?: string | null) {
     try {
-      const { data: exerciseRows, error: exerciseError } = await supabase
+      let exerciseQuery = supabase
         .from('workout_exercises')
         .select('id, session_id, workout_sessions!inner(id, user_id, name, started_at)')
         .eq('exercise_id', exerciseId)
         .eq('workout_sessions.user_id', userId);
+
+      if (excludeSessionId) {
+        exerciseQuery = exerciseQuery.neq('session_id', excludeSessionId);
+      }
+
+      const { data: exerciseRows, error: exerciseError } = await exerciseQuery;
 
       if (exerciseError) return fail(exerciseError.message);
 

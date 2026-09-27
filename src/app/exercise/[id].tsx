@@ -17,6 +17,7 @@ import {
   type ExerciseSessionSet,
 } from '@/lib/exerciseHistory';
 import { workoutService } from '@/services/workoutService';
+import { useWorkoutSession } from '@/state/workout/WorkoutSessionContext';
 
 function formatDay(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString(undefined, {
@@ -50,14 +51,19 @@ export default function ExerciseHistoryScreen() {
   const { id, name } = useLocalSearchParams<{ id: string; name?: string }>();
   const { user } = useAuth();
   const units = useUnits();
+  const { activeSession } = useWorkoutSession();
   const [sessions, setSessions] = useState<ExerciseHistorySession[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const activeSessionId = activeSession?.id ?? null;
+
   const load = useCallback(async () => {
     if (!user || !id) return;
     setLoading(true);
-    const result = await workoutService.getExerciseHistory(user.id, id);
+    // Opened from the logging card mid-workout, so the workout in progress would otherwise sit at
+    // the top of this list as a past session with today's half-finished sets under it.
+    const result = await workoutService.getExerciseHistory(user.id, id, 20, activeSessionId);
     if (result.success) {
       setSessions(result.data);
       setError(null);
@@ -65,7 +71,7 @@ export default function ExerciseHistoryScreen() {
       setError(result.error);
     }
     setLoading(false);
-  }, [user, id]);
+  }, [user, id, activeSessionId]);
 
   useEffect(() => {
     load();
