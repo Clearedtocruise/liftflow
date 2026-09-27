@@ -232,5 +232,32 @@ check(
   true,
 );
 
+console.log('\nAdded sets raise the ceiling of the exercise they were added to');
+// "+ Add Set" was one number for the whole screen. A superset rotation moves the exercise being
+// written to in the same tick, so the set logged next was measured against the previous lift's
+// ceiling — the effect that cleared the counter had not run yet.
+check(
+  'the logger reads the tally for the exercise it is writing to',
+  /bonusSets: bonusSetsFor\(bonusSetsRef\.current, logExercise\.id\)/.test(activeWorkoutSource),
+  true,
+);
+check(
+  'the screen reads the tally for the card on screen',
+  activeWorkoutSource.includes('bonusSetsFor(bonusSetsByExercise, currentExercise?.id)'),
+  true,
+);
+check(
+  'superset partners count their added sets too',
+  activeWorkoutSource.includes('targetSetsAtIndex(index)'),
+  true,
+);
+check(
+  'the tally is cleared per workout, not per card',
+  /skippedExerciseIdsRef\.current\.clear\(\);[\s\S]{0,300}setBonusSetsByExercise\(\{\}\);[\s\S]{0,80}\}, \[session\.id\]\)/.test(
+    activeWorkoutSource,
+  ),
+  true,
+);
+
 console.log(`\n${failures === 0 ? 'Active workout progression: PASS' : `Active workout progression: ${failures} FAILURE(S)`}`);
 process.exit(failures === 0 ? 0 : 1);
