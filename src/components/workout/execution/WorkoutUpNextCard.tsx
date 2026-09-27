@@ -24,11 +24,9 @@ export function WorkoutUpNextCard({ position, compact = false, supersetActive = 
             Now
           </AppText>
           <AppText variant="bodyBold">{position.currentSetLabel}</AppText>
-          {!compact ? (
-            <AppText variant="footnote" color="textTertiary">
-              {position.exerciseName}
-            </AppText>
-          ) : null}
+          <AppText variant="footnote" color="textTertiary">
+            {position.exerciseName}
+          </AppText>
         </View>
         <View style={styles.divider} />
         <View style={styles.cell}>

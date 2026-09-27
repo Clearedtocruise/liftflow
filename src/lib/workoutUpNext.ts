@@ -24,14 +24,18 @@ export function formatIntervalRoundProgress(round: number, totalRounds: number):
 }
 
 export function resolveWorkoutUpNext(input: ResolveWorkoutUpNextInput): WorkoutPositionLabels {
+  const finished =
+    input.activeSetNumber == null && input.completedSetsCount >= input.targetSets && input.targetSets > 0;
+
   const activeSet =
     input.activeSetNumber != null
       ? Math.min(Math.max(1, input.activeSetNumber), input.targetSets)
       : Math.min(input.completedSetsCount + 1, input.targetSets);
 
   const remainingIncludingCurrent = Math.max(0, input.targetSets - activeSet + 1);
-  const currentSetLabel =
-    input.activeSetNumber != null
+  const currentSetLabel = finished
+    ? `Set ${input.targetSets} of ${input.targetSets} · done`
+    : input.activeSetNumber != null
       ? formatIntervalRoundProgress(activeSet, input.targetSets)
       : `Set ${activeSet} of ${input.targetSets} · ${remainingIncludingCurrent} left`;
 

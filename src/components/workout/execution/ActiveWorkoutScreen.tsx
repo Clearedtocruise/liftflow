@@ -75,6 +75,7 @@ import { matchSpokenExercise } from '@/lib/voice/matchSpokenExercise';
 import { pickWorkoutChallenge } from '@/lib/workoutChallengeFlow';
 import { normalizeExecutionMode } from '@/lib/workoutExecutionMode';
 import { exerciseIsFinished, shouldShowExerciseComplete } from '@/lib/workoutExerciseCompletion';
+import { resolveSwapTargetIndex } from '@/lib/workoutSwapTarget';
 import { eachSideLabelForSet, expandSetsForEachSide } from '@/lib/eachSideSets';
 import { resolveExerciseInputSeed } from '@/lib/activeWorkoutWeightSeed';
 import { missingPlanExerciseNames } from '@/lib/sessionPlanIntegrity';
@@ -82,6 +83,7 @@ import { logWorkoutProgressionDecision } from '@/lib/workoutProgressionDebug';
 import { firstIncompleteExerciseIndex, resolveEffectiveTargetSets } from '@/lib/workoutSetTarget';
 import {
   clearRestAdvanceCoordination,
+  nextIndexAfterFinishedExercise,
   resolveRestSkipAdvance,
 } from '@/lib/workoutRestAdvance';
 import { alignPlanExercisesToSession, parseTargetReps } from '@/lib/workoutPlan';
@@ -472,6 +474,11 @@ export function ActiveWorkoutScreen({
     usesSupersetRotation && inSuperset && supersetGroup
       ? nextExerciseIndexAfterGroup(supersetGroup, sortedExercises.length) === null
       : isLastExercise;
+  const swapTargetIndex = resolveSwapTargetIndex(
+    currentIndex,
+    sortedExercises.map((exercise) => exercise.sets?.length ?? 0),
+  );
+  const swapTarget = sortedExercises[swapTargetIndex] ?? currentExercise;
 
   const workoutPosition = useMemo(() => {
     if (
@@ -1336,8 +1343,9 @@ export function ActiveWorkoutScreen({
   }
 
   async function handleSwapExercise(exercise: Exercise) {
-    if (!currentExercise) return;
-    const replacedKey = (currentExercise.exercise?.name ?? '').trim().toLowerCase();
+    if (!currentExercise || !swapTarget) return;
+    const target = swapTarget;
+    const replacedKey = (target.exercise?.name ?? '').trim().toLowerCase();
 
     // Recorded before the swap lands, not after: replacing refreshes the session, and the render
     // in between would otherwise see the plan naming a lift the session no longer has and repair
@@ -1346,10 +1354,21 @@ export function ActiveWorkoutScreen({
       setSwappedPlanNames((current) => ({ ...current, [replacedKey]: exercise.name }));
     }
 
-    const workoutExerciseId = await replaceExerciseByName(currentExercise.id, exercise.name);
+    const swapped = await replaceExerciseByName(target.id, exercise.name);
+    const workoutExerciseId = swapped.workoutExerciseId;
     if (!workoutExerciseId) {
       if (replacedKey) forgetPlanSwap(replacedKey);
-      Alert.alert('Could not swap exercise', 'Please try again.');
+      Alert.alert('Could not swap exercise', swapped.error ?? 'Please try again.');
+      return;
+    }
+
+    if (swapped.alreadyInWorkout) {
+      if (replacedKey) forgetPlanSwap(replacedKey);
+      Alert.alert(
+        'Already in this workout',
+        `${exercise.name} is already in this session. Taking you to it.`,
+      );
+      await focusWorkoutExercise(workoutExerciseId);
       return;
     }
 
@@ -1357,7 +1376,8 @@ export function ActiveWorkoutScreen({
     // replacement in after it, so the original still belongs to its plan entry — only an in-place
     // swap actually vacates one. Rewriting it either way would cost the completed lift its
     // prescription and leave it showing a default set target.
-    if (replacedKey && workoutExerciseId !== currentExercise.id) {
+    const replacedInPlace = workoutExerciseId === target.id;
+    if (replacedKey && !replacedInPlace && workoutExerciseId !== currentExercise.id) {
       forgetPlanSwap(replacedKey);
     }
 
@@ -1642,7 +1662,46 @@ export function ActiveWorkoutScreen({
         executionModeUsesTraditionalRest(executionMode) &&
         !skipRest
       ) {
-        pendingExerciseAdvanceAfterRestRef.current = true;
+        const advanceTo = nextIndexAfterFinishedExercise(
+          logIndex,
+          sortedExercises.length,
+          completedAfterLog,
+          logTargetSets,
+        );
+        if (advanceTo != null) {
+          // The lift is done. Stay on it and the rest clock reads as another set of the
+          // same exercise ("1 left") instead of moving on. The clock keeps running; it is
+          // now the rest before the next exercise.
+          justFinishedExerciseRef.current = false;
+          pendingExerciseAdvanceAfterRestRef.current = false;
+          currentIndexRef.current = advanceTo;
+          setCurrentIndex(advanceTo);
+          setShowComplete(false);
+          const nextLoggedExercise = sortedExercises[advanceTo];
+          const nextPlan = planExercises[advanceTo];
+          if (nextLoggedExercise) {
+            inputsTouchedRef.current = false;
+            const seed = resolveExerciseInputSeed({
+              sessionSets: nextLoggedExercise.sets ?? [],
+              suggestedWeightKg: clampPlanWeightKgForExercise(
+                nextLoggedExercise.suggestedWeight,
+                nextLoggedExercise.exercise?.name,
+                nextLoggedExercise.exercise?.slug,
+              ),
+              planRepRange: nextPlan?.repRange ?? nextLoggedExercise.suggestedReps,
+            });
+            weightKgRef.current = seed.weightKg;
+            repsRef.current = seed.reps;
+            durationSecondsRef.current = seed.durationSeconds;
+            setWeightKg(seed.weightKg);
+            setReps(seed.reps);
+            setDurationSeconds(seed.durationSeconds);
+            setDistanceKm(0);
+            distanceKmRef.current = 0;
+          }
+        } else {
+          pendingExerciseAdvanceAfterRestRef.current = true;
+        }
       }
 
       if (completedAfterLog < logTargetSets && !skipRest) {
@@ -2370,6 +2429,9 @@ export function ActiveWorkoutScreen({
                       label="Swap Exercise"
                       variant="secondary"
                       onPress={() => {
+                        // The rest clock is its own modal. Leaving it up swallows the picker
+                        // on iOS, so Swap looks like a dead button.
+                        setRestOverlayOpen(false);
                         setExercisePickerMode('swap');
                         setExercisePickerVisible(true);
                       }}
@@ -2571,7 +2633,7 @@ export function ActiveWorkoutScreen({
         title={exercisePickerMode === 'swap' ? 'Swap Exercise' : 'Add Exercise'}
         subtitle={
           exercisePickerMode === 'swap'
-            ? `Replacing ${currentExercise.exercise?.name ?? 'this exercise'}`
+            ? `Replacing ${swapTarget?.exercise?.name ?? currentExercise.exercise?.name ?? 'this exercise'}`
             : undefined
         }
       />

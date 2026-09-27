@@ -171,9 +171,13 @@ export function WorkoutTimerOverlay({
     else onCircuitDismiss?.();
   }
 
+  // A hidden Modal still sits above the workout on iOS and eats taps, which is how
+  // Swap Exercise looked tappable and did nothing while rest was only minimized.
+  if (!showModal) return null;
+
   return (
     <Modal
-      visible={showModal}
+      visible
       transparent
       animationType="fade"
       onRequestClose={handleRequestClose}

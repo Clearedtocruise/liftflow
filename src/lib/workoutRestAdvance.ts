@@ -26,6 +26,23 @@ export type RestSkipOutcome = {
   advanceToIndex: number | null;
 };
 
+/**
+ * The last set of an exercise used to leave the lifter on that exercise for the whole rest
+ * ("Set 3 of 3 · 1 left") and only then try to advance. They finished the lift and the workout
+ * did not move on. Step to the next exercise now; the rest that just started is the rest
+ * before that exercise. The last exercise of the workout stays put.
+ */
+export function nextIndexAfterFinishedExercise(
+  currentIndex: number,
+  exerciseCount: number,
+  setsJustLogged: number,
+  targetSets: number,
+): number | null {
+  if (setsJustLogged < targetSets) return null;
+  const nextIndex = currentIndex + 1;
+  return nextIndex < exerciseCount ? nextIndex : null;
+}
+
 export function emptyRestAdvanceCoordination(): RestAdvanceCoordination {
   return {
     pendingExerciseAdvanceAfterRest: false,

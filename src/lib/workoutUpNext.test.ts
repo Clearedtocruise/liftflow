@@ -26,6 +26,20 @@ test('tabata active round labels show progress and remaining', () => {
   assert.equal(labels.upNextLabel, 'Round 4 of 10 · 7 left');
 });
 
+test('a finished set does not still say one set is left', () => {
+  const labels = resolveWorkoutUpNext({
+    exerciseName: 'Incline DB Press',
+    targetSets: 3,
+    completedSetsCount: 3,
+    isLastExercise: false,
+    nextExerciseName: 'OHP',
+    nextExerciseTargetSets: 3,
+  });
+  assert.equal(labels.currentSetLabel, 'Set 3 of 3 · done');
+  assert.equal(labels.upNextLabel, 'OHP · Set 1 of 3');
+  assert.equal(labels.exerciseName, 'Incline DB Press');
+});
+
 test('tabata prep prompts logging before work', () => {
   const labels = resolveTabataPrepUpNext('Goblet squat', 10);
   assert.match(labels.currentSetLabel, /Log weight · 10 rounds/);

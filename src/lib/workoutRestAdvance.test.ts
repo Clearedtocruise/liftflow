@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
   clearRestAdvanceCoordination,
+  nextIndexAfterFinishedExercise,
   resolveRestSkipAdvance,
 } from './workoutRestAdvance';
 
@@ -36,6 +37,13 @@ test('Skip Rest mid-sets with no pending advance does nothing extra', () => {
   });
   assert.equal(outcome.scheduleAutoAdvance, false);
   assert.equal(outcome.advanceToIndex, null);
+});
+
+test('the last set of an exercise moves to the next one instead of staying put', () => {
+  assert.equal(nextIndexAfterFinishedExercise(0, 4, 3, 3), 1);
+  assert.equal(nextIndexAfterFinishedExercise(2, 4, 3, 3), 3);
+  assert.equal(nextIndexAfterFinishedExercise(3, 4, 3, 3), null);
+  assert.equal(nextIndexAfterFinishedExercise(0, 4, 2, 3), null);
 });
 
 test('Skip Rest prefers a pending superset partner index over the last-set auto-advance', () => {

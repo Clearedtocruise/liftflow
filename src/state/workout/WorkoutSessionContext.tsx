@@ -67,7 +67,7 @@ type WorkoutSessionActions = {
     options?: { afterWorkoutExerciseId?: string },
   ) => Promise<AddExerciseOutcome>;
   /** Swap an exercise mid-session. Resolves to the workout exercise the user should move to. */
-  replaceExerciseByName: (workoutExerciseId: string, name: string) => Promise<string | null>;
+  replaceExerciseByName: (workoutExerciseId: string, name: string) => Promise<AddExerciseOutcome>;
   setListening: (listening: boolean) => void;
   /**
    * Start a rest clock. `setId` is null for a rest nobody logged a set for — the minute taken
@@ -459,17 +459,28 @@ export function WorkoutSessionProvider({
   );
 
   const replaceExerciseByName = useCallback(
-    async (workoutExerciseId: string, name: string) => {
-      if (!userId || !activeSession) return null;
+    async (workoutExerciseId: string, name: string): Promise<AddExerciseOutcome> => {
+      if (!userId || !activeSession) {
+        return { workoutExerciseId: null, error: 'No workout is running.' };
+      }
 
       const exerciseIdResult = await workoutService.findOrCreateExerciseByName(name, userId);
-      if (!exerciseIdResult.success) return null;
+      if (!exerciseIdResult.success) {
+        return { workoutExerciseId: null, error: exerciseIdResult.error };
+      }
+
+      const existing = activeSession.exercises.find((exercise) => exercise.exerciseId === exerciseIdResult.data);
+      if (existing && existing.id !== workoutExerciseId) {
+        return { workoutExerciseId: existing.id, alreadyInWorkout: true };
+      }
 
       const result = await workoutService.replaceExercise(workoutExerciseId, exerciseIdResult.data);
-      if (!result.success) return null;
+      if (!result.success) {
+        return { workoutExerciseId: null, error: result.error };
+      }
 
       await refreshSession();
-      return result.data.id;
+      return { workoutExerciseId: result.data.id };
     },
     [userId, activeSession, refreshSession],
   );
