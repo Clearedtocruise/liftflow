@@ -34,6 +34,7 @@ import {
     computeWorkoutSetProgress,
     formatCoachTargetLine,
 } from '@/lib/activeWorkoutMetrics';
+import { willAutoAdvanceExercise } from '@/lib/exerciseAutoAdvance';
 import {
     inferLoadingMethodFromHistory,
     loadingMethodOptions,
@@ -350,6 +351,8 @@ export function ActiveWorkoutScreen({
   const [historySets, setHistorySets] = useState<ExerciseHistorySet[]>([]);
   const [coachPrescription, setCoachPrescription] = useState<ExerciseCoachPrescription | null>(null);
   const [showComplete, setShowComplete] = useState(false);
+  /** Mirrors the auto-advance timer so the complete card only claims a jump that is really queued. */
+  const [autoAdvanceScheduled, setAutoAdvanceScheduled] = useState(false);
   const [exerciseHadPr, setExerciseHadPr] = useState(false);
   const [restPaused, setRestPaused] = useState(false);
   const [restTargetSeconds, setRestTargetSeconds] = useState(() =>
@@ -997,6 +1000,7 @@ export function ActiveWorkoutScreen({
     const generation = advanceGenerationRef.current;
     autoAdvanceTimeoutRef.current = setTimeout(() => {
       autoAdvanceTimeoutRef.current = null;
+      setAutoAdvanceScheduled(false);
       // A manual Next / skip that already advanced cancels this scheduled jump.
       if (generation !== advanceGenerationRef.current) return;
       advanceExerciseRef.current();
@@ -1004,22 +1008,28 @@ export function ActiveWorkoutScreen({
   }, []);
 
   useEffect(() => {
-    if (!showComplete || restActive || activeChallenge || isPaused) return;
-    // Tabata/HIIT: wait for the lifter to log the rounds they just finished before advancing.
-    if (
-      executionModeUsesIntervalTimer(executionMode) &&
-      completedSets.length < effectiveTargetSets
-    ) {
-      return;
-    }
-    // Revisiting an already-complete exercise must not auto-skip the lifter forward.
-    if (!justFinishedExerciseRef.current) return;
+    // Revisiting an already-complete exercise, a paused workout and an interval block whose rounds
+    // are not logged yet all stay put. The card reads the same answer, so it never promises a jump
+    // that is not coming.
+    const willAdvance = willAutoAdvanceExercise({
+      exerciseComplete: showComplete,
+      restRunning: restActive,
+      challengeOpen: Boolean(activeChallenge),
+      workoutPaused: isPaused,
+      justFinishedExercise: justFinishedExerciseRef.current,
+      usesIntervalTimer: executionModeUsesIntervalTimer(executionMode),
+      loggedSets: completedSets.length,
+      targetSets: effectiveTargetSets,
+    });
+    setAutoAdvanceScheduled(willAdvance);
+    if (!willAdvance) return;
     scheduleAutoExerciseAdvance();
     return () => {
       if (autoAdvanceTimeoutRef.current) {
         clearTimeout(autoAdvanceTimeoutRef.current);
         autoAdvanceTimeoutRef.current = null;
       }
+      setAutoAdvanceScheduled(false);
     };
   }, [
     showComplete,
@@ -2434,7 +2444,7 @@ export function ActiveWorkoutScreen({
             volumeKg={exerciseVolume}
             hasPr={exerciseHadPr}
             onNext={handleNextExercise}
-            autoAdvancing={!restActive && !activeChallenge && !isFinalExercise}
+            autoAdvancing={autoAdvanceScheduled && !isFinalExercise}
             isLastExercise={isFinalExercise}
           />
         ) : null}

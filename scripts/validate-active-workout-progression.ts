@@ -232,5 +232,21 @@ check(
   true,
 );
 
+console.log('\nThe complete card only promises a jump the timer is actually going to make');
+// "Next exercise starting…" used to be derived from "rest is not running", which is also true when
+// the lifter walks back to an exercise they finished ten minutes ago. The card now reads the same
+// flag the auto-advance effect sets, so the two cannot disagree.
+check(
+  'the card reads the scheduled flag, not a rest check',
+  activeWorkoutSource.includes('autoAdvancing={autoAdvanceScheduled && !isFinalExercise}'),
+  true,
+);
+check(
+  'the effect and the card share one decision',
+  activeWorkoutSource.includes('willAutoAdvanceExercise({') &&
+    activeWorkoutSource.includes('setAutoAdvanceScheduled(willAdvance)'),
+  true,
+);
+
 console.log(`\n${failures === 0 ? 'Active workout progression: PASS' : `Active workout progression: ${failures} FAILURE(S)`}`);
 process.exit(failures === 0 ? 0 : 1);
