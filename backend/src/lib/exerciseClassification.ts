@@ -61,6 +61,13 @@ const TIMED_NAME_PATTERN =
 const BODYWEIGHT_NAME_PATTERN =
   /\b(pull[\s-]?up|chin[\s-]?up|push[\s-]?up|dip|burpee|air\s*squat|bodyweight|inverted\s*row|muscle[\s-]?up|pistol\s*squat|walking\s*lunge)\b/i;
 
+/** Flat lying pulldown is bodyweight. "lwg" is the dictated/imported spelling. Cable lat pulldowns stay loaded. */
+const FLAT_BODYWEIGHT_PULLDOWN_NAME_PATTERN = /\bflat[\s-]+(?:lwg|lying)[\s-]+pull[\s-]?downs?\b/i;
+
+function isFlatBodyweightPulldownName(name: string | null | undefined): boolean {
+  return FLAT_BODYWEIGHT_PULLDOWN_NAME_PATTERN.test(normalize(name));
+}
+
 const CORE_BODYWEIGHT_NAME_PATTERN =
   /\b(windshield\s*wiper|windshield\s*wipers|hanging\s+leg\s+raise|leg\s+raise|v[\s-]?up|toes?\s+to\s+bar|mountain\s+climber|russian\s+twist|dead\s+bug|hollow\s+rock|flutter\s+kick|scissor\s+kick)\b/i;
 
@@ -107,6 +114,8 @@ function normalize(value: string | undefined | null): string {
 
 export function classifyExercise(input: ExerciseClassificationInput): ExerciseType {
   if (input.exerciseType && input.exerciseType !== 'strength') return input.exerciseType;
+
+  if (isFlatBodyweightPulldownName(input.name)) return 'bodyweight';
 
   const slug = normalize(input.slug);
   if (slug && CATALOG[slug]) return CATALOG[slug];

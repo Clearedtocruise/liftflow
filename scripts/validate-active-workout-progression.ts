@@ -78,6 +78,16 @@ for (const name of [
   check(name, classifyExercise({ name }), 'strength');
 }
 check('Inverted Row', classifyExercise({ name: 'Inverted Row' }), 'bodyweight');
+check(
+  'Flat lying pulldown is bodyweight',
+  classifyExercise({ name: 'Flat LWG Pull Down', slug: 'lat-pulldown', equipment: 'cable', exerciseType: 'strength' }),
+  'bodyweight',
+);
+check(
+  'Lat Pulldown stays strength',
+  classifyExercise({ name: 'Lat Pulldown', slug: 'lat-pulldown', equipment: 'cable', exerciseType: 'strength' }),
+  'strength',
+);
 check('Walking Lunge', classifyExercise({ name: 'Walking Lunge' }), 'bodyweight');
 check("Farmer's Walk is not cardio", classifyExercise({ name: "Farmer's Walk" }) !== 'cardio', true);
 

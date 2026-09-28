@@ -6,7 +6,8 @@ import { Card } from '@/components/layout/Card';
 import { AppText } from '@/components/ui/AppText';
 import { ExerciseGuideSheet } from '@/components/workout/execution/ExerciseGuideSheet';
 import { LiftFlowColors, Spacing } from '@/constants/theme';
-import { coachAdjustmentLabel } from '@/lib/coachAdjustmentLabels';
+import { coachAdjustmentLabel, coachReasonForLoggingMode } from '@/lib/coachAdjustmentLabels';
+import { getExerciseLoggingMode } from '@/lib/exerciseModality';
 import { formatExerciseStationLabel } from '@/lib/supersetFlow';
 import { exerciseCoachService } from '@/services/exerciseCoachService';
 import type { ExerciseCoachPrescription } from '@/types/exerciseCoach';
@@ -91,6 +92,7 @@ export function WorkoutExerciseDetailList({
       {exercises.map((exercise, index) => {
         const prescription = exercise.exerciseId ? prescriptionByExerciseId.get(exercise.exerciseId) : undefined;
         const stationLabel = formatExerciseStationLabel(exercise, index, exercises);
+        const loggingMode = getExerciseLoggingMode(null, exercise.repRange, exercise.name);
         return (
           <View key={exercise.id} style={[styles.row, index < exercises.length - 1 && styles.rowBorder]}>
             <AppText variant="caption" color="textTertiary" style={styles.index}>
@@ -113,10 +115,10 @@ export function WorkoutExerciseDetailList({
               {prescription ? (
                 <>
                   <AppText variant="caption" color="accent">
-                    {coachAdjustmentLabel(prescription.adjustmentLabel)} · {prescription.reason}
+                    {coachAdjustmentLabel(prescription.adjustmentLabel)} · {coachReasonForLoggingMode(prescription.reason, loggingMode)}
                   </AppText>
                   <AppText variant="caption" color="textTertiary">
-                    {prescription.detailedReason}
+                    {coachReasonForLoggingMode(prescription.detailedReason, loggingMode)}
                   </AppText>
                 </>
               ) : null}

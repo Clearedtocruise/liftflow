@@ -83,6 +83,23 @@ test('strength work without a known weight is refused', () => {
   assert.match((result as { error: string }).error, /Set a weight/);
 });
 
+test('flat lying pulldown logs at zero rather than asking for a weight', () => {
+  const pulldown = session();
+  pulldown.exercises[1] = {
+    id: 'we-2',
+    sortOrder: 1,
+    exerciseId: 'pulldown',
+    exercise: { id: 'pulldown', name: 'Flat LWG Pull Down' },
+    suggestedReps: '12',
+    sets: [],
+  } as never;
+
+  const result = resolveWatchSetPayload({ session: pulldown, activeExerciseIndex: 1 });
+  assert.ok(result.ok);
+  assert.equal(result.payload.weight, 0);
+  assert.equal(result.payload.reps, 12);
+});
+
 test('bodyweight work logs at zero rather than refusing', () => {
   const pullUps = session();
   pullUps.exercises[1] = {
