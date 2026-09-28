@@ -246,6 +246,16 @@ check(
   /if \(!logged\) \{[\s\S]*setCurrentIndex\(logIndex\)/.test(commitBody),
   true,
 );
+check(
+  'the rest clock calls the next exercise Now',
+  activeWorkoutSource.includes('restPopupNow({'),
+  true,
+);
+check(
+  'the rest clock opens after the last set is saved',
+  commitBody.includes('if (advanceTo != null) setRestOverlayOpen(true)'),
+  true,
+);
 
 console.log(`\n${failures === 0 ? 'Active workout progression: PASS' : `Active workout progression: ${failures} FAILURE(S)`}`);
 process.exit(failures === 0 ? 0 : 1);

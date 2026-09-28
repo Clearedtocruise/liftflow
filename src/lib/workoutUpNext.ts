@@ -60,6 +60,47 @@ export function resolveWorkoutUpNext(input: ResolveWorkoutUpNextInput): WorkoutP
   };
 }
 
+/**
+ * What the rest clock calls "Now".
+ *
+ * After the last set of a lift, rest is the rest before the next exercise. "Now" is that
+ * exercise's first set — not the lift that just finished, and not "1 left" on a set already
+ * logged. Mid-exercise, "Now" is the next set of the same lift.
+ */
+export function restPopupNow(input: ResolveWorkoutUpNextInput): WorkoutPositionLabels {
+  const target = Math.max(1, input.targetSets);
+  const finished = input.completedSetsCount >= target;
+
+  if (finished && !input.isLastExercise && input.nextExerciseName) {
+    const nextSets = Math.max(1, input.nextExerciseTargetSets ?? target);
+    return {
+      exerciseName: input.nextExerciseName,
+      currentSetLabel: `Set 1 of ${nextSets}`,
+      upNextLabel: nextSets > 1 ? `Set 2 of ${nextSets}` : 'Finish workout',
+    };
+  }
+
+  if (!finished) {
+    const nowSet = Math.min(input.completedSetsCount + 1, target);
+    return {
+      exerciseName: input.exerciseName,
+      currentSetLabel: `Set ${nowSet} of ${target}`,
+      upNextLabel:
+        nowSet < target
+          ? `Set ${nowSet + 1} of ${target}`
+          : !input.isLastExercise && input.nextExerciseName
+            ? `${input.nextExerciseName} · Set 1 of ${Math.max(1, input.nextExerciseTargetSets ?? target)}`
+            : 'Finish workout',
+    };
+  }
+
+  return {
+    exerciseName: input.exerciseName,
+    currentSetLabel: `Set ${target} of ${target} · done`,
+    upNextLabel: 'Finish workout',
+  };
+}
+
 export function resolveBetweenExerciseUpNext(
   nextExerciseName: string,
   nextTargetSets: number,

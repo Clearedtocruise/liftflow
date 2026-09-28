@@ -87,7 +87,7 @@ import {
   resolveRestSkipAdvance,
 } from '@/lib/workoutRestAdvance';
 import { alignPlanExercisesToSession, parseTargetReps } from '@/lib/workoutPlan';
-import { resolveBetweenExerciseUpNext, resolveTabataPrepUpNext, resolveWorkoutUpNext } from '@/lib/workoutUpNext';
+import { resolveBetweenExerciseUpNext, resolveTabataPrepUpNext, resolveWorkoutUpNext, restPopupNow } from '@/lib/workoutUpNext';
 import { workoutService } from '@/services/workoutService';
 import { watchPhoneBridge, type WatchDisplayContext } from '@/state/WatchPhoneBridge';
 import { useWorkoutSession } from '@/state/workout/WorkoutSessionContext';
@@ -1665,6 +1665,10 @@ export function ActiveWorkoutScreen({
         setExerciseHadPr(true);
       }
 
+      // Rest is about to count. Open it on the exercise we just stepped to, so the clock's
+      // "Now" is set 1 of that lift rather than the one that just finished.
+      if (advanceTo != null) setRestOverlayOpen(true);
+
       // The set list updates silently, so a screen-reader user gets no confirmation that the tap
       // registered — and the rest timer that follows is equally unannounced.
       AccessibilityInfo.announceForAccessibility(
@@ -2540,7 +2544,18 @@ export function ActiveWorkoutScreen({
             (intervalTimer != null && intervalOverlayOpen) ||
             (circuitTimer != null && circuitTimer.phase !== 'done' && circuitOverlayOpen))
         }
-        position={workoutPosition}
+        position={
+          restActive && !intervalTimer && !circuitTimer
+            ? restPopupNow({
+                exerciseName: currentExercise?.exercise?.name ?? 'Exercise',
+                targetSets: effectiveTargetSets,
+                completedSetsCount: completedSets.length,
+                isLastExercise,
+                nextExerciseName: nextExercise?.exercise?.name,
+                nextExerciseTargetSets: nextPlanMeta?.sets,
+              })
+            : workoutPosition
+        }
         traditional={restActive && !intervalTimer && !circuitTimer ? {
                 secondsRemaining: restSecondsRemaining,
                 recommendedSeconds: activeRestPeriod?.recommendedSeconds ?? restTargetSeconds,
