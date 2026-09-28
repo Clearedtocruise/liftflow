@@ -46,6 +46,12 @@ test('the last set of an exercise moves to the next one instead of staying put',
   assert.equal(nextIndexAfterFinishedExercise(0, 4, 2, 3), null);
 });
 
+test('three sets of pull-ups in a seven-exercise workout move on to the next lift', () => {
+  // The card stayed on Pull Up ("Set 3 of 3 · 1 left", sets left already 0) with Barbell Row
+  // only listed as up next. The last set is done, so the next exercise is where rest happens.
+  assert.equal(nextIndexAfterFinishedExercise(0, 7, 3, 3), 1);
+});
+
 test('Skip Rest prefers a pending superset partner index over the last-set auto-advance', () => {
   const outcome = resolveRestSkipAdvance({
     pendingExerciseAdvanceAfterRest: true,

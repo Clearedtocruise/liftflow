@@ -232,5 +232,20 @@ check(
   true,
 );
 
+console.log('\nThe last set leaves the finished exercise before the save round trip');
+// Rest used to open on the lift that had just been completed ("Set 3 of 3 · 1 left", sets left
+// already 0) and only try to move on once the clock hit zero. The index changes first.
+const commitBody = /const commitSetLog = useCallback\(async[\s\S]*?\n  \}, \[/
+  .exec(activeWorkoutSource)?.[0] ?? '';
+check('commitSetLog exists', commitBody.length > 0, true);
+const advanceAt = commitBody.indexOf('setCurrentIndex(advanceTo)');
+const saveAt = commitBody.indexOf('const logged =');
+check('the next exercise is shown before the set is saved', advanceAt >= 0 && saveAt > advanceAt, true);
+check(
+  'a failed save steps back',
+  /if \(!logged\) \{[\s\S]*setCurrentIndex\(logIndex\)/.test(commitBody),
+  true,
+);
+
 console.log(`\n${failures === 0 ? 'Active workout progression: PASS' : `Active workout progression: ${failures} FAILURE(S)`}`);
 process.exit(failures === 0 ? 0 : 1);

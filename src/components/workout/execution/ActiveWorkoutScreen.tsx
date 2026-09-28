@@ -1565,9 +1565,6 @@ export function ActiveWorkoutScreen({
       );
 
       const exerciseAdvance = completedAfterLog >= logTargetSets;
-      if (exerciseAdvance) {
-        justFinishedExerciseRef.current = true;
-      }
       logWorkoutProgressionDecision({
         exerciseId: logExercise.exerciseId ?? logExercise.id,
         exerciseName: logExercise.exercise?.name ?? 'Exercise',
@@ -1586,6 +1583,59 @@ export function ActiveWorkoutScreen({
       const skipRest =
         !executionModeUsesTraditionalRest(executionMode) || flowAction.skipRest;
 
+      // The last set of a lift used to sit on that lift for the whole save, then the whole rest,
+      // with the card saying "Set 3 of 3 · 1 left" while Sets left already read 0. Pull-ups
+      // finished and Barbell Row stayed "up next". Step off now, before the round trip; the rest
+      // that starts is the rest before the next exercise. The last exercise of the workout stays.
+      const restingBeforeNext =
+        exerciseAdvance &&
+        executionModeUsesTraditionalRest(executionMode) &&
+        !skipRest &&
+        flowAction.immediateAdvanceIndex == null &&
+        flowAction.afterRestAdvanceIndex == null &&
+        !(flowAction.circuitTimer && flowAction.circuitTimer.seconds > 0);
+      const advanceTo = restingBeforeNext
+        ? nextIndexAfterFinishedExercise(
+            logIndex,
+            sortedExercises.length,
+            completedAfterLog,
+            logTargetSets,
+          )
+        : null;
+
+      if (advanceTo != null) {
+        justFinishedExerciseRef.current = false;
+        pendingExerciseAdvanceAfterRestRef.current = false;
+        currentIndexRef.current = advanceTo;
+        setCurrentIndex(advanceTo);
+        setShowComplete(false);
+        const nextLoggedExercise = sortedExercises[advanceTo];
+        const nextPlan = planExercises[advanceTo];
+        if (nextLoggedExercise) {
+          inputsTouchedRef.current = false;
+          const seed = resolveExerciseInputSeed({
+            sessionSets: nextLoggedExercise.sets ?? [],
+            suggestedWeightKg: clampPlanWeightKgForExercise(
+              nextLoggedExercise.suggestedWeight,
+              nextLoggedExercise.exercise?.name,
+              nextLoggedExercise.exercise?.slug,
+            ),
+            planRepRange: nextPlan?.repRange ?? nextLoggedExercise.suggestedReps,
+          });
+          weightKgRef.current = seed.weightKg;
+          repsRef.current = seed.reps;
+          durationSecondsRef.current = seed.durationSeconds;
+          setWeightKg(seed.weightKg);
+          setReps(seed.reps);
+          setDurationSeconds(seed.durationSeconds);
+          setDistanceKm(0);
+          distanceKmRef.current = 0;
+        }
+      } else if (exerciseAdvance) {
+        justFinishedExerciseRef.current = true;
+        if (restingBeforeNext) pendingExerciseAdvanceAfterRestRef.current = true;
+      }
+
       const logged =
         logLoggingMode === 'cardio'
           ? await logSet({
@@ -1602,6 +1652,11 @@ export function ActiveWorkoutScreen({
             : await logSet({ ...base, weight: resolvedWeightKg, reps: resolvedReps, skipRest });
 
       if (!logged) {
+        // The card already stepped forward. The set did not save, so step back.
+        if (advanceTo != null) {
+          currentIndexRef.current = logIndex;
+          setCurrentIndex(logIndex);
+        }
         AccessibilityInfo.announceForAccessibility('Could not log set. Try again.');
         return { ok: false, error: 'Could not save that set.' };
       }
@@ -1657,51 +1712,6 @@ export function ActiveWorkoutScreen({
         }
       } else if (flowAction.afterRestAdvanceIndex != null) {
         pendingAdvanceRef.current = flowAction.afterRestAdvanceIndex;
-      } else if (
-        exerciseAdvance &&
-        executionModeUsesTraditionalRest(executionMode) &&
-        !skipRest
-      ) {
-        const advanceTo = nextIndexAfterFinishedExercise(
-          logIndex,
-          sortedExercises.length,
-          completedAfterLog,
-          logTargetSets,
-        );
-        if (advanceTo != null) {
-          // The lift is done. Stay on it and the rest clock reads as another set of the
-          // same exercise ("1 left") instead of moving on. The clock keeps running; it is
-          // now the rest before the next exercise.
-          justFinishedExerciseRef.current = false;
-          pendingExerciseAdvanceAfterRestRef.current = false;
-          currentIndexRef.current = advanceTo;
-          setCurrentIndex(advanceTo);
-          setShowComplete(false);
-          const nextLoggedExercise = sortedExercises[advanceTo];
-          const nextPlan = planExercises[advanceTo];
-          if (nextLoggedExercise) {
-            inputsTouchedRef.current = false;
-            const seed = resolveExerciseInputSeed({
-              sessionSets: nextLoggedExercise.sets ?? [],
-              suggestedWeightKg: clampPlanWeightKgForExercise(
-                nextLoggedExercise.suggestedWeight,
-                nextLoggedExercise.exercise?.name,
-                nextLoggedExercise.exercise?.slug,
-              ),
-              planRepRange: nextPlan?.repRange ?? nextLoggedExercise.suggestedReps,
-            });
-            weightKgRef.current = seed.weightKg;
-            repsRef.current = seed.reps;
-            durationSecondsRef.current = seed.durationSeconds;
-            setWeightKg(seed.weightKg);
-            setReps(seed.reps);
-            setDurationSeconds(seed.durationSeconds);
-            setDistanceKm(0);
-            distanceKmRef.current = 0;
-          }
-        } else {
-          pendingExerciseAdvanceAfterRestRef.current = true;
-        }
       }
 
       if (completedAfterLog < logTargetSets && !skipRest) {
