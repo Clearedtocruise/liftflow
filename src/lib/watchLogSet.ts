@@ -7,6 +7,7 @@
  * your workout on iPhone", which defeats the point of logging from your wrist mid-set.
  */
 
+import { isFlatBodyweightPulldownName } from '@/lib/exerciseClassification';
 import type { WorkoutSession } from '@/types';
 
 export type WatchSetPayload = {
@@ -81,8 +82,9 @@ export function resolveWatchSetPayload(input: WatchLogSetInput): WatchSetResolut
 
   if (weight == null) {
     // Strength lifts must not silently log at 0 lb from the watch.
-    const name = (exercise.exercise?.name ?? '').toLowerCase();
+    const name = exercise.exercise?.name ?? '';
     const looksBodyweight =
+      isFlatBodyweightPulldownName(name) ||
       /\b(pull[\s-]?up|chin[\s-]?up|push[\s-]?up|dip|burpee|plank|bodyweight)\b/i.test(name);
     if (!looksBodyweight) {
       return { ok: false, error: 'Set a weight on iPhone or Watch before logging.' };

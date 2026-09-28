@@ -7,7 +7,7 @@ import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import { useSubscription } from '@/hooks/useSubscription';
 import { useUnits } from '@/hooks/useUnits';
 import { formatCoachTargetLine } from '@/lib/activeWorkoutMetrics';
-import { coachAdjustmentColor, coachAdjustmentLabel } from '@/lib/coachAdjustmentLabels';
+import { coachAdjustmentColor, coachAdjustmentLabel, coachReasonForLoggingMode } from '@/lib/coachAdjustmentLabels';
 import { canRetryCoach, classifyCoachFailure, type CoachFailureKind } from '@/lib/coachFailure';
 import type { ExerciseLoggingMode } from '@/lib/exerciseModality';
 import { defaultTimedDurationSeconds } from '@/lib/exerciseModality';
@@ -293,7 +293,7 @@ export function ExerciseCoachCard({
         </AppText>
       ) : null}
       <AppText variant="footnote" color="textSecondary">
-        {prescription.reason}
+        {coachReasonForLoggingMode(prescription.reason, loggingMode)}
       </AppText>
       {/* A refetch failed but the last good prescription is still on screen — say so rather than
           silently showing stale targets. */}
@@ -327,7 +327,7 @@ export function ExerciseCoachCard({
             Reasoning
           </AppText>
           <AppText variant="footnote" color="textSecondary">
-            {prescription.detailedReason}
+            {coachReasonForLoggingMode(prescription.detailedReason, loggingMode)}
           </AppText>
           {prescription.contextUsed.programPhase ? (
             <AppText variant="caption" color="textTertiary">
@@ -383,7 +383,7 @@ export function ExerciseCoachCard({
           {coachAdjustmentLabel(displayLabel)}
         </AppText>
         <AppText variant="footnote" color="textSecondary">
-          {targetLine} · {prescription.reason}
+          {targetLine} · {coachReasonForLoggingMode(prescription.reason, loggingMode)}
         </AppText>
       </View>
     );

@@ -1,4 +1,4 @@
-import { classifyExercise } from '@/lib/exerciseClassification';
+import { classifyExercise, isFlatBodyweightPulldownName } from '@/lib/exerciseClassification';
 import { formatDistance } from '@/lib/unitConversion';
 import type { Exercise } from '@/types';
 import type { DistanceUnit } from '@/types/common';
@@ -52,6 +52,7 @@ export function isBodyweightExercise(
   if (equipment.includes('bodyweight') || equipment === 'none' || equipment === 'pull_up_bar') {
     return true;
   }
+  if (isFlatBodyweightPulldownName(label)) return true;
   return BODYWEIGHT_NAME_PATTERN.test(label);
 }
 
