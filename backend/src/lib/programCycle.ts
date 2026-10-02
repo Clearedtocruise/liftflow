@@ -297,8 +297,41 @@ export function isCustomCyclePlanPack(planPack: string | null | undefined): bool
 
 export type MaterializedCycleRow = {
   status: string;
-  metadata?: { cycleDay?: number; cycleVersion?: number; rescheduledAt?: string } | null;
+  scheduled_date?: string;
+  metadata?: {
+    cycleDay?: number;
+    cycleVersion?: number;
+    rescheduledAt?: string;
+    rescheduledFrom?: string;
+    vacatedDates?: string[];
+  } | null;
 };
+
+/**
+ * Calendar dates a still-scheduled workout was moved off of, and that nothing has been put back on.
+ * The cycle projection must not refill these — that put the workout back on the day the lifter
+ * just switched it away from.
+ */
+export function datesClearedByAMove(rows: MaterializedCycleRow[]): Set<string> {
+  const occupied = new Set<string>();
+  for (const row of rows) {
+    if (!row.scheduled_date || row.status === 'cancelled') continue;
+    occupied.add(row.scheduled_date);
+  }
+
+  const cleared = new Set<string>();
+  for (const row of rows) {
+    if (row.status === 'cancelled' || !row.metadata?.rescheduledAt) continue;
+    const listed = [
+      ...(row.metadata.rescheduledFrom ? [row.metadata.rescheduledFrom] : []),
+      ...(row.metadata.vacatedDates ?? []),
+    ];
+    for (const date of listed) {
+      if (date && !occupied.has(date)) cleared.add(date);
+    }
+  }
+  return cleared;
+}
 
 /**
  * Whether a calendar date needs its cycle day (re)written.
@@ -313,7 +346,7 @@ export function needsCycleDayMaterialization(
   rows: MaterializedCycleRow[],
   dayNumber: number,
   cycleVersion: number,
-  options?: { isRest?: boolean },
+  options?: { isRest?: boolean; leftEmpty?: boolean },
 ): boolean {
   // Never touch a date the user has already started, finished or has in flight.
   const untouched = new Set(['completed', 'active', 'in_progress', 'paused']);
@@ -323,6 +356,10 @@ export function needsCycleDayMaterialization(
   // writes the projected day back, so a swap or a move was undone by the next refresh: the day
   // moved away reappeared, and the day moved in vanished.
   if (rows.some((row) => row.status === 'planned' && row.metadata?.rescheduledAt)) return false;
+
+  // The lifter moved the workout off this date and left it empty. Writing the projection back
+  // would put that workout on both days.
+  if (options?.leftEmpty && !rows.some((row) => row.status === 'planned')) return false;
 
   // A rest day writes nothing, so an empty date is already correct. Without this every rest day in
   // the window costs a write on every pass, which is what made keeping the window topped up

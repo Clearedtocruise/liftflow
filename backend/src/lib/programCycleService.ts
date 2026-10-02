@@ -18,6 +18,7 @@ import {
   currentCycleDay,
   cycleWorkoutName,
   isRestDay,
+  datesClearedByAMove,
   needsCycleDayMaterialization,
   normalizeCycle,
   projectedCycleDayNumber,
@@ -228,6 +229,21 @@ async function materializeUpcomingCycleDays(
     forDate.push(row as MaterializedCycleRow);
     rowsByDate.set(row.scheduled_date, forDate);
   }
+  // The window query only sees rows still scheduled inside the lookahead. A workout moved onto a
+  // later (or earlier) day lives outside that range, and without it the day it left looks empty
+  // and the projection writes the workout back. Read those parked rows too.
+  const horizonEnd = addIsoDays(fromDate, Math.max(aheadDays - 1, 0));
+  const { data: parkedRows } = await db
+    .from('planned_workouts')
+    .select('scheduled_date, status, metadata')
+    .eq('user_id', userId)
+    .neq('status', 'cancelled')
+    .contains('metadata', { planPack: CUSTOM_CYCLE_PLAN_PACK })
+    .or(`scheduled_date.gt.${horizonEnd},scheduled_date.lt.${fromDate}`);
+  const clearedDates = datesClearedByAMove([
+    ...((windowRows ?? []) as MaterializedCycleRow[]),
+    ...((parkedRows ?? []) as MaterializedCycleRow[]),
+  ]);
 
   for (let offset = 0; offset < aheadDays; offset += 1) {
     const date = addIsoDays(fromDate, offset);
@@ -235,7 +251,12 @@ async function materializeUpcomingCycleDays(
     const day = cycle.days.find((d) => d.dayNumber === dayNumber);
     const isRest = !day || isRestDay(day) || day.exercises.length === 0;
 
-    if (!needsCycleDayMaterialization(rowsByDate.get(date) ?? [], dayNumber, cycle.version, { isRest })) {
+    if (
+      !needsCycleDayMaterialization(rowsByDate.get(date) ?? [], dayNumber, cycle.version, {
+        isRest,
+        leftEmpty: clearedDates.has(date),
+      })
+    ) {
       continue;
     }
 
