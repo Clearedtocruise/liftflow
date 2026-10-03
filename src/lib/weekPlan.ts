@@ -144,10 +144,11 @@ export function patchPlannedWorkoutsForChange(
       if (!a || !b) return workouts;
       const dateA = a.scheduledDate;
       const dateB = b.scheduledDate;
-      return workouts.map((w) => {
-        if (w.id === a.id) return withReschedule(w, dateB, dateA);
-        if (w.id === b.id) return withReschedule(w, dateA, dateB);
-        return w;
+      return workouts.flatMap((w) => {
+        if (w.id === a.id) return [withReschedule(w, dateB, dateA)];
+        if (w.id === b.id) return [withReschedule(w, dateA, dateB)];
+        if ((w.scheduledDate === dateA || w.scheduledDate === dateB) && w.status === 'planned') return [];
+        return [w];
       });
     }
     case 'move': {
@@ -156,12 +157,18 @@ export function patchPlannedWorkoutsForChange(
       const fromDate = moving.scheduledDate;
       const toDate = change.toDate;
       const occupant = workouts.find(
-        (w) => w.scheduledDate === toDate && w.status === 'planned' && w.id !== moving.id,
+        (w) =>
+          w.scheduledDate === toDate &&
+          (w.status === 'planned' || w.status === 'active' || w.status === 'paused' || w.status === 'in_progress') &&
+          w.id !== moving.id,
       );
-      return workouts.map((w) => {
-        if (w.id === moving.id) return withReschedule(w, toDate, fromDate);
-        if (occupant && w.id === occupant.id) return withReschedule(w, fromDate, toDate);
-        return w;
+      return workouts.flatMap((w) => {
+        if (w.id === moving.id) return [withReschedule(w, toDate, fromDate)];
+        if (occupant && w.id === occupant.id) return [withReschedule(w, fromDate, toDate)];
+        // A second planned row on the day being left kept the workout looking like it never moved.
+        if (w.scheduledDate === fromDate && w.status === 'planned') return [];
+        if (w.scheduledDate === toDate && w.status === 'planned' && w.id !== moving.id) return [];
+        return [w];
       });
     }
     case 'skip':

@@ -752,26 +752,21 @@ export async function reschedulePlannedWorkout(plannedWorkoutId: string, newDate
   if (ownerUserId && existing.user_id !== ownerUserId) throw new Error('Planned workout not found');
 
   const prevMeta = (existing.metadata ?? {}) as Record<string, unknown>;
-  // Moving a workout to a later date can carry it into a new training week, so the title is
-  // rewritten for where it lands rather than kept from where it came from.
-  const weekNumber = await loadTrainingWeek(db, existing.user_id, newDate);
-
-  const slotLabel =
-    (typeof prevMeta.slotLabel === 'string' && prevMeta.slotLabel) ||
-    String(existing.name ?? 'Workout').replace(/\s*—\s*Week\s*\d+\s*$/i, '').trim();
-  const nextName = slotLabel ? `${slotLabel} — Week ${weekNumber}` : existing.name;
-
+  // The workout itself does not change — only the calendar day it sits on. Rewriting the title
+  // and week number made a day swap look like a different session.
+  const previousVacated = Array.isArray(prevMeta.vacatedDates)
+    ? prevMeta.vacatedDates.filter((date): date is string => typeof date === 'string')
+    : [];
   const metadata = {
     ...prevMeta,
     rescheduledFrom: existing.scheduled_date,
     rescheduledAt: new Date().toISOString(),
-    weekNumber,
-    ...(slotLabel ? { slotLabel } : null),
+    vacatedDates: [...new Set([...previousVacated, existing.scheduled_date as string])],
   };
 
   const { data, error } = await db
     .from('planned_workouts')
-    .update({ scheduled_date: newDate, name: nextName, metadata })
+    .update({ scheduled_date: newDate, metadata })
     .eq('id', plannedWorkoutId)
     .select('*')
     .single();

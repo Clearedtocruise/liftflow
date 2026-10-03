@@ -8,6 +8,7 @@ import {
   completeCurrentCycleDay,
   currentCycleDay,
   cycleWorkoutName,
+  datesClearedByAMove,
   needsCycleDayMaterialization,
   normalizeCurrentDay,
   normalizeCycle,
@@ -211,4 +212,49 @@ test('a rest day with nothing scheduled is already correct', () => {
     true,
     'a leftover workout on what is now a rest day still has to be cleared',
   );
+});
+
+test('moving a workout off a day leaves that day empty instead of rewriting it', () => {
+  const rows = [
+    {
+      status: 'planned',
+      scheduled_date: '2026-10-07',
+      metadata: {
+        cycleDay: 1,
+        cycleVersion: 1,
+        rescheduledAt: '2026-10-02T12:00:00.000Z',
+        rescheduledFrom: '2026-10-05',
+        vacatedDates: ['2026-10-05'],
+      },
+    },
+  ];
+  const cleared = datesClearedByAMove(rows);
+  assert.equal(cleared.has('2026-10-05'), true);
+  assert.equal(cleared.has('2026-10-07'), false);
+  assert.equal(
+    needsCycleDayMaterialization([], 1, 1, { leftEmpty: true }),
+    false,
+    'the day the workout left stays empty',
+  );
+  assert.equal(
+    needsCycleDayMaterialization([], 1, 1),
+    true,
+    'a date nobody moved off of is still filled',
+  );
+});
+
+test('a swap occupies both days, so neither is treated as cleared', () => {
+  const cleared = datesClearedByAMove([
+    {
+      status: 'planned',
+      scheduled_date: '2026-10-07',
+      metadata: { rescheduledAt: '2026-10-02T12:00:00.000Z', rescheduledFrom: '2026-10-05' },
+    },
+    {
+      status: 'planned',
+      scheduled_date: '2026-10-05',
+      metadata: { rescheduledAt: '2026-10-02T12:00:00.000Z', rescheduledFrom: '2026-10-07' },
+    },
+  ]);
+  assert.equal(cleared.size, 0);
 });

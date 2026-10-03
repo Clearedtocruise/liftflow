@@ -401,6 +401,22 @@ async function clearActiveWorkoutState(workoutId: string, status: string): Promi
   await db.from('planned_workouts').update({ status: 'planned' }).eq('id', workoutId);
 }
 
+/** Drop leftover planned rows so the day a workout left does not keep a second copy of it. */
+async function cancelOtherPlannedOnDate(userId: string, date: string, keepIds: string[]): Promise<void> {
+  const db = requireAdmin();
+  const { data } = await db
+    .from('planned_workouts')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('scheduled_date', date)
+    .eq('status', 'planned');
+  const drop = (data ?? [])
+    .map((row) => row.id as string)
+    .filter((id) => !keepIds.includes(id));
+  if (drop.length === 0) return;
+  await db.from('planned_workouts').update({ status: 'cancelled' }).in('id', drop);
+}
+
 async function applyMove(userId: string, change: ScheduleChangeMove): Promise<PlanAdaptationResult> {
   const workout = await loadWorkout(change.workoutId);
   const fromDate = workout.scheduled_date;
@@ -422,6 +438,8 @@ async function applyMove(userId: string, change: ScheduleChangeMove): Promise<Pl
 
   await reschedulePlannedWorkout(workout.id, toDate);
   await clearActiveWorkoutState(workout.id, workout.status);
+  await cancelOtherPlannedOnDate(userId, fromDate, destWorkout ? [destWorkout.id] : []);
+  await cancelOtherPlannedOnDate(userId, toDate, [workout.id]);
 
   const affectedDates = [...new Set([fromDate, toDate])];
   // Nutrition/macros sync in background — awaiting it froze day swaps for many seconds.
@@ -464,6 +482,8 @@ async function applySwap(userId: string, change: ScheduleChangeSwap): Promise<Pl
   await reschedulePlannedWorkout(workoutB.id, dateA);
   await clearActiveWorkoutState(workoutA.id, workoutA.status);
   await clearActiveWorkoutState(workoutB.id, workoutB.status);
+  await cancelOtherPlannedOnDate(userId, dateA, [workoutB.id]);
+  await cancelOtherPlannedOnDate(userId, dateB, [workoutA.id]);
 
   const affectedDates = [...new Set([dateA, dateB])];
   const nutritionByDate: Record<string, DayNutritionSync> = {};
