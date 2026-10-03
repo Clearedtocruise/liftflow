@@ -553,8 +553,8 @@ export function ActiveWorkoutScreen({
   ]);
 
   const workoutSetProgress = useMemo(
-    () => computeWorkoutSetProgress(session.exercises, planExercises),
-    [session.exercises, planExercises],
+    () => computeWorkoutSetProgress(session.exercises, planExercises, executionMode),
+    [session.exercises, planExercises, executionMode],
   );
   const workoutProgress = useMemo(
     () => computeWorkoutExerciseProgress(currentIndex, sortedExercises.length),
@@ -2043,7 +2043,7 @@ export function ActiveWorkoutScreen({
               </View>
             </View>
             <AppText variant="title">{session.name}</AppText>
-            <WorkoutProgressBar percent={workoutProgress.percent} />
+            <WorkoutProgressBar percent={workoutSetProgress.percent} />
             <AppText variant="caption" color="textSecondary">
               Exercise {workoutProgress.currentExerciseNumber} of {workoutProgress.totalExercises}
               {' · '}

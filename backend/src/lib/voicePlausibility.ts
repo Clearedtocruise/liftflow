@@ -99,6 +99,19 @@ export function stripTrailingFiller(text: string): string {
     .trim();
 }
 
+/**
+ * Lifters narrate the logging itself before the numbers — "log 135 at 10", "put me down for 225
+ * for 5". Every pattern in the parser is anchored at the start of the utterance, so that opening
+ * verb left an otherwise ordinary set unparsed. Only stripped when a number follows it, which
+ * leaves a lift whose name begins with one of these words alone.
+ */
+const LEADING_LOG_VERB =
+  /^(?:log|logged|logging|record|recorded|enter|save|note|put\s+(?:me\s+)?down|write\s+down|mark\s+down)(?:\s+(?:that|this|it|me|as|for|down))*\s+(?=\d)/i;
+
+export function stripLeadingLogVerb(text: string): string {
+  return text.replace(LEADING_LOG_VERB, '').trim();
+}
+
 const NON_EXERCISE_LEAD =
   /^(?:failed|missed|got|did|hit|felt|feels?|same|undo|delete|next|completed|finished|starting|switching|reduce|decrease|lower|drop|increase|bump|add|go\s+up)\b/i;
 
