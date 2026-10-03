@@ -82,3 +82,26 @@ test('bonus sets past the target do not push completion over 100', () => {
   const exercises = [exercise('e1', 0, 5), exercise('e2', 1, 3)];
   assert.equal(computeWorkoutSetProgress(exercises, plan(2)).percent, 100);
 });
+
+test('a lift prescribed each side is owed both sides', () => {
+  // The card turns "3 sets each side" into six loggable sets. Counting the bare three here had
+  // the header calling the exercise finished while the card still asked for another set.
+  const exercises = [exercise('e1', 0, 3)];
+  const sideplank: EditableWorkoutExercise[] = [
+    { id: 'e1', name: 'e1', sets: 3, repRange: '30 sec each side' },
+  ];
+
+  const progress = computeWorkoutSetProgress(exercises, sideplank);
+  assert.equal(progress.totalSets, 6);
+  assert.equal(progress.completedSets, 3);
+  assert.equal(progress.percent, 50);
+});
+
+test('interval rounds are the target when the plan counts rounds', () => {
+  const exercises = [exercise('e1', 0, 4)];
+  const tabata: EditableWorkoutExercise[] = [
+    { id: 'e1', name: 'e1', sets: 3, intervalRounds: 8, executionMode: 'tabata' },
+  ];
+
+  assert.equal(computeWorkoutSetProgress(exercises, tabata).totalSets, 8);
+});

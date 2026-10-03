@@ -553,8 +553,8 @@ export function ActiveWorkoutScreen({
   ]);
 
   const workoutSetProgress = useMemo(
-    () => computeWorkoutSetProgress(session.exercises, planExercises),
-    [session.exercises, planExercises],
+    () => computeWorkoutSetProgress(session.exercises, planExercises, executionMode),
+    [session.exercises, planExercises, executionMode],
   );
   const workoutProgress = useMemo(
     () => computeWorkoutExerciseProgress(currentIndex, sortedExercises.length),

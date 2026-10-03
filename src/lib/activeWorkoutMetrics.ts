@@ -1,10 +1,13 @@
+import { expandSetsForEachSide } from '@/lib/eachSideSets';
 import type { ExerciseLoggingMode } from '@/lib/exerciseModality';
 import { defaultTimedDurationSeconds, formatCardioDuration } from '@/lib/exerciseModality';
 import { formatDistance } from '@/lib/unitConversion';
+import { DEFAULT_TARGET_SETS, resolveEffectiveTargetSets } from '@/lib/workoutSetTarget';
 import type { WorkoutSession } from '@/types';
 import type { DistanceUnit } from '@/types/common';
-import type { ExerciseCoachPrescription } from '@/types/exerciseCoach';
 import type { EditableWorkoutExercise } from '@/types/workoutExecution';
+import type { WorkoutExecutionMode } from '@/types/workoutExecutionMode';
+import type { ExerciseCoachPrescription } from '@/types/exerciseCoach';
 
 export type WorkoutSetProgress = {
   completedSets: number;
@@ -31,9 +34,19 @@ export function resolvePlanMetaForSessionExercise(
   );
 }
 
+/**
+ * How many sets the workout is asking for, and how many are in.
+ *
+ * The per-exercise target has to be the one the exercise itself enforces. Counting the bare plan
+ * number here meant the header disagreed with the card in front of the lifter: a lift prescribed
+ * "3 sets each side" is six loggable sets on the card but was counted as three, so the workout
+ * read as owing a set the lifter had already done — or as finished while the card still wanted
+ * more.
+ */
 export function computeWorkoutSetProgress(
   sessionExercises: WorkoutSession['exercises'],
   planExercises: EditableWorkoutExercise[],
+  executionMode?: WorkoutExecutionMode,
 ): WorkoutSetProgress {
   const sorted = [...sessionExercises].sort((a, b) => a.sortOrder - b.sortOrder);
   let totalSets = 0;
@@ -41,8 +54,13 @@ export function computeWorkoutSetProgress(
 
   sorted.forEach((exercise, index) => {
     const meta = resolvePlanMetaForSessionExercise(exercise, index, planExercises);
-    const target = meta?.sets ?? Math.max(exercise.sets.length, 3);
-    totalSets += target;
+    // No plan row: an exercise added mid-workout is owed at least what has been logged on it.
+    const planSets = meta?.sets ?? Math.max(exercise.sets.length, DEFAULT_TARGET_SETS);
+    totalSets += resolveEffectiveTargetSets({
+      executionMode: meta?.executionMode ?? executionMode,
+      planSets: expandSetsForEachSide(planSets, meta?.notes, meta?.repRange),
+      intervalRounds: meta?.intervalRounds,
+    });
     completedSets += exercise.sets.length;
   });
 
