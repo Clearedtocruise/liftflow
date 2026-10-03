@@ -15,7 +15,6 @@ export type WorkoutSetProgress = {
 export type WorkoutExerciseProgress = {
   currentExerciseNumber: number;
   totalExercises: number;
-  percent: number;
 };
 
 export function resolvePlanMetaForSessionExercise(
@@ -51,21 +50,24 @@ export function computeWorkoutSetProgress(
   return { completedSets, totalSets, percent: Math.min(100, percent) };
 }
 
+/**
+ * Which exercise the lifter is standing on. Deliberately not a percentage: counting position in
+ * the list read as 100% complete the moment the last exercise opened, so the end of a workout
+ * claimed to be finished while sets were still unlogged. Completion is work done — see
+ * `computeWorkoutSetProgress`.
+ */
 export function computeWorkoutExerciseProgress(
   currentIndex: number,
   totalExercises: number,
 ): WorkoutExerciseProgress {
   const safeTotal = Math.max(totalExercises, 0);
   if (safeTotal === 0) {
-    return { currentExerciseNumber: 0, totalExercises: 0, percent: 0 };
+    return { currentExerciseNumber: 0, totalExercises: 0 };
   }
 
-  const currentExerciseNumber = Math.min(Math.max(currentIndex + 1, 0), safeTotal);
-  const percent = Math.round((currentExerciseNumber / safeTotal) * 100);
   return {
-    currentExerciseNumber,
+    currentExerciseNumber: Math.min(Math.max(currentIndex + 1, 0), safeTotal),
     totalExercises: safeTotal,
-    percent: Math.min(100, Math.max(0, percent)),
   };
 }
 

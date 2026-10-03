@@ -2043,7 +2043,7 @@ export function ActiveWorkoutScreen({
               </View>
             </View>
             <AppText variant="title">{session.name}</AppText>
-            <WorkoutProgressBar percent={workoutProgress.percent} />
+            <WorkoutProgressBar percent={workoutSetProgress.percent} />
             <AppText variant="caption" color="textSecondary">
               Exercise {workoutProgress.currentExerciseNumber} of {workoutProgress.totalExercises}
               {' · '}
