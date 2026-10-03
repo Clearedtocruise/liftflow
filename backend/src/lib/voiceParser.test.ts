@@ -114,6 +114,24 @@ test('context-aware reps-at-weight phrases populate the active exercise weight',
   assert.ok((parsed?.confidence ?? 0) >= FAST_PATH_CONFIDENCE);
 });
 
+test('a set the lifter opened by saying "log" is still a set', () => {
+  const parsed = parse('Log 135 at 10.');
+  assert.equal(parsed?.intent, 'log_set');
+  assert.equal(parsed?.exercise, 'Bench Press');
+  assert.equal(parsed?.weight, 135);
+  assert.equal(parsed?.reps, 10);
+});
+
+test('the shorthand with no rep word parses, matching the client', () => {
+  const parsed = parse('225 for 8');
+  assert.equal(parsed?.weight, 225);
+  assert.equal(parsed?.reps, 8);
+});
+
+test('a lift whose name starts with a logging word is left alone', () => {
+  assert.equal(parse('log press 185 for 5')?.exercise, 'log press');
+});
+
 test('multi-set utterances are flagged instead of silently truncated', () => {
   const parsed = parse('squat 315 for 5 and then 335 for 3');
   assert.equal(parsed?.multipleSetsHeard, true);

@@ -12,6 +12,7 @@ import {
     MAX_TRANSCRIPT_CHARS,
     orderWeightAndReps,
     REPS_MAX,
+    stripLeadingLogVerb,
     stripTrailingFiller,
     TRUNCATED_CONFIDENCE,
     WEIGHT_MAX_KG,
@@ -301,8 +302,10 @@ const COACHING_PATTERNS: Array<{ pattern: RegExp; build: (match: RegExpMatchArra
     }),
   },
   {
+    // "225 for 8" — the shorthand a lifter uses with the exercise already on screen. The word
+    // "reps" is optional: nobody says it with a bar in their hands.
     pattern:
-      /^(?<weight>\d+(?:\.\d+)?)\s*(?<unit>lbs?|pounds?|kg|kilos?)?\s*(?:for|x|\*|×)\s*(?<reps>\d+)\s*reps?\.?$/i,
+      /^(?<weight>\d+(?:\.\d+)?)s?\s*(?<unit>lbs?|pounds?|kg|kilos?)?\s*(?:for|x|\*|×|times|by)\s*(?<reps>\d+)(?:\s*reps?)?\.?$/i,
     build: (m, text, ctx) => ({
       intent: 'log_set',
       exercise: ctx.activeExerciseName,
@@ -312,6 +315,21 @@ const COACHING_PATTERNS: Array<{ pattern: RegExp; build: (match: RegExpMatchArra
       usesContextExercise: !ctx.activeExerciseName,
       rawText: text,
       confidence: ctx.activeExerciseName ? 0.89 : 0.7,
+    }),
+  },
+  {
+    // "95 pounds at 12 reps" / "95 at 12" — common mid-set shorthand without naming the lift.
+    pattern:
+      /^(?<weight>\d+(?:\.\d+)?)\s*(?<unit>lbs?|pounds?|kg|kilos?)?\s+at\s+(?<reps>\d+)(?:\s*reps?)?\.?$/i,
+    build: (m, text, ctx) => ({
+      intent: 'log_set',
+      exercise: ctx.activeExerciseName,
+      weight: parseFloat(m.groups!.weight!),
+      reps: parseInt(m.groups!.reps!, 10),
+      weightUnit: detectWeightUnit(m.groups!.unit ?? text) ?? detectWeightUnit(text),
+      usesContextExercise: true,
+      rawText: text,
+      confidence: ctx.activeExerciseName ? 0.9 : 0.7,
     }),
   },
   {
@@ -430,8 +448,9 @@ function finalizeSetCommand(command: ParsedCommand, remainder = ''): ParsedComma
 export function parseVoiceTranscript(transcript: string, context: VoiceParseContext = {}): ParsedCommand | null {
   const raw = transcript.trim();
   if (!raw) return null;
-  // Real speech ends in politeness and punctuation; the `$` anchors below must not see it.
-  const matchable = stripTrailingFiller(raw);
+  // Real speech ends in politeness and punctuation, and opens with the verb for what the lifter
+  // is asking for; the anchors below must see neither.
+  const matchable = stripLeadingLogVerb(stripTrailingFiller(raw));
   if (!matchable) return null;
   const text = matchable.toLowerCase();
 
