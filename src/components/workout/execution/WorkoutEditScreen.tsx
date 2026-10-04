@@ -33,6 +33,13 @@ function createExerciseId(name: string): string {
   return `custom-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${Date.now()}`;
 }
 
+/**
+ * One sheet at a time. Tracking the picker and the replace sheet separately let both be open at
+ * once, which iOS refuses to present — and left the picker flagged open forever, so the next tap
+ * on Add Exercise changed no state and the button looked broken.
+ */
+type EditSheet = { kind: 'none' } | { kind: 'add' } | { kind: 'replace'; index: number };
+
 export function WorkoutEditScreen({
   workoutName,
   exercises,
@@ -47,8 +54,12 @@ export function WorkoutEditScreen({
   onDone,
   onDiscard,
 }: WorkoutEditScreenProps) {
-  const [pickerVisible, setPickerVisible] = useState(false);
-  const [replaceIndex, setReplaceIndex] = useState<number | null>(null);
+  const [sheet, setSheet] = useState<EditSheet>({ kind: 'none' });
+  const replaceIndex = sheet.kind === 'replace' ? sheet.index : null;
+
+  function closeSheet() {
+    setSheet({ kind: 'none' });
+  }
 
   function handleBack() {
     if (!unsavedChanges) {
@@ -81,22 +92,17 @@ export function WorkoutEditScreen({
     onChange(copy);
   }
 
-  function handleSelectExercise(exercise: Exercise) {
-    const next: EditableWorkoutExercise = {
-      id: createExerciseId(exercise.name),
-      name: exercise.name,
-      sets: 3,
-      repRange: '8-10',
-      restSeconds: 90,
-    };
-
-    if (replaceIndex != null) {
-      updateAt(replaceIndex, { ...next, sets: exercises[replaceIndex]?.sets ?? 3, repRange: exercises[replaceIndex]?.repRange });
-      setReplaceIndex(null);
-      return;
-    }
-
-    onChange([...exercises, next]);
+  function handleAddExercise(exercise: Exercise) {
+    onChange([
+      ...exercises,
+      {
+        id: createExerciseId(exercise.name),
+        name: exercise.name,
+        sets: 3,
+        repRange: '8-10',
+        restSeconds: 90,
+      },
+    ]);
   }
 
   function handleReplaceWithAlternative(option: ExerciseAlternativeOption) {
@@ -106,7 +112,7 @@ export function WorkoutEditScreen({
       id: createExerciseId(option.name),
       name: option.name,
     });
-    setReplaceIndex(null);
+    closeSheet();
   }
 
   return (
@@ -136,7 +142,7 @@ export function WorkoutEditScreen({
             </Pressable>
           </View>
           <View style={styles.actions}>
-            <Pressable onPress={() => setReplaceIndex(index)}>
+            <Pressable accessibilityRole="button" onPress={() => setSheet({ kind: 'replace', index })}>
               <AppText variant="footnote" color="accent">Replace Exercise</AppText>
             </Pressable>
             <Pressable onPress={() => removeAt(index)}>
@@ -152,7 +158,11 @@ export function WorkoutEditScreen({
         </Card>
       ))}
 
-      <Pressable style={styles.addCard} onPress={() => { setReplaceIndex(null); setPickerVisible(true); }}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Add an exercise to this workout"
+        style={({ pressed }) => [styles.addCard, pressed && styles.addCardPressed]}
+        onPress={() => setSheet({ kind: 'add' })}>
         <AppText variant="bodyBold" color="accent">
           + Add Exercise
         </AppText>
@@ -190,27 +200,21 @@ export function WorkoutEditScreen({
       ) : null}
 
       <ExerciseReplaceSheet
-        visible={replaceIndex != null}
+        visible={sheet.kind === 'replace'}
         exercise={replaceIndex != null ? exercises[replaceIndex] ?? null : null}
         userId={userId}
         goal={goal}
         programType={programType}
         availableEquipment={availableEquipment}
-        onClose={() => setReplaceIndex(null)}
+        onClose={closeSheet}
         onReplace={handleReplaceWithAlternative}
-        onManualSearch={() => {
-          setPickerVisible(true);
-        }}
       />
 
       <ExercisePickerModal
-        visible={pickerVisible}
-        onClose={() => {
-          setPickerVisible(false);
-          setReplaceIndex(null);
-        }}
-        onSelect={handleSelectExercise}
-        title={replaceIndex != null ? 'Replace Exercise' : 'Add Exercise'}
+        visible={sheet.kind === 'add'}
+        onClose={closeSheet}
+        onSelect={handleAddExercise}
+        title="Add Exercise"
       />
     </ScreenContainer>
   );
@@ -246,5 +250,8 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
     borderColor: LiftFlowColors.border,
     backgroundColor: LiftFlowColors.backgroundSecondary,
+  },
+  addCardPressed: {
+    backgroundColor: LiftFlowColors.surfaceHighlight,
   },
 });

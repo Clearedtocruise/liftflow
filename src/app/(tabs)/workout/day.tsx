@@ -18,6 +18,7 @@ import type { ExerciseAlternativeOption } from '@/services/exerciseAdvisoryServi
 import { trainingService } from '@/services/trainingService';
 import { useWorkoutPlanDraft } from '@/state/workout/WorkoutPlanDraftContext';
 import { useWorkoutSession } from '@/state/workout/WorkoutSessionContext';
+import type { Exercise } from '@/types';
 import type { PlannedWorkout } from '@/types/training';
 
 export default function WorkoutDayScreen() {
@@ -184,6 +185,41 @@ export default function WorkoutDayScreen() {
     [workout, exercises, setExercises, markSaved],
   );
 
+  const handleAddExercise = useCallback(
+    async (exercise: Exercise) => {
+      if (!workout) return;
+      const previousExercises = exercises;
+      const nextExercises = [
+        ...exercises,
+        {
+          id: `plan-${exercises.length}-${exercise.name.toLowerCase().replace(/\s+/g, '-')}`,
+          name: exercise.name,
+          sets: 3,
+          repRange: '8-10',
+          restSeconds: 90,
+        },
+      ];
+      setExercises(nextExercises);
+      try {
+        const result = await trainingService.updatePlannedWorkoutExercises(
+          workout.id,
+          nextExercises,
+          workout.metadata,
+        );
+        if (result.success) {
+          setLoaded(result.data);
+          markSaved(result.data);
+        } else {
+          setExercises(previousExercises);
+          Alert.alert('Could not add that exercise', result.error || 'Please try again.');
+        }
+      } catch {
+        setExercises(previousExercises);
+      }
+    },
+    [workout, exercises, setExercises, markSaved],
+  );
+
   if (loading) {
     return (
       <View style={styles.centered}>
@@ -239,6 +275,7 @@ export default function WorkoutDayScreen() {
       onEdit={() => router.push('/(tabs)/workout/edit')}
       onBack={() => router.back()}
       onReplaceExercise={handleReplaceExercise}
+      onAddExercise={handleAddExercise}
     />
   );
 }
