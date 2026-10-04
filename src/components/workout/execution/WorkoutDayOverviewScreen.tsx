@@ -6,6 +6,7 @@ import { Card } from '@/components/layout/Card';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { AppText } from '@/components/ui/AppText';
+import { ExercisePickerModal } from '@/components/workout/execution/ExercisePickerModal';
 import { ExerciseReplaceSheet } from '@/components/workout/execution/ExerciseReplaceSheet';
 import { WorkoutExerciseDetailList } from '@/components/workout/execution/WorkoutExerciseDetailList';
 import { Spacing } from '@/constants/theme';
@@ -13,6 +14,7 @@ import { aggregateWorkoutMuscles } from '@/lib/exerciseMuscleMap';
 import { workoutMuscleGroups } from '@/lib/weekPlan';
 import { estimateWorkoutDurationMinutes } from '@/lib/workoutPlan';
 import type { ExerciseAlternativeOption } from '@/services/exerciseAdvisoryService';
+import type { Exercise } from '@/types';
 import type { PlannedWorkout } from '@/types/training';
 import type { EditableWorkoutExercise } from '@/types/workoutExecution';
 import { WORKOUT_EXECUTION_MODE_LABELS } from '@/types/workoutExecutionMode';
@@ -30,7 +32,11 @@ type WorkoutDayOverviewScreenProps = {
   onEdit: () => void;
   onBack: () => void;
   onReplaceExercise?: (index: number, option: ExerciseAlternativeOption) => void | Promise<void>;
+  onAddExercise?: (exercise: Exercise) => void | Promise<void>;
 };
+
+/** iOS presents one modal at a time, so the sheets here are a single choice rather than two flags. */
+type OverviewSheet = { kind: 'none' } | { kind: 'add' } | { kind: 'replace'; index: number };
 
 export function WorkoutDayOverviewScreen({
   workout,
@@ -45,13 +51,16 @@ export function WorkoutDayOverviewScreen({
   onEdit,
   onBack,
   onReplaceExercise,
+  onAddExercise,
 }: WorkoutDayOverviewScreenProps) {
   const durationMin = estimateWorkoutDurationMinutes(exercises);
   const mode = workout.metadata?.executionMode;
   const executionModeLabel = mode ? (WORKOUT_EXECUTION_MODE_LABELS[mode] ?? null) : null;
   const sessionMuscles = aggregateWorkoutMuscles(exercises.map((item) => item.name));
-  const [replaceIndex, setReplaceIndex] = useState<number | null>(null);
+  const [sheet, setSheet] = useState<OverviewSheet>({ kind: 'none' });
+  const replaceIndex = sheet.kind === 'replace' ? sheet.index : null;
   const replaceExercise = replaceIndex != null ? exercises[replaceIndex] ?? null : null;
+  const closeSheet = () => setSheet({ kind: 'none' });
 
   return (
     <ScreenContainer contentContainerStyle={styles.content}>
@@ -96,9 +105,17 @@ export function WorkoutDayOverviewScreen({
         gender={gender}
         onReplaceExercise={onReplaceExercise ? (_, exercise) => {
           const index = exercises.findIndex((item) => item.id === exercise.id);
-          if (index >= 0) setReplaceIndex(index);
+          if (index >= 0) setSheet({ kind: 'replace', index });
         } : undefined}
       />
+
+      {onAddExercise ? (
+        <PrimaryButton
+          label="+ Add Exercise"
+          variant="secondary"
+          onPress={() => setSheet({ kind: 'add' })}
+        />
+      ) : null}
 
       <View style={styles.actions}>
         <PrimaryButton label={starting ? 'Starting…' : 'Start Workout'} size="large" loading={starting} onPress={onStart} />
@@ -107,19 +124,27 @@ export function WorkoutDayOverviewScreen({
 
       {onReplaceExercise ? (
         <ExerciseReplaceSheet
-          visible={replaceIndex != null}
+          visible={sheet.kind === 'replace'}
           exercise={replaceExercise}
           userId={userId}
           goal={goal}
           programType={programType}
           availableEquipment={availableEquipment}
-          onClose={() => setReplaceIndex(null)}
+          onClose={closeSheet}
           onReplace={(option) => {
             if (replaceIndex == null) return;
             void onReplaceExercise(replaceIndex, option);
-            setReplaceIndex(null);
+            closeSheet();
           }}
-          onManualSearch={onEdit}
+        />
+      ) : null}
+
+      {onAddExercise ? (
+        <ExercisePickerModal
+          visible={sheet.kind === 'add'}
+          onClose={closeSheet}
+          onSelect={(picked) => void onAddExercise(picked)}
+          title="Add Exercise"
         />
       ) : null}
     </ScreenContainer>

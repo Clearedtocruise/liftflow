@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
@@ -6,11 +6,7 @@ import { AppText } from '@/components/ui/AppText';
 import { ExerciseGuideSheet } from '@/components/workout/execution/ExerciseGuideSheet';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
-import {
-    shouldOfferCustomExercise,
-    validateCustomExerciseName,
-} from '@/lib/customExerciseName';
-import { workoutService } from '@/services/workoutService';
+import { useExerciseSearch } from '@/hooks/useExerciseSearch';
 import type { Exercise } from '@/types';
 
 type ExercisePickerModalProps = {
@@ -30,52 +26,24 @@ export function ExercisePickerModal({
   subtitle,
 }: ExercisePickerModalProps) {
   const { user } = useAuth();
-  const [query, setQuery] = useState('');
-  const [exercises, setExercises] = useState<Exercise[]>([]);
-  const [loading, setLoading] = useState(false);
   const [preview, setPreview] = useState<Exercise | null>(null);
-  const [creating, setCreating] = useState(false);
-  const [createError, setCreateError] = useState<string | null>(null);
-
-  const canCreate = !loading && shouldOfferCustomExercise(query, exercises);
+  const {
+    query,
+    setQuery,
+    exercises,
+    loading,
+    creating,
+    createError,
+    canCreate,
+    createCustom,
+  } = useExerciseSearch({ enabled: visible, userId: user?.id });
 
   async function handleCreateCustom() {
-    if (!user || creating) return;
-    const check = validateCustomExerciseName(query);
-    if (!check.valid) {
-      setCreateError(check.reason);
-      return;
-    }
-
-    setCreating(true);
-    setCreateError(null);
-    const result = await workoutService.createCustomExercise(check.name, user.id);
-    setCreating(false);
-
-    if (!result.success) {
-      setCreateError(result.error);
-      return;
-    }
-    onSelect(result.data);
-    setQuery('');
+    const created = await createCustom();
+    if (!created) return;
+    onSelect(created);
     onClose();
   }
-
-  useEffect(() => {
-    if (!visible || !user) return;
-
-    let cancelled = false;
-    setLoading(true);
-    void workoutService.searchExercises(query, user.id).then((result) => {
-      if (cancelled) return;
-      if (result.success) setExercises(result.data);
-      setLoading(false);
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [visible, query, user]);
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
@@ -105,10 +73,7 @@ export function ExercisePickerModal({
           placeholder="Search or name a new exercise"
           placeholderTextColor={LiftFlowColors.textTertiary}
           value={query}
-          onChangeText={(text) => {
-            setQuery(text);
-            setCreateError(null);
-          }}
+          onChangeText={setQuery}
           autoCapitalize="words"
           autoCorrect={false}
         />
