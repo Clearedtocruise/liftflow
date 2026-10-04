@@ -9,6 +9,7 @@ import {
   IMPLAUSIBLE_CONFIDENCE,
   looksLikeNonExercise,
   orderWeightAndReps,
+  stripLeadingLogVerb,
   stripTrailingFiller,
   TRUNCATED_CONFIDENCE,
 } from './voicePlausibility';
@@ -390,8 +391,9 @@ export function parseVoiceCommandLocal(
 ): ParsedVoiceCommandExtended | null {
   const raw = transcript.trim();
   if (!raw) return null;
-  // Real speech ends in politeness and punctuation; the `$` anchors above must not see it.
-  const matchable = stripTrailingFiller(raw);
+  // Real speech ends in politeness and punctuation, and opens with the verb for what the lifter
+  // is asking for; the anchors above must see neither.
+  const matchable = stripLeadingLogVerb(stripTrailingFiller(raw));
   if (!matchable) return null;
   const text = matchable.toLowerCase();
 
