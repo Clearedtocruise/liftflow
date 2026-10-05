@@ -476,7 +476,13 @@ export function ActiveWorkoutScreen({
       : isLastExercise;
   const swapTargetIndex = resolveSwapTargetIndex(
     currentIndex,
-    sortedExercises.map((exercise) => exercise.sets?.length ?? 0),
+    sortedExercises.map((exercise, index) => ({
+      loggedSets: exercise.sets?.length ?? 0,
+      // The lift on screen uses the target the screen is showing, bonus sets and all, so Swap
+      // agrees with the set counter above it about whether anything is still owed.
+      targetSets:
+        index === currentIndex ? effectiveTargetSets : targetSetsForIndex(index, planExercises),
+    })),
   );
   const swapTarget = sortedExercises[swapTargetIndex] ?? currentExercise;
 
