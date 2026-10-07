@@ -1,5 +1,5 @@
-import { router } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Alert, RefreshControl, StyleSheet, View } from 'react-native';
 
 import { HistoryCard } from '@/components/history/HistoryCard';
@@ -50,7 +50,12 @@ export default function HistoryScreen() {
       setOlderError(null);
 
       // Load history immediately; pull Apple Fitness in the background so History never freezes.
-      const historyResult = await getCombinedActivityHistory(user.id);
+      // The streak reads completed sessions only, so it has nothing to wait on — behind the
+      // HealthKit sync it used to stay on the cached number long after that number went stale.
+      const [historyResult, streakResult] = await Promise.all([
+        getCombinedActivityHistory(user.id),
+        analyticsService.getWorkoutStreak(user.id, user.timezone),
+      ]);
       if (generation !== loadGenerationRef.current) return;
 
       const items = historyResult.success ? historyResult.data.data : [];
@@ -59,6 +64,7 @@ export default function HistoryScreen() {
         setTotalSessions(historyResult.data.totals.all);
         setCursor({ before: historyResult.data.nextBefore, hasMore: historyResult.data.hasMore });
       }
+      if (streakResult.success) setStreak(streakResult.data);
       setLoading(false);
       setRefreshing(false);
 
@@ -70,23 +76,18 @@ export default function HistoryScreen() {
         }
         if (generation !== loadGenerationRef.current) return;
 
-        const [refreshed, streakResult] = await Promise.all([
-          getCombinedActivityHistory(user.id),
-          analyticsService.getWorkoutStreak(user.id),
-        ]);
+        const refreshed = await getCombinedActivityHistory(user.id);
         if (generation !== loadGenerationRef.current) return;
 
         const nextItems = refreshed.success ? refreshed.data.data : items;
-        const streakValue = streakResult.success ? streakResult.data : 0;
         if (refreshed.success && !readingOlderRef.current) {
           setHistory(nextItems);
           setTotalSessions(refreshed.data.totals.all);
           setCursor({ before: refreshed.data.nextBefore, hasMore: refreshed.data.hasMore });
         }
-        if (streakResult.success) setStreak(streakValue);
         screenDataCache.writeHistory(user.id, {
           items: nextItems,
-          streak: streakValue,
+          streak: streakResult.success ? streakResult.data : 0,
           totalSessions: refreshed.success ? refreshed.data.totals.all : undefined,
         });
       })();
@@ -118,33 +119,43 @@ export default function HistoryScreen() {
     });
   }, [user, loadingOlder, cursor]);
 
-  useEffect(() => {
-    if (!user?.id) {
-      setLoading(false);
-      return;
-    }
-
-    let cancelled = false;
-
-    void (async () => {
-      const cached = await screenDataCache.readHistory(user.id);
-      if (cancelled) return;
-
-      if (cached) {
-        setHistory(cached.items);
-        setStreak(cached.streak);
-        if (cached.totalSessions != null) setTotalSessions(cached.totalSessions);
+  /**
+   * Every other tab refreshes on focus; History only loaded on mount. A tab screen stays mounted
+   * once visited, so coming back showed whatever was true the first time it opened — a day streak
+   * frozen days behind the one the home screen was showing.
+   */
+  useFocusEffect(
+    useCallback(() => {
+      if (!user?.id) {
         setLoading(false);
-        hydratedFromCacheRef.current = true;
+        return;
       }
 
-      void load({ silent: hydratedFromCacheRef.current });
-    })();
+      let cancelled = false;
 
-    return () => {
-      cancelled = true;
-    };
-  }, [user?.id, load]);
+      void (async () => {
+        if (!hydratedFromCacheRef.current) {
+          const cached = await screenDataCache.readHistory(user.id);
+          if (cancelled) return;
+
+          if (cached) {
+            setHistory(cached.items);
+            setStreak(cached.streak);
+            if (cached.totalSessions != null) setTotalSessions(cached.totalSessions);
+            setLoading(false);
+            hydratedFromCacheRef.current = true;
+          }
+        }
+        if (cancelled) return;
+
+        void load({ silent: hydratedFromCacheRef.current });
+      })();
+
+      return () => {
+        cancelled = true;
+      };
+    }, [user?.id, load]),
+  );
 
   const months = useMemo(() => groupHistoryByMonth(history), [history]);
 
