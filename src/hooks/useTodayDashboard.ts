@@ -113,9 +113,10 @@ export function useTodayDashboard(): TodayDashboardState {
     setLoading(true);
     try {
       const { from, to } = getWeekRange(new Date(), user.timezone);
-      const [result, nextResult] = await Promise.all([
+      const [result, nextResult, completedResult] = await Promise.all([
         trainingService.getPlannedWorkouts(user.id, from, to, user.timezone),
         trainingService.getNextPlannedWorkout(user.id, today),
+        trainingService.getCompletedPlannedWorkout(user.id, today),
       ]);
       if (!result.success) {
         // A failed fetch used to render identically to a rest day, telling the user they had
@@ -140,7 +141,11 @@ export function useTodayDashboard(): TodayDashboardState {
       const status = scheduled?.status ?? null;
       // Not read off the canonical row: that row is whichever one can be started next, so a day
       // moved onto today, or a cycle day rewritten after a swap, used to hide a finished session.
-      setCompletedTodaysWorkout(active.completedWorkout);
+      // The resolver can only look at rows that survived the week dedupe, which drops a finished
+      // row whenever the day also holds a startable one, so the direct read is what answers this.
+      setCompletedTodaysWorkout(
+        active.completedWorkout ?? (completedResult.success ? completedResult.data : null),
+      );
       setInProgressTodaysWorkout(status === 'active' || status === 'paused' ? scheduled : null);
       setUpcomingWorkout(
         nextResult.success && nextResult.data

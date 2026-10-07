@@ -10,6 +10,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { resolveActiveTrainingDay } from './activeTrainingDay';
+import { dedupePlannedWorkoutsByDate } from './weekPlan';
 
 import type { PlannedWorkout } from '@/types/training';
 
@@ -66,4 +67,30 @@ test("another day's finished session is not borrowed", () => {
     workout({ id: 'today', status: 'planned' }),
   ]);
   assert.equal(day.completedWorkout, null);
+});
+
+/**
+ * The resolver is only ever handed rows that `trainingService.getPlannedWorkouts` has already
+ * deduped, so its own undeduped lookup has nothing left to find. Guarding the resolver in
+ * isolation passed while the screen it protects still lost the session.
+ */
+test('deduping before the resolver runs drops the finished session', () => {
+  const rows = [
+    workout({ id: 'done', status: 'completed', name: 'Day 1' }),
+    workout({ id: 'moved-in', status: 'planned', name: 'Day 2' }),
+  ];
+
+  const asTheServiceReturnsThem = dedupePlannedWorkoutsByDate(rows, REFERENCE);
+
+  assert.equal(
+    asTheServiceReturnsThem.some((row) => row.id === 'done'),
+    false,
+    'this is the drop that has to be worked around, not a behaviour to rely on',
+  );
+  assert.equal(
+    resolveActiveTrainingDay(asTheServiceReturnsThem, { date: TODAY, reference: REFERENCE })
+      .completedWorkout,
+    null,
+    'the finished session cannot be recovered from a deduped list',
+  );
 });

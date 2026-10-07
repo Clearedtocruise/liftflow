@@ -256,6 +256,36 @@ export const trainingService: ITrainingService = {
     }
   },
 
+  /**
+   * The finished session for a date, if that date has been trained.
+   *
+   * Deliberately does not go through `getPlannedWorkouts`: that runs its rows through
+   * `dedupePlannedWorkoutsByDate`, which ranks a startable row above a finished one so the week
+   * can say what to do next. On a day holding both — one moved onto a day already trained, or a
+   * cycle day rewritten after a swap — the finished row is dropped before anything downstream can
+   * look at it, and home asks the lifter to start the workout they have just done.
+   */
+  async getCompletedPlannedWorkout(
+    userId: string,
+    date: string,
+  ): Promise<import('@/types/common').ServiceResult<PlannedWorkout | null>> {
+    try {
+      const { data, error } = await supabase
+        .from('planned_workouts')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('scheduled_date', date)
+        .eq('status', 'completed')
+        .limit(1);
+
+      if (error) return fail(error.message);
+      const row = (data ?? [])[0];
+      return ok(row ? mapPlanned(row as PlannedRow) : null);
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
   async getPlannedWorkouts(userId, from, to, timeZone?: string | null): Promise<
     import('@/types/common').ServiceResult<PlannedWorkout[]>
   > {
