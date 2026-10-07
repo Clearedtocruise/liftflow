@@ -406,8 +406,9 @@ export interface IGoalService {
 }
 
 export interface IAnalyticsService {
-  getDashboard(userId: string): Promise<ServiceResult<DashboardSummary>>;
-  getWorkoutStreak(userId: string): Promise<ServiceResult<number>>;
+  getDashboard(userId: string, timeZone?: string | null): Promise<ServiceResult<DashboardSummary>>;
+  /** `timeZone` is the lifter's calendar; without it an evening session counts on the wrong day. */
+  getWorkoutStreak(userId: string, timeZone?: string | null): Promise<ServiceResult<number>>;
   getSnapshots(userId: string, periodType: string): Promise<ServiceResult<AnalyticsSnapshot[]>>;
   getPerformanceTrends(userId: string, exerciseId?: string): Promise<ServiceResult<PerformanceTrend[]>>;
   generateSnapshot(userId: string, date: string): Promise<ServiceResult<AnalyticsSnapshot>>;

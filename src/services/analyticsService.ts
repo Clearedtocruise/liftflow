@@ -2,6 +2,7 @@ import { mapHistoryItem, mapMeal } from '@/lib/db-mappers';
 import { localDateString } from '@/lib/localDate';
 import { aggregateDailyMeals } from '@/lib/mealAggregation';
 import { fail, fromError, ok } from '@/lib/serviceResult';
+import { computeWorkoutStreak } from '@/lib/workoutStreak';
 import type { IAnalyticsService } from '@/services/interfaces';
 import { supabase } from '@/supabase/client';
 import type { AnalyticsSnapshot, DashboardSummary, PerformanceTrend } from '@/types';
@@ -15,46 +16,11 @@ function startOfWeek(): Date {
   return d;
 }
 
-function computeStreak(workoutDates: string[]): number {
-  if (workoutDates.length === 0) return 0;
-
-  const uniqueDays = [...new Set(workoutDates.map((d) => d.slice(0, 10)))].sort().reverse();
-  let streak = 0;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  for (let i = 0; i < uniqueDays.length; i++) {
-    const expected = new Date(today);
-    expected.setDate(expected.getDate() - i);
-    const expectedStr = localDateString(expected);
-    if (uniqueDays.includes(expectedStr)) {
-      streak += 1;
-    } else if (i === 0 && uniqueDays[0] !== expectedStr) {
-      const yesterday = new Date(today);
-      yesterday.setDate(yesterday.getDate() - 1);
-      if (uniqueDays[0] === localDateString(yesterday)) {
-        streak = 1;
-        for (let j = 1; j < uniqueDays.length; j++) {
-          const exp = new Date(yesterday);
-          exp.setDate(exp.getDate() - j);
-          if (uniqueDays[j] === localDateString(exp)) streak += 1;
-          else break;
-        }
-      }
-      break;
-    } else {
-      break;
-    }
-  }
-
-  return streak;
-}
-
 export const analyticsService: IAnalyticsService = {
-  async getDashboard(userId) {
+  async getDashboard(userId, timeZone) {
     try {
       const weekStart = startOfWeek().toISOString();
-      const today = localDateString();
+      const today = localDateString(new Date(), timeZone);
 
       const [profile, weekWorkouts, recentSessions, metrics, goals, nutrition, allDates] = await Promise.all([
         supabase.from('profiles').select('weight_kg, body_fat_pct').eq('id', userId).single(),
@@ -101,7 +67,7 @@ export const analyticsService: IAnalyticsService = {
       const mealTotals = aggregateDailyMeals(todayMeals);
 
       const dashboard: DashboardSummary = {
-        streak: computeStreak((allDates.data ?? []).map((d) => d.started_at)),
+        streak: computeWorkoutStreak((allDates.data ?? []).map((d) => d.started_at), { timeZone }),
         weeklyWorkouts: weekWorkouts.data?.length ?? 0,
         weeklyVolume: (weekWorkouts.data ?? []).reduce((s, w) => s + Number(w.total_volume ?? 0), 0),
         activeGoals: goals.data?.length ?? 0,
@@ -125,7 +91,7 @@ export const analyticsService: IAnalyticsService = {
     }
   },
 
-  async getWorkoutStreak(userId) {
+  async getWorkoutStreak(userId, timeZone) {
     try {
       const { data, error } = await supabase
         .from('workout_sessions')
@@ -136,7 +102,7 @@ export const analyticsService: IAnalyticsService = {
         .limit(60);
 
       if (error) return fail(error.message);
-      return ok(computeStreak((data ?? []).map((d) => d.started_at)));
+      return ok(computeWorkoutStreak((data ?? []).map((d) => d.started_at), { timeZone }));
     } catch (e) {
       return fromError(e);
     }
