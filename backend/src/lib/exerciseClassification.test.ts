@@ -37,6 +37,22 @@ const cases: Array<{ label: string; input: Parameters<typeof classifyExercise>[0
   { label: 'Walking Lunge without slug', input: { name: 'Walking Lunge', equipment: 'dumbbell' }, expected: 'bodyweight' },
   { label: "Farmer's Walk", input: { name: "Farmer's Walk", equipment: 'dumbbell' }, expected: 'strength' },
   { label: 'Treadmill Walk', input: { name: 'Treadmill Walk', equipment: 'machine' }, expected: 'cardio' },
+  // Leg throw downs are an ab movement — the load is the lifter's own legs, so the weighted
+  // logger asked for a weight that does not exist.
+  {
+    label: 'Flat leg throw downs are bodyweight',
+    input: { name: 'Flat Leg Throw Downs', equipment: 'bodyweight' },
+    expected: 'bodyweight',
+  },
+  {
+    label: 'Throw downs stay bodyweight even tagged as machine work',
+    input: { name: 'Flat Leg Throwdowns', equipment: 'machine', exerciseType: 'strength' },
+    expected: 'bodyweight',
+  },
+  { label: 'Bare throw downs', input: { name: 'Throw Downs' }, expected: 'bodyweight' },
+  // "Push down" and "pull down" are loaded cable work and must not be swept up with "throw down".
+  { label: 'Tricep Pushdown stays strength', input: { name: 'Tricep Pushdown', equipment: 'cable' }, expected: 'strength' },
+  { label: 'Rope Push Down stays strength', input: { name: 'Rope Push Down', equipment: 'cable' }, expected: 'strength' },
 ];
 
 for (const testCase of cases) {
