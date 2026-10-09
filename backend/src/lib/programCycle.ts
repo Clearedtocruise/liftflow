@@ -221,6 +221,47 @@ export function completeCurrentCycleDay(cycle: ProgramCycle, options?: { anchorD
   };
 }
 
+/**
+ * Where the pointer belongs once a planned row is finished.
+ *
+ * The pointer used to move only when the finished row's day matched it exactly, so that a
+ * double-tap or an old row could not skip the program forward. That reads every mismatch as
+ * stale, which a swap is not: moving a day onto today leaves the row carrying its own cycle day
+ * while the pointer still holds the day it displaced. Finishing it was then refused, the pointer
+ * never moved, and the next calendar day rebuilt the same day again — the program stuck on one
+ * day while the lifter kept training and kept being handed it back.
+ *
+ * So a row finished on the day it was scheduled for advances the pointer past the day that was
+ * actually trained, wherever the pointer happened to be. A row finished late — scheduled before
+ * today — is the stale case the guard was written for and still leaves the pointer alone, since
+ * honouring it would drag the program backwards.
+ *
+ * Reading the destination off the finished row rather than off the pointer also makes finishing
+ * twice harmless: the same row always resolves to the same day, where repeatedly stepping the
+ * pointer forward would walk the program away from the lifter one tap at a time.
+ *
+ * Returns the day the pointer should hold, or `null` for a row too old to take direction from.
+ */
+export function cycleDayAfterCompletion(
+  cycle: Pick<ProgramCycle, 'currentDay' | 'lengthDays'>,
+  completed: { cycleDay?: number | null; scheduledDate?: string | null },
+  today: string,
+): number | null {
+  const current = normalizeCurrentDay(cycle.currentDay, cycle.lengthDays);
+  const completedDay = completed.cycleDay;
+
+  // Nothing identifies the finished row, so the pointer is all there is to go on.
+  if (typeof completedDay !== 'number' || !Number.isFinite(completedDay)) {
+    return advanceCycleDay(current, cycle.lengthDays);
+  }
+
+  const normalizedCompleted = normalizeCurrentDay(completedDay, cycle.lengthDays);
+  const finishedLate = Boolean(completed.scheduledDate && completed.scheduledDate < today);
+  if (finishedLate && normalizedCompleted !== current) return null;
+
+  return advanceCycleDay(normalizedCompleted, cycle.lengthDays);
+}
+
 /** Apply a template edit while preserving the live pointer. Future workouts only; history untouched. */
 export function applyCycleTemplateEdit(
   cycle: ProgramCycle,
