@@ -256,6 +256,33 @@ export const trainingService: ITrainingService = {
     }
   },
 
+  /**
+   * Every row a date holds, in the state the database has them.
+   *
+   * Deliberately does not go through `getPlannedWorkouts`: that runs its rows through
+   * `dedupePlannedWorkoutsByDate`, which ranks `planned` above every status a row reaches once it
+   * has been trained. A day holding a stale duplicate alongside the row actually worked therefore
+   * reports as untouched no matter what happened to it — started, paused or finished — because
+   * the duplicate is the only row that survives. Reading the day directly is what sees the rest.
+   */
+  async getPlannedWorkoutsForDate(
+    userId: string,
+    date: string,
+  ): Promise<import('@/types/common').ServiceResult<PlannedWorkout[]>> {
+    try {
+      const { data, error } = await supabase
+        .from('planned_workouts')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('scheduled_date', date);
+
+      if (error) return fail(error.message);
+      return ok((data ?? []).map((row) => mapPlanned(row as PlannedRow)));
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
   async getPlannedWorkouts(userId, from, to, timeZone?: string | null): Promise<
     import('@/types/common').ServiceResult<PlannedWorkout[]>
   > {

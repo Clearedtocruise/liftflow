@@ -177,7 +177,7 @@ export function useHomeMetrics(): HomeMetrics {
       setLoading(false);
 
       const [streakResult, nutritionResult, gainResult] = await Promise.all([
-        analyticsService.getWorkoutStreak(user.id),
+        analyticsService.getWorkoutStreak(user.id, user.timezone),
         nutritionService.getDailySummary(user.id, dates[dates.length - 1]),
         coachInsightService.getStrengthGain(user.id),
       ]);

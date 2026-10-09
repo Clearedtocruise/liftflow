@@ -62,6 +62,36 @@ export function coerceTrainingRecommendationForSchedule(
   return recommendation;
 }
 
+// `in_progress` is not in `PlannedWorkout['status']`, but `PLANNED_STATUS_PRIORITY` ranks it, so
+// rows carrying it exist as far as the week is concerned and are treated as underway here too.
+const IN_PROGRESS_STATUSES = new Set(['active', 'paused', 'in_progress']);
+
+/** What a day has actually had done to it, as opposed to what it still offers to start. */
+export type DayEngagement = {
+  completed: PlannedWorkout | null;
+  inProgress: PlannedWorkout | null;
+};
+
+/**
+ * Read a day's real state from every row it holds.
+ *
+ * Starting a workout moves its row to `active` and finishing moves it to `completed`, but
+ * `dedupePlannedWorkoutsByDate` ranks `planned` above both, so one stale duplicate left on the
+ * day is enough to hide all of it — the day reports as untouched however much work went into it,
+ * and home keeps offering to start a session that is underway or already done. This has to be
+ * given undeduped rows to be worth anything.
+ */
+export function resolveDayEngagement(
+  rows: readonly PlannedWorkout[],
+  date: string,
+): DayEngagement {
+  const onDay = rows.filter((row) => row.scheduledDate === date);
+  return {
+    completed: onDay.find((row) => row.status === 'completed') ?? null,
+    inProgress: onDay.find((row) => IN_PROGRESS_STATUSES.has(row.status)) ?? null,
+  };
+}
+
 export function resolveActiveTrainingDay(
   workouts: PlannedWorkout[],
   options?: { date?: string; timeZone?: string | null; reference?: Date },
