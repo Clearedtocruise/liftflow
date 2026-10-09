@@ -257,30 +257,27 @@ export const trainingService: ITrainingService = {
   },
 
   /**
-   * The finished session for a date, if that date has been trained.
+   * Every row a date holds, in the state the database has them.
    *
    * Deliberately does not go through `getPlannedWorkouts`: that runs its rows through
-   * `dedupePlannedWorkoutsByDate`, which ranks a startable row above a finished one so the week
-   * can say what to do next. On a day holding both — one moved onto a day already trained, or a
-   * cycle day rewritten after a swap — the finished row is dropped before anything downstream can
-   * look at it, and home asks the lifter to start the workout they have just done.
+   * `dedupePlannedWorkoutsByDate`, which ranks `planned` above every status a row reaches once it
+   * has been trained. A day holding a stale duplicate alongside the row actually worked therefore
+   * reports as untouched no matter what happened to it — started, paused or finished — because
+   * the duplicate is the only row that survives. Reading the day directly is what sees the rest.
    */
-  async getCompletedPlannedWorkout(
+  async getPlannedWorkoutsForDate(
     userId: string,
     date: string,
-  ): Promise<import('@/types/common').ServiceResult<PlannedWorkout | null>> {
+  ): Promise<import('@/types/common').ServiceResult<PlannedWorkout[]>> {
     try {
       const { data, error } = await supabase
         .from('planned_workouts')
         .select('*')
         .eq('user_id', userId)
-        .eq('scheduled_date', date)
-        .eq('status', 'completed')
-        .limit(1);
+        .eq('scheduled_date', date);
 
       if (error) return fail(error.message);
-      const row = (data ?? [])[0];
-      return ok(row ? mapPlanned(row as PlannedRow) : null);
+      return ok((data ?? []).map((row) => mapPlanned(row as PlannedRow)));
     } catch (e) {
       return fromError(e);
     }

@@ -6,7 +6,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useLocalCalendarDay } from '@/hooks/useLocalCalendarDay';
 import { useTabataModePreference } from '@/hooks/useTabataModePreference';
 import { useWorkoutLocations } from '@/hooks/useWorkoutLocations';
-import { resolveActiveTrainingDay } from '@/lib/activeTrainingDay';
+import { resolveActiveTrainingDay, resolveDayEngagement } from '@/lib/activeTrainingDay';
 import { localDateString } from '@/lib/localDate';
 import { startPlannedWorkout } from '@/lib/startPlannedWorkout';
 import { getWeekRange } from '@/lib/weekPlan';
@@ -113,10 +113,10 @@ export function useTodayDashboard(): TodayDashboardState {
     setLoading(true);
     try {
       const { from, to } = getWeekRange(new Date(), user.timezone);
-      const [result, nextResult, completedResult] = await Promise.all([
+      const [result, nextResult, todaysRowsResult] = await Promise.all([
         trainingService.getPlannedWorkouts(user.id, from, to, user.timezone),
         trainingService.getNextPlannedWorkout(user.id, today),
-        trainingService.getCompletedPlannedWorkout(user.id, today),
+        trainingService.getPlannedWorkoutsForDate(user.id, today),
       ]);
       if (!result.success) {
         // A failed fetch used to render identically to a rest day, telling the user they had
@@ -137,16 +137,21 @@ export function useTodayDashboard(): TodayDashboardState {
         timeZone: user.timezone,
       });
       setTodaysWorkout(active.isStartableWorkoutDay ? active.workout : null);
+      // Neither of these can be read off the canonical row. That row is whichever one can be
+      // started next, so a single stale duplicate sitting in `planned` outranks the row the work
+      // actually went into and today reports as untouched — which is how home kept offering to
+      // start a session that was already underway, or already finished. The undeduped read of the
+      // day is the only thing that sees what really happened to it.
+      const engagement = resolveDayEngagement(
+        todaysRowsResult.success ? todaysRowsResult.data : [],
+        today,
+      );
       const scheduled = active.scheduledWorkout;
       const status = scheduled?.status ?? null;
-      // Not read off the canonical row: that row is whichever one can be started next, so a day
-      // moved onto today, or a cycle day rewritten after a swap, used to hide a finished session.
-      // The resolver can only look at rows that survived the week dedupe, which drops a finished
-      // row whenever the day also holds a startable one, so the direct read is what answers this.
-      setCompletedTodaysWorkout(
-        active.completedWorkout ?? (completedResult.success ? completedResult.data : null),
+      setCompletedTodaysWorkout(active.completedWorkout ?? engagement.completed);
+      setInProgressTodaysWorkout(
+        status === 'active' || status === 'paused' ? scheduled : engagement.inProgress,
       );
-      setInProgressTodaysWorkout(status === 'active' || status === 'paused' ? scheduled : null);
       setUpcomingWorkout(
         nextResult.success && nextResult.data
           ? describeUpcoming(nextResult.data, today, user.timezone)

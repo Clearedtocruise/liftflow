@@ -193,8 +193,8 @@ export interface ITrainingService {
   getPlannedWorkoutById(userId: string, plannedWorkoutId: string): Promise<ServiceResult<PlannedWorkout | null>>;
   /** The next scheduled session strictly after `afterDate`, unconstrained by week boundaries. */
   getNextPlannedWorkout(userId: string, afterDate: string): Promise<ServiceResult<PlannedWorkout | null>>;
-  /** The finished session for `date`, read without the week dedupe that hides it. */
-  getCompletedPlannedWorkout(userId: string, date: string): Promise<ServiceResult<PlannedWorkout | null>>;
+  /** Every row `date` holds, read without the week dedupe that hides all but one of them. */
+  getPlannedWorkoutsForDate(userId: string, date: string): Promise<ServiceResult<PlannedWorkout[]>>;
   suggestMuscleGroups(userId: string): Promise<ServiceResult<SuggestedMuscleGroups>>;
   assessRecovery(userId: string): Promise<ServiceResult<RecoveryAssessment>>;
   createPlannedWorkout(userId: string, workout: Omit<PlannedWorkout, 'id' | 'createdAt'>): Promise<ServiceResult<PlannedWorkout>>;
