@@ -7,6 +7,7 @@ import {
   clampCycleLength,
   completeCurrentCycleDay,
   currentCycleDay,
+  cycleDayAfterCompletion,
   cycleWorkoutName,
   datesClearedByAMove,
   needsCycleDayMaterialization,
@@ -257,4 +258,98 @@ test('a swap occupies both days, so neither is treated as cleared', () => {
     },
   ]);
   assert.equal(cleared.size, 0);
+});
+
+const SIX_DAY = { currentDay: 1, lengthDays: 6 };
+const TODAY = '2026-10-08';
+
+test('finishing the day the pointer is on advances it by one', () => {
+  assert.equal(
+    cycleDayAfterCompletion(SIX_DAY, { cycleDay: 1, scheduledDate: TODAY }, TODAY),
+    2,
+  );
+});
+
+/**
+ * The reported stall. A swap leaves the row on today carrying its own cycle day while the pointer
+ * still holds the day it displaced, so the mismatch is real work, not a stale tap. Refusing it
+ * pinned the pointer and every following day rebuilt the same workout.
+ */
+test('finishing a day swapped onto today advances past the day actually trained', () => {
+  assert.equal(
+    cycleDayAfterCompletion(SIX_DAY, { cycleDay: 5, scheduledDate: TODAY }, TODAY),
+    6,
+  );
+});
+
+test('a day swapped onto today still loops Day N back to Day 1', () => {
+  assert.equal(
+    cycleDayAfterCompletion(SIX_DAY, { cycleDay: 6, scheduledDate: TODAY }, TODAY),
+    1,
+  );
+});
+
+test('finishing the same day twice lands on the same day, not two days on', () => {
+  const afterFirst = cycleDayAfterCompletion(SIX_DAY, { cycleDay: 1, scheduledDate: TODAY }, TODAY);
+  assert.equal(afterFirst, 2);
+  assert.equal(
+    cycleDayAfterCompletion({ currentDay: afterFirst!, lengthDays: 6 }, { cycleDay: 1, scheduledDate: TODAY }, TODAY),
+    2,
+  );
+});
+
+test('a row finished late does not drag the pointer backwards', () => {
+  assert.equal(
+    cycleDayAfterCompletion({ currentDay: 5, lengthDays: 6 }, { cycleDay: 2, scheduledDate: '2026-10-04' }, TODAY),
+    null,
+  );
+});
+
+test('a row scheduled in the past is still honoured when it is the day the pointer is on', () => {
+  assert.equal(
+    cycleDayAfterCompletion({ currentDay: 2, lengthDays: 6 }, { cycleDay: 2, scheduledDate: '2026-10-04' }, TODAY),
+    3,
+  );
+});
+
+test('a row finished ahead of its scheduled date advances from the day trained', () => {
+  assert.equal(
+    cycleDayAfterCompletion(SIX_DAY, { cycleDay: 4, scheduledDate: '2026-10-11' }, TODAY),
+    5,
+  );
+});
+
+test('a row carrying no cycle day falls back to advancing the pointer', () => {
+  assert.equal(cycleDayAfterCompletion(SIX_DAY, { cycleDay: null, scheduledDate: TODAY }, TODAY), 2);
+  assert.equal(cycleDayAfterCompletion(SIX_DAY, {}, TODAY), 2);
+});
+
+test('an out-of-range cycle day is wrapped rather than trusted', () => {
+  assert.equal(
+    cycleDayAfterCompletion(SIX_DAY, { cycleDay: 8, scheduledDate: TODAY }, TODAY),
+    3,
+    'day 8 of a six-day program is day 2, so the pointer lands on day 3',
+  );
+});
+
+test('a one-day program stays on its only day', () => {
+  assert.equal(
+    cycleDayAfterCompletion({ currentDay: 1, lengthDays: 1 }, { cycleDay: 1, scheduledDate: TODAY }, TODAY),
+    1,
+  );
+});
+
+/** The sequence from the report: the pointer stuck on Day 1 while real sessions kept landing. */
+test('training swapped days walks the program forward instead of stalling on one day', () => {
+  let cycle = { currentDay: 1, lengthDays: 6 };
+  const trained: number[] = [];
+
+  for (const [day, date] of [[1, '2026-10-05'], [5, '2026-10-06'], [2, '2026-10-07'], [6, '2026-10-08']] as const) {
+    const next = cycleDayAfterCompletion(cycle, { cycleDay: day, scheduledDate: date }, date);
+    assert.notEqual(next, null, `finishing day ${day} on ${date} should move the pointer`);
+    cycle = { ...cycle, currentDay: next! };
+    trained.push(cycle.currentDay);
+  }
+
+  assert.deepEqual(trained, [2, 6, 3, 1]);
 });

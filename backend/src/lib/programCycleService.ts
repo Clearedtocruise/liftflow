@@ -15,6 +15,7 @@ import { localDateString } from './localDate.js';
 import { totalPlannedVolume } from './programProgression.js';
 import {
   completeCurrentCycleDay,
+  cycleDayAfterCompletion,
   currentCycleDay,
   cycleWorkoutName,
   isRestDay,
@@ -413,9 +414,10 @@ export async function ensureCycleMaterialized(userId: string, timeZone?: string 
 }
 
 /**
- * Advance the cycle after a workout completes. Only advances when the completed planned workout is
- * the current cycle day, so double-taps or completing a stale row cannot skip days. Materializes the
- * next day for the next calendar date and loops Day N → Day 1.
+ * Advance the cycle after a workout completes, past the day that was actually trained rather than
+ * past wherever the pointer happened to be — see {@link cycleDayAfterCompletion} for why the two
+ * come apart, and why only a late finish is ignored now. Materializes the next day for the next
+ * calendar date and loops Day N → Day 1.
  */
 export async function advanceCycleAfterCompletion(
   userId: string,
@@ -429,24 +431,32 @@ export async function advanceCycleAfterCompletion(
 
   const today = localDateString(new Date(), timeZone);
 
-  // Guard: only advance for a genuine current-cycle-day completion.
+  let nextDay: number | null = null;
   if (completedPlannedWorkoutId) {
     const { data: completedRow } = await db
       .from('planned_workouts')
-      .select('metadata, status')
+      .select('metadata, status, scheduled_date')
       .eq('id', completedPlannedWorkoutId)
       .eq('user_id', userId)
       .maybeSingle();
     const meta = (completedRow?.metadata ?? {}) as { planPack?: string; cycleDay?: number };
     if (meta.planPack !== CUSTOM_CYCLE_PLAN_PACK) return getCycleStatus(userId, timeZone);
-    if (typeof meta.cycleDay === 'number' && meta.cycleDay !== cycle.currentDay) {
-      // A stale/older day completed — do not move the live pointer.
-      return getCycleStatus(userId, timeZone);
-    }
+
+    nextDay = cycleDayAfterCompletion(
+      cycle,
+      { cycleDay: meta.cycleDay, scheduledDate: completedRow?.scheduled_date },
+      today,
+    );
+    // A row finished long after its date cannot say where the program is up to; honouring it
+    // would pull the pointer back onto work already behind the lifter.
+    if (nextDay == null) return getCycleStatus(userId, timeZone);
   }
 
   const nextDate = addIsoDays(today, 1);
-  const advanced = completeCurrentCycleDay(cycle, { anchorDate: nextDate });
+  const advanced =
+    nextDay == null
+      ? completeCurrentCycleDay(cycle, { anchorDate: nextDate })
+      : { ...cycle, currentDay: nextDay, anchorDate: nextDate };
   await persistCycle(db, program.id, userId, advanced);
 
   // Refresh the rolling week window from tomorrow so the rest of the visible week keeps matching
