@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { parseFirstNumber, resolveWatchSetPayload } from './watchLogSet';
+import { parseFirstNumber, resolveWatchActiveExercise, resolveWatchSetPayload } from './watchLogSet';
 import type { WorkoutSession } from '@/types';
 
 function session(overrides: Partial<WorkoutSession> = {}): WorkoutSession {
@@ -121,10 +121,61 @@ test('no session tells the user to start one', () => {
   assert.match((result as { error: string }).error, /Start a workout/);
 });
 
-test('an out-of-range index falls back to the first exercise', () => {
-  const result = resolveWatchSetPayload({ session: session(), activeExerciseIndex: 99 });
+test('an out-of-range index lands on the last exercise, which is the one the watch is showing', () => {
+  // The phone clamps the index when it builds the watch face. This path used to fall back to
+  // sorted[0] instead, so the wrist read "Barbell Row" and the set was written under Bench Press.
+  const result = resolveWatchSetPayload({
+    session: session(),
+    activeExerciseIndex: 99,
+    draftWeightKg: 50,
+  });
+  assert.ok(result.ok);
+  assert.equal(result.payload.workoutExerciseId, 'we-2');
+  assert.equal(result.exerciseName, 'Barbell Row');
+});
+
+test('the exercise named on the watch face wins over the index', () => {
+  const result = resolveWatchSetPayload({
+    session: session(),
+    activeExerciseIndex: 0,
+    displayedWorkoutExerciseId: 'we-2',
+    draftWeightKg: 50,
+  });
+  assert.ok(result.ok);
+  assert.equal(result.payload.workoutExerciseId, 'we-2');
+});
+
+test('a displayed exercise that is no longer in the workout gives way to the index', () => {
+  // Swapped or deleted from the phone before the wrist tap arrived.
+  const result = resolveWatchSetPayload({
+    session: session(),
+    activeExerciseIndex: 0,
+    displayedWorkoutExerciseId: 'we-deleted',
+  });
   assert.ok(result.ok);
   assert.equal(result.payload.workoutExerciseId, 'we-1');
+});
+
+test('an index outside the workout is clamped, never wrapped to the start', () => {
+  const sorted = [{ id: 'we-1' }, { id: 'we-2' }, { id: 'we-3' }];
+  const at = (activeExerciseIndex: number) =>
+    resolveWatchActiveExercise(sorted, { activeExerciseIndex })?.id;
+
+  assert.equal(at(-1), 'we-1');
+  assert.equal(at(0), 'we-1');
+  assert.equal(at(2), 'we-3');
+  assert.equal(at(7), 'we-3');
+  assert.equal(resolveWatchActiveExercise([], { activeExerciseIndex: 0 }), undefined);
+});
+
+test('an exercise flagged active outranks the index, as it does on the watch face', () => {
+  const sorted = [{ id: 'we-1' }, { id: 'we-2', isActive: true }, { id: 'we-3' }];
+  assert.equal(resolveWatchActiveExercise(sorted, { activeExerciseIndex: 0 })?.id, 'we-2');
+  // Unless the face is already naming one, in which case that is what the lifter is looking at.
+  assert.equal(
+    resolveWatchActiveExercise(sorted, { activeExerciseIndex: 0, displayedWorkoutExerciseId: 'we-3' })?.id,
+    'we-3',
+  );
 });
 
 test('logging past the plan target is refused', () => {
