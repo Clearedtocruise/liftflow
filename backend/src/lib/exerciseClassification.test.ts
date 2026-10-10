@@ -30,6 +30,16 @@ const cases: Array<{ label: string; input: Parameters<typeof classifyExercise>[0
   { label: 'Bent Over Row', input: { name: 'Bent Over Row', equipment: 'barbell' }, expected: 'strength' },
   { label: 'Upright Row', input: { name: 'Upright Row', equipment: 'dumbbell' }, expected: 'strength' },
   { label: 'Inverted Row', input: { name: 'Inverted Row', equipment: 'bodyweight' }, expected: 'bodyweight' },
+  {
+    label: 'Flat lying pulldown is bodyweight even on a cable slug',
+    input: { name: 'Flat LWG Pull Down', slug: 'lat-pulldown', equipment: 'cable', exerciseType: 'strength' },
+    expected: 'bodyweight',
+  },
+  {
+    label: 'Lat Pulldown stays strength',
+    input: { name: 'Lat Pulldown', slug: 'lat-pulldown', equipment: 'cable', exerciseType: 'strength' },
+    expected: 'strength',
+  },
   { label: 'Rowing Machine', input: { name: 'Rowing Machine', equipment: 'machine' }, expected: 'cardio' },
   { label: 'Row Erg', input: { name: 'Row Erg', equipment: 'machine' }, expected: 'cardio' },
   { label: 'Rowing remains cardio', input: { name: 'Rowing', equipment: 'rower' }, expected: 'cardio' },

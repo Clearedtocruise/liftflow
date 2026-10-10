@@ -458,7 +458,7 @@ export async function loadExerciseCoachPrescription(
 
   const adjustmentLabel = mapAdjustmentLabel(progression.adjustmentType, setsDelta);
 
-  return {
+  const prescription: ExerciseCoachPrescription = {
     exerciseId,
     exerciseName: plan?.exerciseName ?? progression.exerciseName,
     whySelected,
@@ -486,6 +486,24 @@ export async function loadExerciseCoachPrescription(
       sessionsUsed: progression.basedOnSessions,
     },
   };
+
+  if (plan?.loggingMode !== 'bodyweight' && exerciseType !== 'bodyweight') return prescription;
+  if (plan?.loggingMode === 'weighted') return prescription;
+
+  return {
+    ...prescription,
+    targets: { ...prescription.targets, weightKg: 0 },
+    adjustmentLabel: prescription.adjustmentLabel === 'increase_weight' ? 'increase_reps' : prescription.adjustmentLabel,
+    reason: bodyweightCoachReason(prescription.reason),
+    detailedReason: bodyweightCoachReason(prescription.detailedReason),
+  };
+}
+
+function bodyweightCoachReason(reason: string): string {
+  if (/no prior history/i.test(reason)) {
+    return 'No prior history — log the reps you can do with good form.';
+  }
+  return reason.replace(/working weight/gi, 'rep target');
 }
 
 export async function loadWorkoutExercisePrescriptions(

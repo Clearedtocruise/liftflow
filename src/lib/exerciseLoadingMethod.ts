@@ -1,4 +1,5 @@
 import { catalogExerciseBySlug } from '@/constants/exerciseDatabase';
+import { isFlatBodyweightPulldownName } from '@/lib/exerciseClassification';
 import type { ExerciseLoggingMode } from '@/lib/exerciseModality';
 import { getExerciseLoggingMode, isTimedExercise } from '@/lib/exerciseModality';
 import type { Exercise } from '@/types';
@@ -29,6 +30,10 @@ export function supportedLoadingMethods(
   exercise: Exercise | null | undefined,
   slug?: string | null,
 ): LoadingMethod[] {
+  const label = `${exercise?.name ?? ''} ${slug ?? ''}`.toLowerCase();
+  // Reps only. A previous 5 lb log must not flip this back to a weight stepper.
+  if (isFlatBodyweightPulldownName(label)) return ['bodyweight'];
+
   const key = slug ?? exercise?.slug;
   if (key) {
     const catalog = catalogExerciseBySlug(key);
@@ -37,7 +42,6 @@ export function supportedLoadingMethods(
     if (DEFAULT_LOADING_METHODS[key]) return DEFAULT_LOADING_METHODS[key]!;
   }
 
-  const label = `${exercise?.name ?? ''} ${slug ?? ''}`.toLowerCase();
   // Catalog slug can be missing on a custom/imported row; still offer added weight for these.
   if (/\bhanging\s+(leg|knee)\s+raises?\b/.test(label) || /\bhanging-leg-raise\b/.test(label)) {
     return ['bodyweight', 'bodyweight_plus_weight'];

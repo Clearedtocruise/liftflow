@@ -13,6 +13,17 @@ const TIMED_NAME_PATTERN =
 const BODYWEIGHT_NAME_PATTERN =
   /\b(pull[\s-]?up|chin[\s-]?up|push[\s-]?up|dip|burpee|air\s*squat|bodyweight|inverted\s*row|muscle[\s-]?up|pistol\s*squat|walking\s*lunge)\b/i;
 
+/**
+ * A flat lying pulldown is a bodyweight pull (the lifter's own weight, reps only).
+ * "lwg" is the spelling that shows up when the name is dictated or imported.
+ * Cable lat pulldowns are a different lift and stay weighted.
+ */
+const FLAT_BODYWEIGHT_PULLDOWN_NAME_PATTERN = /\bflat[\s-]+(?:lwg|lying)[\s-]+pull[\s-]?downs?\b/i;
+
+export function isFlatBodyweightPulldownName(name: string | null | undefined): boolean {
+  return FLAT_BODYWEIGHT_PULLDOWN_NAME_PATTERN.test(normalize(name));
+}
+
 // "Throw down" needs no qualifier: nothing loaded goes by that name, so the bare form is safe to
 // claim and catches "Flat Leg Throw Downs", "Leg Throwdowns" and plain "Throw Downs" alike.
 const CORE_BODYWEIGHT_NAME_PATTERN =
@@ -71,6 +82,10 @@ function isBodyweightEquipment(equipment: string): boolean {
  */
 export function classifyExercise(input: ExerciseClassificationInput): ExerciseType {
   if (input.exerciseType && input.exerciseType !== 'strength') return input.exerciseType;
+
+  // Name wins over a catalog slug. A row stored as lat-pulldown is a cable lift, but this
+  // name is bodyweight even when the catalog row or equipment says otherwise.
+  if (isFlatBodyweightPulldownName(input.name)) return 'bodyweight';
 
   const slug = normalize(input.slug);
   if (slug) {
