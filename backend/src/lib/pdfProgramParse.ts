@@ -650,6 +650,129 @@ export type AiDocumentRead =
   | { ok: true; data: LlmShape }
   | { ok: false; reason: ChatFailureReason };
 
+/**
+ * A document cut into the days it describes, keyed on the same headers the heuristic walks.
+ *
+ * `preamble` is whatever sits above the first day — a plan title, a note on how the block is
+ * run — and is prepended to each day so a protocol stated once is not lost by the split.
+ */
+export type DaySection = { label: string; text: string };
+
+export function splitDocumentIntoDaySections(text: string): {
+  preamble: string;
+  days: DaySection[];
+} {
+  const lines = normalizePlanText(text).split('\n');
+  const preamble: string[] = [];
+  const days: DaySection[] = [];
+  let current: { label: string; lines: string[] } | null = null;
+
+  for (const line of lines) {
+    if (parseDayHeader(line)) {
+      if (current) days.push({ label: current.label, text: current.lines.join('\n') });
+      current = { label: line.trim(), lines: [line] };
+      continue;
+    }
+    if (current) current.lines.push(line);
+    else if (line.trim()) preamble.push(line);
+  }
+  if (current) days.push({ label: current.label, text: current.lines.join('\n') });
+
+  return { preamble: preamble.join('\n'), days };
+}
+
+/**
+ * Below this, one read of the whole document is cheaper than a request per day.
+ *
+ * The cost that matters is the JSON the model has to write out. A three-day plan is a few
+ * hundred tokens and lands well inside any budget; it is the long plans that do not, and they
+ * are exactly the ones worth splitting.
+ */
+const AI_PER_DAY_MIN_SECTIONS = 4;
+
+/**
+ * How many day reads may be in flight at once.
+ *
+ * A cycle can run to thirty days, and firing thirty requests together trades a timeout for a
+ * rate limit. Six keeps even the longest plan to a handful of waves while still collapsing most
+ * of the wall clock a day-by-day read would otherwise spend in sequence.
+ */
+const AI_PER_DAY_CONCURRENCY = 6;
+
+/** Map over `items` with at most `limit` promises in flight, preserving input order. */
+async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    for (let index = next++; index < items.length; index = next++) {
+      results[index] = await fn(items[index]!, index);
+    }
+  });
+
+  await Promise.all(workers);
+  return results;
+}
+
+/**
+ * Read a long plan a day at a time, concurrently.
+ *
+ * A ten-day plan with forty-four exercises is several thousand tokens of JSON, and generating it
+ * is most of what the import spends — long enough that the read was timing out and the plan fell
+ * back to pattern-matching. Asking per day turns one long generation into a set of short ones
+ * that run together, so the wall clock is roughly the slowest single day rather than the sum.
+ *
+ * A day the model declines or mangles is left to the heuristic rather than failing the import,
+ * so one bad day cannot cost the other nine.
+ */
+async function readDaysInParallel(
+  sections: DaySection[],
+  preamble: string,
+  readWithAi: (prompt: { system: string; user: string }) => Promise<AiDocumentRead>,
+): Promise<{ days: (unknown | null)[]; failed: number }> {
+  const system = `You extract ONE day of a workout program from user-supplied document text.
+Return JSON only: { "day": { "label", "isRest", "executionMode", "intervalWorkSeconds", "intervalRestSeconds", "intervalRounds", "exercises": [{ "name", "sets", "reps", "restSeconds", "weightLbs", "notes" }] } }.
+Return every exercise the day lists, in order, and nothing that is not in the text.
+Mark a rest day with isRest true and an empty exercises array.
+Default restSeconds to 90 when the day does not say.
+executionMode is how the day is run: omit it for ordinary straight sets, or use tabata|hiit|circuit when the text says so. Set intervalWorkSeconds, intervalRestSeconds and intervalRounds only from timings the text states — "20s on / 10s off x 8" is 20, 10, 8.`;
+
+  const days = await mapWithConcurrency(sections, AI_PER_DAY_CONCURRENCY, async (section) => {
+    const user = [
+      preamble ? asPromptData('PLAN_CONTEXT', preamble) : null,
+      asPromptData('DAY_TEXT', section.text),
+    ]
+      .filter(Boolean)
+      .join('\n\n');
+
+    const attempt = await readWithAi({ system, user });
+    if (!attempt.ok) return null;
+    return (attempt.data as { day?: unknown } | null)?.day ?? null;
+  });
+
+  return { days, failed: days.filter((day) => day == null).length };
+}
+
+/** The meal plan on its own, for when the workout half is being read a day at a time. */
+async function readNutritionOnly(
+  text: string,
+  readWithAi: (prompt: { system: string; user: string }) => Promise<AiDocumentRead>,
+): Promise<ImportedNutritionPlan | null> {
+  const system = `You extract ONLY the nutrition plan from user-supplied document text. Ignore the workout.
+Return JSON only: { "nutrition": null or { "name", "goals": { "calories", "proteinG", "carbsG", "fatG", "waterMl" }, "days": [{ "dayIndex" 0=Mon..6=Sun, "label", "meals": [{ "mealType", "name", "scheduledTime", "calories", "proteinG", "carbsG", "fatG", "notes" }] }] } }.
+mealType must be one of breakfast|lunch|dinner|snack|pre_workout|post_workout.
+If the document gives daily targets but no meals, return the goals and an empty days array.
+Return null when the document says nothing about food. Do not invent meals or numbers.`;
+
+  const attempt = await readWithAi({ system, user: asPromptData('PROGRAM_DOCUMENT_TEXT', text) });
+  if (!attempt.ok) return null;
+  return sanitizeNutrition((attempt.data as { nutrition?: unknown } | null)?.nutrition);
+}
+
 function readDocumentWithAi(
   prompt: { system: string; user: string },
   timeoutMs: number,
@@ -703,6 +826,46 @@ If the document is only goals without meals, return goals and empty days.`;
 
     const budget = Math.min(options.timeoutMs ?? MAX_AI_PARSE_MS, MAX_AI_PARSE_MS);
     const readWithAi = options.readWithAi ?? ((prompt) => readDocumentWithAi(prompt, budget));
+
+    // A long plan is read a day at a time so no single generation has to carry the whole cycle.
+    // Only the workout half splits this way; nutrition is short enough to ask for in one go.
+    const sections = kind === 'nutrition' ? { preamble: '', days: [] } : splitDocumentIntoDaySections(text);
+    if (sections.days.length >= AI_PER_DAY_MIN_SECTIONS) {
+      // The meal plan rides along with the days rather than being skipped by the split. Its
+      // output is short, so it costs no more wall clock than the day it runs beside.
+      const [perDay, nutritionRead] = await Promise.all([
+        readDaysInParallel(sections.days, sections.preamble, readWithAi),
+        kind === 'workout' ? Promise.resolve(null) : readNutritionOnly(text, readWithAi),
+      ]);
+
+      // A day the model did not return keeps the heuristic's reading of that same day, so one
+      // unread day costs its own detail rather than shifting every day after it up a slot.
+      const merged = perDay.days.map((day, index) => day ?? heuristic.workout?.days[index] ?? null);
+      const workout = sanitizeWorkout({ name: heuristic.workout?.name, days: merged.filter((day) => day != null) });
+
+      if (workout && perDay.failed < sections.days.length) {
+        const warnings = replaceNoAiWarning(heuristic.warnings);
+        if (perDay.failed > 0) {
+          warnings.push(
+            `${perDay.failed} of ${sections.days.length} days could not be read by the AI and were kept as the document structured them. Check those days below.`,
+          );
+        }
+        return {
+          ...heuristic,
+          workout,
+          nutrition: nutritionRead ?? heuristic.nutrition,
+          warnings,
+        };
+      }
+
+      // Every day failed. Reading the whole document is unlikely to do better for the same
+      // reason, so go straight to what the document structure gave us.
+      return {
+        ...heuristic,
+        warnings: replaceNoAiWarning(heuristic.warnings, aiUnavailableWarning('timeout')),
+      };
+    }
+
     const attempt = await readWithAi({ system, user });
 
     if (!attempt.ok) {
