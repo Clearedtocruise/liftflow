@@ -31,7 +31,11 @@ test('a curl is only a biceps curl when it is one', () => {
 test('presses and pulls are split by direction', () => {
   assert.equal(family('Bench Press'), 'horizontal_press');
   assert.equal(family('Push-Up'), 'horizontal_press');
+  assert.equal(family('Incline DB Press'), 'horizontal_press');
+  assert.equal(family('Incline Dumbbell Press'), 'horizontal_press');
+  assert.equal(family('Decline Dumbbell Press'), 'horizontal_press');
   assert.equal(family('Overhead Press'), 'vertical_press');
+  assert.equal(family('Incline Shoulder Press'), 'vertical_press');
   assert.equal(family('Barbell Row'), 'horizontal_pull');
   assert.equal(family('Lat Pulldown'), 'vertical_pull');
   assert.equal(family('Wide Pull-Up'), 'vertical_pull');

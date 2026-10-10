@@ -76,7 +76,7 @@ const NAME_RULES: Array<{ family: MovementFamily; pattern: RegExp }> = [
   { family: 'vertical_pull', pattern: /\bpull[\s-]?ups?\b|\bchin[\s-]?ups?\b|\bpull\s*downs?\b|\bpulldowns?\b|\blat\s+pull/i },
   { family: 'horizontal_pull', pattern: /\brows?\b|\b(seated|cable|barbell|dumbbell|machine|chest[\s-]?supported)\s+rowing\b/i },
   { family: 'vertical_press', pattern: /\boverhead\s+press\b|\bshoulder\s+press\b|\bmilitary\s+press\b|\bpush\s*press\b|\barnold\s+press\b|\bohp\b/i },
-  { family: 'horizontal_press', pattern: /\bbench\s+press\b|\bchest\s+press\b|\bpush[\s-]?ups?\b|\bdips?\b|\bfloor\s+press\b/i },
+  { family: 'horizontal_press', pattern: /\bbench\s+press\b|\bchest\s+press\b|\bpush[\s-]?ups?\b|\bdips?\b|\bfloor\s+press\b|\b(?:incline|decline)\b.*\bpress(?:es)?\b/i },
 
   { family: 'carry', pattern: /\bcarry\b|\bcarries\b|\bfarmer|\byoke\b|\bsled\s+(push|drag|pull)\b|\bprowler\b/i },
   { family: 'cardio', pattern: /\brun(ning)?\b|\bjog|\bsprint|\bcycl|\bbike|\browing\b|\brow\s*(machine|erg)\b|\btreadmill|\belliptical|\bswim|\bjump\s*rope|\bwalk(ing)?\b/i },
