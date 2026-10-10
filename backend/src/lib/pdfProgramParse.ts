@@ -310,9 +310,47 @@ const SETS_ONLY_RE = /^[-•*]?\s*(.+?)\s+(\d+)\s*sets?\b/i;
 const DAY_FOCUS_RE =
   /^(push|pull|legs?|upper|lower|chest|back|shoulders?|arms?|full\s*body|rest|abs?|core)\b[:.\-–]?\s*/i;
 
+/**
+ * A bare weekday only starts a day when the line reads like a heading.
+ *
+ * "Day 3" and "Workout 2" are headings and nothing else, but a weekday is an ordinary English
+ * word, so every sentence that opens with one was being taken for the start of a training day.
+ * A real plan says "Saturday, October 10, in the order you listed." and "Friday as recovery time;
+ * do not try to make up missed volume" in its opening prose, and both were read as days — leaving
+ * the import with three empty days before the workout, Day 1 shown as Rest, and the actual
+ * sessions pushed down the cycle.
+ *
+ * A heading is short and has no sentence in it. That is enough to separate "SATURDAY | A: CHEST +
+ * TRICEPS" from a paragraph that happens to begin on a weekday, without demanding a particular
+ * capitalisation or separator that a hand-written plan may not use.
+ */
+const HEADING_MAX_LENGTH = 60;
+const SENTENCE_PUNCTUATION_RE = /[.;]/;
+
+function looksLikeHeading(line: string): boolean {
+  const trimmed = line.trim();
+  return trimmed.length <= HEADING_MAX_LENGTH && !SENTENCE_PUNCTUATION_RE.test(trimmed);
+}
+
+/**
+ * Template-letter days: "A | Chest + triceps", "B | Back + biceps".
+ *
+ * Plans built around rotating templates name their days by letter rather than by number, and
+ * those headings were invisible here — so a document whose workouts were all under A–F had no
+ * day the parser could see, and the import fell back to whatever else in the file happened to
+ * look like a day.
+ *
+ * The pipe is required. A letter alone opens far too many ordinary lines, and the same plan
+ * usually also lists "A: Chest/triceps" in a calendar at the top, which is a reference to the
+ * day rather than the day itself.
+ */
+const LETTER_DAY_HEADER_RE = /^(?:day\s+)?([a-h])\s*\|\s*(.+)$/i;
+
 function parseDayHeader(line: string): { dayNumber: number | null; labelTail: string; focus: string; isRest: boolean } | null {
   const match = line.match(DAY_HEADER_RE);
-  if (!match) return null;
+  if (!match) return parseLetterDayHeader(line);
+  // Group 6 is the bare-weekday branch — the only one a sentence can open with by accident.
+  if (match[6] && !looksLikeHeading(line)) return null;
   const n =
     match[1] ||
     (match[2] ? String(WORD_DAY[match[2].toLowerCase()] ?? '') : '') ||
@@ -321,7 +359,26 @@ function parseDayHeader(line: string): { dayNumber: number | null; labelTail: st
     match[5] ||
     (match[6] ? String(WORD_DAY[match[6].toLowerCase()] ?? '') : '');
   const dayNumber = n && Number.isFinite(Number(n)) ? Number(n) : null;
-  let labelTail = (match[7] ?? '').trim().replace(/^[—–\-:\s]+/, '');
+  return describeDayHeader(line, dayNumber, match[7] ?? '');
+}
+
+/**
+ * A letter day carries no number, so the heading itself becomes the label. "A | Chest + triceps"
+ * tells the lifter which template they are looking at; "Day 1" would tell them less.
+ */
+function parseLetterDayHeader(line: string): ReturnType<typeof parseDayHeader> {
+  if (!looksLikeHeading(line)) return null;
+  const match = line.match(LETTER_DAY_HEADER_RE);
+  if (!match) return null;
+  return describeDayHeader(line, null, match[2]);
+}
+
+function describeDayHeader(
+  line: string,
+  dayNumber: number | null,
+  rawTail: string,
+): { dayNumber: number | null; labelTail: string; focus: string; isRest: boolean } {
+  let labelTail = rawTail.trim().replace(/^[—–\-:|\s]+/, '');
   let focus = '';
   const focusMatch = labelTail.match(DAY_FOCUS_RE);
   if (focusMatch) {
@@ -421,10 +478,85 @@ export function executionHintForDay(hint: DayExecutionHint): DayExecutionHint {
   return hint;
 }
 
+/**
+ * A prescription written on its own line, under the exercise it belongs to.
+ *
+ * Plenty of plans lay an exercise out over two lines — the lift on one, "Sets x reps: 2 x 6-12"
+ * on the next. Read a line at a time, the second line looks like an exercise whose name is "Sets
+ * x reps", so a seven-exercise day imported as seven copies of that phrase and the lift names
+ * were thrown away entirely.
+ */
+const PRESCRIPTION_LABEL_RE =
+  /^(?:sets?|reps?|volume|prescription)(?:\s*(?:[x×/&+,-]|and)\s*(?:sets?|reps?))?\s*[:–—-]\s*/i;
+const PRESCRIPTION_BODY_RE =
+  /^(\d+)\s*(?:[x×]\s*|sets?\s*(?:of\s*|x\s*|×\s*)?)(\d+(?:\s*[-–]\s*\d+)?)\s*(?:reps?)?\b(.*)$/i;
+/** What may follow the numbers on a line that is still only a prescription. */
+const PRESCRIPTION_TAIL_RE = /^(?:reps?\b|each\b|per\b|total\b|[)\],.\-–—]|$)/i;
+
+function parsePrescriptionOnlyLine(line: string): { sets: number; reps: string } | null {
+  const label = line.match(PRESCRIPTION_LABEL_RE);
+  const body = (label ? line.slice(label[0].length) : line).trim();
+  const match = body.match(PRESCRIPTION_BODY_RE);
+  if (!match) return null;
+  // Unlabelled, only a line that is nothing but the prescription counts. Otherwise
+  // "3 x 10 Bulgarian split squats" would be read as a prescription for the line above it.
+  if (!label && !PRESCRIPTION_TAIL_RE.test(match[3].trim())) return null;
+  const sets = Number(match[1]);
+  if (!Number.isFinite(sets) || sets < 1) return null;
+  return { sets: Math.min(sets, 20), reps: match[2].replace(/\s+/g, '') };
+}
+
+/**
+ * Whether a line could be the name of the lift that a following prescription line describes.
+ *
+ * Between the lifts a plan carries coaching prose — "Technique: feet on stable bench; keep hips
+ * level." — and none of it should end up named as an exercise. A lift name is short, has no
+ * sentence in it, and does not read as a labelled note.
+ */
+const ORDINAL_PREFIX_RE = /^\(?\d{1,2}[.)\]]\s+/;
+const EXERCISE_NAME_MAX_LENGTH = 70;
+const PAGE_NUMBER_ONLY_RE = /^\d{1,3}$/;
+
+function cleanExerciseName(raw: string): string {
+  return raw.trim().replace(ORDINAL_PREFIX_RE, '').replace(/^[-•*]\s*/, '').trim();
+}
+
+/** Headings a plan carries between its lifts. None of them is the name of one. */
+const NON_EXERCISE_HEADING_RE =
+  /^(?:warm[-\s]?ups?|cool[-\s]?downs?|progression|notes?|technique|form|setup|substitutions?|equipment)\b/i;
+
+function exerciseNameCandidate(line: string): string | null {
+  const trimmed = cleanExerciseName(line);
+  if (!trimmed || trimmed.length > EXERCISE_NAME_MAX_LENGTH) return null;
+  if (SENTENCE_PUNCTUATION_RE.test(trimmed) || trimmed.includes(':')) return null;
+  if (!/[a-z]/i.test(trimmed)) return null;
+  if (NON_EXERCISE_HEADING_RE.test(trimmed)) return null;
+  return trimmed;
+}
+
+/**
+ * A lift name wrapped onto a second line.
+ *
+ * A plan laid out as a table comes out of a PDF with its columns flattened and its longer names
+ * broken mid-phrase — "5. Standing underhand dumbbell" on one line, "fly" on the next — so
+ * taking only the line above the prescription imported that exercise as "fly". A fragment that
+ * opens in lower case and is too short to be a name of its own is the tail of the line before it.
+ */
+const WRAPPED_NAME_MAX_LENGTH = 25;
+
+function joinWrappedName(pending: string | null, candidate: string, line: string): string {
+  const trimmed = line.trim();
+  if (!pending || trimmed.length > WRAPPED_NAME_MAX_LENGTH || !/^[a-z]/.test(trimmed)) {
+    return candidate;
+  }
+  const joined = `${pending} ${candidate}`;
+  return joined.length <= EXERCISE_NAME_MAX_LENGTH ? joined : candidate;
+}
+
 function parseExerciseLine(line: string): CycleTemplateExercise | null {
   const ex = line.match(EX_RE) || line.match(SETS_REPS_RE);
   if (ex) {
-    const name = ex[1].trim().replace(/^[-•*]\s*/, '');
+    const name = cleanExerciseName(ex[1]);
     if (!name || /^(day|workout|session)\b/i.test(name)) return null;
     return {
       name,
@@ -437,7 +569,10 @@ function parseExerciseLine(line: string): CycleTemplateExercise | null {
   }
   const setsOnly = line.match(SETS_ONLY_RE);
   if (setsOnly) {
-    const name = setsOnly[1].trim().replace(/^[-•*]\s*/, '');
+    // The loosest of the three patterns, and the one coaching prose falls into: "Week 4: perform
+    // 1 set per exercise." was being imported as a lift called "Week 4: perform". Asking that the
+    // name read like a lift name costs nothing that "Plank 3 sets" would not still pass.
+    const name = exerciseNameCandidate(setsOnly[1]);
     if (!name || /^(day|workout|session)\b/i.test(name)) return null;
     return {
       name,
@@ -452,27 +587,83 @@ function parseExerciseLine(line: string): CycleTemplateExercise | null {
 /** The heuristic's note about itself, rewritten by the caller once it knows what the AI did. */
 const NO_AI_WARNING = 'Parsed without AI — review carefully before applying.';
 
-/** Heuristic fallback when OpenAI is unavailable — best-effort day/exercise extraction. */
-export function heuristicParseProgramText(text: string, kind: ImportKind): ProgramImportPreview {
-  const warnings: string[] = [NO_AI_WARNING];
-  const normalized = normalizePlanText(text);
-  const lines = normalized.split('\n').filter(Boolean);
+/** A day as the document lays it out: what was read from it, beside the lines it was read from. */
+type DocumentDay = { day: CycleProgramInput['days'][number]; label: string; text: string };
 
-  const workoutDays: CycleProgramInput['days'] = [];
+/**
+ * Whether a parsed day is this document's account of a training day.
+ *
+ * A plan states its days more than once — a calendar at the top, the sessions themselves, then a
+ * meal plan keyed by the same days at the bottom — and only one of those listings is the workout.
+ * The others carry no exercises, and neither does a banner heading sitting above the real one
+ * ("B | BACK + BICEPS" immediately above "B | Back and biceps"). A day that says it is a rest day
+ * is kept on its word, since having nothing in it is the whole point.
+ */
+function describesTraining(day: CycleProgramInput['days'][number]): boolean {
+  return Boolean(day.isRest) || (day.exercises?.length ?? 0) > 0;
+}
+
+/**
+ * Cut a document into its days and read each one.
+ *
+ * The heuristic parse and the day-at-a-time AI read both work from this. They merge their results
+ * by position, so a day either of them dropped or split on its own would put the two out of step
+ * and hand a lifter one day's exercises under another day's name.
+ */
+function readDocumentDays(text: string): {
+  preamble: string[];
+  days: DocumentDay[];
+} {
+  const lines = normalizePlanText(text).split('\n').filter(Boolean);
+
+  const preamble: string[] = [];
+  const days: DocumentDay[] = [];
   let current:
-    | { label: string; isRest: boolean; exercises: CycleTemplateExercise[]; hint: DayExecutionHint }
+    | {
+        label: string;
+        isRest: boolean;
+        exercises: CycleTemplateExercise[];
+        hint: DayExecutionHint;
+        lines: string[];
+      }
     | null = null;
 
   // A protocol stated before the first day header ("This block is run Tabata style") applies to
   // the whole document rather than to one day.
   let documentHint: DayExecutionHint = {};
 
+  // The lift name sits on the line above its "Sets x reps: 2 x 6-12" in plenty of plans, so the
+  // last line that could be a name is held until the next line says whether it was one. A few
+  // plans put the prescription first instead, so one with no name above it waits for the one
+  // below rather than being thrown away.
+  let pendingName: string | null = null;
+  let pendingPrescription: { sets: number; reps: string } | null = null;
+
+  const pushExercise = (name: string, prescription: { sets: number; reps: string }) => {
+    if (!current) return;
+    current.isRest = false;
+    current.exercises.push({
+      name,
+      exerciseName: name,
+      sets: prescription.sets,
+      reps: prescription.reps,
+      repRange: prescription.reps,
+      restSeconds: DEFAULT_IMPORT_REST_SECONDS,
+    });
+  };
+
   const flush = () => {
     if (current) {
-      const { hint, ...day } = current;
-      workoutDays.push({ ...day, ...executionHintForDay(mergeExecutionHint(hint, documentHint)) });
+      const { hint, lines: dayLines, label, ...rest } = current;
+      days.push({
+        day: { label, ...rest, ...executionHintForDay(mergeExecutionHint(hint, documentHint)) },
+        label,
+        text: dayLines.join('\n'),
+      });
     }
     current = null;
+    pendingName = null;
+    pendingPrescription = null;
   };
 
   for (const line of lines) {
@@ -486,7 +677,13 @@ export function heuristicParseProgramText(text: string, kind: ImportKind): Progr
       const label = n
         ? `Day ${n}${focusLabel ? ` — ${focusLabel}` : ''}`
         : line.slice(0, 48);
-      current = { label, isRest: header.isRest, exercises: [], hint: detectExecutionHint(line) ?? {} };
+      current = {
+        label,
+        isRest: header.isRest,
+        exercises: [],
+        hint: detectExecutionHint(line) ?? {},
+        lines: [line],
+      };
 
       // Same line may carry the first exercise after the header (collapsed paste).
       if (header.labelTail && !header.isRest) {
@@ -506,10 +703,29 @@ export function heuristicParseProgramText(text: string, kind: ImportKind): Progr
       continue;
     }
     if (!current) {
-      const preamble = detectExecutionHint(line);
-      if (preamble) documentHint = mergeExecutionHint(documentHint, preamble);
+      const hint = detectExecutionHint(line);
+      if (hint) documentHint = mergeExecutionHint(documentHint, hint);
+      if (line.trim()) preamble.push(line);
       continue;
     }
+    current.lines.push(line);
+    // A page number stranded mid-exercise by the extractor. It carries nothing, and letting it
+    // count as a line lost every lift whose prescription happened to fall after a page break.
+    if (PAGE_NUMBER_ONLY_RE.test(line.trim())) continue;
+
+    // Tried before the one-line forms: "Sets x reps: 2 x 6-12" matches those too, as an exercise
+    // called "Sets x reps".
+    const prescription = parsePrescriptionOnlyLine(line);
+    if (prescription) {
+      if (pendingName) {
+        pushExercise(pendingName, prescription);
+        pendingName = null;
+      } else {
+        pendingPrescription = prescription;
+      }
+      continue;
+    }
+
     const exercise = parseExerciseLine(line);
     // A protocol line is read before the rest-day check, so "Tabata: 20s on / 10s off" is not
     // mistaken for a rest day just because it contains the word "rest".
@@ -519,15 +735,36 @@ export function heuristicParseProgramText(text: string, kind: ImportKind): Progr
         current.hint = mergeExecutionHint(current.hint, hint);
         continue;
       }
-      if (/\brest\b/i.test(line) && line.length < 40) {
+      // Only a day with nothing in it yet. "Rest 2-3 minutes between squat sets" is a line every
+      // training day carries, and it was turning days with seven lifts in them into rest days.
+      if (current.exercises.length === 0 && /\brest\b/i.test(line) && line.length < 40) {
         current.isRest = true;
       }
+      const candidate = exerciseNameCandidate(line);
+      if (candidate && pendingPrescription) {
+        pushExercise(candidate, pendingPrescription);
+        pendingPrescription = null;
+        pendingName = null;
+        continue;
+      }
+      pendingName = candidate ? joinWrappedName(pendingName, candidate, line) : null;
       continue;
     }
     current.isRest = false;
     current.exercises.push(exercise);
+    pendingName = null;
+    pendingPrescription = null;
   }
   flush();
+
+  const training = days.filter((entry) => describesTraining(entry.day));
+  return { preamble, days: training.length > 0 ? training : days };
+}
+
+/** Heuristic fallback when OpenAI is unavailable — best-effort day/exercise extraction. */
+export function heuristicParseProgramText(text: string, kind: ImportKind): ProgramImportPreview {
+  const warnings: string[] = [NO_AI_WARNING];
+  const workoutDays = readDocumentDays(text).days.map((entry) => entry.day);
 
   let workout: CycleProgramInput | null = null;
   if (kind !== 'nutrition' && workoutDays.length > 0) {
@@ -650,6 +887,117 @@ export type AiDocumentRead =
   | { ok: true; data: LlmShape }
   | { ok: false; reason: ChatFailureReason };
 
+/**
+ * A document cut into the days it describes, keyed on the same headers the heuristic walks.
+ *
+ * `preamble` is whatever sits above the first day — a plan title, a note on how the block is
+ * run — and is prepended to each day so a protocol stated once is not lost by the split.
+ */
+export type DaySection = { label: string; text: string };
+
+export function splitDocumentIntoDaySections(text: string): {
+  preamble: string;
+  days: DaySection[];
+} {
+  const read = readDocumentDays(text);
+  return {
+    preamble: read.preamble.join('\n'),
+    days: read.days.map((entry) => ({ label: entry.label, text: entry.text })),
+  };
+}
+
+/**
+ * Below this, one read of the whole document is cheaper than a request per day.
+ *
+ * The cost that matters is the JSON the model has to write out. A three-day plan is a few
+ * hundred tokens and lands well inside any budget; it is the long plans that do not, and they
+ * are exactly the ones worth splitting.
+ */
+const AI_PER_DAY_MIN_SECTIONS = 4;
+
+/**
+ * How many day reads may be in flight at once.
+ *
+ * A cycle can run to thirty days, and firing thirty requests together trades a timeout for a
+ * rate limit. Six keeps even the longest plan to a handful of waves while still collapsing most
+ * of the wall clock a day-by-day read would otherwise spend in sequence.
+ */
+const AI_PER_DAY_CONCURRENCY = 6;
+
+/** Map over `items` with at most `limit` promises in flight, preserving input order. */
+async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    for (let index = next++; index < items.length; index = next++) {
+      results[index] = await fn(items[index]!, index);
+    }
+  });
+
+  await Promise.all(workers);
+  return results;
+}
+
+/**
+ * Read a long plan a day at a time, concurrently.
+ *
+ * A ten-day plan with forty-four exercises is several thousand tokens of JSON, and generating it
+ * is most of what the import spends — long enough that the read was timing out and the plan fell
+ * back to pattern-matching. Asking per day turns one long generation into a set of short ones
+ * that run together, so the wall clock is roughly the slowest single day rather than the sum.
+ *
+ * A day the model declines or mangles is left to the heuristic rather than failing the import,
+ * so one bad day cannot cost the other nine.
+ */
+async function readDaysInParallel(
+  sections: DaySection[],
+  preamble: string,
+  readWithAi: (prompt: { system: string; user: string }) => Promise<AiDocumentRead>,
+): Promise<{ days: (unknown | null)[]; failed: number }> {
+  const system = `You extract ONE day of a workout program from user-supplied document text.
+Return JSON only: { "day": { "label", "isRest", "executionMode", "intervalWorkSeconds", "intervalRestSeconds", "intervalRounds", "exercises": [{ "name", "sets", "reps", "restSeconds", "weightLbs", "notes" }] } }.
+Return every exercise the day lists, in order, and nothing that is not in the text.
+Mark a rest day with isRest true and an empty exercises array.
+Default restSeconds to 90 when the day does not say.
+executionMode is how the day is run: omit it for ordinary straight sets, or use tabata|hiit|circuit when the text says so. Set intervalWorkSeconds, intervalRestSeconds and intervalRounds only from timings the text states — "20s on / 10s off x 8" is 20, 10, 8.`;
+
+  const days = await mapWithConcurrency(sections, AI_PER_DAY_CONCURRENCY, async (section) => {
+    const user = [
+      preamble ? asPromptData('PLAN_CONTEXT', preamble) : null,
+      asPromptData('DAY_TEXT', section.text),
+    ]
+      .filter(Boolean)
+      .join('\n\n');
+
+    const attempt = await readWithAi({ system, user });
+    if (!attempt.ok) return null;
+    return (attempt.data as { day?: unknown } | null)?.day ?? null;
+  });
+
+  return { days, failed: days.filter((day) => day == null).length };
+}
+
+/** The meal plan on its own, for when the workout half is being read a day at a time. */
+async function readNutritionOnly(
+  text: string,
+  readWithAi: (prompt: { system: string; user: string }) => Promise<AiDocumentRead>,
+): Promise<ImportedNutritionPlan | null> {
+  const system = `You extract ONLY the nutrition plan from user-supplied document text. Ignore the workout.
+Return JSON only: { "nutrition": null or { "name", "goals": { "calories", "proteinG", "carbsG", "fatG", "waterMl" }, "days": [{ "dayIndex" 0=Mon..6=Sun, "label", "meals": [{ "mealType", "name", "scheduledTime", "calories", "proteinG", "carbsG", "fatG", "notes" }] }] } }.
+mealType must be one of breakfast|lunch|dinner|snack|pre_workout|post_workout.
+If the document gives daily targets but no meals, return the goals and an empty days array.
+Return null when the document says nothing about food. Do not invent meals or numbers.`;
+
+  const attempt = await readWithAi({ system, user: asPromptData('PROGRAM_DOCUMENT_TEXT', text) });
+  if (!attempt.ok) return null;
+  return sanitizeNutrition((attempt.data as { nutrition?: unknown } | null)?.nutrition);
+}
+
 function readDocumentWithAi(
   prompt: { system: string; user: string },
   timeoutMs: number,
@@ -703,6 +1051,46 @@ If the document is only goals without meals, return goals and empty days.`;
 
     const budget = Math.min(options.timeoutMs ?? MAX_AI_PARSE_MS, MAX_AI_PARSE_MS);
     const readWithAi = options.readWithAi ?? ((prompt) => readDocumentWithAi(prompt, budget));
+
+    // A long plan is read a day at a time so no single generation has to carry the whole cycle.
+    // Only the workout half splits this way; nutrition is short enough to ask for in one go.
+    const sections = kind === 'nutrition' ? { preamble: '', days: [] } : splitDocumentIntoDaySections(text);
+    if (sections.days.length >= AI_PER_DAY_MIN_SECTIONS) {
+      // The meal plan rides along with the days rather than being skipped by the split. Its
+      // output is short, so it costs no more wall clock than the day it runs beside.
+      const [perDay, nutritionRead] = await Promise.all([
+        readDaysInParallel(sections.days, sections.preamble, readWithAi),
+        kind === 'workout' ? Promise.resolve(null) : readNutritionOnly(text, readWithAi),
+      ]);
+
+      // A day the model did not return keeps the heuristic's reading of that same day, so one
+      // unread day costs its own detail rather than shifting every day after it up a slot.
+      const merged = perDay.days.map((day, index) => day ?? heuristic.workout?.days[index] ?? null);
+      const workout = sanitizeWorkout({ name: heuristic.workout?.name, days: merged.filter((day) => day != null) });
+
+      if (workout && perDay.failed < sections.days.length) {
+        const warnings = replaceNoAiWarning(heuristic.warnings);
+        if (perDay.failed > 0) {
+          warnings.push(
+            `${perDay.failed} of ${sections.days.length} days could not be read by the AI and were kept as the document structured them. Check those days below.`,
+          );
+        }
+        return {
+          ...heuristic,
+          workout,
+          nutrition: nutritionRead ?? heuristic.nutrition,
+          warnings,
+        };
+      }
+
+      // Every day failed. Reading the whole document is unlikely to do better for the same
+      // reason, so go straight to what the document structure gave us.
+      return {
+        ...heuristic,
+        warnings: replaceNoAiWarning(heuristic.warnings, aiUnavailableWarning('timeout')),
+      };
+    }
+
     const attempt = await readWithAi({ system, user });
 
     if (!attempt.ok) {
