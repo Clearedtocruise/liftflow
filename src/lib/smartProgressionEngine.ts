@@ -113,6 +113,22 @@ function sessionHitAllTargets(sets: ProgressionSetRecord[], targetReps: number):
   return sets.length > 0 && sets.every((s) => s.reps >= targetReps && !s.isFailure);
 }
 
+const LOAD_MATCH_TOLERANCE_KG = 0.05;
+
+/** Reps already proven at a load. `latest` reflects current fatigue, `best` what the day held. */
+function repsAchievedAtLoad(
+  sets: ProgressionSetRecord[],
+  loadKg: number,
+  pick: 'latest' | 'best',
+): number {
+  const matching = sets.filter(
+    (s) => !s.isFailure && Math.abs(s.weightKg - loadKg) <= LOAD_MATCH_TOLERANCE_KG,
+  );
+  if (matching.length === 0) return 0;
+  if (pick === 'latest') return matching[matching.length - 1]!.reps;
+  return matching.reduce((best, s) => Math.max(best, s.reps), 0);
+}
+
 function buildVoiceLines(
   adjustmentType: ProgressionAdjustmentType,
   recommendedWeightKg: number,
@@ -125,6 +141,13 @@ function buildVoiceLines(
   const recDisplay = kgToDisplayWeight(recommendedWeightKg, unit);
   const prevDisplay = kgToDisplayWeight(previousWeightKg, unit);
   const unitWord = unit === 'kg' ? 'kilograms' : 'pounds';
+
+  if (recommendedWeightKg <= 0) {
+    return {
+      voiceNextSetLine: `Aim for ${recommendedReps} reps.`,
+      voiceWhyLine: detailedReason || reason,
+    };
+  }
 
   let voiceNextSetLine = `Use ${recDisplay} ${unitWord} for ${recommendedReps} reps.`;
   if (adjustmentType === 'progressive_overload' && recommendedWeightKg > previousWeightKg) {
@@ -153,11 +176,16 @@ export function computeSmartProgression(input: SmartProgressionInput): SmartProg
     goalFocus,
     recoveryScore = 72,
     recoveryVolumeMultiplier = 1,
+    plannedRepRange,
     targetRepsOverride,
     weightUnit = 'lb',
   } = input;
 
-  const repRange = getTargetRepRange(goalFocus);
+  // The program's own prescription beats the goal default: a plan that says 20-25 reps should
+  // never be coached down to the 12 that "fat loss" happens to default to.
+  const repRange = plannedRepRange
+    ? { min: plannedRepRange.min, max: plannedRepRange.max, target: plannedRepRange.min }
+    : getTargetRepRange(goalFocus);
   const targetReps = targetRepsOverride ?? repRange.target;
   const lastSession = priorSessions[0];
   const lastWorkout = lastSession?.sets ?? [];
@@ -259,6 +287,34 @@ export function computeSmartProgression(input: SmartProgressionInput): SmartProg
     }
   }
 
+  // A goal's rep target is a floor to build from, not a ceiling to fall back to. Prescribing
+  // fewer reps than the lifter has already proven at this load reads as a demotion, and on a
+  // bodyweight lift it is a dead end: there is no load for `increaseWeight` to add, so reps are
+  // the only progression available.
+  if (adjustmentType !== 'deload' && adjustmentType !== 'recovery_hold') {
+    const midSession = currentSessionSets.length > 0;
+    const provenReps = midSession
+      ? repsAchievedAtLoad(currentSessionSets, recommendedWeightKg, 'latest')
+      : repsAchievedAtLoad(lastWorkout, recommendedWeightKg, 'best');
+    // Mid-session fatigue makes "one better than your last set" unrealistic; between sessions it is the point.
+    const repFloor = provenReps > 0 && !midSession && lastSessionAllHit ? provenReps + 1 : provenReps;
+
+    if (repFloor > recommendedReps) {
+      recommendedReps = repFloor;
+      adjustmentType = repFloor > provenReps ? 'rep_progression' : 'hold';
+      if (midSession) {
+        reason = `Set ${currentSessionSets.length} hit ${provenReps} reps — match that on your next set.`;
+        detailedReason = `Your ${targetReps}-rep goal target is already behind you. Repeating ${provenReps} holds the stimulus instead of stepping back.`;
+      } else {
+        reason = `Last session topped out at ${provenReps} reps — go for ${repFloor}.`;
+        detailedReason =
+          recommendedWeightKg <= 0
+            ? `There is no load to add on a bodyweight lift, so reps are the progression: beat last session's ${provenReps} by one.`
+            : `You are already past the ${targetReps}-rep target at this load, so add a rep before adding weight.`;
+      }
+    }
+  }
+
   if (recommendedWeightKg > 0) {
     recommendedWeightKg = roundWeightToStep(recommendedWeightKg, weightUnit);
   }
@@ -284,7 +340,7 @@ export function computeSmartProgression(input: SmartProgressionInput): SmartProg
     voiceNextSetLine,
     voiceWhyLine,
     adjustmentType,
-    targetRepRange: { min: repRange.min, max: repRange.max },
+    targetRepRange: { min: repRange.min, max: Math.max(repRange.max, recommendedReps) },
     confidence,
     basedOnSessions: priorSessions.length,
     goalFocus,

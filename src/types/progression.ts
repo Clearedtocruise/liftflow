@@ -34,6 +34,8 @@ export type SmartProgressionInput = {
   recoveryScore?: number;
   recoveryVolumeMultiplier?: number;
   plannedSetCount?: number;
+  /** Rep range the program prescribes for this exercise; outranks the generic goal default. */
+  plannedRepRange?: { min: number; max: number };
   targetRepsOverride?: number;
   weightUnit?: WeightUnit;
 };
