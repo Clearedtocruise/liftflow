@@ -1,6 +1,7 @@
 import { loadCoachContext } from './coachContext.js';
 import { loadUserToday } from './dailyMacroInputs.js';
 import { classifyExercise, type ExerciseType } from './exerciseClassification.js';
+import { loadExerciseFamilyIds } from './exerciseFamily.js';
 import { loadRecoveryIntelligence } from './loadRecoveryIntelligence.js';
 import { loadSmartProgression } from './loadSmartProgression.js';
 import {
@@ -249,6 +250,7 @@ async function loadTimedSessionHistory(
   userId: string,
   exerciseId: string,
   sessionId?: string,
+  exerciseName?: string,
 ): Promise<TimedSetRecord[][]> {
   const db = requireAdmin();
   const { data } = await db
@@ -256,7 +258,7 @@ async function loadTimedSessionHistory(
     .select(
       'duration_seconds, set_number, logged_at, workout_exercises!inner(exercise_id, workout_sessions!inner(id, started_at, status, user_id))',
     )
-    .eq('workout_exercises.exercise_id', exerciseId)
+    .in('workout_exercises.exercise_id', await loadExerciseFamilyIds(exerciseId, exerciseName))
     .eq('workout_exercises.workout_sessions.user_id', userId)
     .eq('workout_exercises.workout_sessions.status', 'completed')
     .not('duration_seconds', 'is', null)
@@ -303,7 +305,7 @@ async function loadTimedExerciseCoachPrescription(
       .eq('user_id', userId)
       .eq('check_in_date', today)
       .maybeSingle(),
-    loadTimedSessionHistory(userId, exerciseId, plan?.sessionId),
+    loadTimedSessionHistory(userId, exerciseId, plan?.sessionId, plan?.exerciseName),
   ]);
 
   const readinessScore = intelligence?.factors.muscleReadinessScore ?? coachCtx.recovery.score ?? 72;

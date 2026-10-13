@@ -18,8 +18,8 @@ export function exerciseSlugFromName(name: string): string {
 }
 
 /**
- * One-word compounds the catalog stores as two words. Checked before singularization so
- * "Pullups" and "Pull-Ups" both collapse onto the catalog "Pull Up".
+ * One-word compounds the catalog stores as two words. Applied per word, so "Decline Pushups"
+ * collapses onto "Decline Push Up" and not just the bare "Pushups".
  */
 const COMPOUND_ALIASES: Record<string, string> = {
   pullup: 'pull up',
@@ -32,7 +32,6 @@ const COMPOUND_ALIASES: Record<string, string> = {
   situps: 'sit up',
   stepup: 'step up',
   stepups: 'step up',
-  signup: 'sign up',
 };
 
 /** Singularize a single token conservatively so "rows"→"row" but "press" stays "press". */
@@ -54,19 +53,41 @@ function singularizeWord(word: string): string {
 export function exerciseCanonicalKey(name: string): string {
   const base = exerciseNameKey(name);
   if (!base) return '';
-  const compact = base.replace(/\s+/g, '');
-  if (COMPOUND_ALIASES[compact]) return COMPOUND_ALIASES[compact];
   return base
     .split(' ')
     .filter(Boolean)
-    .map(singularizeWord)
+    .map((word) => COMPOUND_ALIASES[word] ?? singularizeWord(word))
     .join(' ');
+}
+
+/**
+ * The same key with word boundaries removed, so a lift split differently in two places still
+ * matches: "Lat Pulldown" == "Lat Pull Down", "Deadlift" == "Dead Lift". The catalog has no
+ * unique constraint on `name`, so these really do coexist as separate rows with separate history.
+ */
+export function exerciseCompactKey(name: string): string {
+  const compact = exerciseNameKey(name).replace(/\s+/g, '');
+  return compact ? singularizeWord(compact) : '';
 }
 
 export function namesMatchExercise(a: string, b: string): boolean {
   const left = exerciseCanonicalKey(a);
   const right = exerciseCanonicalKey(b);
-  return left.length > 0 && left === right;
+  if (left.length > 0 && left === right) return true;
+  const leftCompact = exerciseCompactKey(a);
+  const rightCompact = exerciseCompactKey(b);
+  return leftCompact.length > 0 && leftCompact === rightCompact;
+}
+
+/**
+ * A deliberately over-broad `ilike` pattern reaching every spelling of a lift: "Push-Ups" yields
+ * `%push%up%`, which finds "Push Up", "Pushups" and "Push-Up" in one query. Callers must confirm
+ * each row with `namesMatchExercise` — the pattern also matches "Push Up Plank".
+ */
+export function exerciseNamePattern(name: string): string {
+  const words = exerciseCanonicalKey(name).split(' ').filter(Boolean);
+  if (words.length === 0) return '';
+  return `%${words.join('%')}%`;
 }
 
 /**

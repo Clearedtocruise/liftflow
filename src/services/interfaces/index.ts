@@ -150,6 +150,7 @@ export interface IWorkoutService {
     userId: string,
     exerciseId: string,
     sessionLimit?: number,
+    exerciseName?: string,
   ): Promise<ServiceResult<import('@/lib/exerciseHistory').ExerciseHistorySession[]>>;
   /** Recent performance for exercise history UI */
   getRecentSetsForExercise(
@@ -157,6 +158,8 @@ export interface IWorkoutService {
     exerciseId: string,
     limit?: number,
     mode?: import('@/lib/exerciseModality').ExerciseLoggingMode,
+    /** Unions history across every catalog row spelling this lift differently. */
+    exerciseName?: string,
   ): Promise<ServiceResult<import('@/types/workoutExecution').ExerciseHistorySet[]>>;
   /** Density tracking */
   calculateDensity(sessionId: string): Promise<ServiceResult<WorkoutDensityMetrics>>;

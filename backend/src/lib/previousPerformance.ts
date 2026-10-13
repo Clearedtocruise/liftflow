@@ -7,11 +7,15 @@
  * and format the latest set and are unit-tested.
  */
 
-import { normalizeExerciseName } from './exerciseCatalogDedup.js';
+import { exerciseCanonicalKey } from './exerciseNameLookup.js';
 import { requireAdmin } from './supabase.js';
 
-/** Normalized identity for matching an exercise name across sessions ("Pull-Up" == "pull up"). */
-const exerciseNameKey = normalizeExerciseName;
+/**
+ * Identity for matching an exercise across sessions. Canonical rather than merely normalized,
+ * so "Decline Push-Ups", "Decline Pushups" and "Decline Push Up" are one lift with one history
+ * instead of three that each remember nothing of the others.
+ */
+const exerciseNameKey = exerciseCanonicalKey;
 
 const LB_PER_KG = 2.2046226218;
 

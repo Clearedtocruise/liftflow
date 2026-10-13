@@ -2,9 +2,11 @@ import { mapHistoryItem, mapSession, mapSet } from '@/lib/db-mappers';
 import {
   exerciseCanonicalKey,
   exerciseNameLookupCandidates,
+  exerciseNamePattern,
   exerciseSlugFromName,
   namesMatchExercise,
 } from '@/lib/exerciseNameLookup';
+import { exerciseFamilyIds } from '@/services/exerciseFamily';
 import {
   buildExerciseHistory,
   type ExerciseHistorySession,
@@ -81,16 +83,21 @@ async function detectPersonalRecord(
 
   const { data: exerciseRow } = await supabase
     .from('workout_exercises')
-    .select('exercise_id')
+    .select('exercise_id, exercises(name)')
     .eq('id', workoutExerciseId)
     .single();
 
   if (!exerciseRow?.exercise_id) return false;
 
+  // Without the sibling rows, a lift that moved to a different spelling looks brand new and
+  // every set of it comes back a personal record.
+  const catalogName = (Array.isArray(exerciseRow.exercises)
+    ? exerciseRow.exercises[0]
+    : exerciseRow.exercises) as { name?: string } | null;
   const { data: userExercises } = await supabase
     .from('workout_exercises')
     .select('id, workout_sessions!inner(user_id)')
-    .eq('exercise_id', exerciseRow.exercise_id)
+    .in('exercise_id', await exerciseFamilyIds(exerciseRow.exercise_id, catalogName?.name))
     .eq('workout_sessions.user_id', userId);
 
   const exerciseIds = (userExercises ?? []).map((row) => row.id);
@@ -150,6 +157,9 @@ async function loadPlannedExercises(plannedWorkoutId: string): Promise<PlannedEx
   return template?.exercises ?? [];
 }
 
+/** `exerciseNamePattern` is loose by design, so cap the rows read before the exact-name filter. */
+const CATALOG_SCAN_LIMIT = 100;
+
 async function findOrCreateExerciseByNameInternal(name: string, userId: string): Promise<string | null> {
   const normalized = name.trim().replace(/\s+/g, ' ');
   if (!normalized) return null;
@@ -168,6 +178,25 @@ async function findOrCreateExerciseByNameInternal(name: string, userId: string):
     return data?.[0]?.id ?? null;
   };
 
+  // The trigger compares against every spelling in the catalog and takes the system row; matching
+  // only on exact spellings here is how the client landed on the custom "Decline push-ups" while
+  // the database landed on the seeded "Decline Push-Up". One lift, two rows, two histories, and a
+  // weight logged under either is invisible to the other. Resolve the whole family first so both
+  // sides agree, and so a lift already in the catalog never gets a second row minted for it.
+  const pattern = exerciseNamePattern(normalized);
+  if (pattern) {
+    const { data: family } = await supabase
+      .from('exercises')
+      .select('id, name')
+      .ilike('name', pattern)
+      .order('is_system', { ascending: false })
+      .order('created_at', { ascending: true })
+      .limit(CATALOG_SCAN_LIMIT);
+    const match = (family ?? []).find((row) => namesMatchExercise(row.name ?? '', normalized));
+    if (match) return match.id;
+  }
+
+  // The pattern needs the words in catalog order, so keep the exact spellings as a fallback.
   for (const candidate of exerciseNameLookupCandidates(normalized)) {
     const found = await pickCatalogId('name', candidate);
     if (found) return found;
@@ -1234,12 +1263,14 @@ export const workoutService: IWorkoutService = {
     exerciseId: string,
     limit = 5,
     mode: import('@/lib/exerciseModality').ExerciseLoggingMode = 'weighted',
+    exerciseName?: string,
   ) {
     try {
+      const exerciseIds = await exerciseFamilyIds(exerciseId, exerciseName);
       const { data: exerciseRows, error: exerciseError } = await supabase
         .from('workout_exercises')
         .select('id, workout_sessions!inner(user_id)')
-        .eq('exercise_id', exerciseId)
+        .in('exercise_id', exerciseIds)
         .eq('workout_sessions.user_id', userId);
 
       if (exerciseError) return fail(exerciseError.message);
@@ -1302,12 +1333,13 @@ export const workoutService: IWorkoutService = {
    * The sets themselves carry no session — only the workout_exercise row they were logged under —
    * so the days are read first and the sets hung off them.
    */
-  async getExerciseHistory(userId: string, exerciseId: string, sessionLimit = 20) {
+  async getExerciseHistory(userId: string, exerciseId: string, sessionLimit = 20, exerciseName?: string) {
     try {
+      const exerciseIds = await exerciseFamilyIds(exerciseId, exerciseName);
       const { data: exerciseRows, error: exerciseError } = await supabase
         .from('workout_exercises')
         .select('id, session_id, workout_sessions!inner(id, user_id, name, started_at)')
-        .eq('exercise_id', exerciseId)
+        .in('exercise_id', exerciseIds)
         .eq('workout_sessions.user_id', userId);
 
       if (exerciseError) return fail(exerciseError.message);

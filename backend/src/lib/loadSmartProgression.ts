@@ -5,6 +5,7 @@ import {
   type ProgressionSetRecord,
   type SmartProgressionRecommendation,
 } from './smartProgressionEngine.js';
+import { loadExerciseFamilyIds } from './exerciseFamily.js';
 import { requireAdmin } from './supabase.js';
 
 type SetRow = {
@@ -31,7 +32,7 @@ export async function loadSmartProgression(
 ): Promise<SmartProgressionRecommendation> {
   const db = requireAdmin();
 
-  const [profileRes, recoveryRes, setsRes, exerciseRes] = await Promise.all([
+  const [profileRes, recoveryRes, exerciseRes] = await Promise.all([
     db.from('profiles').select('fitness_goals, preferred_weight_unit').eq('id', userId).maybeSingle(),
     db
       .from('recovery_assessments')
@@ -40,20 +41,24 @@ export async function loadSmartProgression(
       .order('check_in_date', { ascending: false })
       .limit(1)
       .maybeSingle(),
-    db
-      .from('workout_sets')
-      .select(
-        'weight, reps, set_number, is_failure, logged_at, workout_exercises!inner(exercise_id, workout_sessions!inner(id, started_at, status, user_id), exercises(name))',
-      )
-      .eq('workout_exercises.exercise_id', exerciseId)
-      .eq('workout_exercises.workout_sessions.user_id', userId)
-      .eq('workout_exercises.workout_sessions.status', 'completed')
-      .order('logged_at', { ascending: false })
-      .limit(200),
     db.from('exercises').select('name').eq('id', exerciseId).maybeSingle(),
   ]);
 
   const exerciseName = exerciseRes.data?.name ?? 'Exercise';
+  // Spans every catalog row spelling this lift differently, so history logged under
+  // "Decline Push-Ups" still informs a session running "Decline Push Up".
+  const exerciseIds = await loadExerciseFamilyIds(exerciseId, exerciseRes.data?.name ?? undefined);
+
+  const setsRes = await db
+    .from('workout_sets')
+    .select(
+      'weight, reps, set_number, is_failure, logged_at, workout_exercises!inner(exercise_id, workout_sessions!inner(id, started_at, status, user_id), exercises(name))',
+    )
+    .in('workout_exercises.exercise_id', exerciseIds)
+    .eq('workout_exercises.workout_sessions.user_id', userId)
+    .eq('workout_exercises.workout_sessions.status', 'completed')
+    .order('logged_at', { ascending: false })
+    .limit(200);
   const goalFocus = resolveGoalFocus(profileRes.data?.fitness_goals as string[] | undefined);
   const weightUnit = (profileRes.data?.preferred_weight_unit as 'lb' | 'kg' | undefined) ?? 'lb';
   const recoveryScore = recoveryRes.data?.recovery_score ?? 72;
