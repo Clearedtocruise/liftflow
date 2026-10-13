@@ -10,8 +10,14 @@ import type { ExerciseClassificationInput, ExerciseType } from '@/types/exercise
 const TIMED_NAME_PATTERN =
   /\b(planks?|wall[\s-]*sits?|dead[\s-]*hangs?|hollow[\s-]*holds?|l[\s-]?sits?|superman[\s-]*holds?|iso[\s-]*holds?|static[\s-]*holds?|stretch(?:es)?|carr(?:y|ies))\b/i;
 
+/**
+ * Plurals must be included here for the same reason they must in {@link TIMED_NAME_PATTERN}: the
+ * trailing `\b` refuses "push-ups", because "push-up" ends mid-word in it. A plan that names its
+ * lifts in the plural — which an imported one generally does — put every set of push-ups and
+ * every set of dips on the weighted logger, asking for a weight nobody was lifting.
+ */
 const BODYWEIGHT_NAME_PATTERN =
-  /\b(pull[\s-]?up|chin[\s-]?up|push[\s-]?up|dip|burpee|air\s*squat|bodyweight|inverted\s*row|muscle[\s-]?up|pistol\s*squat|walking\s*lunge)\b/i;
+  /\b(pull[\s-]?ups?|chin[\s-]?ups?|push[\s-]?ups?|dips?|burpees?|air\s*squats?|bodyweight|inverted\s*rows?|muscle[\s-]?ups?|pistol\s*squats?|walking\s*lunges?)\b/i;
 
 /**
  * A flat lying pulldown is a bodyweight pull (the lifter's own weight, reps only).
@@ -27,28 +33,28 @@ export function isFlatBodyweightPulldownName(name: string | null | undefined): b
 // "Throw down" needs no qualifier: nothing loaded goes by that name, so the bare form is safe to
 // claim and catches "Flat Leg Throw Downs", "Leg Throwdowns" and plain "Throw Downs" alike.
 const CORE_BODYWEIGHT_NAME_PATTERN =
-  /\b(windshield\s*wiper|windshield\s*wipers|hanging\s+leg\s+raise|leg\s+raise|v[\s-]?up|toes?\s+to\s+bar|mountain\s+climber|russian\s+twist|dead\s+bug|hollow\s+rock|flutter\s+kick|scissor\s+kick|(?:leg\s*)?throw[\s-]?downs?)\b/i;
+  /\b(windshield\s*wipers?|hanging\s+leg\s+raises?|leg\s+raises?|v[\s-]?ups?|toes?\s+to\s+bar|mountain\s+climbers?|russian\s+twists?|dead\s+bugs?|hollow\s+rocks?|flutter\s+kicks?|scissor\s+kicks?|(?:leg\s*)?throw[\s-]?downs?)\b/i;
 
 const CORE_STRENGTH_NAME_PATTERN =
-  /\b(weighted\s+sit[\s-]?up|sit[\s-]?up|crunch|cable\s+crunch|ab\s+rollout|rollout|wood\s+chop|pallof\s+press)\b/i;
+  /\b(weighted\s+sit[\s-]?ups?|sit[\s-]?ups?|crunch(?:es)?|cable\s+crunch(?:es)?|ab\s+rollouts?|rollouts?|wood\s+chops?|pallof\s+press(?:es)?)\b/i;
 
 // Prefer rowing/erg terms — bare "row" matches strength moves (Hammer Row, Cable Row).
 const CARDIO_NAME_PATTERN =
-  /\b(run|running|jog|jogging|sprint|swim|swimming|cycle|cycling|bike|biking|walk(?:ing)?|treadmill|elliptical|stair\s*climber|hiit|cardio|jump\s*rope)\b/i;
+  /\b(runs?|running|jogs?|jogging|sprints?|swims?|swimming|cycles?|cycling|bikes?|biking|walk(?:ing|s)?|treadmills?|ellipticals?|stair\s*climbers?|hiit|cardio|jump\s*ropes?)\b/i;
 
 /**
  * A bare "row" is a pulling lift, so only machine/erg rowing counts as cardio. Matching "row" on
  * its own put every barbell, cable and hammer row on the distance-and-duration logger.
  */
 const CARDIO_ROW_NAME_PATTERN =
-  /\b(rowing|rower|row\s*(?:machine|erg|ergometer)|erg\s*row|concept\s*2)\b/i;
+  /\b(rowing|rowers?|row\s*(?:machines?|ergs?|ergometers?)|erg\s*rows?|concept\s*2)\b/i;
 
 /**
  * Loaded carries and walking lunges read as cardio but are weight-and-reps work, so they are
  * excluded before the cardio patterns run.
  */
 const CARDIO_LOOKALIKE_NAME_PATTERN =
-  /\b(walking\s*lunge|lunge\s*walk|farmer'?s?\s*(?:walk|carry)|suitcase\s*(?:walk|carry)|waiter\s*walk|overhead\s*(?:walk|carry)|sled\s*(?:push|pull|drag))\b/i;
+  /\b(walking\s*lunges?|lunge\s*walks?|farmer'?s?\s*(?:walks?|carr(?:y|ies))|suitcase\s*(?:walks?|carr(?:y|ies))|waiter\s*walks?|overhead\s*(?:walks?|carr(?:y|ies))|sled\s*(?:push(?:es)?|pulls?|drags?))\b/i;
 
 function isCardioName(name: string): boolean {
   if (CARDIO_LOOKALIKE_NAME_PATTERN.test(name)) return false;

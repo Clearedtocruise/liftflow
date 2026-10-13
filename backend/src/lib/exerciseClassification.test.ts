@@ -60,6 +60,13 @@ const cases: Array<{ label: string; input: Parameters<typeof classifyExercise>[0
     expected: 'bodyweight',
   },
   { label: 'Bare throw downs', input: { name: 'Throw Downs' }, expected: 'bodyweight' },
+  // An imported plan names its lifts in the plural, and only the singular used to match.
+  { label: 'Decline push-ups', input: { name: 'Decline push-ups' }, expected: 'bodyweight' },
+  { label: 'Bench dips', input: { name: 'Bench dips' }, expected: 'bodyweight' },
+  { label: 'Pull-Ups', input: { name: 'Pull-Ups' }, expected: 'bodyweight' },
+  { label: 'Mountain Climbers', input: { name: 'Mountain Climbers' }, expected: 'bodyweight' },
+  { label: 'Crunches stay strength', input: { name: 'Crunches' }, expected: 'strength' },
+  { label: 'Flat dumbbell flies stay strength', input: { name: 'Flat dumbbell flies' }, expected: 'strength' },
   // "Push down" and "pull down" are loaded cable work and must not be swept up with "throw down".
   { label: 'Tricep Pushdown stays strength', input: { name: 'Tricep Pushdown', equipment: 'cable' }, expected: 'strength' },
   { label: 'Rope Push Down stays strength', input: { name: 'Rope Push Down', equipment: 'cable' }, expected: 'strength' },
