@@ -74,6 +74,19 @@ export type ExercisePrescriptionPlanInput = {
   }>;
 };
 
+const PLANNED_REP_RANGE_RE = /(\d+)\s*(?:[-–—]\s*(\d+))?/;
+
+/** Reads "20-25", "12", "8-10 each side" into the range the program actually asks for. */
+export function parsePlannedRepRange(plannedReps?: string): { min: number; max: number } | undefined {
+  if (!plannedReps || isTimedRepRange(plannedReps)) return undefined;
+  const match = plannedReps.match(PLANNED_REP_RANGE_RE);
+  if (!match) return undefined;
+  const min = Number(match[1]);
+  if (!Number.isFinite(min) || min <= 0) return undefined;
+  const max = match[2] ? Number(match[2]) : min;
+  return { min, max: Number.isFinite(max) ? Math.max(min, max) : min };
+}
+
 export function mapAdjustmentLabel(
   progressionType: ProgressionAdjustmentType,
   setsDelta: number,
@@ -392,6 +405,7 @@ export async function loadExerciseCoachPrescription(
   const [progression, coachCtx, intelligence, profileRes, recoveryRow] = await Promise.all([
     loadSmartProgression(userId, exerciseId, {
       sessionId: plan?.sessionId,
+      plannedRepRange: parsePlannedRepRange(plan?.plannedReps),
       currentSessionSets: plan?.currentSessionSets?.map((set) => ({
         weightKg: set.weightKg ?? 0,
         reps: set.reps ?? 0,

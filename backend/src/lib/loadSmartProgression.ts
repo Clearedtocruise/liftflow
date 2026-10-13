@@ -26,6 +26,7 @@ export async function loadSmartProgression(
   options?: {
     sessionId?: string;
     currentSessionSets?: ProgressionSetRecord[];
+    plannedRepRange?: { min: number; max: number };
   },
 ): Promise<SmartProgressionRecommendation> {
   const db = requireAdmin();
@@ -101,6 +102,7 @@ export async function loadSmartProgression(
     goalFocus,
     recoveryScore,
     recoveryVolumeMultiplier,
+    plannedRepRange: options?.plannedRepRange,
     weightUnit,
   });
 }
