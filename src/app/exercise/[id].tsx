@@ -57,7 +57,7 @@ export default function ExerciseHistoryScreen() {
   const load = useCallback(async () => {
     if (!user || !id) return;
     setLoading(true);
-    const result = await workoutService.getExerciseHistory(user.id, id);
+    const result = await workoutService.getExerciseHistory(user.id, id, undefined, name);
     if (result.success) {
       setSessions(result.data);
       setError(null);
@@ -65,7 +65,7 @@ export default function ExerciseHistoryScreen() {
       setError(result.error);
     }
     setLoading(false);
-  }, [user, id]);
+  }, [user, id, name]);
 
   useEffect(() => {
     load();

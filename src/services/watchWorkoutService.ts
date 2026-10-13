@@ -9,6 +9,7 @@ import {
     type WatchWorkoutMessage,
 } from '@/integrations/watch';
 import { fail, fromError, ok } from '@/lib/serviceResult';
+import { exerciseFamilyIdsForId } from '@/services/exerciseFamily';
 import { workoutService } from '@/services/workoutService';
 import { watchPhoneBridge } from '@/state/WatchPhoneBridge';
 import { supabase } from '@/supabase/client';
@@ -49,7 +50,7 @@ async function getLastPerformance(
   const { data } = await supabase
     .from('workout_sets')
     .select('weight, reps, logged_at, workout_exercises!inner(exercise_id, workout_sessions!inner(user_id, status))')
-    .eq('workout_exercises.exercise_id', exerciseId)
+    .in('workout_exercises.exercise_id', await exerciseFamilyIdsForId(exerciseId))
     .eq('workout_exercises.workout_sessions.user_id', userId)
     .eq('workout_exercises.workout_sessions.status', 'completed')
     .order('logged_at', { ascending: false })

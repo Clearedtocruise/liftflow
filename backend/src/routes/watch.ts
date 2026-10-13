@@ -1,5 +1,6 @@
 import { Router } from 'express';
 
+import { loadExerciseFamilyIdsForId } from '../lib/exerciseFamily.js';
 import { requireAdmin } from '../lib/supabase.js';
 import { detectReps, listSupportedExercises, parseWatchVoice, resolveProfile } from '../lib/watchWorkoutEngine.js';
 import { requireUser, type AuthedRequest } from '../middleware/authUser.js';
@@ -91,7 +92,7 @@ watchRouter.post('/voice', requireUser, async (req: AuthedRequest, res) => {
       const { data } = await db
         .from('workout_sets')
         .select('weight, reps, workout_exercises!inner(exercise_id, workout_sessions!inner(user_id, status))')
-        .eq('workout_exercises.exercise_id', exerciseId)
+        .in('workout_exercises.exercise_id', await loadExerciseFamilyIdsForId(exerciseId))
         .eq('workout_exercises.workout_sessions.user_id', userId)
         .eq('workout_exercises.workout_sessions.status', 'completed')
         .order('logged_at', { ascending: false })

@@ -842,7 +842,13 @@ export function ActiveWorkoutScreen({
 
     let cancelled = false;
     void workoutService
-      .getRecentSetsForExercise(user.id, currentExercise.exerciseId, 5, historyMode)
+      .getRecentSetsForExercise(
+        user.id,
+        currentExercise.exerciseId,
+        5,
+        historyMode,
+        currentExercise.exercise?.name,
+      )
       .then((result: Awaited<ReturnType<typeof workoutService.getRecentSetsForExercise>>) => {
       if (cancelled || !result.success) return;
       setHistorySets(result.data);
