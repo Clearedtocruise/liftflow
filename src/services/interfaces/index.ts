@@ -145,14 +145,21 @@ export interface IWorkoutService {
     recommendedSeconds: number,
   ): Promise<ServiceResult<RestPeriod>>;
   endRestTimer(restPeriodId: string, actualSeconds: number, wasSkipped?: boolean): Promise<ServiceResult<RestPeriod>>;
-  /** Past work on one exercise, gathered into the sessions it was performed in. */
+  /**
+   * Past work on one exercise, gathered into the sessions it was performed in.
+   * Pass the running session as `excludeSessionId` so today's unfinished work is not history.
+   */
   getExerciseHistory(
     userId: string,
     exerciseId: string,
     sessionLimit?: number,
     exerciseName?: string,
+    excludeSessionId?: string | null,
   ): Promise<ServiceResult<import('@/lib/exerciseHistory').ExerciseHistorySession[]>>;
-  /** Recent performance for exercise history UI */
+  /**
+   * Recent performance for exercise history UI.
+   * Pass the running session as `excludeSessionId` so the card does not quote the sets just logged.
+   */
   getRecentSetsForExercise(
     userId: string,
     exerciseId: string,
@@ -160,6 +167,7 @@ export interface IWorkoutService {
     mode?: import('@/lib/exerciseModality').ExerciseLoggingMode,
     /** Unions history across every catalog row spelling this lift differently. */
     exerciseName?: string,
+    excludeSessionId?: string | null,
   ): Promise<ServiceResult<import('@/types/workoutExecution').ExerciseHistorySet[]>>;
   /** Density tracking */
   calculateDensity(sessionId: string): Promise<ServiceResult<WorkoutDensityMetrics>>;
