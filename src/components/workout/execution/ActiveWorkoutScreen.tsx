@@ -80,6 +80,12 @@ import { resolveSwapTargetIndex } from '@/lib/workoutSwapTarget';
 import { eachSideLabelForSet, expandSetsForEachSide } from '@/lib/eachSideSets';
 import { resolveExerciseInputSeed } from '@/lib/activeWorkoutWeightSeed';
 import { missingPlanExerciseNames } from '@/lib/sessionPlanIntegrity';
+import {
+  countLoggedSets,
+  forgetLoggedSet,
+  recordLoggedSet,
+  type LoggedSetLedger,
+} from '@/lib/loggedSetLedger';
 import { logWorkoutProgressionDecision } from '@/lib/workoutProgressionDebug';
 import {
   addBonusSet,
@@ -390,6 +396,8 @@ export function ActiveWorkoutScreen({
   const offeredExerciseCompleteRef = useRef<number | null>(null);
   /** Only auto-advance when THIS visit just finished the last set — not when landing on an already-done exercise. */
   const justFinishedExerciseRef = useRef(false);
+  /** Sets written but possibly not refreshed into `session.exercises` yet. See loggedSetLedger. */
+  const loggedSetLedgerRef = useRef<LoggedSetLedger>({});
   const [circuitRound, setCircuitRound] = useState(1);
   /**
    * Keyed by workout_exercise id so the ceiling always belongs to the lift being written to.
@@ -1128,6 +1136,7 @@ export function ActiveWorkoutScreen({
     // Added sets belong to the exercise, so they survive leaving it and coming back. Only a new
     // workout starts the tally over.
     setBonusSetsByExercise({});
+    loggedSetLedgerRef.current = {};
   }, [session.id]);
 
   useEffect(() => {
@@ -1229,6 +1238,8 @@ export function ActiveWorkoutScreen({
         style: 'destructive',
         onPress: async () => {
           await deleteSet(setId);
+          // Out of the ledger too, or the exercise stays full at a set that no longer exists.
+          loggedSetLedgerRef.current = forgetLoggedSet(loggedSetLedgerRef.current, setId);
           await refreshSession();
           setShowComplete(false);
         },
@@ -1559,8 +1570,12 @@ export function ActiveWorkoutScreen({
     if (logging || loggingInFlightRef.current) {
       return { ok: false, error: 'A set is already being logged.' };
     }
-    const logCompletedSets = logExercise.sets ?? [];
     const logPlanMeta = planExercises[logIndex];
+    // Not `logExercise.sets.length`. A set logged moments ago refreshes the session, but that
+    // refresh only reaches this closure on the next render — so a wrist tap or a fast second press
+    // arriving first would read one set too few, repeat the set number, and slip a set past the
+    // plan target.
+    const logCompletedCount = countLoggedSets(logExercise.sets, loggedSetLedgerRef.current, logExercise.id);
     // The same resolver the screen uses. Coach suggestions must not inflate the hard log ceiling,
     // and the logger must not disagree with what the lifter can see.
     const logTargetSets = resolveEffectiveTargetSets({
@@ -1571,7 +1586,7 @@ export function ActiveWorkoutScreen({
       bonusSets: bonusSetsFor(bonusSetsRef.current, logExercise.id),
       intervalRounds: intervalTimer?.config.rounds,
     });
-    if (logCompletedSets.length >= logTargetSets) {
+    if (logCompletedCount >= logTargetSets) {
       return { ok: false, error: 'All planned sets are already logged.' };
     }
     if (restActive || intervalBlocksLogging || transitionBlocksLogging) {
@@ -1613,7 +1628,7 @@ export function ActiveWorkoutScreen({
         restSeconds: restTargetSeconds,
       };
 
-      const completedAfterLog = logCompletedSets.length + 1;
+      const completedAfterLog = logCompletedCount + 1;
       const flowAction = resolvePostSetFlowAction(
         logIndex,
         planExercises,
@@ -1719,6 +1734,10 @@ export function ActiveWorkoutScreen({
         AccessibilityInfo.announceForAccessibility('Could not log set. Try again.');
         return { ok: false, error: 'Could not save that set.' };
       }
+
+      // Before anything can await again: the next log has to see this set even if the session
+      // refresh has not rendered yet.
+      loggedSetLedgerRef.current = recordLoggedSet(loggedSetLedgerRef.current, logExercise.id, logged.id);
 
       if (logged.isPr) {
         setExerciseHadPr(true);
