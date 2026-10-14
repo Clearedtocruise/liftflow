@@ -782,7 +782,10 @@ export function ActiveWorkoutScreen({
     setWeightKg(seed.weightKg);
     setReps(seed.reps);
     setDurationSeconds(seed.durationSeconds);
-  }, [currentExercise?.id, setWatchDraftReps, setWatchDraftWeightKg]);
+    // `exerciseId` as well as `id`: swapping a lift with no sets yet keeps the session row, so the
+    // card would otherwise hold the replaced lift's loading method, coach prescription and typed
+    // weight — and a touched input blocks the history effect below from re-seeding them.
+  }, [currentExercise?.id, currentExercise?.exerciseId, setWatchDraftReps, setWatchDraftWeightKg]);
 
   useEffect(() => {
     if (circuitTimer?.phase !== 'done') return;
