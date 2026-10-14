@@ -14,8 +14,10 @@ import {
   loadingMethodToLoggingMode,
   supportedLoadingMethods,
 } from '@/lib/exerciseLoadingMethod';
+import { expandSetsForEachSide } from '@/lib/eachSideSets';
 import { alignPlanExercisesToSession } from '@/lib/workoutPlan';
 import { workoutSessionSyncKey } from '@/lib/workoutSessionSyncKey';
+import { resolveCoachTargetSets } from '@/lib/workoutSetTarget';
 import type { Exercise, WorkoutExercise, WorkoutSession } from '@/types';
 import type { EditableWorkoutExercise } from '@/types/workoutExecution';
 
@@ -264,6 +266,42 @@ check(
     activeWorkoutSource,
   ),
   true,
+);
+
+console.log('\nTarget Performance counts sets in the same unit as the rest of the card');
+// Reported from TestFlight: "why does target performance differ from offered sets?" — the card
+// read "Current set 3 of 4 · Sets left 2" above "Target Performance: 2 sets × 50s hold". The plan
+// prescribed 2 sets each side, which the card expands to 4 loggable holds, while the coach was
+// handed the plan's raw count and answered in that unit.
+check(
+  'the coach set count is expanded for each side before it is used',
+  /const coachPlanSets = coachPrescription[\s\S]{0,200}expandSetsForEachSide\(\s*coachPrescription\.targets\.sets/.test(
+    activeWorkoutSource,
+  ),
+  true,
+);
+check(
+  '"Coach suggests +N sets" compares like with like',
+  activeWorkoutSource.includes('Math.max(0, (coachPlanSets ?? targetSets) - targetSets)'),
+  true,
+);
+check(
+  'the target line is reconciled with the sets the card counts to',
+  /sets: coachTargetSets/.test(activeWorkoutSource) &&
+    activeWorkoutSource.includes(
+      'resolveCoachTargetSets(coachPlanSets, targetSets, effectiveTargetSets)',
+    ),
+  true,
+);
+check(
+  'an each-side plan does not leave the line naming half the sets',
+  resolveCoachTargetSets(expandSetsForEachSide(2, '30 sec each side'), 4, 4),
+  4,
+);
+check(
+  'a coach deload still reports its own lower set count',
+  resolveCoachTargetSets(3, 4, 4),
+  3,
 );
 
 console.log('\nSwaps and adds tear down the rest clock they are leaving behind');

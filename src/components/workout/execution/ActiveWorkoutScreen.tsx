@@ -80,7 +80,11 @@ import { eachSideLabelForSet, expandSetsForEachSide } from '@/lib/eachSideSets';
 import { resolveExerciseInputSeed } from '@/lib/activeWorkoutWeightSeed';
 import { missingPlanExerciseNames } from '@/lib/sessionPlanIntegrity';
 import { logWorkoutProgressionDecision } from '@/lib/workoutProgressionDebug';
-import { firstIncompleteExerciseIndex, resolveEffectiveTargetSets } from '@/lib/workoutSetTarget';
+import {
+  firstIncompleteExerciseIndex,
+  resolveCoachTargetSets,
+  resolveEffectiveTargetSets,
+} from '@/lib/workoutSetTarget';
 import {
   clearRestAdvanceCoordination,
   nextIndexAfterFinishedExercise,
@@ -404,18 +408,21 @@ export function ActiveWorkoutScreen({
   const currentExercise = sortedExercises[currentIndex];
   const planMeta = planExercises[currentIndex];
   const targetSets = expandSetsForEachSide(planMeta?.sets ?? 3, planMeta?.notes, planMeta?.repRange);
+  // The coach is given the plan's set count and answers in that unit, so its answer has to be
+  // expanded the same way the card expands the plan before the two are compared or shown together.
+  const coachPlanSets = coachPrescription
+    ? expandSetsForEachSide(coachPrescription.targets.sets, planMeta?.notes, planMeta?.repRange)
+    : null;
   // Stick to the plan set count. Coach may *suggest* more volume in the card, but auto-inflating
   // to 4–5 working sets was too much for everyday lifters — use + Add Set if you want more.
-  const coachSuggestedExtraSets = Math.max(
-    0,
-    (coachPrescription?.targets.sets ?? targetSets) - targetSets,
-  );
+  const coachSuggestedExtraSets = Math.max(0, (coachPlanSets ?? targetSets) - targetSets);
   const effectiveTargetSets = resolveEffectiveTargetSets({
     executionMode,
     planSets: targetSets,
     bonusSets,
     intervalRounds: intervalTimer?.config.rounds,
   });
+  const coachTargetSets = resolveCoachTargetSets(coachPlanSets, targetSets, effectiveTargetSets);
   const repRange = planMeta?.repRange ?? currentExercise?.suggestedReps ?? '8-10';
   const completedSets = currentExercise?.sets ?? [];
   const completedSetsCountRef = useRef(0);
@@ -570,7 +577,7 @@ export function ActiveWorkoutScreen({
         ? (clampPlanWeightKgForExercise(rawWeight, name, slug) ?? 0)
         : rawWeight;
     return formatCoachTargetLine(
-      { ...coachPrescription.targets, weightKg: safeWeight },
+      { ...coachPrescription.targets, sets: coachTargetSets, weightKg: safeWeight },
       loggingMode,
       (kg) => formatWorkoutWeightForInput(kg, units.preferredWeightUnit),
       units.weightLabel,
@@ -578,6 +585,7 @@ export function ActiveWorkoutScreen({
     );
   }, [
     coachPrescription,
+    coachTargetSets,
     loggingMode,
     units.preferredWeightUnit,
     units.weightLabel,

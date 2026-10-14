@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { DEFAULT_TARGET_SETS, firstIncompleteExerciseIndex, resolveEffectiveTargetSets } from './workoutSetTarget';
+import {
+  DEFAULT_TARGET_SETS,
+  firstIncompleteExerciseIndex,
+  resolveCoachTargetSets,
+  resolveEffectiveTargetSets,
+} from './workoutSetTarget';
 
 test('a traditional exercise finishes on its planned sets', () => {
   assert.equal(resolveEffectiveTargetSets({ executionMode: 'traditional', planSets: 4 }), 4);
@@ -94,4 +99,31 @@ test('a brand-new session with nothing logged resumes on the first exercise', ()
 
 test('an empty session resumes at index 0 rather than a negative index', () => {
   assert.equal(firstIncompleteExerciseIndex([], []), 0);
+});
+
+// Reported from TestFlight: "why does target performance differ from offered sets?" — the card
+// read "Current set 3 of 4 · Sets left 2" with "Target Performance: 2 sets × 50s hold" under it.
+// The plan said 2 sets each side, which the card expands to 4 loggable holds while the coach
+// answered in the plan's own unit.
+test('an each-side target is named in the loggable sets the card counts', () => {
+  // Plan 2 sets each side: planSets and the coach's answer both expand to 4.
+  assert.equal(resolveCoachTargetSets(4, 4, 4), 4);
+});
+
+test('a set added with + Add Set is part of the target the card counts to', () => {
+  assert.equal(resolveCoachTargetSets(3, 3, 4), 4);
+});
+
+test('a coach that trimmed the volume still speaks for itself', () => {
+  assert.equal(resolveCoachTargetSets(3, 4, 4), 3);
+});
+
+test('a coach asking for more volume is not flattened to the plan', () => {
+  assert.equal(resolveCoachTargetSets(5, 4, 4), 5);
+});
+
+test('no coach answer leaves the card target standing', () => {
+  assert.equal(resolveCoachTargetSets(null, 4, 5), 5);
+  assert.equal(resolveCoachTargetSets(0, 4, 5), 5);
+  assert.equal(resolveCoachTargetSets(undefined, 3, 3), 3);
 });
