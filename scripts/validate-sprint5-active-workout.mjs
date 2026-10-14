@@ -53,6 +53,35 @@ record('Coach enabled for timed exercises', !active.includes("loggingMode !== 't
 record('Progress computation helper', lib.includes('computeWorkoutSetProgress'));
 record('Clock formatter', elapsed.includes('formatWorkoutClockTime'));
 
+// Reported from TestFlight: "the exercise page is huge. Anyway to compress options and move rest
+// timer up?" The running rest clock sat below the muscle figure, the metrics block and the coach
+// card, so the thing the lifter was waiting on was off screen; and five full-width secondary
+// buttons ran to roughly 300pt on their own.
+record(
+  'Running rest clock sits above the muscle figure, not below the coach card',
+  active.indexOf('styles.restBanner') > -1 &&
+    active.indexOf('styles.restBanner') < active.indexOf('<ExerciseMusclePanel'),
+);
+record(
+  'Rest clock still stays out of the way once its own overlay is open',
+  active.includes('restActive && !showComplete && !restOverlayOpen'),
+);
+record(
+  'Secondary actions are compact rather than five stacked full-width buttons',
+  active.includes('styles.extraActionsGrid') &&
+    (active.match(/<CompactAction/g) ?? []).length >= 5,
+);
+record(
+  'Compact actions keep the minimum touch target',
+  /compactAction: \{[\s\S]*?minHeight: TouchTarget\.min/.test(active),
+);
+record(
+  'Compact actions are still reachable by screen readers',
+  /accessibilityRole="button"[\s\S]{0,200}accessibilityState=\{\{ disabled: Boolean\(disabled\) \}\}/.test(
+    active,
+  ),
+);
+
 console.log('\nGuided session fields: name · exercise # · current set · remaining · previous · target · time · progress');
 console.log('Acceptance: one exercise at a time · no search · no exercise typing');
 
