@@ -52,3 +52,42 @@ test('plural exercise names resolve to their real muscles, not Full Body', () =>
     assert.notEqual(resolveExerciseMuscles(name).primary[0], 'full-body');
   }
 });
+
+test('incline and chest presses are chest work, not shoulder presses', () => {
+  // "Incline DB Press" has no "bench", so the generic press rule painted the delts red
+  // and the triceps blue and never mentioned the chest.
+  for (const name of [
+    'Incline DB Press',
+    'INCLINE DB PRESS',
+    'Incline Dumbbell Press',
+    'Incline Dumbbell Bench Press',
+    'Incline Press',
+    'Decline DB Press',
+    'Chest Press',
+    'Floor Press',
+  ]) {
+    const profile = resolveExerciseMuscles(name);
+    assert.deepEqual(profile.primary, ['chest'], name);
+    assert.ok(profile.secondary.includes('triceps'), name);
+    assert.ok(!profile.primary.includes('shoulders'), name);
+  }
+
+  // The same label shows up when the stored tags are the generic press pair,
+  // including names that do not have their own catalog slug.
+  const tagged = resolveExerciseMuscles('Incline DB Press', ['shoulders', 'triceps']);
+  assert.deepEqual(tagged.primary, ['chest']);
+  assert.ok(!tagged.primary.includes('shoulders'));
+  const highIncline = resolveExerciseMuscles('High Incline DB Press', ['shoulders', 'triceps']);
+  assert.deepEqual(highIncline.primary, ['chest']);
+
+  const bySlug = resolveExerciseMuscles('Press', ['shoulders'], 'incline-dumbbell-press');
+  assert.deepEqual(bySlug.primary, ['chest']);
+
+  // Overhead and shoulder presses stay shoulders. A bare "press" is still that fallback.
+  assert.deepEqual(resolveExerciseMuscles('Shoulder Presses').primary, ['shoulders']);
+  assert.deepEqual(resolveExerciseMuscles('Dumbbell Shoulder Press').primary, ['front-delts', 'side-delts']);
+  assert.ok(!resolveExerciseMuscles('Overhead Press').primary.includes('chest'));
+  assert.deepEqual(resolveExerciseMuscles('Arnold Press').primary, ['shoulders']);
+  assert.deepEqual(resolveExerciseMuscles('DB Press').primary, ['shoulders']);
+  assert.deepEqual(resolveExerciseMuscles('Leg Press').primary, ['quads', 'glutes']);
+});

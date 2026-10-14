@@ -53,10 +53,51 @@ const MUSCLE_ALIASES: Record<string, MuscleId> = {
   abductors: 'abductors',
 };
 
+/**
+ * Incline, decline, and chest presses are pec work. Front delts and triceps assist,
+ * which is why they stay secondary — a 30° incline dumbbell press is not a shoulder press.
+ */
+const CHEST_PRESS_PROFILE: ExerciseMuscleProfile = {
+  primary: ['chest'],
+  secondary: ['front-delts', 'triceps'],
+};
+
+/**
+ * Overhead and shoulder-press names. These must not be swallowed by the chest-press
+ * rule just because the title also contains "press" or "incline".
+ */
+function isVerticalPressName(lower: string): boolean {
+  return /\b(shoulders?|overhead|military|ohp|arnolds?|landmine|pike|handstands?|push\s*press(?:es)?|z[\s-]?press(?:es)?)\b/.test(
+    lower,
+  );
+}
+
+/** Incline / decline / chest / floor presses. A bare "press" stays a shoulder press. */
+function isChestPressName(lower: string): boolean {
+  if (isVerticalPressName(lower)) return false;
+  if (/\bleg\s+press/.test(lower)) return false;
+  if (!/\bpress(?:es)?\b/.test(lower)) return false;
+  return /\b(inclines?|declines?|chest|floor|flat)\b/.test(lower);
+}
+
 /** Per-exercise primary / secondary muscles for the system catalog. */
 export const EXERCISE_MUSCLE_PROFILES: Record<string, ExerciseMuscleProfile> = {
   'bench-press': { primary: ['chest'], secondary: ['triceps', 'front-delts'] },
   'incline-bench-press': { primary: ['chest', 'front-delts'], secondary: ['triceps'] },
+  'incline-dumbbell-press': CHEST_PRESS_PROFILE,
+  'incline-db-press': CHEST_PRESS_PROFILE,
+  'incline-dumbbell-bench-press': CHEST_PRESS_PROFILE,
+  'incline-barbell-bench-press': CHEST_PRESS_PROFILE,
+  'incline-press': CHEST_PRESS_PROFILE,
+  'incline-cable-press': CHEST_PRESS_PROFILE,
+  'incline-machine-chest-press': CHEST_PRESS_PROFILE,
+  'decline-bench-press': CHEST_PRESS_PROFILE,
+  'decline-dumbbell-press': CHEST_PRESS_PROFILE,
+  'decline-db-press': CHEST_PRESS_PROFILE,
+  'decline-press': CHEST_PRESS_PROFILE,
+  'chest-press': CHEST_PRESS_PROFILE,
+  'machine-chest-press': CHEST_PRESS_PROFILE,
+  'floor-press': CHEST_PRESS_PROFILE,
   'dumbbell-bench-press': { primary: ['chest'], secondary: ['triceps', 'front-delts'] },
   'band-chest-press': { primary: ['chest'], secondary: ['triceps', 'front-delts'] },
   'cable-fly': { primary: ['chest'], secondary: ['front-delts'] },
@@ -168,6 +209,11 @@ function deriveFromNamePattern(name: string): ExerciseMuscleProfile {
   if (/\b(curls?)\b/.test(lower)) {
     return { primary: ['biceps'], secondary: ['forearms'] };
   }
+  // Before the generic press rule. "Incline DB Press" has no "bench", so it used to
+  // fall through and render as a shoulder press (red delts, blue triceps).
+  if (isChestPressName(lower)) {
+    return CHEST_PRESS_PROFILE;
+  }
   if (/\b(press(?:es)?|ohp|shoulders?)\b/.test(lower)) {
     return { primary: ['shoulders'], secondary: ['triceps'] };
   }
@@ -268,7 +314,13 @@ export function resolveExerciseMuscles(
   if (groups?.length) {
     const filtered = groups.filter((g) => g !== 'cardiovascular' && g !== 'full_body' && g !== 'full-body');
     const fromGroups = filtered.length > 0 ? deriveFromMuscleGroups(filtered) : null;
-    if (fromGroups) return fromGroups;
+    const groupsNameChest = filtered.some((group) => aliasToMuscle(group) === 'chest');
+    // Stored tags for a press are often just shoulders and triceps — the same pair the
+    // generic press rule emits. That is what labeled Incline DB Press as a shoulder
+    // exercise. Keep those tags when they already name the chest; otherwise the name wins.
+    if (fromGroups && !(isChestPressName(exerciseName.toLowerCase()) && !groupsNameChest)) {
+      return fromGroups;
+    }
   }
 
   return fromName;
