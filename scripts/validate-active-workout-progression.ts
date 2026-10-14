@@ -14,8 +14,11 @@ import {
   loadingMethodToLoggingMode,
   supportedLoadingMethods,
 } from '@/lib/exerciseLoadingMethod';
+import { expandSetsForEachSide } from '@/lib/eachSideSets';
 import { alignPlanExercisesToSession } from '@/lib/workoutPlan';
-import type { Exercise, WorkoutExercise } from '@/types';
+import { workoutSessionSyncKey } from '@/lib/workoutSessionSyncKey';
+import { resolveCoachTargetSets } from '@/lib/workoutSetTarget';
+import type { Exercise, WorkoutExercise, WorkoutSession } from '@/types';
 import type { EditableWorkoutExercise } from '@/types/workoutExecution';
 
 let failures = 0;
@@ -63,6 +66,20 @@ function sessionExercise(id: string, name: string, sortOrder: number, setCount: 
     })),
     createdAt: '2026-01-01T00:00:00.000Z',
   };
+}
+
+/** One session, one exercise entry with no sets logged — the shape an in-place swap rewrites. */
+function sessionWithExerciseId(exerciseId: string): WorkoutSession {
+  const entry = sessionExercise('we-1', 'Dumbbell Bench Press', 0, 0);
+  return {
+    id: 'session-1',
+    userId: 'user-1',
+    name: 'Push',
+    status: 'active',
+    startedAt: '2026-01-01T00:00:00.000Z',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    exercises: [{ ...entry, exerciseId }],
+  } as WorkoutSession;
 }
 
 console.log('\nPulling lifts must not classify as cardio');
@@ -217,6 +234,75 @@ const afterSwap = alignPlanExercisesToSession(swapPlan, [
 ]);
 check('a swapped-in lift inherits the planned set target', afterSwap[0]?.sets, 5);
 check('the swap does not displace the rest of the plan', afterSwap[1]?.sets, 4);
+
+console.log('\nA swap shows on the card straight away, not at the next logged set');
+// Reported from TestFlight: "when I swap an exercise it doesn't immediately change the exercise in
+// the workout — it waits until I log a set". Swapping a lift with no sets yet rewrites exercise_id
+// on the existing workout_exercises row, so the row id, the sort order and the empty set list all
+// survive. The sync key was built from only those, the refresh decided nothing had changed and
+// kept the pre-swap session on screen until a logged set finally moved the key.
+check(
+  'the sync key tracks which lift an entry points at',
+  source('src/lib/workoutSessionSyncKey.ts').includes('exercise.exerciseId'),
+  true,
+);
+check(
+  'the sync key tracks the suggested weight the swap clears',
+  source('src/lib/workoutSessionSyncKey.ts').includes('exercise.suggestedWeight'),
+  true,
+);
+check(
+  'an in-place swap is a different session to the one on screen',
+  workoutSessionSyncKey(sessionWithExerciseId('bench')) !==
+    workoutSessionSyncKey(sessionWithExerciseId('incline-press')),
+  true,
+);
+// The row id does not change on an in-place swap, so a card reset keyed on it alone holds the
+// replaced lift's loading method and coach prescription — and leaves inputsTouchedRef set, which
+// stops the history effect re-seeding the weight for the lift that is actually on screen now.
+check(
+  'the card resets when the entry changes which lift it points at',
+  /inputsTouchedRef\.current = false;[\s\S]*?\}, \[currentExercise\?\.id, currentExercise\?\.exerciseId,/.test(
+    activeWorkoutSource,
+  ),
+  true,
+);
+
+console.log('\nTarget Performance counts sets in the same unit as the rest of the card');
+// Reported from TestFlight: "why does target performance differ from offered sets?" — the card
+// read "Current set 3 of 4 · Sets left 2" above "Target Performance: 2 sets × 50s hold". The plan
+// prescribed 2 sets each side, which the card expands to 4 loggable holds, while the coach was
+// handed the plan's raw count and answered in that unit.
+check(
+  'the coach set count is expanded for each side before it is used',
+  /const coachPlanSets = coachPrescription[\s\S]{0,200}expandSetsForEachSide\(\s*coachPrescription\.targets\.sets/.test(
+    activeWorkoutSource,
+  ),
+  true,
+);
+check(
+  '"Coach suggests +N sets" compares like with like',
+  activeWorkoutSource.includes('Math.max(0, (coachPlanSets ?? targetSets) - targetSets)'),
+  true,
+);
+check(
+  'the target line is reconciled with the sets the card counts to',
+  /sets: coachTargetSets/.test(activeWorkoutSource) &&
+    activeWorkoutSource.includes(
+      'resolveCoachTargetSets(coachPlanSets, targetSets, effectiveTargetSets)',
+    ),
+  true,
+);
+check(
+  'an each-side plan does not leave the line naming half the sets',
+  resolveCoachTargetSets(expandSetsForEachSide(2, '30 sec each side'), 4, 4),
+  4,
+);
+check(
+  'a coach deload still reports its own lower set count',
+  resolveCoachTargetSets(3, 4, 4),
+  3,
+);
 
 console.log('\nSwaps and adds tear down the rest clock they are leaving behind');
 // Next / Previous / Skip all cancel a still-counting rest before moving. focusWorkoutExercise —

@@ -64,3 +64,25 @@ test('editing the load on a set changes the key', () => {
   after.exercises[0].sets = [{ ...before.exercises[0].sets[0], weight: 110 }];
   assert.notEqual(workoutSessionSyncKey(before), workoutSessionSyncKey(after));
 });
+
+// Swapping a lift with no sets logged updates `exercise_id` on the existing row, so the entry
+// keeps its id, its sort order and its empty set list. The screen held the pre-swap session until
+// a logged set happened to move the key, which read as Swap doing nothing.
+test('swapping an exercise in place changes the key', () => {
+  const before = session();
+  const after = session();
+  before.exercises[0].sets = [];
+  after.exercises[0].sets = [];
+  after.exercises[0].exerciseId = 'incline-press';
+  assert.notEqual(workoutSessionSyncKey(before), workoutSessionSyncKey(after));
+});
+
+test('a swap clearing the suggested weight changes the key', () => {
+  const before = session();
+  const after = session();
+  before.exercises[0].sets = [];
+  before.exercises[0].suggestedWeight = 135;
+  after.exercises[0].sets = [];
+  after.exercises[0].suggestedWeight = undefined;
+  assert.notEqual(workoutSessionSyncKey(before), workoutSessionSyncKey(after));
+});

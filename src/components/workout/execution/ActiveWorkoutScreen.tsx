@@ -80,7 +80,11 @@ import { eachSideLabelForSet, expandSetsForEachSide } from '@/lib/eachSideSets';
 import { resolveExerciseInputSeed } from '@/lib/activeWorkoutWeightSeed';
 import { missingPlanExerciseNames } from '@/lib/sessionPlanIntegrity';
 import { logWorkoutProgressionDecision } from '@/lib/workoutProgressionDebug';
-import { firstIncompleteExerciseIndex, resolveEffectiveTargetSets } from '@/lib/workoutSetTarget';
+import {
+  firstIncompleteExerciseIndex,
+  resolveCoachTargetSets,
+  resolveEffectiveTargetSets,
+} from '@/lib/workoutSetTarget';
 import {
   clearRestAdvanceCoordination,
   nextIndexAfterFinishedExercise,
@@ -404,18 +408,21 @@ export function ActiveWorkoutScreen({
   const currentExercise = sortedExercises[currentIndex];
   const planMeta = planExercises[currentIndex];
   const targetSets = expandSetsForEachSide(planMeta?.sets ?? 3, planMeta?.notes, planMeta?.repRange);
+  // The coach is given the plan's set count and answers in that unit, so its answer has to be
+  // expanded the same way the card expands the plan before the two are compared or shown together.
+  const coachPlanSets = coachPrescription
+    ? expandSetsForEachSide(coachPrescription.targets.sets, planMeta?.notes, planMeta?.repRange)
+    : null;
   // Stick to the plan set count. Coach may *suggest* more volume in the card, but auto-inflating
   // to 4–5 working sets was too much for everyday lifters — use + Add Set if you want more.
-  const coachSuggestedExtraSets = Math.max(
-    0,
-    (coachPrescription?.targets.sets ?? targetSets) - targetSets,
-  );
+  const coachSuggestedExtraSets = Math.max(0, (coachPlanSets ?? targetSets) - targetSets);
   const effectiveTargetSets = resolveEffectiveTargetSets({
     executionMode,
     planSets: targetSets,
     bonusSets,
     intervalRounds: intervalTimer?.config.rounds,
   });
+  const coachTargetSets = resolveCoachTargetSets(coachPlanSets, targetSets, effectiveTargetSets);
   const repRange = planMeta?.repRange ?? currentExercise?.suggestedReps ?? '8-10';
   const completedSets = currentExercise?.sets ?? [];
   const completedSetsCountRef = useRef(0);
@@ -570,7 +577,7 @@ export function ActiveWorkoutScreen({
         ? (clampPlanWeightKgForExercise(rawWeight, name, slug) ?? 0)
         : rawWeight;
     return formatCoachTargetLine(
-      { ...coachPrescription.targets, weightKg: safeWeight },
+      { ...coachPrescription.targets, sets: coachTargetSets, weightKg: safeWeight },
       loggingMode,
       (kg) => formatWorkoutWeightForInput(kg, units.preferredWeightUnit),
       units.weightLabel,
@@ -578,6 +585,7 @@ export function ActiveWorkoutScreen({
     );
   }, [
     coachPrescription,
+    coachTargetSets,
     loggingMode,
     units.preferredWeightUnit,
     units.weightLabel,
@@ -782,7 +790,10 @@ export function ActiveWorkoutScreen({
     setWeightKg(seed.weightKg);
     setReps(seed.reps);
     setDurationSeconds(seed.durationSeconds);
-  }, [currentExercise?.id, setWatchDraftReps, setWatchDraftWeightKg]);
+    // `exerciseId` as well as `id`: swapping a lift with no sets yet keeps the session row, so the
+    // card would otherwise hold the replaced lift's loading method, coach prescription and typed
+    // weight — and a touched input blocks the history effect below from re-seeding them.
+  }, [currentExercise?.id, currentExercise?.exerciseId, setWatchDraftReps, setWatchDraftWeightKg]);
 
   useEffect(() => {
     if (circuitTimer?.phase !== 'done') return;
@@ -2105,6 +2116,27 @@ export function ActiveWorkoutScreen({
                 </AppText>
               ) : null}
 
+              {/* Directly under the exercise name: while a rest is counting it is the one thing
+                  on this card the lifter is waiting on, and it used to sit below the muscle
+                  figure, the metrics and the coach card — off screen without scrolling. */}
+              {restActive && !showComplete && !restOverlayOpen ? (
+                <View style={styles.restBanner}>
+                  <View style={styles.restBannerMain}>
+                    <AppText variant="label" color="restTimer">
+                      Rest timer
+                    </AppText>
+                    <AppText variant="title" color="restTimer">
+                      {formatTimerSeconds(restSecondsRemaining ?? restTargetSeconds)}
+                    </AppText>
+                  </View>
+                  <PrimaryButton
+                    label="Open timer"
+                    variant="secondary"
+                    onPress={() => setRestOverlayOpen(true)}
+                  />
+                </View>
+              ) : null}
+
               {!showComplete ? <WorkoutUpNextCard position={workoutPosition} supersetActive={usesSupersetRotation && inSuperset} /> : null}
 
               {showSupersetPrepBanner && supersetPrepGroup ? (
@@ -2244,25 +2276,6 @@ export function ActiveWorkoutScreen({
                       </Pressable>
                     ))}
                   </View>
-                </View>
-              ) : null}
-
-              {restActive && !showComplete && !restOverlayOpen ? (
-                <View style={styles.intervalBanner}>
-                  <AppText variant="label" color="restTimer">
-                    Rest timer
-                  </AppText>
-                  <AppText variant="bodyBold" color="restTimer">
-                    {formatTimerSeconds(restSecondsRemaining ?? restTargetSeconds)}
-                  </AppText>
-                  <AppText variant="footnote" color="textSecondary">
-                    {workoutPosition.currentSetLabel} · {workoutPosition.upNextLabel}
-                  </AppText>
-                  <PrimaryButton
-                    label="Open timer"
-                    variant="secondary"
-                    onPress={() => setRestOverlayOpen(true)}
-                  />
                 </View>
               ) : null}
 
@@ -2423,44 +2436,47 @@ export function ActiveWorkoutScreen({
                       }
                     />
                   ) : null}
+                  {/* Five full-width buttons ran to about 300pt of the card on their own, which
+                      is most of what made this screen feel endless. They are secondary to Log
+                      Set, so they sit two-up at the minimum touch target instead. */}
                   <View style={styles.extraActions}>
                     {addedExerciseNotice ? (
                       <AppText variant="caption" color="accent" align="center">
                         {addedExerciseNotice}
                       </AppText>
                     ) : null}
-                    <PrimaryButton
-                      label="Skip Exercise"
-                      variant="secondary"
-                      onPress={handleSkipExercise}
-                      disabled={isPaused || logging}
-                    />
-                    <PrimaryButton label="+ Add Set" variant="secondary" onPress={handleAddSet} disabled={isPaused} />
-                    <PrimaryButton
-                      label="+ Add Exercise"
-                      variant="secondary"
-                      onPress={() => {
-                        setExercisePickerMode('add');
-                        setExercisePickerVisible(true);
-                      }}
-                      disabled={isPaused}
-                    />
-                    <PrimaryButton
-                      label="Swap Exercise"
-                      variant="secondary"
-                      onPress={() => {
-                        // The rest clock is its own modal. Leaving it up swallows the picker
-                        // on iOS, so Swap looks like a dead button.
-                        setRestOverlayOpen(false);
-                        setExercisePickerMode('swap');
-                        setExercisePickerVisible(true);
-                      }}
-                      disabled={isPaused}
-                    />
+                    <View style={styles.extraActionsGrid}>
+                      <CompactAction
+                        label="Skip Exercise"
+                        onPress={handleSkipExercise}
+                        disabled={isPaused || logging}
+                      />
+                      <CompactAction label="+ Add Set" onPress={handleAddSet} disabled={isPaused} />
+                      <CompactAction
+                        label="+ Add Exercise"
+                        onPress={() => {
+                          setExercisePickerMode('add');
+                          setExercisePickerVisible(true);
+                        }}
+                        disabled={isPaused}
+                      />
+                      <CompactAction
+                        label="Swap Exercise"
+                        onPress={() => {
+                          // The rest clock is its own modal. Leaving it up swallows the picker
+                          // on iOS, so Swap looks like a dead button.
+                          setRestOverlayOpen(false);
+                          setExercisePickerMode('swap');
+                          setExercisePickerVisible(true);
+                        }}
+                        disabled={isPaused}
+                      />
+                    </View>
                     {completedSets.length > 0 ? (
-                      <PrimaryButton
+                      <CompactAction
                         label="Delete Last Set"
-                        variant="ghost"
+                        tone="danger"
+                        fullWidth
                         onPress={() => handleDeleteSet(completedSets[completedSets.length - 1]!.id)}
                         disabled={isPaused}
                       />
@@ -2679,6 +2695,49 @@ export function ActiveWorkoutScreen({
   );
 }
 
+/**
+ * A secondary workout action, sized to the minimum touch target rather than the comfortable one
+ * PrimaryButton uses, so four of them fit in the height two used to take.
+ */
+function CompactAction({
+  label,
+  onPress,
+  disabled,
+  tone = 'default',
+  fullWidth = false,
+}: {
+  label: string;
+  onPress: () => void;
+  disabled?: boolean;
+  tone?: 'default' | 'danger';
+  /** Set outside the two-up grid, where a grid cell's width would be measured down the column. */
+  fullWidth?: boolean;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled: Boolean(disabled) }}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.compactAction,
+        fullWidth ? styles.compactActionFull : styles.compactActionHalf,
+        tone === 'danger' && styles.compactActionDanger,
+        disabled && styles.compactActionDisabled,
+        pressed && styles.compactActionPressed,
+      ]}>
+      <AppText
+        variant="caption"
+        color={tone === 'danger' ? 'error' : 'textPrimary'}
+        align="center"
+        numberOfLines={1}>
+        {label}
+      </AppText>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
   root: {
     flex: 1,
@@ -2801,5 +2860,52 @@ const styles = StyleSheet.create({
   },
   extraActions: {
     gap: Spacing.sm,
+  },
+  extraActionsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.sm,
+  },
+  compactAction: {
+    minHeight: TouchTarget.min,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.sm,
+    borderRadius: Radius.md,
+    backgroundColor: LiftFlowColors.surface,
+    borderWidth: 1,
+    borderColor: LiftFlowColors.border,
+  },
+  compactActionHalf: {
+    // Two per row, whatever the card is wide: half the space left once the gap is taken out.
+    flexBasis: '47%',
+    flexGrow: 1,
+  },
+  compactActionFull: {
+    alignSelf: 'stretch',
+  },
+  compactActionDanger: {
+    backgroundColor: 'transparent',
+    borderColor: 'transparent',
+  },
+  compactActionPressed: {
+    opacity: 0.6,
+  },
+  compactActionDisabled: {
+    opacity: 0.5,
+  },
+  restBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.md,
+    padding: Spacing.md,
+    borderRadius: Radius.md,
+    backgroundColor: LiftFlowColors.backgroundSecondary,
+    borderWidth: 1,
+    borderColor: LiftFlowColors.border,
+  },
+  restBannerMain: {
+    gap: Spacing.half,
   },
 });

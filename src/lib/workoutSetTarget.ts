@@ -46,6 +46,28 @@ function positive(value: number | null | undefined): number | undefined {
 }
 
 /**
+ * How many sets the Target Performance line should name.
+ *
+ * The coach is handed the plan's own set count and answers in that unit, while the card counts
+ * loggable sets — "2 sets × 20 sec each side" is four holds, and "Current set" and "Sets left" are
+ * expanded to match. Target Performance read straight from the coach, so it said "2 sets × 50s
+ * hold" beside "Current set 3 of 4". Pass `coachSets` already expanded the same way as `planSets`.
+ *
+ * Where the coach has not moved the volume this names the target the card is counting to, so a set
+ * added with "+ Add Set" does not leave the line contradicting it either. A coach that genuinely
+ * changed the set count — a deload, or low recovery trimming volume — still speaks for itself.
+ */
+export function resolveCoachTargetSets(
+  coachSets: number | null | undefined,
+  planSets: number,
+  effectiveTargetSets: number,
+): number {
+  const coach = positive(coachSets);
+  if (coach == null || coach === planSets) return effectiveTargetSets;
+  return coach;
+}
+
+/**
  * Which exercise a resumed/remounted workout screen should land on.
  *
  * `ActiveWorkoutScreen` used to always start at index 0, so leaving the app mid-session (e.g.
