@@ -160,6 +160,20 @@ const REQUIRED = [
     ],
   },
   {
+    // The watch face and the wrist tap must name the same lift. They used to resolve the active
+    // exercise two different ways, so an out-of-range index logged to the first exercise while the
+    // watch displayed the last one.
+    file: 'src/services/watchWorkoutService.ts',
+    label: 'Watch face resolves the active exercise the same way the log path does',
+    patterns: ['resolveWatchActiveExercise'],
+    forbidden: ["sorted.find((e) => e.isActive) ?? sorted[index]"],
+  },
+  {
+    file: 'src/hooks/useWatchCompanionSync.ts',
+    label: 'Wrist log set is pinned to the exercise on the watch face',
+    patterns: ['displayedWorkoutExerciseId', 'resolveWatchActiveExercise'],
+  },
+  {
     file: 'src/lib/navigateAfterAuth.ts',
     label: 'Login post-auth navigation',
     patterns: ['authHomeRoute', 'router.replace(authHomeRoute'],

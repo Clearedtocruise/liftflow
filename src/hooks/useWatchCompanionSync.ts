@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { AppState } from 'react-native';
 
-import { resolveWatchSetPayload } from '@/lib/watchLogSet';
+import { resolveWatchActiveExercise, resolveWatchSetPayload } from '@/lib/watchLogSet';
 import { productAnalyticsService } from '@/services/productAnalyticsService';
 import { watchCompanionService } from '@/services/watchCompanionService';
+import { watchWorkoutService } from '@/services/watchWorkoutService';
 import { watchPhoneBridge } from '@/state/WatchPhoneBridge';
 import { useWorkoutSession } from '@/state/workout/WorkoutSessionContext';
 
@@ -47,7 +48,7 @@ export function useWatchCompanionSync(userId: string | undefined) {
   const sessionStructureKey = useMemo(() => {
     if (!activeSession) return 'none';
     const sorted = [...activeSession.exercises].sort((a, b) => a.sortOrder - b.sortOrder);
-    const activeExercise = sorted[activeExerciseIndex] ?? sorted[0];
+    const activeExercise = resolveWatchActiveExercise(sorted, { activeExerciseIndex });
     const setCount = activeSession.exercises.reduce((total, exercise) => total + exercise.sets.length, 0);
     return `${activeSession.id}:${activeSession.status}:${activeExercise?.id ?? 'none'}:${setCount}:${activeExerciseIndex}`;
   }, [activeSession, activeExerciseIndex]);
@@ -94,9 +95,15 @@ export function useWatchCompanionSync(userId: string | undefined) {
         return { ok: false as const, error: 'A set is already being logged.' };
       }
 
+      // The set belongs to the lift named on the watch face, which is the one the phone last
+      // pushed. An index alone drifts the moment the session is reordered or an exercise is
+      // dropped, and the wrist tap lands under a lift the user never touched.
       const resolution = resolveWatchSetPayload({
         session: sessionRef.current,
         activeExerciseIndex: exerciseIndexRef.current,
+        displayedWorkoutExerciseId: userId
+          ? watchWorkoutService.getState(userId).activeSet?.workoutExerciseId
+          : null,
         draftReps: watchPhoneBridge.getPendingWatchReps(),
         draftWeightKg: watchPhoneBridge.getPendingWatchWeightKg(),
       });
