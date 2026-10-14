@@ -117,6 +117,8 @@ export interface IWorkoutService {
     page?: number,
     options?: { before?: string | null; pageSize?: number },
   ): Promise<ServiceResult<PaginatedResponse<WorkoutHistoryItem>>>;
+  /** Every completed session with its exercises and sets, newest first, for exporting. */
+  getAllCompletedSessions(userId: string): Promise<ServiceResult<WorkoutSession[]>>;
   getSession(sessionId: string): Promise<ServiceResult<WorkoutSession>>;
   deleteSession(sessionId: string): Promise<ServiceResult<void>>;
   updateSession(sessionId: string, updates: { name?: string; notes?: string }): Promise<ServiceResult<WorkoutSession>>;

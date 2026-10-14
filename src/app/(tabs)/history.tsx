@@ -12,16 +12,20 @@ import { EmptyStateCard } from '@/components/layout/StateCard';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
+import { useUnits } from '@/hooks/useUnits';
 import { appendActivityHistory, groupHistoryByMonth } from '@/lib/activityHistoryPage';
 import { screenDataCache } from '@/lib/screenDataCache';
 import { getCombinedActivityHistory } from '@/services/activityHistoryService';
 import { analyticsService } from '@/services/analyticsService';
 import { healthService } from '@/services/healthService';
+import { exportWorkoutHistoryPdf } from '@/services/workoutHistoryExport';
 import { workoutService } from '@/services/workoutService';
 import type { WorkoutHistoryItem } from '@/types';
 
 export default function HistoryScreen() {
   const { user } = useAuth();
+  const units = useUnits();
+  const [exporting, setExporting] = useState(false);
   const [history, setHistory] = useState<WorkoutHistoryItem[]>([]);
   const [streak, setStreak] = useState(0);
   const [totalSessions, setTotalSessions] = useState<number | null>(null);
@@ -183,6 +187,18 @@ export default function HistoryScreen() {
     ]);
   }
 
+  async function handleExport() {
+    if (!user || exporting) return;
+    setExporting(true);
+    const result = await exportWorkoutHistoryPdf(user.id, {
+      weightUnit: units.preferredWeightUnit,
+      timeZone: user.timezone,
+      athleteName: user.displayName,
+    });
+    setExporting(false);
+    if (!result.success) Alert.alert('Could not export history', result.error);
+  }
+
   if (loading && history.length === 0) {
     return (
       <ScreenContainer scroll={false}>
@@ -226,6 +242,17 @@ export default function HistoryScreen() {
           <AppText variant="title">{totalSessions ?? history.length}</AppText>
         </MetricTile>
       </View>
+
+      {history.length > 0 ? (
+        <PrimaryButton
+          label={exporting ? 'Building PDF…' : 'Export history as PDF'}
+          variant="secondary"
+          loading={exporting}
+          onPress={() => {
+            void handleExport();
+          }}
+        />
+      ) : null}
 
       <SectionHeader
         title="All Sessions"
