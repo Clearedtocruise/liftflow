@@ -880,6 +880,35 @@ export const workoutService: IWorkoutService = {
     }
   },
 
+  async getAllCompletedSessions(userId) {
+    try {
+      // Paged by session: the API caps rows per request, and a long history has far more sets than
+      // that. Ordering by id after started_at keeps a page boundary stable when two sessions share
+      // a start time.
+      const pageSize = 40;
+      const sessions: WorkoutSession[] = [];
+      for (let page = 0; page < 250; page += 1) {
+        const from = page * pageSize;
+        const { data, error } = await supabase
+          .from('workout_sessions')
+          .select(SESSION_SELECT)
+          .eq('user_id', userId)
+          .eq('status', 'completed')
+          .order('started_at', { ascending: false })
+          .order('id', { ascending: true })
+          .range(from, from + pageSize - 1);
+
+        if (error) return fail(error.message);
+        const rows = data ?? [];
+        sessions.push(...rows.map((row) => mapSession(row)));
+        if (rows.length < pageSize) break;
+      }
+      return ok(sessions);
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
   async getSession(sessionId) {
     try {
       const session = await loadSession(sessionId);
