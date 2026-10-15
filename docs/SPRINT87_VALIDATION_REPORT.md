@@ -1,8 +1,8 @@
 # Sprint 8.7 — Closed Beta Execution Validation Report
 
-**Date:** 2026-06-13  
-**Result:** PASS  
-**Checks:** 16/16  
+**Date:** 2026-10-15  
+**Result:** FAIL  
+**Checks:** 13/15  
 
 ## Summary
 
@@ -21,7 +21,7 @@ npm run deploy:render            # Deploy soak-status routes
 
 | Check | Result | Detail |
 |-------|--------|--------|
-| Sprint 8.6 regression | PASS | 56/56 |
+| Sprint 8.6 regression | FAIL | 47/56 |
 | Beta soak lib | PASS | — |
 | Soak status API | PASS | — |
 | Retention API | PASS | — |
@@ -35,5 +35,4 @@ npm run deploy:render            # Deploy soak-status routes
 | build:ios:testflight script | PASS | — |
 | beta:daily-report script | PASS | — |
 | Backend TypeScript build | PASS | — |
-| Production soak-status API | PASS | internal=0 |
-| LIFTFLOW-INTERNAL invite live | PASS | — |
+| Production soak-status API | FAIL | HTTP 0 |

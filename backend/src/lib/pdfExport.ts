@@ -1,8 +1,10 @@
 import PDFDocument from 'pdfkit';
+import { formatExportDateTime, formatExportWeight, resolveExportWeightUnit } from './exportFormat.js';
 import { requireAdmin } from './supabase.js';
 
 const BRAND_HEADER = 'ONE MORE';
 const BRAND_FOOTER = 'Only One.';
+const MAX_EXPORT_SESSIONS = 500;
 
 type ExportPayload = {
   userId: string;
@@ -47,19 +49,26 @@ export async function generateWorkoutPdf(userId: string, sessionId?: string) {
 
   if (sessionId) query = query.eq('id', sessionId);
 
-  const { data: sessions } = await query.limit(sessionId ? 1 : 10);
+  const [{ data: sessions }, { data: profile }] = await Promise.all([
+    query.limit(sessionId ? 1 : MAX_EXPORT_SESSIONS),
+    db.from('profiles').select('preferred_weight_unit, timezone').eq('id', userId).maybeSingle(),
+  ]);
+  const unit = resolveExportWeightUnit(profile?.preferred_weight_unit);
+  const timeZone = (profile?.timezone as string | null | undefined) ?? null;
   const lines: string[] = [`Generated ${new Date().toLocaleDateString()}`, ''];
 
   for (const session of sessions ?? []) {
     lines.push(`Session: ${session.name}`);
-    lines.push(`Date: ${new Date(session.started_at).toLocaleString()}`);
-    lines.push(`Volume: ${session.total_volume ?? 0} · Sets: ${session.total_sets ?? 0}`);
+    lines.push(`Date: ${formatExportDateTime(session.started_at, timeZone)}`);
+    lines.push(`Volume: ${formatExportWeight(Number(session.total_volume ?? 0), unit)} · Sets: ${session.total_sets ?? 0}`);
     lines.push('');
 
     for (const we of session.workout_exercises ?? []) {
       lines.push(`  ${we.exercises?.name ?? 'Exercise'}`);
-      for (const set of we.workout_sets ?? []) {
-        lines.push(`    Set ${set.set_number}: ${set.weight ?? '-'} lbs × ${set.reps ?? '-'} reps`);
+      for (const set of [...(we.workout_sets ?? [])].sort(
+        (a: { set_number?: number }, b: { set_number?: number }) => (a.set_number ?? 0) - (b.set_number ?? 0),
+      )) {
+        lines.push(`    Set ${set.set_number}: ${formatExportWeight(set.weight, unit)} × ${set.reps ?? '-'} reps`);
       }
       lines.push('');
     }

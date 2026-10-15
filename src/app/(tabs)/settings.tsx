@@ -43,6 +43,7 @@ import { coachingPrefsPatch } from '@/lib/voice/voicePreferences';
 import { dataResetService, formatResetConfirmation, type DataResetType } from '@/services/dataResetService';
 import { deviceLocationService } from '@/services/deviceLocationService';
 import { exportService } from '@/services/exportService';
+import { exportWorkoutHistoryPdf } from '@/services/workoutHistoryExport';
 import { feedbackService } from '@/services/feedbackService';
 import { nutritionService } from '@/services/nutritionService';
 import { trainingService } from '@/services/trainingService';
@@ -260,12 +261,19 @@ export default function SettingsScreen() {
   async function handleExport(contentType: 'workout' | 'progress_summary' | 'meal_plan', title: string) {
     if (!user) return;
     setExporting(true);
-    const result = await exportService.downloadAndShare(user.id, {
-      contentType,
-      format: 'pdf',
-      sourceEntityId: '',
-      title,
-    });
+    const result =
+      contentType === 'workout'
+        ? await exportWorkoutHistoryPdf(user.id, {
+            weightUnit: units.preferredWeightUnit,
+            timeZone: user.timezone,
+            athleteName: user.displayName,
+          })
+        : await exportService.downloadAndShare(user.id, {
+            contentType,
+            format: 'pdf',
+            sourceEntityId: '',
+            title,
+          });
     setExporting(false);
     if (!result.success) Alert.alert('Export failed', result.error);
   }

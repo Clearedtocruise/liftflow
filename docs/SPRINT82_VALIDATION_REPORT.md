@@ -1,8 +1,8 @@
 # Sprint 8.2 — Transformation Engine Validation Report
 
-**Date:** 2026-06-13  
-**Result:** PASS  
-**Score:** 56/56  
+**Date:** 2026-10-15  
+**Result:** FAIL  
+**Score:** 55/56  
 
 ## Summary
 
@@ -67,7 +67,7 @@ Sprint 8.2 delivers the Transformation Engine: lean-mass projection math, persis
 | schema.sql RLS policy | PASS | — |
 | Migration RLS enabled | PASS | — |
 | Backend TypeScript build | PASS | — |
-| Free user blocked on transformation/latest | PASS | HTTP 403 |
+| Free user blocked on transformation/latest | FAIL | HTTP 401 |
 
 ## Ops checklist
 
