@@ -1,8 +1,8 @@
 # Sprint 8.4 — Apple Watch Companion Validation Report
 
-**Date:** 2026-07-25  
+**Date:** 2026-10-15  
 **Result:** PASS  
-**Score:** 63/63  
+**Score:** 70/70  
 
 ## Summary
 
@@ -73,6 +73,13 @@ Sprint 8.4 delivers the Apple Watch companion architecture: workout logging, res
 | Watch start workout button | PASS | — |
 | Phone start_workout bridge | PASS | — |
 | watchCompanionService.startTodaysWorkoutFromWatch | PASS | — |
+| Log set falls back beyond the workout screen | PASS | — |
+| logCurrentSet prefers the screen handler then falls back | PASS | — |
+| App-level sync registers the fallback | PASS | — |
+| Watch set resolver exists | PASS | — |
+| Workout session starts only after Health authorization resolves | PASS | — |
+| Workout session start is intent-tracked | PASS | — |
+| Wrist raise reclaims a lost workout session | PASS | — |
 | Watch architecture doc | PASS | — |
 | HealthKit requirements doc | PASS | — |
 | App Store watch requirements | PASS | — |

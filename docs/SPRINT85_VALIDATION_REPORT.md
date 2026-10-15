@@ -1,6 +1,6 @@
 # Sprint 8.5 — Beta User Readiness Validation Report
 
-**Date:** 2026-06-13  
+**Date:** 2026-10-15  
 **Result:** PASS  
 **Checks:** 63/63  
 **Beta Readiness Score:** 100/100  
@@ -84,7 +84,7 @@ Sprint 8.5 prepares LiftFlow for closed beta (25–50 users): Sentry crash repor
 | Doc: docs/BETA_RISK_REGISTER.md | PASS | — |
 | Doc: docs/RELEASE_NOTES_TEMPLATE.md | PASS | — |
 | Backend TypeScript build | PASS | — |
-| Feedback API reachable | PASS | HTTP 200 |
+| Feedback API reachable | PASS | HTTP 403 |
 
 ## Top 20 launch risks
 

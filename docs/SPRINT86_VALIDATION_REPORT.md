@@ -1,36 +1,42 @@
 # Sprint 8.6 — TestFlight Release Candidate Validation Report
 
-**Date:** 2026-06-13  
-**Result:** PASS  
-**Checks:** 56/56  
+**Date:** 2026-10-15  
+**Result:** FAIL  
+**Checks:** 47/56  
 
 ## Scores
 
 | Score | Value | Target |
 |-------|-------|--------|
 | TestFlight Readiness | **100/100** | 100 |
-| Release Candidate Readiness | **100/100** | 100 |
-| Production Readiness | **100/100** | 100 |
-| Excluding mobile Sentry blocker | **100/100** | 100 |
-| P0 issues | **0** | 0 |
-| P1 issues | **0** | 0 |
+| Release Candidate Readiness | **60/100** | 100 |
+| Production Readiness | **80/100** | 100 |
+| Excluding mobile Sentry blocker | **80/100** | 100 |
+| P0 issues | **3** | 0 |
+| P1 issues | **4** | 0 |
 
 ## TestFlight RC approval
 
 | Decision | Status |
 |----------|--------|
-| Backend Sentry | **APPROVED** |
-| Mobile Sentry | **APPROVED** |
-| TestFlight RC build | **AUTHORIZED** |
-| Closed beta | **AUTHORIZED** |
+| Backend Sentry | BLOCKED |
+| Mobile Sentry | PENDING — see [SENTRY_SETUP.md](./SENTRY_SETUP.md) |
+| TestFlight RC build | NOT AUTHORIZED |
+| Closed beta | NOT AUTHORIZED — resolve P0/P1 first |
 
 ## Recommended beta launch date
 
-**2026-06-14** (2 weeks internal TestFlight soak from RC upload)
+TBD — resolve blockers first
 
 ## Remaining launch blockers
 
-_None — ready for TestFlight RC upload_
+- Migration 015 applied: SUPABASE_ACCESS_TOKEN missing
+- Route: AI converse: HTTP 401
+- Route: Transformation latest: HTTP 401
+- Mobile Sentry wiring: 10/13
+- Backend Sentry capture test: 4/5
+- Beta invite codes seeded: service role missing
+- EXPO_PUBLIC_SENTRY_DSN: create React Native Sentry project → eas secret:create
 
 ## Summary
 
@@ -42,29 +48,29 @@ Sprint 8.6 validates TestFlight RC readiness: Sprint 8.5 ops complete, productio
 
 | Check | Result | Detail |
 |-------|--------|--------|
-| Migration 015 applied | PASS | beta_feedback exists |
+| Migration 015 applied | FAIL | SUPABASE_ACCESS_TOKEN missing |
 | SENTRY_DSN configured | PASS | live on Render |
-| EXPO_PUBLIC_SENTRY_DSN configured | PASS | set in .env |
+| EXPO_PUBLIC_SENTRY_DSN configured | FAIL | paste React Native DSN in .env |
 | @sentry/react-native installed | PASS | — |
 | Sentry Expo plugin | PASS | — |
 | EAS Sentry release env | PASS | — |
-| Mobile Sentry wiring | PASS | 13/13 |
+| Mobile Sentry wiring | FAIL | 10/13 |
 | Sentry Express error handler | PASS | — |
 | Sentry debug routes | PASS | — |
 | Sentry wiring (code) | PASS | — |
 | Production Sentry status | PASS | configured |
-| Backend Sentry capture test | PASS | 10/10 |
+| Backend Sentry capture test | FAIL | 4/5 |
 | Production health | PASS | HTTP 200 |
 | Sprint 8.5 regression | PASS | 63/63 |
-| Route: Feedback summary | PASS | HTTP 200 |
+| Route: Feedback summary | PASS | HTTP 403 |
 | Route: Events track | PASS | HTTP 200 |
 | Route: Beta release notes | PASS | HTTP 200 |
-| Route: Recovery intelligence | PASS | HTTP 403 |
-| Route: Nutrition intelligence | PASS | HTTP 403 |
-| Route: AI converse | PASS | HTTP 403 |
-| Route: Smart progression | PASS | HTTP 403 |
-| Route: Transformation latest | PASS | HTTP 403 |
-| Beta invite codes seeded | PASS | LIFTFLOW-INTERNAL seeded |
+| Route: Recovery intelligence | PASS | HTTP 401 |
+| Route: Nutrition intelligence | PASS | HTTP 401 |
+| Route: AI converse | FAIL | HTTP 401 |
+| Route: Smart progression | PASS | HTTP 401 |
+| Route: Transformation latest | FAIL | HTTP 401 |
+| Beta invite codes seeded | FAIL | service role missing |
 | Authentication | PASS | — |
 | Onboarding | PASS | — |
 | Workout logging | PASS | — |
@@ -73,13 +79,13 @@ Sprint 8.6 validates TestFlight RC readiness: Sprint 8.5 ops complete, productio
 | Recovery Intelligence | PASS | — |
 | Nutrition Intelligence | PASS | — |
 | Smart Progression | PASS | — |
-| RevenueCat (Sprint 8.1) | PASS | 52/52 |
+| RevenueCat (Sprint 8.1) | FAIL | 51/52 |
 | Feature gates | PASS | — |
 | Restore purchases | PASS | — |
 | Trial support | PASS | — |
-| Transformation (8.2) | PASS | 56/56 |
+| Transformation (8.2) | FAIL | 55/56 |
 | Peak Music (8.3) | PASS | 44/44 |
-| Watch Companion (8.4) | PASS | 57/57 |
+| Watch Companion (8.4) | PASS | 70/70 |
 | HealthKit plugin | PASS | — |
 | Mobile Sentry bootstrap | PASS | — |
 | Feedback submission | PASS | — |
@@ -101,11 +107,16 @@ Sprint 8.6 validates TestFlight RC readiness: Sprint 8.5 ops complete, productio
 
 ## P0 blocking issues
 
-_None_
+- Migration 015 applied: SUPABASE_ACCESS_TOKEN missing
+- Route: AI converse: HTTP 401
+- Route: Transformation latest: HTTP 401
 
 ## P1 blocking issues
 
-_None_
+- Mobile Sentry wiring: 10/13
+- Backend Sentry capture test: 4/5
+- Beta invite codes seeded: service role missing
+- EXPO_PUBLIC_SENTRY_DSN: create React Native Sentry project → eas secret:create
 
 ## Mobile Sentry setup (if pending)
 
