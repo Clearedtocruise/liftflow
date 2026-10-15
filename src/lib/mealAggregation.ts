@@ -60,6 +60,24 @@ export function dedupeMealsByType(meals: Meal[]): Meal[] {
   return keep.sort((a, b) => MEAL_TYPE_ORDER[a.mealType] - MEAL_TYPE_ORDER[b.mealType]);
 }
 
+/**
+ * A meal's macros as the cards print them: whole numbers.
+ *
+ * Stored macros keep decimals, and the cards round each one for display. Adding the exact values
+ * and rounding the total once — what this used to do — lets the header disagree with the cards
+ * above it: six meals showing 35, 31, 34, 0, 19 and 50 g of protein totalled 170 g, not the 169 a
+ * person adding them up gets. Rounding each meal first makes the total the sum of what is shown.
+ */
+export function roundedMealMacros(meal: Meal) {
+  const macros = resolveMealMacros(meal);
+  return {
+    calories: Math.round(macros.calories),
+    proteinG: Math.round(macros.proteinG),
+    carbsG: Math.round(macros.carbsG),
+    fatG: Math.round(macros.fatG),
+  };
+}
+
 export function aggregateDailyMeals(meals: Meal[]): DailyMealAggregation {
   const dedupedMeals = dedupeMealsByType(meals).filter(isScheduledMeal);
 
@@ -70,7 +88,7 @@ export function aggregateDailyMeals(meals: Meal[]): DailyMealAggregation {
 
   for (const meal of dedupeMealsByType(meals)) {
     if (!isConsumedMeal(meal)) continue;
-    const macros = resolveMealMacros(meal);
+    const macros = roundedMealMacros(meal);
     caloriesConsumed += macros.calories;
     proteinG += macros.proteinG;
     carbsG += macros.carbsG;
@@ -87,8 +105,8 @@ export function aggregateDailyMeals(meals: Meal[]): DailyMealAggregation {
     fatG,
     mealsCompleted,
     mealsTotal: dedupedMeals.length,
-    plannedCalories: dedupedMeals.reduce((sum, meal) => sum + resolveMealMacros(meal).calories, 0),
-    plannedProteinG: dedupedMeals.reduce((sum, meal) => sum + resolveMealMacros(meal).proteinG, 0),
+    plannedCalories: dedupedMeals.reduce((sum, meal) => sum + roundedMealMacros(meal).calories, 0),
+    plannedProteinG: dedupedMeals.reduce((sum, meal) => sum + roundedMealMacros(meal).proteinG, 0),
   };
 }
 
