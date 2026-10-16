@@ -130,12 +130,21 @@ test('a logged pre-workout shake over the type cap keeps the user-entered macros
     origin: 'log',
   };
 
-  assert.equal(looksLikeInflatedPlanMacros(loggedShake), true);
+  assert.equal(looksLikeInflatedPlanMacros(loggedShake), false);
   assert.deepEqual(resolveMealMacros(loggedShake), {
     calories: 600,
     proteinG: 30,
     carbsG: 90,
     fatG: 10,
+  });
+
+  const loggedBigShake = { ...loggedShake, calories: 1000, proteinG: 60, carbsG: 150, fatG: 16 };
+  assert.equal(looksLikeInflatedPlanMacros(loggedBigShake), true);
+  assert.deepEqual(resolveMealMacros(loggedBigShake), {
+    calories: 1000,
+    proteinG: 60,
+    carbsG: 150,
+    fatG: 16,
   });
 });
 
@@ -179,4 +188,48 @@ test('Today screenshot breakfast/snack correct via correctedMacrosIfInflated', (
   assert.ok(snack);
   assert.ok(snack!.calories < 350, `got ${snack!.calories}`);
   assert.notEqual(snack!.calories, 1131);
+});
+
+test('a burrito swapped into the post-workout slot keeps its 875 calories', () => {
+  // Regression: the slot cap (550) flagged the swapped-in meal as a corrupted plan row, rescaled it
+  // to 2400 x 13% = 312 cal, and the heal step wrote that over the lifter's number.
+  const burrito = {
+    name: 'chipotle barbacoa burrito',
+    mealType: 'post_workout',
+    calories: 875,
+    proteinG: 50,
+    carbsG: 80,
+    fatG: 36,
+    macrosProvided: true,
+    origin: 'plan',
+  };
+
+  for (const status of ['planned', 'completed', 'modified']) {
+    const meal = { ...burrito, status };
+    assert.equal(looksLikeInflatedPlanMacros(meal), false, status);
+    assert.equal(correctedMacrosIfInflated(meal), null, status);
+    assert.deepEqual(resolveMealMacros(meal), {
+      calories: 875,
+      proteinG: 50,
+      carbsG: 80,
+      fatG: 36,
+    });
+  }
+});
+
+test('an eaten meal is only corrected when it is plainly a whole day in one slot', () => {
+  const eatenHuge = {
+    name: 'Oatmeal with banana',
+    mealType: 'breakfast',
+    calories: 2827,
+    proteinG: 221,
+    carbsG: 309,
+    fatG: 79,
+    origin: 'plan',
+    status: 'completed',
+  };
+  assert.equal(looksLikeInflatedPlanMacros(eatenHuge), true);
+
+  const eatenBigSlot = { ...eatenHuge, mealType: 'snack', calories: 1000, proteinG: 60 };
+  assert.equal(looksLikeInflatedPlanMacros(eatenBigSlot), false);
 });
