@@ -109,7 +109,7 @@ function sourceWarnings(resolved: { recovered?: boolean; transcribed?: boolean }
  * Reading a scan is the expensive case: transcribing the pages and then reading the plan out of
  * that transcription are two model calls inside this one budget.
  */
-const PREVIEW_BUDGET_MS = 52_000;
+const PREVIEW_BUDGET_MS = 80_000;
 
 /** Never bother the model with less time than a plan takes to read; go straight to the fallback. */
 const MIN_AI_PARSE_MS = 10_000;
