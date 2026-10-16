@@ -7,7 +7,7 @@ import { aggregateDailyMeals, mealsForCalendarDay } from '@/lib/mealAggregation'
 import { isReplaceablePlannedMeal, pickMealsToKeep, weekEndDate } from '@/lib/mealCleanup';
 import { planDataCache } from '@/lib/planDataCache';
 import { MEAL_NOT_FOUND } from '@/lib/mealErrors';
-import { enrichMealMeta, correctedMacrosIfInflated, serializeMealMeta } from '@/lib/mealIngredients';
+import { enrichMealMeta, correctedMacrosIfInflated, correctedStoredMacrosIfDaySized, serializeMealMeta } from '@/lib/mealIngredients';
 import { isInvertedBodyWeightKg, normalizeBodyWeightKg } from '@/lib/bodyWeightKg';
 import { fail, fromError, ok } from '@/lib/serviceResult';
 import { getWeekRange } from '@/lib/weekPlan';
@@ -55,7 +55,7 @@ async function persistHealedPlanMacros(meals: Meal[]): Promise<Meal[]> {
   const updates = meals.flatMap((meal) => {
     if (meal.origin !== 'plan') return [];
     if (meal.status !== 'planned' && meal.status !== 'skipped') return [];
-    const corrected = correctedMacrosIfInflated(meal);
+    const corrected = correctedStoredMacrosIfDaySized(meal);
     if (!corrected) return [];
     return [{ meal, corrected }];
   });

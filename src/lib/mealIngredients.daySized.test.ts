@@ -3,7 +3,9 @@ import test from 'node:test';
 
 import {
   correctedMacrosIfInflated,
+  correctedStoredMacrosIfDaySized,
   looksLikeDaySizedMealMacros,
+  looksLikeDaySizedStoredMeal,
   looksLikeInflatedPlanMacros,
   resolveMealMacros,
 } from './mealIngredients';
@@ -86,12 +88,18 @@ test('Tuesday week-view meals are all flagged and corrected to meal-sized macros
       true,
       `expected inflated: ${meal.name} (${meal.calories})`,
     );
-    const macros = resolveMealMacros(meal);
+    const generated = correctedMacrosIfInflated(meal);
+    assert.ok(generated, meal.name);
     assert.ok(
-      macros.calories < 900,
-      `${meal.name}: expected meal-sized calories, got ${macros.calories}`,
+      generated!.calories < 900,
+      `${meal.name}: expected meal-sized calories, got ${generated!.calories}`,
     );
-    assert.notEqual(macros.calories, meal.calories);
+    assert.notEqual(generated!.calories, meal.calories);
+  }
+
+  // Already stored, only the rows that are plainly a whole day are rewritten on screen.
+  for (const meal of tuesday.filter((row) => row.calories >= 1800)) {
+    assert.ok(resolveMealMacros(meal).calories < 900, meal.name);
   }
 });
 
@@ -130,16 +138,25 @@ test('a logged pre-workout shake over the type cap keeps the user-entered macros
     origin: 'log',
   };
 
-  assert.equal(looksLikeInflatedPlanMacros(loggedShake), true);
+  assert.equal(looksLikeInflatedPlanMacros(loggedShake), false);
   assert.deepEqual(resolveMealMacros(loggedShake), {
     calories: 600,
     proteinG: 30,
     carbsG: 90,
     fatG: 10,
   });
+
+  const loggedBigShake = { ...loggedShake, calories: 1000, proteinG: 60, carbsG: 150, fatG: 16 };
+  assert.equal(looksLikeInflatedPlanMacros(loggedBigShake), true);
+  assert.deepEqual(resolveMealMacros(loggedBigShake), {
+    calories: 1000,
+    proteinG: 60,
+    carbsG: 150,
+    fatG: 16,
+  });
 });
 
-test('an un-logged plan row over the type cap is still corrected', () => {
+test('a generated plan row over the type cap is corrected before it is saved', () => {
   const planRow = {
     name: 'Rice cakes with honey',
     mealType: 'pre_workout',
@@ -150,9 +167,27 @@ test('an un-logged plan row over the type cap is still corrected', () => {
     origin: 'plan',
   };
 
-  const macros = resolveMealMacros(planRow);
-  assert.notEqual(macros.calories, 1131);
-  assert.ok(macros.calories < 450, `expected corrected calories, got ${macros.calories}`);
+  const corrected = correctedMacrosIfInflated(planRow);
+  assert.ok(corrected);
+  assert.ok(corrected!.calories < 450, `expected corrected calories, got ${corrected!.calories}`);
+});
+
+test('a stored plan row is not rewritten just for beating its slot cap', () => {
+  const planRow = {
+    name: 'Rice cakes with honey',
+    mealType: 'pre_workout',
+    calories: 1131,
+    proteinG: 20,
+    carbsG: 245,
+    fatG: 9,
+    origin: 'plan',
+    status: 'planned',
+    macrosProvided: true,
+  };
+
+  assert.equal(looksLikeDaySizedStoredMeal(planRow), false);
+  assert.equal(correctedStoredMacrosIfDaySized(planRow), null);
+  assert.equal(resolveMealMacros(planRow).calories, 1131);
 });
 
 test('Today screenshot breakfast/snack correct via correctedMacrosIfInflated', () => {
@@ -179,4 +214,70 @@ test('Today screenshot breakfast/snack correct via correctedMacrosIfInflated', (
   assert.ok(snack);
   assert.ok(snack!.calories < 350, `got ${snack!.calories}`);
   assert.notEqual(snack!.calories, 1131);
+});
+
+test('a burrito swapped into the post-workout slot keeps its 875 calories', () => {
+  // Regression: the slot cap (550) flagged the swapped-in meal as a corrupted plan row, rescaled it
+  // to 2400 x 13% = 312 cal, and the heal step wrote that over the lifter's number.
+  const burrito = {
+    name: 'chipotle barbacoa burrito',
+    mealType: 'post_workout',
+    calories: 875,
+    proteinG: 50,
+    carbsG: 80,
+    fatG: 36,
+    macrosProvided: true,
+    origin: 'plan',
+  };
+
+  for (const status of ['planned', 'completed', 'modified']) {
+    const meal = { ...burrito, status };
+    assert.equal(looksLikeDaySizedStoredMeal(meal), false, status);
+    assert.equal(correctedStoredMacrosIfDaySized(meal), null, status);
+    assert.deepEqual(resolveMealMacros(meal), {
+      calories: 875,
+      proteinG: 50,
+      carbsG: 80,
+      fatG: 36,
+    });
+  }
+});
+
+test('numbers the lifter confirmed are never rewritten, however large', () => {
+  const huge = {
+    name: 'Oatmeal with banana',
+    mealType: 'breakfast',
+    calories: 2827,
+    proteinG: 221,
+    carbsG: 309,
+    fatG: 79,
+    macrosProvided: true,
+  };
+
+  for (const confirmed of [{ origin: 'log' }, { origin: 'plan', status: 'completed' }, { origin: 'plan', status: 'modified' }]) {
+    const meal = { ...huge, ...confirmed };
+    assert.equal(looksLikeDaySizedStoredMeal(meal), false);
+    assert.deepEqual(resolveMealMacros(meal), {
+      calories: 2827,
+      proteinG: 221,
+      carbsG: 309,
+      fatG: 79,
+    });
+  }
+
+  assert.equal(looksLikeDaySizedStoredMeal({ ...huge, origin: 'plan', status: 'planned' }), true);
+});
+
+test('a logged peanut-butter meal keeps its calories instead of the catalog guess', () => {
+  const logged = {
+    name: 'oikos greek yogurt, with 2 tablespoons of peanut butter, 2 tablespoons of honey, and a handful of blueberries',
+    mealType: 'snack',
+    calories: 700,
+    proteinG: 30,
+    carbsG: 60,
+    fatG: 40,
+    macrosProvided: true,
+    origin: 'log',
+  };
+  assert.equal(resolveMealMacros(logged).calories, 700);
 });
