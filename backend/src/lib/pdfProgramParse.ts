@@ -907,7 +907,7 @@ type LlmShape = {
  * on a request of its own accord at about a minute, and extraction has already spent some of
  * that, so this is roughly what is left to give.
  */
-export const MAX_AI_PARSE_MS = 40_000;
+export const MAX_AI_PARSE_MS = 70_000;
 
 function replaceNoAiWarning(warnings: string[], replacement?: string): string[] {
   const rest = warnings.filter((warning) => warning !== NO_AI_WARNING);
@@ -1043,6 +1043,28 @@ executionMode is how the day is run: omit it for ordinary straight sets, or use 
 }
 
 /** The meal plan on its own, for when the workout half is being read a day at a time. */
+/**
+ * The part of a combined document that talks about food.
+ *
+ * Reading meals out of the whole document makes the model take in every exercise first, and the
+ * meal read is the longest-running call in an import: right at the edge of its budget it either
+ * lands or silently does not. The meals are almost always in their own section, so hand the model
+ * just that.
+ */
+function hasMealWords(text: string): boolean {
+  return /\b(breakfast|lunch|dinner)\b/i.test(text);
+}
+
+export function nutritionSection(text: string): string {
+  const lines = text.split('\n');
+  const start = lines.findIndex((line) =>
+    /^(?:nutrition\s*[|:—–-]|meal plan\b|your daily meals|daily meals)/i.test(line.trim()),
+  );
+  if (start < 0) return text;
+  const section = lines.slice(start).join('\n');
+  return section.length >= 200 ? section : text;
+}
+
 async function readNutritionOnly(
   text: string,
   readWithAi: (prompt: { system: string; user: string }) => Promise<AiDocumentRead>,
@@ -1120,7 +1142,7 @@ If the document is only goals without meals, return goals and empty days.`;
       // output is short, so it costs no more wall clock than the day it runs beside.
       const [perDay, nutritionRead] = await Promise.all([
         readDaysInParallel(sections.days, sections.preamble, readWithAi),
-        kind === 'workout' ? Promise.resolve(null) : readNutritionOnly(text, readWithAi),
+        kind === 'workout' ? Promise.resolve(null) : readNutritionOnly(nutritionSection(text), readWithAi),
       ]);
 
       // A day the model did not return keeps the heuristic's reading of that same day, so one
@@ -1135,10 +1157,19 @@ If the document is only goals without meals, return goals and empty days.`;
             `${perDay.failed} of ${sections.days.length} days could not be read by the AI and were kept as the document structured them. Check those days below.`,
           );
         }
+        const nutrition = nutritionRead ?? heuristic.nutrition;
+        // Targets without a single meal is what this leaves when the meal read fails, and the
+        // import went on to report success having loaded no food at all.
+        if (kind !== 'workout' && (nutrition?.days.length ?? 0) === 0 && hasMealWords(text)) {
+          warnings.push(
+            'The meal plan could not be read by the AI this time, so only the daily targets were found. ' +
+              'Tap Start over and read the plan again to load the meals.',
+          );
+        }
         return {
           ...heuristic,
           workout,
-          nutrition: nutritionRead ?? heuristic.nutrition,
+          nutrition,
           warnings,
         };
       }
