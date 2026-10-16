@@ -862,9 +862,11 @@ trainingRouter.post('/programs/import-pdf/preview', requireBasicSubscription, as
       pdfBase64?: string;
       text?: string;
       fileName?: string;
+      today?: string;
     };
     const { previewProgramImport } = await import('../lib/pdfProgramImport.js');
-    const preview = await previewProgramImport(parseImportSource(body), parseImportKind(body.kind));
+    const today = typeof body.today === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.today) ? body.today : undefined;
+    const preview = await previewProgramImport(parseImportSource(body), parseImportKind(body.kind), { today });
     res.json(preview);
   } catch (error) {
     console.warn(`[import-pdf] preview failed: ${error instanceof Error ? error.message : 'unknown'}`);
@@ -886,6 +888,7 @@ trainingRouter.post('/programs/import-pdf/commit', requireBasicSubscription, asy
       fileName?: string;
       preview?: import('../lib/pdfProgramParse.js').ProgramImportPreview;
       timeZone?: string | null;
+      startDay?: number;
     };
     const { commitProgramImport } = await import('../lib/pdfProgramImport.js');
     const kind = parseImportKind(body.kind);
@@ -896,6 +899,7 @@ trainingRouter.post('/programs/import-pdf/commit', requireBasicSubscription, asy
       userId,
       kind,
       timeZone: body.timeZone,
+      startDay: typeof body.startDay === 'number' ? body.startDay : undefined,
       preview: body.preview,
       source: hasSource ? parseImportSource(body) : undefined,
     });
