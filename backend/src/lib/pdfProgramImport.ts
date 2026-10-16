@@ -2,6 +2,8 @@
  * PDF / text program import orchestrator — preview then commit into existing sinks.
  */
 
+import { createHash } from 'node:crypto';
+
 import { applyImportedNutritionPlan } from './importedNutritionPlan.js';
 import {
   MAX_AI_PARSE_MS,
@@ -114,11 +116,67 @@ const PREVIEW_BUDGET_MS = 80_000;
 /** Never bother the model with less time than a plan takes to read; go straight to the fallback. */
 const MIN_AI_PARSE_MS = 10_000;
 
+type PreviewResult = ProgramImportPreview & { pageCount?: number };
+
+const PREVIEW_CACHE_TTL_MS = 10 * 60_000;
+const PREVIEW_CACHE_MAX = 8;
+const previewCache = new Map<string, { at: number; result: Promise<PreviewResult> }>();
+
+export function clearPreviewCache(): void {
+  previewCache.clear();
+}
+
+function previewCacheKey(source: ImportSource, kind: ImportKind, today?: string): string {
+  const content = source.type === 'pdf' ? source.base64 : source.text;
+  return createHash('sha256').update(JSON.stringify([source.type, kind, today ?? '', content])).digest('hex');
+}
+
+/**
+ * A preview takes most of a minute on a long plan, and a phone changing networks mid-request drops
+ * the connection while the server carries on to the end. Without this the retry starts the whole
+ * read again; with it the retry joins the read already running, or collects the finished one.
+ * Only a clean read is kept: a read that fell back because the model was unavailable is worth
+ * trying again.
+ */
 export async function previewProgramImport(
   source: ImportSource,
   kind: ImportKind,
   options?: { today?: string },
-): Promise<ProgramImportPreview & { pageCount?: number }> {
+): Promise<PreviewResult> {
+  const now = Date.now();
+  for (const [key, entry] of previewCache) {
+    if (now - entry.at > PREVIEW_CACHE_TTL_MS) previewCache.delete(key);
+  }
+
+  const key = previewCacheKey(source, kind, options?.today);
+  const cached = previewCache.get(key);
+  if (cached) {
+    console.info(`[import-pdf] preview ${source.type} kind=${kind} served from a read already done or running`);
+    return cached.result;
+  }
+
+  const result = previewProgramImportUncached(source, kind, options);
+  previewCache.set(key, { at: now, result });
+  while (previewCache.size > PREVIEW_CACHE_MAX) {
+    const oldest = previewCache.keys().next().value;
+    if (oldest === undefined) break;
+    previewCache.delete(oldest);
+  }
+  try {
+    const finished = await result;
+    if (finished.warnings.some((warning) => /AI read of this plan|could not be read by the AI/.test(warning))) previewCache.delete(key);
+  } catch (error) {
+    previewCache.delete(key);
+    throw error;
+  }
+  return result;
+}
+
+async function previewProgramImportUncached(
+  source: ImportSource,
+  kind: ImportKind,
+  options?: { today?: string },
+): Promise<PreviewResult> {
   const startedAt = Date.now();
   const resolved = await resolveImportText(source);
   const extractedMs = Date.now() - startedAt;
