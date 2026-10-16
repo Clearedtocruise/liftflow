@@ -430,6 +430,7 @@ export function looksLikeInflatedMealMacros(
     (enrichMealMeta(meal.name, meal.instructions).ingredients?.length ?? 0) > 1;
   const denseName = /peanut butter|almond butter|olive oil|peanuts/i.test(meal.name);
   if (!mixed || !denseName) return false;
+  if (isUserConfirmedMeal(meal)) return false;
 
   if (storedCal >= estimated.calories * 1.45 && estimated.calories >= 150) return true;
 
@@ -438,15 +439,26 @@ export function looksLikeInflatedMealMacros(
 }
 
 /**
- * True when stored macros look like a plan scaled from a bogus daily target
- * (weight-unit bug → ~11k kcal day → breakfast 2827, dinner 3392, snack 1131).
+ * A meal the lifter logged, or marked eaten, carries numbers they stand behind. Nothing in this file
+ * may rewrite them, whichever plan slot the meal started in.
+ */
+export function isUserConfirmedMeal(meal: MealMacroFields): boolean {
+  return meal.origin === 'log' || meal.status === 'completed' || meal.status === 'modified';
+}
+
+/** A single meal this large is a whole day's calories in one slot, never real food. */
+const DAY_SIZED_MEAL_CALORIES = 1800;
+
+/**
+ * True when macros that a meal-plan generator is about to save look like a plan scaled from a bogus
+ * daily target (weight-unit bug → ~11k kcal day → breakfast 2827, dinner 3392, snack 1131). Only for
+ * generator output before it is stored; it is far too loose to run against meals the lifter has
+ * touched, where a bigger-than-usual slot is a real choice (an 875 cal burrito after training).
  */
 export function looksLikeInflatedPlanMacros(meal: MealMacroFields): boolean {
   const calories = meal.calories ?? 0;
   const proteinG = meal.proteinG ?? 0;
-  if (calories >= 1800 || proteinG >= 140) return true;
-
-  if (meal.status === 'completed' || meal.status === 'modified') return false;
+  if (calories >= DAY_SIZED_MEAL_CALORIES || proteinG >= 140) return true;
 
   const maxForType = MEAL_TYPE_MAX_REASONABLE_CAL[meal.mealType ?? ''] ?? 1100;
   return calories > maxForType * SLOT_CAP_BAD_PLAN_MULTIPLE;
@@ -456,6 +468,17 @@ export function looksLikeInflatedPlanMacros(meal: MealMacroFields): boolean {
 export function looksLikeDaySizedMealMacros(meal: MealMacroFields): boolean {
   return looksLikeInflatedPlanMacros(meal);
 }
+
+/**
+ * Stored meals are shown and saved exactly as entered. The one exception is an untouched plan row
+ * holding a whole day's calories, left over from the old weight-unit bug.
+ */
+export function looksLikeDaySizedStoredMeal(meal: MealMacroFields): boolean {
+  if (isUserConfirmedMeal(meal)) return false;
+  return (meal.calories ?? 0) >= DAY_SIZED_MEAL_CALORIES;
+}
+
+type MacroCorrection = MealMacros | null;
 
 function correctInflatedPlanMacros(meal: MealMacroFields): MealMacros {
   const named = macrosForMealName(meal.name);
@@ -482,9 +505,15 @@ function correctInflatedPlanMacros(meal: MealMacroFields): MealMacros {
   };
 }
 
-/** Corrected macros when a plan row looks inflated; otherwise null. */
-export function correctedMacrosIfInflated(meal: MealMacroFields): MealMacros | null {
+/** Corrected macros for generator output that looks inflated, before it is saved; otherwise null. */
+export function correctedMacrosIfInflated(meal: MealMacroFields): MacroCorrection {
   if (!looksLikeInflatedPlanMacros(meal)) return null;
+  return correctInflatedPlanMacros(meal);
+}
+
+/** Corrected macros for an untouched stored plan row that holds a whole day; otherwise null. */
+export function correctedStoredMacrosIfDaySized(meal: MealMacroFields): MacroCorrection {
+  if (!looksLikeDaySizedStoredMeal(meal)) return null;
   return correctInflatedPlanMacros(meal);
 }
 
@@ -530,13 +559,9 @@ function distributeRemainingCalories(meal: MealMacroFields): MealMacros {
  * replaced with the ingredient-based estimate.
  */
 export function resolveMealMacros(meal: MealMacroFields): MealMacros {
-  // This heuristic exists to catch a *meal-plan generator* bug (a bogus daily-calorie total
-  // leaking into one slot, e.g. a weight-unit mixup — see looksLikeInflatedPlanMacros). It must
-  // never run against a meal the user logged themselves: a lifter who genuinely ate/drank a
-  // 600 cal pre-workout shake (over the 450 cal "pre_workout" sanity cap) had their explicit
-  // calories and macros silently rescaled to ~288 cal, which looked like the app "editing" their
-  // number to whatever it wanted.
-  if (meal.origin !== 'log' && looksLikeInflatedPlanMacros(meal)) {
+  // Numbers the lifter logged, swapped in or marked eaten are shown exactly as stored. The only
+  // correction left is an untouched plan row holding a whole day's calories (the old weight-unit bug).
+  if (looksLikeDaySizedStoredMeal(meal)) {
     return correctInflatedPlanMacros(meal);
   }
 
