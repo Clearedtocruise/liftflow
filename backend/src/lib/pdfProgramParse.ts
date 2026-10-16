@@ -762,6 +762,64 @@ function readDocumentDays(text: string): {
 }
 
 /** Heuristic fallback when OpenAI is unavailable — best-effort day/exercise extraction. */
+/** A daily target, not a food label: "120 calories" on a scoop of whey is nowhere near one. */
+const PLAUSIBLE_DAILY_CALORIES = { min: 1200, max: 6000 };
+const PLAUSIBLE_DAILY_PROTEIN_G = { min: 60, max: 400 };
+const PLAUSIBLE_DAILY_CARBS_G = { min: 50, max: 800 };
+const PLAUSIBLE_DAILY_FAT_G = { min: 25, max: 250 };
+
+function firstPlausible(
+  text: string,
+  patterns: RegExp[],
+  range: { min: number; max: number },
+): number | undefined {
+  const hits: Array<{ index: number; value: number }> = [];
+  for (const pattern of patterns) {
+    for (const match of text.matchAll(pattern)) {
+      const value = Number(match[1].replace(/,/g, ''));
+      if (Number.isFinite(value) && value >= range.min && value <= range.max) {
+        hits.push({ index: match.index ?? 0, value });
+      }
+    }
+  }
+  hits.sort((a, b) => a.index - b.index);
+  return hits[0]?.value;
+}
+
+/**
+ * Daily targets the document states outright, read without a model.
+ *
+ * Only numbers in a believable range count, and the first one in the document wins, because plans
+ * state the target before they break it down into days and foods. A figure that cannot be found is
+ * left out rather than guessed: a wrong calorie goal is worse than none.
+ */
+export function detectNutritionGoals(text: string): {
+  calories?: number;
+  proteinG?: number;
+  carbsG?: number;
+  fatG?: number;
+} {
+  const number = '(\\d{1,2},\\d{3}|\\d{3,4})';
+  return {
+    calories: firstPlausible(
+      text,
+      [new RegExp(`${number}\\s*(?:kcal|calories)\\b`, 'gi'), /\bcalories\b[^\d\n]{0,15}(\d{1,2},\d{3}|\d{3,4})\b/gi],
+      PLAUSIBLE_DAILY_CALORIES,
+    ),
+    proteinG: firstPlausible(
+      text,
+      [/\bprotein\b[^\d\n]{0,25}(\d{2,3})\s*g\b/gi, /(\d{2,3})\s*g\s*(?:of\s+)?protein\b/gi],
+      PLAUSIBLE_DAILY_PROTEIN_G,
+    ),
+    carbsG: firstPlausible(
+      text,
+      [/\bcarbohydrates?\b[^\d\n]{0,15}(\d{2,3})\s*g\b/gi, /\bcarbs\b[^\d\n]{0,15}(\d{2,3})\s*g\b/gi],
+      PLAUSIBLE_DAILY_CARBS_G,
+    ),
+    fatG: firstPlausible(text, [/\bfat\b[^\d\n]{0,10}(\d{2,3})\s*g\b/gi], PLAUSIBLE_DAILY_FAT_G),
+  };
+}
+
 export function heuristicParseProgramText(text: string, kind: ImportKind): ProgramImportPreview {
   const warnings: string[] = [NO_AI_WARNING];
   const workoutDays = readDocumentDays(text).days.map((entry) => entry.day);
@@ -780,15 +838,13 @@ export function heuristicParseProgramText(text: string, kind: ImportKind): Progr
 
   let nutrition: ImportedNutritionPlan | null = null;
   if (kind !== 'workout') {
-    const cal = text.match(/(\d{3,4})\s*(?:kcal|calories)\b/i);
-    const pro = text.match(/(\d{2,3})\s*g?\s*protein\b/i);
+    const goals = detectNutritionGoals(text);
+    const cal = goals.calories;
+    const pro = goals.proteinG;
     if (cal || pro) {
       nutrition = {
         name: 'Imported Nutrition Targets',
-        goals: {
-          calories: cal ? Number(cal[1]) : undefined,
-          proteinG: pro ? Number(pro[1]) : undefined,
-        },
+        goals,
         days: [],
       };
       warnings.push(

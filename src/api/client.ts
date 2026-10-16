@@ -11,6 +11,8 @@ type RequestOptions = {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   body?: unknown;
   token?: string;
+  /** Give up and say so after this long. Without it a stalled request waits on the OS default. */
+  timeoutMs?: number;
 };
 
 /**
@@ -72,31 +74,48 @@ class ApiClient {
   }
 
   async request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-    const { method = 'GET', body, token } = options;
+    const { method = 'GET', body, token, timeoutMs } = options;
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
     if (token) headers.Authorization = `Bearer ${token}`;
 
-    const response = await fetch(`${this.baseUrl}${path}`, {
-      method,
-      headers,
-      body: body ? JSON.stringify(body) : undefined,
-    });
+    const controller = timeoutMs ? new AbortController() : undefined;
+    const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : undefined;
 
-    if (!response.ok) {
-      await throwApiError(response);
+    try {
+      const response = await fetch(`${this.baseUrl}${path}`, {
+        method,
+        headers,
+        body: body ? JSON.stringify(body) : undefined,
+        signal: controller?.signal,
+      });
+
+      if (!response.ok) {
+        await throwApiError(response);
+      }
+
+      return (await response.json()) as T;
+    } catch (error) {
+      if (controller?.signal.aborted) {
+        throw new ApiError(
+          'The server took too long to answer. It may be waking up — try again in a moment.',
+          0,
+          'TIMEOUT',
+        );
+      }
+      throw error;
+    } finally {
+      if (timer) clearTimeout(timer);
     }
-
-    return response.json() as Promise<T>;
   }
 
   get<T>(path: string, token?: string) {
     return this.request<T>(path, { token });
   }
 
-  post<T>(path: string, body: unknown, token?: string) {
-    return this.request<T>(path, { method: 'POST', body, token });
+  post<T>(path: string, body: unknown, token?: string, timeoutMs?: number) {
+    return this.request<T>(path, { method: 'POST', body, token, timeoutMs });
   }
 
   put<T>(path: string, body: unknown, token?: string) {
@@ -131,6 +150,13 @@ class ApiClient {
 }
 
 export const apiClient = new ApiClient(API_BASE);
+
+/**
+ * The server reads a plan inside about a minute, and a sleeping free-tier server can take that long
+ * again just to wake. Beyond this the import is not coming back, and saying so beats a spinner.
+ */
+const IMPORT_PREVIEW_TIMEOUT_MS = 120_000;
+const IMPORT_COMMIT_TIMEOUT_MS = 90_000;
 
 /** Typed API endpoints — mirrors backend/src/routes/ */
 export const api = {
@@ -342,6 +368,7 @@ export const api = {
       '/api/training/programs/import-pdf/preview',
       body,
       token,
+      IMPORT_PREVIEW_TIMEOUT_MS,
     ),
 
   /** Commit a parsed workout cycle and/or nutrition plan (Basic). */
@@ -360,6 +387,7 @@ export const api = {
       '/api/training/programs/import-pdf/commit',
       body,
       token,
+      IMPORT_COMMIT_TIMEOUT_MS,
     ),
 
   postSmartProgression: (
