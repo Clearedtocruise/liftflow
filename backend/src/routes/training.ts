@@ -905,7 +905,9 @@ trainingRouter.post('/programs/import-pdf/commit', requireBasicSubscription, asy
     });
     res.json(result);
   } catch (error) {
-    console.warn(`[import-pdf] commit failed: ${error instanceof Error ? error.message : 'unknown'}`);
-    res.status(400).json({ message: error instanceof Error ? error.message : 'Import commit failed' });
+    const { describeDbError } = await import('../lib/importedNutritionPlan.js');
+    const reason = describeDbError(error);
+    console.warn(`[import-pdf] commit failed: ${reason}`);
+    res.status(400).json({ message: error instanceof Error ? error.message : `Import commit failed: ${reason}` });
   }
 });

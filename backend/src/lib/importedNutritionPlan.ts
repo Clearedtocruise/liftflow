@@ -108,9 +108,38 @@ export function normalizeImportedNutritionPlan(plan: ImportedNutritionPlan): Imp
   };
 }
 
-function mealClientKey(date: string, mealType: string, name: string, index: number): string {
+export function mealClientKey(date: string, mealType: string, name: string, index: number): string {
   const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40);
   return `import:${IMPORTED_NUTRITION_PLAN_PACK}:${date}:${mealType}:${slug}:${index}`;
+}
+
+export function describeDbError(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === 'object') {
+    const { message, code, details } = error as { message?: unknown; code?: unknown; details?: unknown };
+    const parts = [message, code ? `code ${String(code)}` : null, details].filter(
+      (part): part is string => typeof part === 'string' && part.length > 0,
+    );
+    if (parts.length > 0) return parts.join(' — ');
+  }
+  return 'unknown database error';
+}
+
+async function existingImportedMealKeys(
+  db: ReturnType<typeof requireAdmin>,
+  userId: string,
+): Promise<Set<string>> {
+  const { data, error } = await db
+    .from('meals')
+    .select('client_key')
+    .eq('user_id', userId)
+    .like('client_key', `import:${IMPORTED_NUTRITION_PLAN_PACK}:%`);
+  if (error) throw new Error(error.message);
+  return new Set(
+    ((data ?? []) as Array<{ client_key: string | null }>)
+      .map((row) => row.client_key)
+      .filter((key): key is string => typeof key === 'string'),
+  );
 }
 
 async function clearPriorImportedMeals(
@@ -262,13 +291,21 @@ export async function applyImportedNutritionPlan(
     .select('id')
     .single();
 
-  if (mealPlanError || !mealPlan) throw mealPlanError ?? new Error('Failed to create meal plan');
+  if (mealPlanError || !mealPlan) {
+    throw new Error(`Could not create the meal plan: ${mealPlanError ? describeDbError(mealPlanError) : 'no row returned'}`);
+  }
+
+  const keptKeys = await existingImportedMealKeys(db, userId);
 
   let mealsInserted = 0;
   for (const day of plan.days) {
     const date = addDays(weekStart, day.dayIndex);
     for (let index = 0; index < day.meals.length; index += 1) {
       const meal = day.meals[index];
+      // A slot the lifter already logged, edited or swapped survives the clean-up above and still
+      // owns its key. Writing the slot again collides with it on the unique index and used to fail
+      // the whole import, so the slot they touched stands and the rest is filled in around it.
+      if (keptKeys.has(mealClientKey(date, meal.mealType, meal.name, index))) continue;
       const { error: mealError } = await db.from('meals').insert({
         user_id: userId,
         meal_plan_id: mealPlan.id,
@@ -290,7 +327,10 @@ export async function applyImportedNutritionPlan(
           notes: meal.notes ?? null,
         }),
       });
-      if (mealError) throw mealError;
+      if (mealError) {
+        // A plain object from the database client, not an Error: say what it was.
+        throw new Error(`Could not save meal "${meal.name}" (${date}): ${describeDbError(mealError)}`);
+      }
       mealsInserted += 1;
     }
   }

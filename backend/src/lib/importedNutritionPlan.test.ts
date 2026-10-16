@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { normalizeImportedNutritionPlan } from './importedNutritionPlan.js';
+import { describeDbError, mealClientKey, normalizeImportedNutritionPlan } from './importedNutritionPlan.js';
 import type { ImportedNutritionPlan } from './pdfProgramParse.js';
 
 /**
@@ -132,4 +132,22 @@ test('a goals-only plan keeps its targets', () => {
   const normalized = normalizeImportedNutritionPlan(plan);
   assert.equal(normalized.goals?.calories, 2200);
   assert.equal(normalized.days.length, 0);
+});
+
+test('a database error object is described rather than reported as unknown', () => {
+  const described = describeDbError({
+    message: 'duplicate key value violates unique constraint "meals_user_client_key_idx"',
+    code: '23505',
+    details: 'Key (user_id, client_key) already exists.',
+  });
+  assert.match(described, /duplicate key/);
+  assert.match(described, /23505/);
+  assert.equal(describeDbError(new Error('boom')), 'boom');
+  assert.equal(describeDbError(null), 'unknown database error');
+});
+
+test('the key for a slot is stable, so a slot the lifter already touched can be recognised', () => {
+  const key = mealClientKey('2026-10-12', 'breakfast', 'Cottage cheese and berries', 0);
+  assert.equal(key, mealClientKey('2026-10-12', 'breakfast', 'Cottage cheese and berries', 0));
+  assert.notEqual(key, mealClientKey('2026-10-13', 'breakfast', 'Cottage cheese and berries', 0));
 });
