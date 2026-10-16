@@ -23,6 +23,21 @@ export type ProgramImportCommitResult = {
   nutrition: ApplyImportedNutritionResult | null;
 };
 
+/** Reading the words out of a file is seconds of work; longer means the file is fighting the reader. */
+export const PDF_READ_DEADLINE_MS = 25_000;
+
+export async function withDeadline<T>(work: Promise<T>, ms: number, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expired = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), ms);
+  });
+  try {
+    return await Promise.race([work, expired]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 function decodePdfBase64(base64: string): Buffer {
   const cleaned = base64.replace(/^data:application\/pdf;base64,/i, '').replace(/\s+/g, '');
   if (!cleaned) throw new Error('PDF payload is empty');
@@ -50,7 +65,11 @@ export async function resolveImportText(source: ImportSource): Promise<{
     return { text, fileName: source.fileName };
   }
   const buffer = decodePdfBase64(source.base64);
-  const extracted = await readPlanPdfText(buffer, { fileName: source.fileName });
+  const extracted = await withDeadline(
+    readPlanPdfText(buffer, { fileName: source.fileName }),
+    PDF_READ_DEADLINE_MS,
+    'Reading this PDF took too long. Print it to a new PDF, or paste the plan as text.',
+  );
   assertUsefulPdfText(extracted.text);
   return {
     text: extracted.text,
@@ -100,7 +119,8 @@ export async function previewProgramImport(
 ): Promise<ProgramImportPreview & { pageCount?: number }> {
   const startedAt = Date.now();
   const resolved = await resolveImportText(source);
-  const remaining = PREVIEW_BUDGET_MS - (Date.now() - startedAt);
+  const extractedMs = Date.now() - startedAt;
+  const remaining = PREVIEW_BUDGET_MS - extractedMs;
   const preview = await parseProgramDocument({
     text: resolved.text,
     kind,
@@ -108,6 +128,10 @@ export async function previewProgramImport(
     timeoutMs: Math.min(Math.max(remaining, MIN_AI_PARSE_MS), MAX_AI_PARSE_MS),
   });
   const warnings = [...sourceWarnings(resolved), ...preview.warnings];
+  console.info(
+    `[import-pdf] preview ${source.type} kind=${kind} pages=${resolved.pageCount ?? '-'} ` +
+      `chars=${resolved.text.length} extract=${extractedMs}ms total=${Date.now() - startedAt}ms`,
+  );
   return { ...preview, warnings, pageCount: resolved.pageCount };
 }
 
@@ -119,6 +143,7 @@ export async function commitProgramImport(options: {
   timeZone?: string | null;
 }): Promise<ProgramImportCommitResult> {
   const { userId, kind, timeZone } = options;
+  const startedAt = Date.now();
   const preview =
     options.preview ??
     (options.source
@@ -151,5 +176,9 @@ export async function commitProgramImport(options: {
     throw new Error('Nothing to apply from this document. Re-parse or adjust the PDF/text.');
   }
 
+  console.info(
+    `[import-pdf] commit kind=${kind} workout=${workout ? 'yes' : 'no'} ` +
+      `nutrition=${nutrition ? nutrition.mealsInserted : 'no'} total=${Date.now() - startedAt}ms`,
+  );
   return { preview, workout, nutrition };
 }

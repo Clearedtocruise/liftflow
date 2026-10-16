@@ -1,7 +1,7 @@
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { router } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { Card } from '@/components/layout/Card';
@@ -15,6 +15,8 @@ import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import { usePlanAdjustment } from '@/contexts/PlanAdjustmentContext';
 import { useAuth } from '@/hooks/useAuth';
 import { useSubscription } from '@/hooks/useSubscription';
+import { api } from '@/api/client';
+import { formatElapsed, settleWithin } from '@/lib/deadline';
 import { planDataCache } from '@/lib/planDataCache';
 import { invalidateWeekPlanPrefetch, warmWeekPlanData } from '@/lib/planDataPrefetch';
 import {
@@ -66,6 +68,28 @@ export default function ImportProgramScreen() {
   const [pdfBase64, setPdfBase64] = useState<string | null>(null);
   const [pastedText, setPastedText] = useState('');
   const [busy, setBusy] = useState(false);
+  const [opening, setOpening] = useState(false);
+  const [waitedSeconds, setWaitedSeconds] = useState(0);
+  const busyStartedAt = useRef<number | null>(null);
+
+  // The server sleeps when idle and takes most of a minute to wake. Starting that now, while the
+  // lifter is still choosing a file, keeps it out of the wait for their plan.
+  useEffect(() => {
+    void api.health().catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    if (!busy) {
+      busyStartedAt.current = null;
+      setWaitedSeconds(0);
+      return;
+    }
+    busyStartedAt.current = Date.now();
+    const timer = setInterval(() => {
+      if (busyStartedAt.current) setWaitedSeconds((Date.now() - busyStartedAt.current) / 1000);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [busy]);
 
   /**
    * The parse exactly as the server returned it. Kept alongside the draft so warnings, page count
@@ -97,6 +121,7 @@ export default function ImportProgramScreen() {
   };
 
   const pickPdf = async () => {
+    setOpening(true);
     try {
       const result = await DocumentPicker.getDocumentAsync({
         type: 'application/pdf',
@@ -129,6 +154,8 @@ export default function ImportProgramScreen() {
       discardDraft();
     } catch (error) {
       Alert.alert('Could not open PDF', error instanceof Error ? error.message : 'Unknown error');
+    } finally {
+      setOpening(false);
     }
   };
 
@@ -183,11 +210,19 @@ export default function ImportProgramScreen() {
         return;
       }
 
+      // The plan is saved. Refreshing the screens that show it is housekeeping, and a refresh that
+      // stalls must not keep the spinner up over a plan that already went live.
       invalidateWeekPlanPrefetch(user.id, user.timezone);
-      await planDataCache.clearUser(user.id);
-      await warmWeekPlanData(user.id, user.timezone);
+      await settleWithin(
+        (async () => {
+          await planDataCache.clearUser(user.id);
+          await warmWeekPlanData(user.id, user.timezone);
+          bumpRevision();
+          await refreshProfile();
+        })(),
+        8_000,
+      );
       bumpRevision();
-      await refreshProfile();
 
       const parts: string[] = [];
       if (result.data.workout) {
@@ -413,8 +448,10 @@ export default function ImportProgramScreen() {
         <Card style={styles.card}>
           <AppText style={styles.cardTitle}>PDF file</AppText>
           <PrimaryButton
-            label={fileName ? 'Choose a different PDF' : 'Choose PDF'}
+            label={opening ? 'Opening PDF…' : fileName ? 'Choose a different PDF' : 'Choose PDF'}
             onPress={() => void pickPdf()}
+            disabled={opening || busy}
+            loading={opening}
           />
           {fileName ? <AppText style={styles.fileName}>{fileName}</AppText> : null}
         </Card>
@@ -449,7 +486,10 @@ export default function ImportProgramScreen() {
           <View style={styles.busy}>
             <ActivityIndicator color={LiftFlowColors.accent} />
             <AppText variant="caption" color="textSecondary">
-              A scanned or photographed plan takes longer — we read the pages themselves.
+              Reading your plan… {formatElapsed(waitedSeconds)}.{' '}
+              {waitedSeconds < 20
+                ? 'This usually takes under a minute.'
+                : 'Still working. A scanned plan, or a server that was asleep, takes longer.'}
             </AppText>
           </View>
         ) : null}

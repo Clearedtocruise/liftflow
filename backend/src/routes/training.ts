@@ -867,6 +867,7 @@ trainingRouter.post('/programs/import-pdf/preview', requireBasicSubscription, as
     const preview = await previewProgramImport(parseImportSource(body), parseImportKind(body.kind));
     res.json(preview);
   } catch (error) {
+    console.warn(`[import-pdf] preview failed: ${error instanceof Error ? error.message : 'unknown'}`);
     res.status(400).json({ message: error instanceof Error ? error.message : 'Import preview failed' });
   }
 });
@@ -900,6 +901,7 @@ trainingRouter.post('/programs/import-pdf/commit', requireBasicSubscription, asy
     });
     res.json(result);
   } catch (error) {
+    console.warn(`[import-pdf] commit failed: ${error instanceof Error ? error.message : 'unknown'}`);
     res.status(400).json({ message: error instanceof Error ? error.message : 'Import commit failed' });
   }
 });
