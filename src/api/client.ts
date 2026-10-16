@@ -361,6 +361,8 @@ export const api = {
       pdfBase64?: string;
       text?: string;
       fileName?: string;
+      /** The lifter's local date, so a plan with its own calendar can say which day today is. */
+      today?: string;
     },
     token?: string,
   ) =>
@@ -380,6 +382,8 @@ export const api = {
       fileName?: string;
       preview?: import('@/types/programImport').ProgramImportPreview;
       timeZone?: string | null;
+      /** Which cycle day today is. */
+      startDay?: number;
     },
     token?: string,
   ) =>

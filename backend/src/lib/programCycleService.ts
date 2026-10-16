@@ -44,6 +44,8 @@ type Db = ReturnType<typeof requireAdmin>;
 const CYCLE_LOOKAHEAD_DAYS = 14;
 
 export type CycleProgramInput = {
+  /** Which cycle day today is. Defaults to Day 1, which is right for a plan that starts now. */
+  startDay?: number;
   name?: string;
   lengthDays: number;
   days: Array<{
@@ -271,7 +273,7 @@ async function persistCycle(db: Db, programId: string, userId: string, cycle: Pr
   await db.from('training_programs').update({ metadata }).eq('id', programId).eq('user_id', userId);
 }
 
-/** Create (or replace) the user's active program with a day-based cycle and materialize Day 1 for today. */
+/** Create (or replace) the user's active program with a day-based cycle and materialize its start day for today. */
 export async function createOrReplaceCycle(
   userId: string,
   input: CycleProgramInput,
@@ -283,7 +285,7 @@ export async function createOrReplaceCycle(
   const cycle = normalizeCycle({
     version: 1,
     lengthDays: input.lengthDays,
-    currentDay: 1,
+    currentDay: input.startDay ?? 1,
     anchorDate: today,
     name: input.name,
     days: input.days,

@@ -559,6 +559,7 @@ export const trainingService: ITrainingService = {
     pdfBase64?: string;
     text?: string;
     fileName?: string;
+    today?: string;
   }) {
     try {
       const token = await getAccessToken();
@@ -575,6 +576,7 @@ export const trainingService: ITrainingService = {
     fileName?: string;
     preview?: import('@/types/programImport').ProgramImportPreview;
     timeZone?: string | null;
+    startDay?: number;
   }) {
     try {
       const token = await getAccessToken();

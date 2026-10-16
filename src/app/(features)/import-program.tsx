@@ -17,6 +17,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useSubscription } from '@/hooks/useSubscription';
 import { api } from '@/api/client';
 import { formatElapsed, settleWithin } from '@/lib/deadline';
+import { localDateString } from '@/lib/localDate';
 import { planDataCache } from '@/lib/planDataCache';
 import { invalidateWeekPlanPrefetch, warmWeekPlanData } from '@/lib/planDataPrefetch';
 import {
@@ -69,6 +70,7 @@ export default function ImportProgramScreen() {
   const [pastedText, setPastedText] = useState('');
   const [busy, setBusy] = useState(false);
   const [opening, setOpening] = useState(false);
+  const [startDay, setStartDay] = useState(1);
   const [waitedSeconds, setWaitedSeconds] = useState(0);
   const busyStartedAt = useRef<number | null>(null);
 
@@ -101,6 +103,11 @@ export default function ImportProgramScreen() {
 
   const issue = useMemo(() => (draft ? importDraftIssue(draft, kind) : undefined), [draft, kind]);
 
+  const cycleLength = draft?.workout?.days.length ?? 1;
+  const todayCycleDay = Math.min(Math.max(startDay, 1), Math.max(cycleLength, 1));
+  const todayCycleDayRow = draft?.workout?.days[todayCycleDay - 1];
+  const todayCycleLabel = todayCycleDayRow ? (todayCycleDayRow.isRest ? 'Rest' : todayCycleDayRow.label.trim()) : '';
+
   if (!canUse) {
     return (
       <ScreenContainer>
@@ -118,6 +125,7 @@ export default function ImportProgramScreen() {
   const discardDraft = () => {
     setParsed(null);
     setDraft(null);
+    setStartDay(1);
   };
 
   const pickPdf = async () => {
@@ -171,6 +179,7 @@ export default function ImportProgramScreen() {
         pdfBase64: pdfBase64 ?? undefined,
         text: pdfBase64 ? undefined : pastedText,
         fileName: fileName ?? undefined,
+        today: localDateString(new Date(), user?.timezone),
       });
       if (!result.success) {
         Alert.alert('Could not read plan', result.error);
@@ -184,6 +193,7 @@ export default function ImportProgramScreen() {
         return;
       }
       setParsed(result.data);
+      setStartDay(result.data.startDay ?? 1);
       setDraft(previewToImportDraft(result.data));
     } finally {
       setBusy(false);
@@ -204,6 +214,7 @@ export default function ImportProgramScreen() {
         kind,
         preview: importDraftToPreview(draft, parsed),
         timeZone: user.timezone,
+        startDay: Math.min(startDay, Math.max(draft.workout?.days.length ?? 1, 1)),
       });
       if (!result.success) {
         Alert.alert('Could not apply plan', result.error);
@@ -316,6 +327,33 @@ export default function ImportProgramScreen() {
                 </View>
                 <AppText variant="caption" color="textTertiary">
                   Day 1 → Day {draft.workout.days.length}, then back to Day 1. Not tied to a Mon–Sun week.
+                </AppText>
+
+                <AppText variant="subhead" color="textSecondary">
+                  Today is Day {todayCycleDay}
+                  {todayCycleLabel ? ` — ${todayCycleLabel}` : ''}
+                </AppText>
+                <View style={styles.lengthRow}>
+                  <Stepper
+                    label="−"
+                    accessibilityLabel="Make today an earlier day of the cycle"
+                    disabled={todayCycleDay <= 1}
+                    onPress={() => setStartDay(Math.max(1, todayCycleDay - 1))}
+                  />
+                  <AppText variant="metric" style={styles.lengthValue}>
+                    {todayCycleDay}
+                  </AppText>
+                  <Stepper
+                    label="+"
+                    accessibilityLabel="Make today a later day of the cycle"
+                    disabled={todayCycleDay >= draft.workout.days.length}
+                    onPress={() => setStartDay(Math.min(draft.workout?.days.length ?? 1, todayCycleDay + 1))}
+                  />
+                </View>
+                <AppText variant="caption" color="textTertiary">
+                  {parsed?.startDay && parsed.startDayLabel
+                    ? `Your plan's own calendar puts today on "${parsed.startDayLabel}", so tomorrow picks up from there. Change it if that is wrong.`
+                    : 'Your plan starts today. Move this if you are already partway through it.'}
                 </AppText>
               </Card>
 

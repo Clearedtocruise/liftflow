@@ -33,6 +33,10 @@ export type ProgramImportPreview = {
     }>;
   } | null;
   warnings: string[];
+  /** Which cycle day the document's own calendar puts today on, when it prints one. */
+  startDay?: number;
+  /** The calendar row startDay came from, as the document labels it. */
+  startDayLabel?: string;
 };
 
 export type ProgramImportCommitResult = {

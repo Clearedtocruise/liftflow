@@ -9,6 +9,7 @@ import {
   type ImportKind,
   type ProgramImportPreview,
 } from './pdfProgramParse.js';
+import { detectPlanStartDay } from './planCalendar.js';
 import { assertUsefulPdfText, readPlanPdfText } from './pdfText.js';
 import { createOrReplaceCycle, type CycleStatus } from './programCycleService.js';
 import type { ApplyImportedNutritionResult } from './importedNutritionPlan.js';
@@ -116,6 +117,7 @@ const MIN_AI_PARSE_MS = 10_000;
 export async function previewProgramImport(
   source: ImportSource,
   kind: ImportKind,
+  options?: { today?: string },
 ): Promise<ProgramImportPreview & { pageCount?: number }> {
   const startedAt = Date.now();
   const resolved = await resolveImportText(source);
@@ -128,11 +130,22 @@ export async function previewProgramImport(
     timeoutMs: Math.min(Math.max(remaining, MIN_AI_PARSE_MS), MAX_AI_PARSE_MS),
   });
   const warnings = [...sourceWarnings(resolved), ...preview.warnings];
+
+  // A plan that prints its own calendar says which session today is. Without it the cycle starts
+  // on Day 1, which shifts every day by one for anyone importing mid-plan.
+  const dayCount = preview.workout?.days.length ?? 0;
+  const calendar =
+    options?.today && dayCount > 0 ? detectPlanStartDay(resolved.text, options.today, dayCount) : null;
   console.info(
     `[import-pdf] preview ${source.type} kind=${kind} pages=${resolved.pageCount ?? '-'} ` +
       `chars=${resolved.text.length} extract=${extractedMs}ms total=${Date.now() - startedAt}ms`,
   );
-  return { ...preview, warnings, pageCount: resolved.pageCount };
+  return {
+    ...preview,
+    warnings,
+    pageCount: resolved.pageCount,
+    ...(calendar ? { startDay: calendar.day, startDayLabel: calendar.label } : {}),
+  };
 }
 
 export async function commitProgramImport(options: {
@@ -141,6 +154,8 @@ export async function commitProgramImport(options: {
   kind: ImportKind;
   preview?: ProgramImportPreview;
   timeZone?: string | null;
+  /** Which cycle day today is. Overrides what the document's calendar suggested. */
+  startDay?: number;
 }): Promise<ProgramImportCommitResult> {
   const { userId, kind, timeZone } = options;
   const startedAt = Date.now();
@@ -159,7 +174,11 @@ export async function commitProgramImport(options: {
   const wantNutrition = kind === 'nutrition' || kind === 'both';
 
   if (wantWorkout && preview.workout && preview.workout.days.length > 0) {
-    workout = await createOrReplaceCycle(userId, preview.workout, timeZone);
+    const startDay =
+      Number.isFinite(options.startDay) && Number(options.startDay) >= 1
+        ? Math.round(Number(options.startDay))
+        : (preview.startDay ?? 1);
+    workout = await createOrReplaceCycle(userId, { ...preview.workout, startDay }, timeZone);
   }
 
   if (wantNutrition && preview.nutrition) {

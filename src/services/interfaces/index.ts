@@ -268,6 +268,7 @@ export interface ITrainingService {
     pdfBase64?: string;
     text?: string;
     fileName?: string;
+    today?: string;
   }): Promise<ServiceResult<import('@/types/programImport').ProgramImportPreview>>;
   commitProgramImport(input: {
     kind: import('@/types/programImport').ProgramImportKind;
@@ -276,6 +277,7 @@ export interface ITrainingService {
     fileName?: string;
     preview?: import('@/types/programImport').ProgramImportPreview;
     timeZone?: string | null;
+    startDay?: number;
   }): Promise<ServiceResult<import('@/types/programImport').ProgramImportCommitResult>>;
 }
 

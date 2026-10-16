@@ -51,6 +51,10 @@ export type ProgramImportPreview = {
   workout: CycleProgramInput | null;
   nutrition: ImportedNutritionPlan | null;
   warnings: string[];
+  /** Which cycle day the document's own calendar puts today on, when it prints one. */
+  startDay?: number;
+  /** The calendar row that startDay came from, as the document labels it. */
+  startDayLabel?: string;
 };
 
 const MEAL_TYPES = new Set([
