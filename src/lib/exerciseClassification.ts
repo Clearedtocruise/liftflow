@@ -33,7 +33,19 @@ export function isFlatBodyweightPulldownName(name: string | null | undefined): b
 // "Throw down" needs no qualifier: nothing loaded goes by that name, so the bare form is safe to
 // claim and catches "Flat Leg Throw Downs", "Leg Throwdowns" and plain "Throw Downs" alike.
 const CORE_BODYWEIGHT_NAME_PATTERN =
-  /\b(windshield\s*wipers?|hanging\s+leg\s+raises?|leg\s+raises?|v[\s-]?ups?|toes?\s+to\s+bar|mountain\s+climbers?|russian\s+twists?|dead\s+bugs?|hollow\s+rocks?|flutter\s+kicks?|scissor\s+kicks?|(?:leg\s*)?throw[\s-]?downs?)\b/i;
+  /\b(windshield\s*wipers?|hanging[\s-]+leg[\s-]+raises?|leg\s+raises?|v[\s-]?ups?|toes?\s+to\s+bar|mountain\s+climbers?|russian\s+twists?|dead[\s-]*bugs?|hollow\s+rocks?|flutter\s+kicks?|scissor\s+kicks?|(?:leg\s*)?throw[\s-]?downs?)\b/i;
+
+/** Someone holding something: "Weighted Russian Twist", "Dumbbell Dead Bug". */
+const LOADED_NAME_QUALIFIER = /\b(weighted|dumbbells?|db|kettlebells?|kb|plates?|medicine\s*ball|med\s*ball|cable|banded|barbell)\b/i;
+
+/**
+ * An unloaded core move is bodyweight whatever the catalog row says. The catalog stores Dead Bug,
+ * Russian Twist and Hanging Leg Raise as strength, and the catalog used to win over the name, so
+ * every one of them asked for a weight nobody was holding.
+ */
+function isUnloadedCoreName(name: string): boolean {
+  return CORE_BODYWEIGHT_NAME_PATTERN.test(name) && !LOADED_NAME_QUALIFIER.test(name);
+}
 
 const CORE_STRENGTH_NAME_PATTERN =
   /\b(weighted\s+sit[\s-]?ups?|sit[\s-]?ups?|crunch(?:es)?|cable\s+crunch(?:es)?|ab\s+rollouts?|rollouts?|wood\s+chops?|pallof\s+press(?:es)?)\b/i;
@@ -92,6 +104,7 @@ export function classifyExercise(input: ExerciseClassificationInput): ExerciseTy
   // Name wins over a catalog slug. A row stored as lat-pulldown is a cable lift, but this
   // name is bodyweight even when the catalog row or equipment says otherwise.
   if (isFlatBodyweightPulldownName(input.name)) return 'bodyweight';
+  if (isUnloadedCoreName(normalize(input.name))) return 'bodyweight';
 
   const slug = normalize(input.slug);
   if (slug) {
@@ -116,7 +129,7 @@ export function classifyExercise(input: ExerciseClassificationInput): ExerciseTy
     return 'timed';
   }
 
-  if (CORE_BODYWEIGHT_NAME_PATTERN.test(name)) {
+  if (isUnloadedCoreName(name)) {
     return 'bodyweight';
   }
 
