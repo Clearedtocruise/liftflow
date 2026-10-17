@@ -521,8 +521,11 @@ async function advanceCycleAfterCompletionUnlocked(
       .eq('id', completedPlannedWorkoutId)
       .eq('user_id', userId)
       .maybeSingle();
-    const meta = (completedRow?.metadata ?? {}) as { planPack?: string; cycleDay?: number };
+    const meta = (completedRow?.metadata ?? {}) as { planPack?: string; cycleDay?: number; programId?: string };
     if (meta.planPack !== CUSTOM_CYCLE_PLAN_PACK) return getCycleStatus(userId, timeZone);
+    // A workout from a plan replaced while it was being trained. Its day number belongs to the old
+    // plan, and moving the new one by it would start the new plan on an arbitrary day.
+    if (meta.programId && meta.programId !== program.id) return getCycleStatus(userId, timeZone);
 
     nextDay = cycleDayAfterCompletion(
       cycle,
