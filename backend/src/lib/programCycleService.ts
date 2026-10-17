@@ -35,6 +35,51 @@ import { requireAdmin } from './supabase.js';
 type Db = ReturnType<typeof requireAdmin>;
 
 /**
+ * The lifter's own calendar date.
+ *
+ * Some callers pass the device's time zone and some pass nothing, and nothing meant UTC. From
+ * 5 p.m. in California UTC is already tomorrow, so two callers a second apart disagreed on what
+ * day it was: one stepped the cycle onto tomorrow and rewrote the week from there, the next put it
+ * back from today. The profile always knows the zone, so a caller without one uses it.
+ */
+async function userToday(db: Db, userId: string, timeZone?: string | null): Promise<string> {
+  let zone = timeZone;
+  if (!zone) {
+    const { data } = await db.from('profiles').select('timezone').eq('id', userId).maybeSingle();
+    zone = (data?.timezone as string | null | undefined) ?? null;
+  }
+  return localDateString(new Date(), zone);
+}
+
+/**
+ * One cycle write at a time per lifter.
+ *
+ * Opening the app fires several reads that each top up the week, and every top-up cancels the
+ * dates it rewrites before inserting them again. Run side by side they cancelled each other's
+ * rows and both inserted, which left two copies of a day, and the row a screen had just opened
+ * was gone by the time it was tapped ("Workout not found").
+ */
+const cycleLocks = new Map<string, Promise<unknown>>();
+
+export async function withCycleLock<T>(userId: string, work: () => Promise<T>): Promise<T> {
+  const previous = cycleLocks.get(userId) ?? Promise.resolve();
+  const run = previous.catch(() => undefined).then(work);
+  const tail = run.catch(() => undefined);
+  cycleLocks.set(userId, tail);
+  try {
+    return await run;
+  } finally {
+    if (cycleLocks.get(userId) === tail) cycleLocks.delete(userId);
+  }
+}
+
+function daysFromAnchor(anchorDate: string, date: string): number {
+  const from = Date.parse(`${anchorDate}T12:00:00.000Z`);
+  const to = Date.parse(`${date}T12:00:00.000Z`);
+  return Math.round((to - from) / 86_400_000);
+}
+
+/**
  * How many calendar days ahead of today to keep materialized. The weekly plan screen shows a
  * Monday–Sunday window, so 7 covers the rest of whichever week the user opens it on. Two weeks
  * means the next lap of the cycle is always already on the calendar: a 6-day program used to run
@@ -248,9 +293,16 @@ async function materializeUpcomingCycleDays(
     ...((parkedRows ?? []) as MaterializedCycleRow[]),
   ]);
 
+  const pointerDate = cycle.anchorDate && cycle.anchorDate > fromDate ? cycle.anchorDate : fromDate;
   for (let offset = 0; offset < aheadDays; offset += 1) {
     const date = addIsoDays(fromDate, offset);
-    const dayNumber = projectedCycleDayNumber(cycle, offset);
+    // The pointer's day lands on its anchor when the anchor is still ahead (the day after a
+    // finished workout). Counting from wherever this pass started instead put the anchor's
+    // workout on the day before it and shifted the whole week back by one. An anchor already
+    // behind is a workout day still waiting to be done, which stays on today.
+    const fromPointer = daysFromAnchor(pointerDate, date);
+    if (fromPointer < 0) continue;
+    const dayNumber = projectedCycleDayNumber(cycle, fromPointer);
     const day = cycle.days.find((d) => d.dayNumber === dayNumber);
     const isRest = !day || isRestDay(day) || day.exercises.length === 0;
 
@@ -279,8 +331,16 @@ export async function createOrReplaceCycle(
   input: CycleProgramInput,
   timeZone?: string | null,
 ): Promise<CycleStatus> {
+  return withCycleLock(userId, () => createOrReplaceCycleUnlocked(userId, input, timeZone));
+}
+
+async function createOrReplaceCycleUnlocked(
+  userId: string,
+  input: CycleProgramInput,
+  timeZone?: string | null,
+): Promise<CycleStatus> {
   const db = requireAdmin();
-  const today = localDateString(new Date(), timeZone);
+  const today = await userToday(db, userId, timeZone);
 
   const cycle = normalizeCycle({
     version: 1,
@@ -344,8 +404,16 @@ export async function updateActiveCycleTemplate(
   edit: { name?: string; lengthDays?: number; days: CycleProgramInput['days'] },
   timeZone?: string | null,
 ): Promise<CycleStatus> {
+  return withCycleLock(userId, () => updateActiveCycleTemplateUnlocked(userId, edit, timeZone));
+}
+
+async function updateActiveCycleTemplateUnlocked(
+  userId: string,
+  edit: { name?: string; lengthDays?: number; days: CycleProgramInput['days'] },
+  timeZone?: string | null,
+): Promise<CycleStatus> {
   const db = requireAdmin();
-  const today = localDateString(new Date(), timeZone);
+  const today = await userToday(db, userId, timeZone);
   const program = await loadActiveProgramRow(db, userId);
   const existing = program ? cycleFromMetadata(program.metadata) : null;
   if (!program || !existing) throw new Error('No active custom program to edit');
@@ -379,7 +447,7 @@ export async function getCycleStatus(userId: string, timeZone?: string | null): 
   const program = await loadActiveProgramRow(db, userId);
   const cycle = program ? cycleFromMetadata(program.metadata) : null;
   if (!program || !cycle) return null;
-  const today = localDateString(new Date(), timeZone);
+  const today = await userToday(db, userId, timeZone);
   return { programId: program.id, cycle, activeDayNumber: cycle.currentDay, activeDay: currentCycleDay(cycle), today };
 }
 
@@ -389,12 +457,16 @@ export async function getCycleStatus(userId: string, timeZone?: string | null): 
  * Safe to call on every load / day rollover — idempotent per date.
  */
 export async function ensureCycleMaterialized(userId: string, timeZone?: string | null): Promise<CycleStatus | null> {
+  return withCycleLock(userId, () => ensureCycleMaterializedUnlocked(userId, timeZone));
+}
+
+async function ensureCycleMaterializedUnlocked(userId: string, timeZone?: string | null): Promise<CycleStatus | null> {
   const db = requireAdmin();
   const program = await loadActiveProgramRow(db, userId);
   const cycle = program ? cycleFromMetadata(program.metadata) : null;
   if (!program || !cycle) return null;
 
-  const today = localDateString(new Date(), timeZone);
+  const today = await userToday(db, userId, timeZone);
   const { cycle: reconciled, advanced } = reconcileCycleForDate(cycle, today);
 
   if (advanced || reconciled.anchorDate !== cycle.anchorDate) {
@@ -426,12 +498,20 @@ export async function advanceCycleAfterCompletion(
   completedPlannedWorkoutId: string | null | undefined,
   timeZone?: string | null,
 ): Promise<CycleStatus | null> {
+  return withCycleLock(userId, () => advanceCycleAfterCompletionUnlocked(userId, completedPlannedWorkoutId, timeZone));
+}
+
+async function advanceCycleAfterCompletionUnlocked(
+  userId: string,
+  completedPlannedWorkoutId: string | null | undefined,
+  timeZone?: string | null,
+): Promise<CycleStatus | null> {
   const db = requireAdmin();
   const program = await loadActiveProgramRow(db, userId);
   const cycle = program ? cycleFromMetadata(program.metadata) : null;
   if (!program || !cycle) return null;
 
-  const today = localDateString(new Date(), timeZone);
+  const today = await userToday(db, userId, timeZone);
 
   let nextDay: number | null = null;
   if (completedPlannedWorkoutId) {
