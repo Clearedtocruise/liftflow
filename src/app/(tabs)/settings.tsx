@@ -38,8 +38,10 @@ import {
   selfDirectedTrainingSummary,
 } from '@/lib/selfDirectedMode';
 import { resolveDaysPerWeek, summarizeTrainingSchedule } from '@/lib/trainingSchedule';
-import { resolveUnitPreferences } from '@/lib/unitConversion';
+import { parseProfileWeightInput } from '@/lib/profileWeight';
+import { formatWorkoutWeightForInput, resolveUnitPreferences } from '@/lib/unitConversion';
 import { coachingPrefsPatch } from '@/lib/voice/voicePreferences';
+import { bodyService } from '@/services/bodyService';
 import { dataResetService, formatResetConfirmation, type DataResetType } from '@/services/dataResetService';
 import { deviceLocationService } from '@/services/deviceLocationService';
 import { exportService } from '@/services/exportService';
@@ -71,6 +73,9 @@ export default function SettingsScreen() {
   const [editingDisplayName, setEditingDisplayName] = useState(false);
   const [displayNameDraft, setDisplayNameDraft] = useState('');
   const [savingDisplayName, setSavingDisplayName] = useState(false);
+  const [editingWeight, setEditingWeight] = useState(false);
+  const [weightDraft, setWeightDraft] = useState('');
+  const [savingWeight, setSavingWeight] = useState(false);
 
   const refreshValidationState = useCallback(async () => {
     if (!user) {
@@ -166,6 +171,34 @@ export default function SettingsScreen() {
     setEditingDisplayName(false);
     await refreshProfile();
   }, [user, displayNameDraft, refreshProfile]);
+
+  const beginEditWeight = useCallback(() => {
+    setWeightDraft(user?.weightKg ? formatWorkoutWeightForInput(user.weightKg, units.preferredWeightUnit) : '');
+    setEditingWeight(true);
+  }, [user?.weightKg, units.preferredWeightUnit]);
+
+  const saveWeight = useCallback(async () => {
+    if (!user) return;
+    const parsed = parseProfileWeightInput(weightDraft, units.preferredWeightUnit);
+    if (!parsed.ok) {
+      Alert.alert('Check your weight', parsed.error);
+      return;
+    }
+    setSavingWeight(true);
+    const result = await bodyService.recordComposition(user.id, {
+      userId: user.id,
+      recordedAt: new Date().toISOString(),
+      weightKg: parsed.kg,
+      estimationMethod: 'manual',
+    });
+    setSavingWeight(false);
+    if (!result.success) {
+      Alert.alert('Could not save weight', result.error);
+      return;
+    }
+    setEditingWeight(false);
+    await refreshProfile();
+  }, [user, weightDraft, units.preferredWeightUnit, refreshProfile]);
 
   async function handleSignOut() {
     await signOut();
@@ -740,14 +773,44 @@ export default function SettingsScreen() {
             onPress={beginEditDisplayName}
           />
         )}
-        <SettingsRow
-          label="Weight"
-          value={user?.weightKg ? units.formatWeight(user.weightKg) : 'Not set'}
-          icon={
-            <AppSymbol name="figure.stand" fallback={SYMBOL_FALLBACKS['figure.stand']} size={20} tintColor={LiftFlowColors.textSecondary} />
-          }
-          onPress={() => router.push('/(tabs)/progress')}
-        />
+        {editingWeight ? (
+          <View style={styles.displayNameEditor}>
+            <AppText variant="caption" color="textSecondary">
+              Weight ({units.weightLabel})
+            </AppText>
+            <TextInput
+              style={styles.displayNameInput}
+              value={weightDraft}
+              onChangeText={setWeightDraft}
+              placeholder={units.weightLabel}
+              placeholderTextColor={LiftFlowColors.textTertiary}
+              autoFocus
+              keyboardType="decimal-pad"
+              returnKeyType="done"
+              onSubmitEditing={() => {
+                void saveWeight();
+              }}
+            />
+            <View style={styles.displayNameActions}>
+              <PrimaryButton label="Cancel" variant="secondary" onPress={() => setEditingWeight(false)} />
+              <PrimaryButton
+                label={savingWeight ? 'Saving…' : 'Save'}
+                onPress={() => {
+                  void saveWeight();
+                }}
+              />
+            </View>
+          </View>
+        ) : (
+          <SettingsRow
+            label="Weight"
+            value={user?.weightKg ? units.formatWeight(user.weightKg) : 'Not set'}
+            icon={
+              <AppSymbol name="figure.stand" fallback={SYMBOL_FALLBACKS['figure.stand']} size={20} tintColor={LiftFlowColors.textSecondary} />
+            }
+            onPress={beginEditWeight}
+          />
+        )}
         <SettingsRow
           label="AI Coaching Hub"
           value={`${user?.trainingExperience ?? 'Beginner'} · Recovery, training, nutrition`}
