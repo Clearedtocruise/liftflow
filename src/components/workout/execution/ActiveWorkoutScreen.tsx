@@ -378,6 +378,7 @@ export function ActiveWorkoutScreen({
   const [challengeTrigger, setChallengeTrigger] = useState<WorkoutChallengeTrigger>('between_sets');
   const [challengeTargetExerciseName, setChallengeTargetExerciseName] = useState<string | null>(null);
   const [loadingMethod, setLoadingMethod] = useState<LoadingMethod>('external_load');
+  const loadingMethodTouchedRef = useRef(false);
 
   useEffect(() => {
     if (!addedExerciseNotice) return;
@@ -803,12 +804,14 @@ export function ActiveWorkoutScreen({
 
     // Loading method used to leak from the previous exercise (e.g. pull-ups → bodyweight), so the
     // next weighted lift logged set 1 with no load until history returned.
+    loadingMethodTouchedRef.current = false;
     setLoadingMethod(
       inferLoadingMethodFromHistory(
         currentExercise?.exercise,
         currentExercise?.exercise?.slug,
         lastSession?.weight,
         lastSession?.durationSeconds,
+        lastSession?.reps,
       ),
     );
 
@@ -910,13 +913,25 @@ export function ActiveWorkoutScreen({
       // movement was logged last week.
       const sessionSetsSoFar = currentExercise.sets ?? [];
       const lastSessionSet = sessionSetsSoFar[sessionSetsSoFar.length - 1];
-      const inferredMethod = inferLoadingMethodFromHistory(
-        currentExercise.exercise,
-        currentExercise.exercise?.slug,
-        lastSessionSet?.weight ?? last?.weightKg,
-        lastSessionSet?.durationSeconds ?? last?.durationSeconds,
-      );
-      setLoadingMethod(inferredMethod);
+      // A set from this session decides on its own: a reps-only set logged today must not borrow
+      // last week's weight and flip the card back to a load.
+      const inferredMethod = lastSessionSet
+        ? inferLoadingMethodFromHistory(
+            currentExercise.exercise,
+            currentExercise.exercise?.slug,
+            lastSessionSet.weight,
+            lastSessionSet.durationSeconds,
+            lastSessionSet.reps,
+          )
+        : inferLoadingMethodFromHistory(
+            currentExercise.exercise,
+            currentExercise.exercise?.slug,
+            last?.weightKg,
+            last?.durationSeconds,
+            last?.reps,
+          );
+      // The lifter's own pick on this card outranks any guess from history.
+      if (!loadingMethodTouchedRef.current) setLoadingMethod(inferredMethod);
 
       // History arriving is never a reason to discard a value the lifter has already set. This
       // request is in flight while the card is usable, and it re-runs on every session refresh.
@@ -964,10 +979,13 @@ export function ActiveWorkoutScreen({
 
       // Prefer this session's last logged set for this exercise (superset rotation returns here
       // mid-workout). Only fall back to prior-session history / plan suggestion when empty.
+      // Bodyweight days of a loaded lift sit in its history now; the weight to suggest is the last
+      // time it was loaded.
+      const lastLoaded = result.data.find((set) => set.weightKg != null && set.weightKg > 0);
       const seed = resolveExerciseInputSeed({
         sessionSets: currentExercise.sets ?? [],
-        historyWeightKg: last?.weightKg,
-        historyReps: last?.reps,
+        historyWeightKg: lastLoaded?.weightKg,
+        historyReps: lastLoaded?.reps ?? last?.reps,
         historyDurationSeconds: last?.durationSeconds,
         suggestedWeightKg: clampPlanWeightKgForExercise(
           currentExercise.suggestedWeight,
@@ -2351,7 +2369,10 @@ export function ActiveWorkoutScreen({
                     {loadingOptions.map((option) => (
                       <Pressable
                         key={option.method}
-                        onPress={() => setLoadingMethod(option.method)}
+                        onPress={() => {
+                          loadingMethodTouchedRef.current = true;
+                          setLoadingMethod(option.method);
+                        }}
                         style={[
                           styles.loadingMethodChip,
                           loadingMethod === option.method && styles.loadingMethodChipActive,
