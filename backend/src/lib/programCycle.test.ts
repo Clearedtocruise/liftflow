@@ -244,6 +244,27 @@ test('moving a workout off a day leaves that day empty instead of rewriting it',
   );
 });
 
+test('a move made in a replaced plan does not keep the new plan off that day', () => {
+  // Chest moved from Sunday to Friday and done in the old plan; a new plan imported on Sunday
+  // must still put its Day 1 on Sunday.
+  const rows = [
+    {
+      status: 'completed',
+      scheduled_date: '2026-10-23',
+      metadata: {
+        programId: 'old-plan',
+        cycleDay: 1,
+        cycleVersion: 2,
+        rescheduledAt: '2026-10-23T19:39:35.372Z',
+        rescheduledFrom: '2026-10-25',
+        vacatedDates: ['2026-10-25'],
+      },
+    },
+  ];
+  assert.equal(datesClearedByAMove(rows, 'new-plan').has('2026-10-25'), false);
+  assert.equal(datesClearedByAMove(rows, 'old-plan').has('2026-10-25'), true);
+});
+
 test('a swap occupies both days, so neither is treated as cleared', () => {
   const cleared = datesClearedByAMove([
     {

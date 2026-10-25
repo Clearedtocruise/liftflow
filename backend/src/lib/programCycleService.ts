@@ -291,7 +291,7 @@ async function materializeUpcomingCycleDays(
   const clearedDates = datesClearedByAMove([
     ...((windowRows ?? []) as MaterializedCycleRow[]),
     ...((parkedRows ?? []) as MaterializedCycleRow[]),
-  ]);
+  ], programId);
 
   const pointerDate = cycle.anchorDate && cycle.anchorDate > fromDate ? cycle.anchorDate : fromDate;
   for (let offset = 0; offset < aheadDays; offset += 1) {
