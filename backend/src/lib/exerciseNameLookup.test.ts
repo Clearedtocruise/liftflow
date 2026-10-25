@@ -90,3 +90,10 @@ test('the catalog search reaches both the spelled-out and the shorthand rows', (
   assert.deepEqual(exerciseNamePatterns('One-Arm DB Rows'), ['%dumbbell%row%', '%db%row%']);
   assert.deepEqual(exerciseNamePatterns('Pull Ups'), ['%pull%up%']);
 });
+
+test('a chest-supported rear-delt fly is the same lift as a rear-delt fly', () => {
+  assert.equal(namesMatchExercise('Chest-supported rear-delt fly', 'Rear Delt Fly'), true);
+  assert.equal(namesMatchExercise('Chest Supported DB Rear Delt Flyes', 'Dumbbell Rear Deltoid Fly'), true);
+  assert.equal(namesMatchExercise('Chest-supported rear-delt fly', 'DB Rear Delt Raises'), false);
+  assert.equal(namesMatchExercise('Chest-supported dumbbell row', 'Dumbbell Row'), false);
+});

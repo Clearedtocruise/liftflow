@@ -53,6 +53,8 @@ const EQUIPMENT_ABBREVIATIONS: Record<string, string> = {
   kb: 'kettlebell',
   kbs: 'kettlebell',
 };
+/** Spellings of one word that the catalog holds both ways. */
+const WORD_ALIASES: Record<string, string> = { flye: 'fly', flyes: 'fly', deltoid: 'delt', deltoids: 'delt' };
 const EQUIPMENT_SHORTHAND: Record<string, string> = { dumbbell: 'db', barbell: 'bb', kettlebell: 'kb' };
 
 /**
@@ -72,6 +74,16 @@ function dropOneArmQualifier(words: string[]): string[] {
   return out;
 }
 
+/**
+ * Lying chest-down on a bench only steadies a rear-delt fly; it is the same lift and load as the
+ * standing one. A chest-supported row is kept apart: the bench changes what the row can move.
+ */
+function dropChestSupportOnRearDeltFly(words: string[]): string[] {
+  const key = words.join(' ');
+  if (!/\brear delt\b/.test(key) || !words.includes('fly')) return words;
+  return key.replace(/\bchest supported\s*/, '').split(' ').filter(Boolean);
+}
+
 export function exerciseCanonicalKey(name: string): string {
   // Coaching cues follow a comma: "One-arm dumbbell row, elbow close to body".
   const base = exerciseNameKey(name.split(',')[0] ?? '');
@@ -79,10 +91,10 @@ export function exerciseCanonicalKey(name: string): string {
   const words = base
     .split(' ')
     .filter(Boolean)
-    .map((word) => EQUIPMENT_ABBREVIATIONS[word] ?? COMPOUND_ALIASES[word] ?? singularizeWord(word))
+    .map((word) => EQUIPMENT_ABBREVIATIONS[word] ?? WORD_ALIASES[word] ?? COMPOUND_ALIASES[word] ?? singularizeWord(word))
     .join(' ')
     .split(' ');
-  return dropOneArmQualifier(words).join(' ');
+  return dropChestSupportOnRearDeltFly(dropOneArmQualifier(words)).join(' ');
 }
 
 /**
