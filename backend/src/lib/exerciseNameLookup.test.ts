@@ -71,6 +71,7 @@ test('equipment shorthand, a one-arm dumbbell qualifier and trailing cues are th
     'One-arm dumbbell row, supported on bench',
   ];
   for (const name of history) assert.equal(namesMatchExercise('One-Arm DB Rows', name), true, name);
+  assert.equal(namesMatchExercise('DB Rear Delt Raises', 'Dumbbell Rear Delt Raise'), true);
   assert.equal(namesMatchExercise('BB Curl', 'Barbell Curls'), true);
   assert.equal(namesMatchExercise('KB Swing', 'Kettlebell Swings'), true);
 });
