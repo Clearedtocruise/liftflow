@@ -13,7 +13,7 @@ import {
 } from './mealCleanup.js';
 import { persistNutritionGoals } from './nutritionGoals.js';
 import type { ImportedMeal, ImportedNutritionDay, ImportedNutritionPlan } from './pdfProgramParse.js';
-import { addDays } from './programTypes.js';
+import { addDays, weekStartFromDate } from './programTypes.js';
 import { cutPlanWeekWindow } from './personalPlans/cutPlanWeek.js';
 import { requireAdmin } from './supabase.js';
 
@@ -108,6 +108,82 @@ export function normalizeImportedNutritionPlan(plan: ImportedNutritionPlan): Imp
   };
 }
 
+/**
+ * Which plan day a calendar date eats from.
+ *
+ * A plan written as Monday–Sunday is a week and lines up with the calendar week. A plan written as
+ * "Day 1 – Back + Rear Delts … Day 6 – Legs + Abs" follows the training days: Day 1 is the day the
+ * plan starts and the days repeat from there. Laying those onto Monday + day number put a plan
+ * imported on a Sunday onto the six days already gone, and left today with nothing to log.
+ */
+export type ImportedNutritionSchedule =
+  | { mode: 'weekday' }
+  | { mode: 'cycle'; startDate: string; startDayIndex: number; length: number };
+
+const WEEKDAY_LABEL = /\b(mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun)(day)?\b/i;
+const NUMBERED_DAY_LABEL = /^\s*day\s*\d+/i;
+/** Days written past the end of the current window, so the next two weeks are there to log. */
+const CYCLE_WINDOW_DAYS = 14;
+
+export function importedNutritionSchedule(
+  plan: ImportedNutritionPlan,
+  today: string,
+  startDay?: number | null,
+): ImportedNutritionSchedule {
+  const labels = plan.days.map((day) => day.label ?? '');
+  const numbered = labels.some((label) => NUMBERED_DAY_LABEL.test(label));
+  const weekdays = labels.some((label) => WEEKDAY_LABEL.test(label));
+  if (plan.days.length === 0 || (!numbered && (weekdays || plan.days.length === DAYS_IN_WEEK))) {
+    return { mode: 'weekday' };
+  }
+  const length = Math.max(...plan.days.map((day) => day.dayIndex)) + 1;
+  const start = startDay != null && Number.isFinite(startDay) && startDay >= 1 ? Math.round(startDay) - 1 : 0;
+  return { mode: 'cycle', startDate: today, startDayIndex: start % length, length };
+}
+
+function daysBetween(from: string, to: string): number {
+  return Math.round((Date.parse(`${to}T12:00:00Z`) - Date.parse(`${from}T12:00:00Z`)) / 86_400_000);
+}
+
+/** The plan day index for `date`, or null when the plan has not started by then. */
+export function importedNutritionDayIndexForDate(schedule: ImportedNutritionSchedule, date: string): number | null {
+  if (schedule.mode === 'weekday') return daysBetween(weekStartFromDate(date), date);
+  const offset = daysBetween(schedule.startDate, date);
+  if (offset < 0) return null;
+  return (schedule.startDayIndex + offset) % schedule.length;
+}
+
+/** Each date in [from, to] paired with the plan day it eats from. */
+export function importedNutritionDates(
+  plan: ImportedNutritionPlan,
+  schedule: ImportedNutritionSchedule,
+  from: string,
+  to: string,
+): Array<{ date: string; day: ImportedNutritionDay }> {
+  const out: Array<{ date: string; day: ImportedNutritionDay }> = [];
+  for (let date = from; date <= to; date = addDays(date, 1)) {
+    const index = importedNutritionDayIndexForDate(schedule, date);
+    const day = index == null ? undefined : plan.days.find((candidate) => candidate.dayIndex === index);
+    if (day) out.push({ date, day });
+  }
+  return out;
+}
+
+function storedSchedule(value: unknown): ImportedNutritionSchedule | null {
+  const raw = value as Partial<{ mode: string; startDate: string; startDayIndex: number; length: number }> | null;
+  if (raw?.mode === 'weekday') return { mode: 'weekday' };
+  if (
+    raw?.mode === 'cycle' &&
+    typeof raw.startDate === 'string' &&
+    Number.isInteger(raw.startDayIndex) &&
+    Number.isInteger(raw.length) &&
+    (raw.length as number) > 0
+  ) {
+    return { mode: 'cycle', startDate: raw.startDate, startDayIndex: raw.startDayIndex as number, length: raw.length as number };
+  }
+  return null;
+}
+
 export function mealClientKey(date: string, mealType: string, name: string, index: number): string {
   const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40);
   return `import:${IMPORTED_NUTRITION_PLAN_PACK}:${date}:${mealType}:${slug}:${index}`;
@@ -167,6 +243,7 @@ async function clearPriorImportedMeals(
 export async function storeImportedNutritionBlueprint(
   userId: string,
   plan: ImportedNutritionPlan,
+  schedule?: ImportedNutritionSchedule,
 ): Promise<void> {
   const db = requireAdmin();
   const { data: profile } = await db
@@ -191,6 +268,7 @@ export async function storeImportedNutritionBlueprint(
           name: plan.name ?? 'Imported Nutrition Plan',
           goals: plan.goals ?? null,
           days: plan.days,
+          ...(schedule ? { schedule } : {}),
           savedAt: new Date().toISOString(),
         },
       },
@@ -200,7 +278,7 @@ export async function storeImportedNutritionBlueprint(
 
 export async function loadStoredImportedNutrition(
   userId: string,
-): Promise<ImportedNutritionPlan | null> {
+): Promise<(ImportedNutritionPlan & { schedule: ImportedNutritionSchedule }) | null> {
   const db = requireAdmin();
   const { data: profile } = await db
     .from('profiles')
@@ -209,7 +287,7 @@ export async function loadStoredImportedNutrition(
     .maybeSingle();
   const meta = (profile?.metadata ?? {}) as {
     coachProfile?: { nutritionPlanPack?: string };
-    importedNutrition?: ImportedNutritionPlan & { planPack?: string };
+    importedNutrition?: ImportedNutritionPlan & { planPack?: string; schedule?: unknown };
   };
   if (meta.coachProfile?.nutritionPlanPack !== IMPORTED_NUTRITION_PLAN_PACK) return null;
   const stored = meta.importedNutrition;
@@ -218,13 +296,15 @@ export async function loadStoredImportedNutrition(
     name: stored.name,
     goals: stored.goals,
     days: stored.days,
+    // Saved before plans carried a schedule: they were always laid onto the calendar week.
+    schedule: storedSchedule(stored.schedule) ?? { mode: 'weekday' },
   };
 }
 
 export async function applyImportedNutritionPlan(
   userId: string,
   rawPlan: ImportedNutritionPlan,
-  options?: { persistBlueprint?: boolean },
+  options?: { persistBlueprint?: boolean; startDay?: number | null },
 ): Promise<ApplyImportedNutritionResult> {
   const db = requireAdmin();
   const persistBlueprint = options?.persistBlueprint !== false;
@@ -237,10 +317,12 @@ export async function applyImportedNutritionPlan(
     .select('timezone')
     .eq('id', userId)
     .maybeSingle();
-  const { weekStart, weekEnd } = cutPlanWeekWindow(
+  const { today, weekStart, weekEnd } = cutPlanWeekWindow(
     new Date(),
     profile?.timezone as string | null | undefined,
   );
+  const schedule = importedNutritionSchedule(plan, today, options?.startDay);
+  const windowEnd = schedule.mode === 'cycle' ? addDays(today, CYCLE_WINDOW_DAYS - 1) : weekEnd;
 
   let goalsUpdated = false;
   if (plan.goals && (plan.goals.calories || plan.goals.proteinG || plan.goals.carbsG || plan.goals.fatG)) {
@@ -261,11 +343,11 @@ export async function applyImportedNutritionPlan(
   }
 
   if (persistBlueprint) {
-    await storeImportedNutritionBlueprint(userId, plan);
+    await storeImportedNutritionBlueprint(userId, plan, schedule);
   }
 
   const priorCleared = await clearPriorImportedMeals(db, userId);
-  const weekCleared = await removePlannedMealsForWeek(db, userId, weekStart, weekEnd);
+  const weekCleared = await removePlannedMealsForWeek(db, userId, weekStart, windowEnd > weekEnd ? windowEnd : weekEnd);
   const mealsCleared = priorCleared + weekCleared;
 
   if (plan.days.length === 0) {
@@ -298,8 +380,8 @@ export async function applyImportedNutritionPlan(
   const keptKeys = await existingImportedMealKeys(db, userId);
 
   let mealsInserted = 0;
-  for (const day of plan.days) {
-    const date = addDays(weekStart, day.dayIndex);
+  const from = schedule.mode === 'cycle' ? today : weekStart;
+  for (const { date, day } of importedNutritionDates(plan, schedule, from, windowEnd)) {
     for (let index = 0; index < day.meals.length; index += 1) {
       const meal = day.meals[index];
       // A slot the lifter already logged, edited or swapped survives the clean-up above and still
@@ -348,6 +430,7 @@ export async function applyImportedNutritionPlan(
 export function importedNutritionToMealPlanResponse(
   plan: ImportedNutritionPlan,
   weekStart: string,
+  schedule: ImportedNutritionSchedule = { mode: 'weekday' },
 ): {
   name: string;
   weekStartDate: string;
@@ -375,8 +458,7 @@ export function importedNutritionToMealPlanResponse(
     instructions?: string;
   }> = [];
 
-  for (const day of plan.days) {
-    const scheduledDate = addDays(weekStart, day.dayIndex);
+  for (const { date: scheduledDate, day } of importedNutritionDates(plan, schedule, weekStart, addDays(weekStart, 6))) {
     for (const meal of day.meals) {
       meals.push({
         mealType: meal.mealType,

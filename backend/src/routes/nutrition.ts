@@ -107,7 +107,7 @@ nutritionRouter.post('/meal-plan/generate', async (req, res) => {
             // Non-fatal
           }
         }
-        res.json(importedNutritionToMealPlanResponse(stored, weekStart));
+        res.json(importedNutritionToMealPlanResponse(stored, weekStart, stored.schedule));
         return;
       }
     } catch {

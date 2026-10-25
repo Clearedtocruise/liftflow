@@ -1,7 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { describeDbError, mealClientKey, normalizeImportedNutritionPlan } from './importedNutritionPlan.js';
+import {
+  describeDbError,
+  importedNutritionDates,
+  importedNutritionDayIndexForDate,
+  importedNutritionSchedule,
+  importedNutritionToMealPlanResponse,
+  mealClientKey,
+  normalizeImportedNutritionPlan,
+} from './importedNutritionPlan.js';
 import type { ImportedNutritionPlan } from './pdfProgramParse.js';
 
 /**
@@ -150,4 +158,67 @@ test('the key for a slot is stable, so a slot the lifter already touched can be 
   const key = mealClientKey('2026-10-12', 'breakfast', 'Cottage cheese and berries', 0);
   assert.equal(key, mealClientKey('2026-10-12', 'breakfast', 'Cottage cheese and berries', 0));
   assert.notEqual(key, mealClientKey('2026-10-13', 'breakfast', 'Cottage cheese and berries', 0));
+});
+
+const sixDayPlan = {
+  name: '6-Day Cutting Meal Plan',
+  days: [0, 1, 2, 3, 4, 5].map((dayIndex) => ({
+    dayIndex,
+    label: `Day ${dayIndex + 1} - Training`,
+    meals: [{ mealType: 'breakfast', name: `Day ${dayIndex + 1} oats` }],
+  })),
+} as unknown as ImportedNutritionPlan;
+
+test('a "Day 1 … Day 6" plan imported on a Sunday starts today, not on the Monday already gone', () => {
+  const schedule = importedNutritionSchedule(sixDayPlan, '2026-10-25');
+  assert.deepEqual(schedule, { mode: 'cycle', startDate: '2026-10-25', startDayIndex: 0, length: 6 });
+  const dates = importedNutritionDates(sixDayPlan, schedule, '2026-10-19', '2026-11-01');
+  assert.equal(dates[0].date, '2026-10-25');
+  assert.equal(dates[0].day.dayIndex, 0);
+  assert.equal(dates.find((entry) => entry.date === '2026-10-31')?.day.dayIndex, 0);
+  assert.equal(dates.find((entry) => entry.date === '2026-11-01')?.day.dayIndex, 1);
+});
+
+test('the chosen start day decides which plan day today eats from', () => {
+  const schedule = importedNutritionSchedule(sixDayPlan, '2026-10-25', 3);
+  assert.equal(importedNutritionDayIndexForDate(schedule, '2026-10-25'), 2);
+  assert.equal(importedNutritionDayIndexForDate(schedule, '2026-10-24'), null);
+});
+
+test('a Monday–Sunday plan keeps lining up with the calendar week', () => {
+  const plan = {
+    days: ['Monday', 'Tuesday', 'Wednesday'].map((label, dayIndex) => ({
+      dayIndex,
+      label,
+      meals: [{ mealType: 'lunch', name: label }],
+    })),
+  } as unknown as ImportedNutritionPlan;
+  const schedule = importedNutritionSchedule(plan, '2026-10-25');
+  assert.deepEqual(schedule, { mode: 'weekday' });
+  const dates = importedNutritionDates(plan, schedule, '2026-10-19', '2026-10-25');
+  assert.deepEqual(
+    dates.map((entry) => [entry.date, entry.day.label]),
+    [
+      ['2026-10-19', 'Monday'],
+      ['2026-10-20', 'Tuesday'],
+      ['2026-10-21', 'Wednesday'],
+    ],
+  );
+});
+
+test('the meal plan for a week follows the cycle the plan was saved with', () => {
+  const schedule = importedNutritionSchedule(sixDayPlan, '2026-10-25');
+  const response = importedNutritionToMealPlanResponse(sixDayPlan, '2026-10-26', schedule);
+  assert.deepEqual(
+    response.meals.map((meal) => [meal.scheduledDate, meal.name]),
+    [
+      ['2026-10-26', 'Day 2 oats'],
+      ['2026-10-27', 'Day 3 oats'],
+      ['2026-10-28', 'Day 4 oats'],
+      ['2026-10-29', 'Day 5 oats'],
+      ['2026-10-30', 'Day 6 oats'],
+      ['2026-10-31', 'Day 1 oats'],
+      ['2026-11-01', 'Day 2 oats'],
+    ],
+  );
 });
