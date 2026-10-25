@@ -7,7 +7,7 @@
  * and format the latest set and are unit-tested.
  */
 
-import { exerciseCanonicalKey } from './exerciseNameLookup.js';
+import { exerciseHistoryKey } from './exerciseNameLookup.js';
 import { requireAdmin } from './supabase.js';
 
 /**
@@ -15,7 +15,7 @@ import { requireAdmin } from './supabase.js';
  * so "Decline Push-Ups", "Decline Pushups" and "Decline Push Up" are one lift with one history
  * instead of three that each remember nothing of the others.
  */
-const exerciseNameKey = exerciseCanonicalKey;
+const exerciseNameKey = exerciseHistoryKey;
 
 const LB_PER_KG = 2.2046226218;
 

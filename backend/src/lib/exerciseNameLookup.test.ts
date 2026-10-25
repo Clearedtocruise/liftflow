@@ -7,6 +7,7 @@ import {
   exerciseNamePattern,
   exerciseNamePatterns,
   namesMatchExercise,
+  namesShareHistory,
 } from './exerciseNameLookup.js';
 
 // Mirrors src/lib/exerciseNameLookup.test.ts — the two copies must agree.
@@ -70,20 +71,20 @@ test('equipment shorthand, a one-arm dumbbell qualifier and trailing cues are th
     'One-arm dumbbell row, elbow close to body',
     'One-arm dumbbell row, supported on bench',
   ];
-  for (const name of history) assert.equal(namesMatchExercise('One-Arm DB Rows', name), true, name);
-  assert.equal(namesMatchExercise('DB Rear Delt Raises', 'Dumbbell Rear Delt Raise'), true);
-  assert.equal(namesMatchExercise('BB Curl', 'Barbell Curls'), true);
-  assert.equal(namesMatchExercise('KB Swing', 'Kettlebell Swings'), true);
+  for (const name of history) assert.equal(namesShareHistory('One-Arm DB Rows', name), true, name);
+  assert.equal(namesShareHistory('DB Rear Delt Raises', 'Dumbbell Rear Delt Raise'), true);
+  assert.equal(namesShareHistory('BB Curl', 'Barbell Curls'), true);
+  assert.equal(namesShareHistory('KB Swing', 'Kettlebell Swings'), true);
 });
 
 test('shorthand does not merge different lifts', () => {
-  assert.equal(namesMatchExercise('One-Arm DB Rows', 'Chest-supported dumbbell row, bench inclined'), false);
-  assert.equal(namesMatchExercise('One-Arm DB Rows', 'DB Split Squat Row'), false);
-  assert.equal(namesMatchExercise('One-Arm DB Rows', 'Barbell Row'), false);
-  assert.equal(namesMatchExercise('Single-Arm Cable Row', 'Cable Row'), false);
-  assert.equal(namesMatchExercise('DB Rear Delt Raises', 'Reverse Fly'), false);
-  assert.equal(namesMatchExercise('DB Rear Delt Raises', 'Chest-supported rear-delt fly'), false);
-  assert.equal(namesMatchExercise('Dumbbell Rear Delt Raise', 'Dumbbell Reverse Fly'), false);
+  assert.equal(namesShareHistory('One-Arm DB Rows', 'Chest-supported dumbbell row, bench inclined'), false);
+  assert.equal(namesShareHistory('One-Arm DB Rows', 'DB Split Squat Row'), false);
+  assert.equal(namesShareHistory('One-Arm DB Rows', 'Barbell Row'), false);
+  assert.equal(namesShareHistory('Single-Arm Cable Row', 'Cable Row'), false);
+  assert.equal(namesShareHistory('DB Rear Delt Raises', 'Reverse Fly'), false);
+  assert.equal(namesShareHistory('DB Rear Delt Raises', 'Chest-supported rear-delt fly'), false);
+  assert.equal(namesShareHistory('Dumbbell Rear Delt Raise', 'Dumbbell Reverse Fly'), false);
 });
 
 test('the catalog search reaches both the spelled-out and the shorthand rows', () => {
@@ -92,8 +93,17 @@ test('the catalog search reaches both the spelled-out and the shorthand rows', (
 });
 
 test('a chest-supported rear-delt fly is the same lift as a rear-delt fly', () => {
-  assert.equal(namesMatchExercise('Chest-supported rear-delt fly', 'Rear Delt Fly'), true);
-  assert.equal(namesMatchExercise('Chest Supported DB Rear Delt Flyes', 'Dumbbell Rear Deltoid Fly'), true);
-  assert.equal(namesMatchExercise('Chest-supported rear-delt fly', 'DB Rear Delt Raises'), false);
-  assert.equal(namesMatchExercise('Chest-supported dumbbell row', 'Dumbbell Row'), false);
+  assert.equal(namesShareHistory('Chest-supported rear-delt fly', 'Rear Delt Fly'), true);
+  assert.equal(namesShareHistory('Chest Supported DB Rear Delt Flyes', 'Dumbbell Rear Deltoid Fly'), true);
+  assert.equal(namesShareHistory('Chest-supported rear-delt fly', 'DB Rear Delt Raises'), false);
+  assert.equal(namesShareHistory('Chest-supported dumbbell row', 'Dumbbell Row'), false);
+});
+
+test('plan entries the plan keeps apart stay apart, so neither drops out of the session', () => {
+  assert.equal(namesMatchExercise('Dumbbell Row', 'One-Arm Dumbbell Row'), false);
+  assert.equal(
+    namesMatchExercise('Chest-supported dumbbell row, bench inclined', 'Chest-supported dumbbell row, elbows slightly wider'),
+    false,
+  );
+  assert.equal(namesMatchExercise('Pull Ups', 'Pull-Up'), true);
 });
