@@ -2,7 +2,7 @@ import { mapHistoryItem, mapSession, mapSet } from '@/lib/db-mappers';
 import {
   exerciseCanonicalKey,
   exerciseNameLookupCandidates,
-  exerciseNamePattern,
+  exerciseNamePatterns,
   exerciseSlugFromName,
   namesMatchExercise,
 } from '@/lib/exerciseNameLookup';
@@ -157,7 +157,7 @@ async function loadPlannedExercises(plannedWorkoutId: string): Promise<PlannedEx
   return template?.exercises ?? [];
 }
 
-/** `exerciseNamePattern` is loose by design, so cap the rows read before the exact-name filter. */
+/** `exerciseNamePatterns` are loose by design, so cap the rows read before the exact-name filter. */
 const CATALOG_SCAN_LIMIT = 100;
 
 async function findOrCreateExerciseByNameInternal(name: string, userId: string): Promise<string | null> {
@@ -183,12 +183,12 @@ async function findOrCreateExerciseByNameInternal(name: string, userId: string):
   // the database landed on the seeded "Decline Push-Up". One lift, two rows, two histories, and a
   // weight logged under either is invisible to the other. Resolve the whole family first so both
   // sides agree, and so a lift already in the catalog never gets a second row minted for it.
-  const pattern = exerciseNamePattern(normalized);
-  if (pattern) {
+  const patterns = exerciseNamePatterns(normalized);
+  if (patterns.length > 0) {
     const { data: family } = await supabase
       .from('exercises')
       .select('id, name')
-      .ilike('name', pattern)
+      .or(patterns.map((pattern) => `name.ilike.${pattern}`).join(','))
       .order('is_system', { ascending: false })
       .order('created_at', { ascending: true })
       .limit(CATALOG_SCAN_LIMIT);

@@ -45,19 +45,44 @@ function singularizeWord(word: string): string {
   return word;
 }
 
+/** Equipment shorthand plans use: "DB Rows" is the "Dumbbell Row" already in the history. */
+const EQUIPMENT_ABBREVIATIONS: Record<string, string> = {
+  db: 'dumbbell',
+  dbs: 'dumbbell',
+  bb: 'barbell',
+  kb: 'kettlebell',
+  kbs: 'kettlebell',
+};
+const EQUIPMENT_SHORTHAND: Record<string, string> = { dumbbell: 'db', barbell: 'bb', kettlebell: 'kb' };
+
 /**
- * A canonical, comparison-only key: lowercased, punctuation flattened to spaces, each word
- * singularized, and known one-word compounds expanded. Two names that describe the same lift
- * produce the same canonical key regardless of hyphens, spacing or plurality.
+ * A dumbbell or kettlebell is loaded per hand, so "One-Arm DB Row" and "DB Row" log the same
+ * weight and are the same lift's history. A barbell or cable lift done one-sided is not.
  */
+function dropOneArmQualifier(words: string[]): string[] {
+  if (!words.includes('dumbbell') && !words.includes('kettlebell')) return words;
+  const out: string[] = [];
+  for (let i = 0; i < words.length; i += 1) {
+    if (/^(one|single|1)$/.test(words[i]) && words[i + 1] === 'arm') {
+      i += 1;
+      continue;
+    }
+    out.push(words[i]);
+  }
+  return out;
+}
+
 export function exerciseCanonicalKey(name: string): string {
-  const base = exerciseNameKey(name);
+  // Coaching cues follow a comma: "One-arm dumbbell row, elbow close to body".
+  const base = exerciseNameKey(name.split(',')[0] ?? '');
   if (!base) return '';
-  return base
+  const words = base
     .split(' ')
     .filter(Boolean)
-    .map((word) => COMPOUND_ALIASES[word] ?? singularizeWord(word))
-    .join(' ');
+    .map((word) => EQUIPMENT_ABBREVIATIONS[word] ?? COMPOUND_ALIASES[word] ?? singularizeWord(word))
+    .join(' ')
+    .split(' ');
+  return dropOneArmQualifier(words).join(' ');
 }
 
 /**
@@ -88,6 +113,18 @@ export function exerciseNamePattern(name: string): string {
   const words = exerciseCanonicalKey(name).split(' ').filter(Boolean);
   if (words.length === 0) return '';
   return `%${words.join('%')}%`;
+}
+
+/**
+ * Every pattern needed to reach a lift's spellings, including its equipment shorthand: the
+ * catalog holds both "Dumbbell Row" and "DB Rows", and `%dumbbell%row%` finds only the first.
+ */
+export function exerciseNamePatterns(name: string): string[] {
+  const words = exerciseCanonicalKey(name).split(' ').filter(Boolean);
+  if (words.length === 0) return [];
+  const full = `%${words.join('%')}%`;
+  const short = `%${words.map((word) => EQUIPMENT_SHORTHAND[word] ?? word).join('%')}%`;
+  return short === full ? [full] : [full, short];
 }
 
 /**

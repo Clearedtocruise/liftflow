@@ -8,6 +8,7 @@ import {
   exerciseNameLookupCandidates,
   exerciseNamePattern,
   exerciseSlugFromName,
+  exerciseNamePatterns,
   namesMatchExercise,
 } from './exerciseNameLookup';
 
@@ -113,4 +114,29 @@ test('lookup candidates add the singular spelling for plural plan names', () => 
   assert.ok(hasPullUp(hyphenPlural), `expected Pull Up in ${JSON.stringify(hyphenPlural)}`);
   const compound = exerciseNameLookupCandidates('Pullups');
   assert.ok(hasPullUp(compound), `expected Pull Up in ${JSON.stringify(compound)}`);
+});
+
+test('equipment shorthand, a one-arm dumbbell qualifier and trailing cues are the same lift', () => {
+  const history = [
+    'DB Rows',
+    'Dumbbell Row',
+    'One-Arm Dumbbell Row',
+    'One-arm dumbbell row, elbow close to body',
+    'One-arm dumbbell row, supported on bench',
+  ];
+  for (const name of history) assert.equal(namesMatchExercise('One-Arm DB Rows', name), true, name);
+  assert.equal(namesMatchExercise('BB Curl', 'Barbell Curls'), true);
+  assert.equal(namesMatchExercise('KB Swing', 'Kettlebell Swings'), true);
+});
+
+test('shorthand does not merge different lifts', () => {
+  assert.equal(namesMatchExercise('One-Arm DB Rows', 'Chest-supported dumbbell row, bench inclined'), false);
+  assert.equal(namesMatchExercise('One-Arm DB Rows', 'DB Split Squat Row'), false);
+  assert.equal(namesMatchExercise('One-Arm DB Rows', 'Barbell Row'), false);
+  assert.equal(namesMatchExercise('Single-Arm Cable Row', 'Cable Row'), false);
+});
+
+test('the catalog search reaches both the spelled-out and the shorthand rows', () => {
+  assert.deepEqual(exerciseNamePatterns('One-Arm DB Rows'), ['%dumbbell%row%', '%db%row%']);
+  assert.deepEqual(exerciseNamePatterns('Pull Ups'), ['%pull%up%']);
 });
