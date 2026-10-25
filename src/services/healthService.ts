@@ -9,6 +9,7 @@ import {
 } from '@/integrations/healthkitProvider';
 import type { HealthMetricSample } from '@/integrations/types';
 import { mergeHealthSamples, summarizeHealthByDay, type HealthDailySummary, type StoredHealthSample } from '@/lib/healthSyncEngine';
+import { shouldApplyHealthWeight } from '@/lib/profileWeight';
 import { fail, fromError, ok } from '@/lib/serviceResult';
 import { getAccessToken } from '@/supabase/client';
 import { supabase } from '@/supabase/client';
@@ -164,7 +165,18 @@ export const healthService = {
         } else if (weightKg > 250) {
           weightKg = weightKg / 2.2046226218;
         }
-        if (weightKg >= 35 && weightKg <= 250) {
+        const { data: lastRecord } = await supabase
+          .from('body_composition_records')
+          .select('weight_kg, recorded_at')
+          .eq('user_id', userId)
+          .not('weight_kg', 'is', null)
+          .order('recorded_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        const lastLogged = lastRecord
+          ? { kg: Number(lastRecord.weight_kg), recordedAt: String(lastRecord.recorded_at) }
+          : null;
+        if (shouldApplyHealthWeight({ kg: weightKg, recordedAt: latestWeight.recordedAt }, lastLogged)) {
           await supabase.from('profiles').update({ weight_kg: weightKg }).eq('id', userId);
         }
       }
