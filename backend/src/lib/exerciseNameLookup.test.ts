@@ -81,6 +81,9 @@ test('shorthand does not merge different lifts', () => {
   assert.equal(namesMatchExercise('One-Arm DB Rows', 'DB Split Squat Row'), false);
   assert.equal(namesMatchExercise('One-Arm DB Rows', 'Barbell Row'), false);
   assert.equal(namesMatchExercise('Single-Arm Cable Row', 'Cable Row'), false);
+  assert.equal(namesMatchExercise('DB Rear Delt Raises', 'Reverse Fly'), false);
+  assert.equal(namesMatchExercise('DB Rear Delt Raises', 'Chest-supported rear-delt fly'), false);
+  assert.equal(namesMatchExercise('Dumbbell Rear Delt Raise', 'Dumbbell Reverse Fly'), false);
 });
 
 test('the catalog search reaches both the spelled-out and the shorthand rows', () => {
