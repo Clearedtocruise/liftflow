@@ -79,6 +79,16 @@ export function formatReportSet(set: WorkoutSet, unit: WeightUnit): string {
   return set.isPr ? `${text} ★` : text;
 }
 
+/** The session's saved total, which counts bodyweight reps; summed from loaded sets when it has none. */
+function sessionVolumeKg(session: WorkoutSession): number {
+  if (session.totalVolume != null && session.totalVolume > 0) return session.totalVolume;
+  return session.exercises.reduce(
+    (sum, exercise) =>
+      sum + exercise.sets.reduce((inner, set) => inner + (set.weight && set.reps ? set.weight * set.reps : 0), 0),
+    0,
+  );
+}
+
 export function summarizeWorkoutHistory(sessions: WorkoutSession[]): WorkoutHistoryTotals {
   let sets = 0;
   let volumeKg = 0;
@@ -87,10 +97,10 @@ export function summarizeWorkoutHistory(sessions: WorkoutSession[]): WorkoutHist
 
   for (const session of sessions) {
     times.push(session.startedAt);
+    volumeKg += sessionVolumeKg(session);
     for (const exercise of session.exercises) {
       for (const set of exercise.sets) {
         sets += 1;
-        if (set.weight && set.reps) volumeKg += set.weight * set.reps;
         if (set.isPr) personalRecords += 1;
       }
     }
@@ -113,11 +123,7 @@ function sessionBlock(session: WorkoutSession, options: WorkoutHistoryReportOpti
     .filter((exercise) => exercise.sets.length > 0);
 
   const setCount = exercises.reduce((sum, exercise) => sum + exercise.sets.length, 0);
-  const volumeKg = exercises.reduce(
-    (sum, exercise) =>
-      sum + exercise.sets.reduce((inner, set) => inner + (set.weight && set.reps ? set.weight * set.reps : 0), 0),
-    0,
-  );
+  const volumeKg = sessionVolumeKg(session);
 
   const meta = [
     formatReportDuration(session.durationSeconds),

@@ -34,6 +34,7 @@ import {
     computeWorkoutSetProgress,
     formatCoachTargetLine,
 } from '@/lib/activeWorkoutMetrics';
+import { setVolumeKg } from '@/lib/bodyweightVolume';
 import { willAutoAdvanceExercise } from '@/lib/exerciseAutoAdvance';
 import {
     inferLoadingMethodFromHistory,
@@ -1549,10 +1550,20 @@ export function ActiveWorkoutScreen({
     scheduleAutoExerciseAdvance();
   }, [restSecondsRemaining, scheduleAutoExerciseAdvance]);
 
-  const exerciseVolume = completedSets.reduce((total, set) => {
-    if (!set.weight || !set.reps) return total;
-    return total + set.weight * set.reps;
-  }, 0);
+  const exerciseVolume = completedSets.reduce(
+    (total, set) =>
+      total +
+      setVolumeKg(
+        {
+          isBodyweight: loggingMode === 'bodyweight',
+          exerciseName: currentExercise?.exercise?.name,
+          weightKg: set.weight,
+          reps: set.reps,
+        },
+        user?.weightKg,
+      ),
+    0,
+  );
 
   const clearWatchDrafts = useCallback(() => {
     setWatchDraftReps(null);
