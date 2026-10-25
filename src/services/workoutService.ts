@@ -70,8 +70,10 @@ async function recalculateSessionTotals(sessionId: string): Promise<void> {
     const isBodyweight = getExerciseLoggingMode(exercise.exercise) === 'bodyweight';
     for (const set of exercise.sets) {
       totalSets += 1;
+      // A loaded lift switched to bodyweight for the day logs reps with no weight.
+      const bodyweightSet = isBodyweight || !(set.weight != null && set.weight > 0);
       totalVolume += setVolumeKg(
-        { isBodyweight, exerciseName: exercise.exercise?.name, weightKg: set.weight, reps: set.reps },
+        { isBodyweight: bodyweightSet, exerciseName: exercise.exercise?.name, weightKg: set.weight, reps: set.reps },
         bodyWeightKg,
       );
     }

@@ -26,7 +26,23 @@ const LOADING_LABELS: Record<LoadingMethod, string> = {
   distance: 'Distance',
 };
 
+/**
+ * Any loaded lift can be done with nothing in hand: no dumbbells at the hotel, a light day, a
+ * movement drill. Offer reps-only on every lift that takes a load.
+ */
+function withBodyweightOption(methods: LoadingMethod[]): LoadingMethod[] {
+  if (!methods.includes('external_load') || methods.includes('bodyweight')) return methods;
+  return [...methods, 'bodyweight'];
+}
+
 export function supportedLoadingMethods(
+  exercise: Exercise | null | undefined,
+  slug?: string | null,
+): LoadingMethod[] {
+  return withBodyweightOption(supportedLoadingMethodsForLift(exercise, slug));
+}
+
+function supportedLoadingMethodsForLift(
   exercise: Exercise | null | undefined,
   slug?: string | null,
 ): LoadingMethod[] {
@@ -73,6 +89,7 @@ export function inferLoadingMethodFromHistory(
   slug: string | undefined,
   lastWeightKg?: number | null,
   lastDurationSeconds?: number | null,
+  lastReps?: number | null,
 ): LoadingMethod {
   const supported = supportedLoadingMethods(exercise, slug);
   if (supported.includes('timed_hold')) return 'timed_hold';
@@ -84,6 +101,8 @@ export function inferLoadingMethodFromHistory(
     if (supported.includes('bodyweight_plus_weight')) return 'bodyweight_plus_weight';
     if (supported.includes('external_load')) return 'external_load';
   }
+  // A loaded lift last logged as reps with no weight was switched to bodyweight; keep it there.
+  if (lastReps != null && lastReps > 0 && supported.includes('bodyweight')) return 'bodyweight';
   if (supported.includes('external_load') && exercise?.exerciseType === 'strength') {
     return 'external_load';
   }

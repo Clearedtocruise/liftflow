@@ -115,7 +115,12 @@ for (const name of ['Rowing', 'Rowing Machine', 'Row Erg', 'Rower', 'Treadmill W
 
 console.log('\nA pulling lift logs weight and reps, not time and distance');
 const hammerRow = exercise('Hammer Row');
-check('supported loading methods', supportedLoadingMethods(hammerRow), ['external_load']);
+check('supported loading methods', supportedLoadingMethods(hammerRow), ['external_load', 'bodyweight']);
+check(
+  'logging mode with no history',
+  loadingMethodToLoggingMode(inferLoadingMethodFromHistory(hammerRow, undefined, null, null)),
+  'weighted',
+);
 check(
   'logging mode after a weighted history',
   loadingMethodToLoggingMode(inferLoadingMethodFromHistory(hammerRow, undefined, 60, null)),
