@@ -1,4 +1,4 @@
-import { exerciseNamePattern, namesMatchExercise } from './exerciseNameLookup.js';
+import { exerciseNamePatterns, namesMatchExercise } from './exerciseNameLookup.js';
 import { requireAdmin } from './supabase.js';
 
 /** The pattern is loose by design, so cap the rows pulled back before the exact-name filter. */
@@ -13,14 +13,14 @@ const FAMILY_SCAN_LIMIT = 100;
  */
 export async function loadExerciseFamilyIds(exerciseId: string, exerciseName?: string): Promise<string[]> {
   const name = exerciseName?.trim() ?? '';
-  const pattern = name ? exerciseNamePattern(name) : '';
-  if (!pattern) return [exerciseId];
+  const patterns = name ? exerciseNamePatterns(name) : [];
+  if (patterns.length === 0) return [exerciseId];
 
   const db = requireAdmin();
   const { data, error } = await db
     .from('exercises')
     .select('id, name')
-    .ilike('name', pattern)
+    .or(patterns.map((pattern) => `name.ilike.${pattern}`).join(','))
     .limit(FAMILY_SCAN_LIMIT);
 
   // A failed widening must not cost the exercise its own history.
