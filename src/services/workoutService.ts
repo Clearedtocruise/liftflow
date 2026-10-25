@@ -1,4 +1,6 @@
+import { setVolumeKg } from '@/lib/bodyweightVolume';
 import { mapHistoryItem, mapSession, mapSet } from '@/lib/db-mappers';
+import { getExerciseLoggingMode } from '@/lib/exerciseModality';
 import {
   exerciseCanonicalKey,
   exerciseNameLookupCandidates,
@@ -54,21 +56,30 @@ async function recalculateSessionTotals(sessionId: string): Promise<void> {
   const session = await loadSession(sessionId);
   if (!session) return;
 
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('weight_kg')
+    .eq('id', session.userId)
+    .maybeSingle();
+  const bodyWeightKg = profile?.weight_kg != null ? Number(profile.weight_kg) : null;
+
   let totalSets = 0;
   let totalVolume = 0;
 
   for (const exercise of session.exercises) {
+    const isBodyweight = getExerciseLoggingMode(exercise.exercise) === 'bodyweight';
     for (const set of exercise.sets) {
       totalSets += 1;
-      if (set.weight && set.reps) {
-        totalVolume += set.weight * set.reps;
-      }
+      totalVolume += setVolumeKg(
+        { isBodyweight, exerciseName: exercise.exercise?.name, weightKg: set.weight, reps: set.reps },
+        bodyWeightKg,
+      );
     }
   }
 
   await supabase
     .from('workout_sessions')
-    .update({ total_sets: totalSets, total_volume: totalVolume })
+    .update({ total_sets: totalSets, total_volume: Math.round(totalVolume * 10) / 10 })
     .eq('id', sessionId);
 }
 
