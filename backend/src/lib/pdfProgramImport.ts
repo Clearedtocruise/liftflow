@@ -231,16 +231,17 @@ export async function commitProgramImport(options: {
   const wantWorkout = kind === 'workout' || kind === 'both';
   const wantNutrition = kind === 'nutrition' || kind === 'both';
 
+  const startDay =
+    Number.isFinite(options.startDay) && Number(options.startDay) >= 1
+      ? Math.round(Number(options.startDay))
+      : (preview.startDay ?? 1);
+
   if (wantWorkout && preview.workout && preview.workout.days.length > 0) {
-    const startDay =
-      Number.isFinite(options.startDay) && Number(options.startDay) >= 1
-        ? Math.round(Number(options.startDay))
-        : (preview.startDay ?? 1);
     workout = await createOrReplaceCycle(userId, { ...preview.workout, startDay }, timeZone);
   }
 
   if (wantNutrition && preview.nutrition) {
-    nutrition = await applyImportedNutritionPlan(userId, preview.nutrition);
+    nutrition = await applyImportedNutritionPlan(userId, preview.nutrition, { startDay });
   }
 
   if (!workout && !nutrition) {
