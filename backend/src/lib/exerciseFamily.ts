@@ -1,4 +1,4 @@
-import { exerciseNamePatterns, namesMatchExercise } from './exerciseNameLookup.js';
+import { exerciseNamePatterns, namesShareHistory } from './exerciseNameLookup.js';
 import { requireAdmin } from './supabase.js';
 
 /** The pattern is loose by design, so cap the rows pulled back before the exact-name filter. */
@@ -28,7 +28,7 @@ export async function loadExerciseFamilyIds(exerciseId: string, exerciseName?: s
 
   const ids = new Set<string>([exerciseId]);
   for (const row of (data ?? []) as Array<{ id: string; name: string | null }>) {
-    if (namesMatchExercise(row.name ?? '', name)) ids.add(row.id);
+    if (namesShareHistory(row.name ?? '', name)) ids.add(row.id);
   }
   return [...ids];
 }

@@ -76,6 +76,24 @@ function dropChestSupportOnRearDeltFly(words: string[]): string[] {
 }
 
 export function exerciseCanonicalKey(name: string): string {
+  const base = exerciseNameKey(name);
+  if (!base) return '';
+  return base
+    .split(' ')
+    .filter(Boolean)
+    .map((word) => COMPOUND_ALIASES[word] ?? singularizeWord(word))
+    .join(' ');
+}
+
+/**
+ * A looser key for reading history: also expands DB/BB/KB, drops a one-arm qualifier on a dumbbell
+ * or kettlebell lift and drops cues after a comma, so a new spelling finds the old sets.
+ *
+ * Never use it to decide whether two plan entries are the same exercise. A session holds each
+ * exercise once, so two entries one plan keeps apart ("Dumbbell Row" and "One-Arm Dumbbell Row",
+ * or a row with two different cues) would collapse onto one row and one would vanish from the day.
+ */
+export function exerciseHistoryKey(name: string): string {
   // Coaching cues follow a comma: "One-arm dumbbell row, elbow close to body".
   const base = exerciseNameKey(name.split(',')[0] ?? '');
   if (!base) return '';
@@ -103,6 +121,13 @@ export function namesMatchExercise(a: string, b: string): boolean {
   return leftCompact.length > 0 && leftCompact === rightCompact;
 }
 
+/** Whether sets logged under `b` are history for `a`. Looser than `namesMatchExercise`; reads only. */
+export function namesShareHistory(a: string, b: string): boolean {
+  if (namesMatchExercise(a, b)) return true;
+  const left = exerciseHistoryKey(a);
+  return left.length > 0 && left === exerciseHistoryKey(b);
+}
+
 /**
  * A deliberately over-broad `ilike` pattern reaching every spelling of a lift: "Push-Ups" yields
  * `%push%up%`. Callers must confirm each row with `namesMatchExercise` — the pattern also matches
@@ -119,7 +144,7 @@ export function exerciseNamePattern(name: string): string {
  * catalog holds both "Dumbbell Row" and "DB Rows", and `%dumbbell%row%` finds only the first.
  */
 export function exerciseNamePatterns(name: string): string[] {
-  const words = exerciseCanonicalKey(name).split(' ').filter(Boolean);
+  const words = exerciseHistoryKey(name).split(' ').filter(Boolean);
   if (words.length === 0) return [];
   const full = `%${words.join('%')}%`;
   const short = `%${words.map((word) => EQUIPMENT_SHORTHAND[word] ?? word).join('%')}%`;
