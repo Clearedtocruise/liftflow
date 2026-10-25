@@ -74,7 +74,19 @@ function isFlatBodyweightPulldownName(name: string | null | undefined): boolean 
 // "Throw down" needs no qualifier: nothing loaded goes by that name, so the bare form is safe to
 // claim and catches "Flat Leg Throw Downs", "Leg Throwdowns" and plain "Throw Downs" alike.
 const CORE_BODYWEIGHT_NAME_PATTERN =
-  /\b(windshield\s*wipers?|hanging\s+leg\s+raises?|leg\s+raises?|v[\s-]?ups?|toes?\s+to\s+bar|mountain\s+climbers?|russian\s+twists?|dead\s+bugs?|hollow\s+rocks?|flutter\s+kicks?|scissor\s+kicks?|(?:leg\s*)?throw[\s-]?downs?)\b/i;
+  /\b(windshield\s*wipers?|hanging[\s-]+leg[\s-]+raises?|leg\s+raises?|v[\s-]?ups?|toes?\s+to\s+bar|mountain\s+climbers?|russian\s+twists?|dead[\s-]*bugs?|hollow\s+rocks?|flutter\s+kicks?|scissor\s+kicks?|(?:leg\s*)?throw[\s-]?downs?)\b/i;
+
+/** Someone holding something: "Weighted Russian Twist", "Dumbbell Dead Bug". */
+const LOADED_NAME_QUALIFIER = /\b(weighted|dumbbells?|db|kettlebells?|kb|plates?|medicine\s*ball|med\s*ball|cable|banded|barbell)\b/i;
+
+/**
+ * An unloaded core move is bodyweight whatever the catalog row says. The catalog stores Dead Bug,
+ * Russian Twist and Hanging Leg Raise as strength, and the catalog used to win over the name, so
+ * every one of them asked for a weight nobody was holding.
+ */
+function isUnloadedCoreName(name: string): boolean {
+  return CORE_BODYWEIGHT_NAME_PATTERN.test(name) && !LOADED_NAME_QUALIFIER.test(name);
+}
 
 const CORE_STRENGTH_NAME_PATTERN =
   /\b(weighted\s+sit[\s-]?ups?|sit[\s-]?ups?|crunch(?:es)?|cable\s+crunch(?:es)?|ab\s+rollouts?|rollouts?|wood\s+chops?|pallof\s+press(?:es)?)\b/i;
@@ -121,6 +133,7 @@ export function classifyExercise(input: ExerciseClassificationInput): ExerciseTy
   if (input.exerciseType && input.exerciseType !== 'strength') return input.exerciseType;
 
   if (isFlatBodyweightPulldownName(input.name)) return 'bodyweight';
+  if (isUnloadedCoreName(normalize(input.name))) return 'bodyweight';
 
   const slug = normalize(input.slug);
   if (slug && CATALOG[slug]) return CATALOG[slug];
@@ -135,7 +148,7 @@ export function classifyExercise(input: ExerciseClassificationInput): ExerciseTy
 
   if (movementCategory === 'cardio' || (isCardioName(name) && !loadedStrength)) return 'cardio';
   if (TIMED_NAME_PATTERN.test(name)) return 'timed';
-  if (CORE_BODYWEIGHT_NAME_PATTERN.test(name)) return 'bodyweight';
+  if (isUnloadedCoreName(name)) return 'bodyweight';
   if (CORE_STRENGTH_NAME_PATTERN.test(name)) return 'strength';
   if (BODYWEIGHT_NAME_PATTERN.test(name)) return 'bodyweight';
   if (equipment === 'bodyweight' || equipment === 'none' || equipment === 'pull_up_bar') return 'bodyweight';

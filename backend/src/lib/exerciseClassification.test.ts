@@ -60,6 +60,9 @@ const cases: Array<{ label: string; input: Parameters<typeof classifyExercise>[0
     expected: 'bodyweight',
   },
   { label: 'Bare throw downs', input: { name: 'Throw Downs' }, expected: 'bodyweight' },
+  { label: 'Dead bug from the catalog', input: { slug: 'dead-bug', name: 'Dead Bug' }, expected: 'bodyweight' },
+  { label: 'Deadbugs, one word', input: { name: 'Deadbugs' }, expected: 'bodyweight' },
+  { label: 'Weighted Russian twist stays weighted', input: { name: 'Weighted Russian Twist', exerciseType: 'strength' }, expected: 'strength' },
   // An imported plan names its lifts in the plural, and only the singular used to match.
   { label: 'Decline push-ups', input: { name: 'Decline push-ups' }, expected: 'bodyweight' },
   { label: 'Bench dips', input: { name: 'Bench dips' }, expected: 'bodyweight' },
