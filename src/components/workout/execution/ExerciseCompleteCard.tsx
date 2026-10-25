@@ -4,24 +4,49 @@ import { Card } from '@/components/layout/Card';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
-import { useUnits } from '@/hooks/useUnits';
+import { useUnits, type UnitsFormatter } from '@/hooks/useUnits';
+import { formatWorkDuration, type ExerciseWork } from '@/lib/exerciseWorkSummary';
 
 type ExerciseCompleteCardProps = {
-  volumeKg: number;
+  work: ExerciseWork;
   hasPr: boolean;
   onNext: () => void;
   isLastExercise: boolean;
   autoAdvancing?: boolean;
 };
 
+function workLines(work: ExerciseWork, units: UnitsFormatter): { title: string; metric: string; detail?: string } {
+  const setsText = `${work.sets} ${work.sets === 1 ? 'set' : 'sets'}`;
+  switch (work.kind) {
+    case 'time':
+      return { title: 'Time Completed', metric: formatWorkDuration(work.seconds), detail: setsText };
+    case 'cardio':
+      return {
+        title: 'Work Completed',
+        metric: formatWorkDuration(work.seconds),
+        detail: work.meters > 0 ? `${units.formatDistance(work.meters / 1000)} · ${setsText}` : setsText,
+      };
+    case 'reps':
+      return {
+        title: 'Reps Completed',
+        metric: String(work.reps),
+        detail:
+          work.volumeKg > 0 ? `${setsText} · ${units.formatWeight(work.volumeKg)} moved at your body weight` : setsText,
+      };
+    default:
+      return { title: 'Volume Lifted', metric: units.formatWeight(work.volumeKg), detail: `${work.reps} reps · ${setsText}` };
+  }
+}
+
 export function ExerciseCompleteCard({
-  volumeKg,
+  work,
   hasPr,
   onNext,
   isLastExercise,
   autoAdvancing = false,
 }: ExerciseCompleteCardProps) {
   const units = useUnits();
+  const lines = workLines(work, units);
 
   return (
     <Card style={styles.card} glow>
@@ -30,10 +55,15 @@ export function ExerciseCompleteCard({
           Exercise Complete
         </AppText>
       </View>
-      <AppText variant="bodyBold">Volume Lifted</AppText>
+      <AppText variant="bodyBold">{lines.title}</AppText>
       <AppText variant="metric" style={styles.metric}>
-        {units.formatWeight(volumeKg)}
+        {lines.metric}
       </AppText>
+      {lines.detail ? (
+        <AppText variant="footnote" color="textSecondary">
+          {lines.detail}
+        </AppText>
+      ) : null}
       {hasPr ? (
         <View style={styles.prBadge}>
           <AppText variant="caption" color="accent">

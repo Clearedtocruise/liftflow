@@ -34,7 +34,7 @@ import {
     computeWorkoutSetProgress,
     formatCoachTargetLine,
 } from '@/lib/activeWorkoutMetrics';
-import { setVolumeKg } from '@/lib/bodyweightVolume';
+import { summarizeExerciseWork } from '@/lib/exerciseWorkSummary';
 import { willAutoAdvanceExercise } from '@/lib/exerciseAutoAdvance';
 import {
     inferLoadingMethodFromHistory,
@@ -1550,21 +1550,6 @@ export function ActiveWorkoutScreen({
     scheduleAutoExerciseAdvance();
   }, [restSecondsRemaining, scheduleAutoExerciseAdvance]);
 
-  const exerciseVolume = completedSets.reduce(
-    (total, set) =>
-      total +
-      setVolumeKg(
-        {
-          isBodyweight: loggingMode === 'bodyweight',
-          exerciseName: currentExercise?.exercise?.name,
-          weightKg: set.weight,
-          reps: set.reps,
-        },
-        user?.weightKg,
-      ),
-    0,
-  );
-
   const clearWatchDrafts = useCallback(() => {
     setWatchDraftReps(null);
     watchPhoneBridge.clearPendingWatchReps();
@@ -2617,7 +2602,12 @@ export function ActiveWorkoutScreen({
 
         {showComplete ? (
           <ExerciseCompleteCard
-            volumeKg={exerciseVolume}
+            work={summarizeExerciseWork(
+              loggingMode,
+              completedSets,
+              currentExercise?.exercise?.name,
+              user?.weightKg,
+            )}
             hasPr={exerciseHadPr}
             onNext={handleNextExercise}
             autoAdvancing={autoAdvanceScheduled && !isFinalExercise}
