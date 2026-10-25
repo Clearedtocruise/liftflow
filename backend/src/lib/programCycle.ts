@@ -340,6 +340,7 @@ export type MaterializedCycleRow = {
   status: string;
   scheduled_date?: string;
   metadata?: {
+    programId?: string;
     cycleDay?: number;
     cycleVersion?: number;
     rescheduledAt?: string;
@@ -352,8 +353,11 @@ export type MaterializedCycleRow = {
  * Calendar dates a still-scheduled workout was moved off of, and that nothing has been put back on.
  * The cycle projection must not refill these — that put the workout back on the day the lifter
  * just switched it away from.
+ *
+ * Only moves made inside `programId` count. A move in a plan that has since been replaced says
+ * nothing about the new plan, and honouring it left the new plan's first day off today.
  */
-export function datesClearedByAMove(rows: MaterializedCycleRow[]): Set<string> {
+export function datesClearedByAMove(rows: MaterializedCycleRow[], programId?: string): Set<string> {
   const occupied = new Set<string>();
   for (const row of rows) {
     if (!row.scheduled_date || row.status === 'cancelled') continue;
@@ -363,6 +367,7 @@ export function datesClearedByAMove(rows: MaterializedCycleRow[]): Set<string> {
   const cleared = new Set<string>();
   for (const row of rows) {
     if (row.status === 'cancelled' || !row.metadata?.rescheduledAt) continue;
+    if (programId && row.metadata.programId && row.metadata.programId !== programId) continue;
     const listed = [
       ...(row.metadata.rescheduledFrom ? [row.metadata.rescheduledFrom] : []),
       ...(row.metadata.vacatedDates ?? []),
