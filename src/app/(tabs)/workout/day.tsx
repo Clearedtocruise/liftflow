@@ -67,8 +67,9 @@ export default function WorkoutDayScreen() {
     setLoading(true);
     setLoadError(null);
 
-    // Load by id (not "this week"), so timezone edges / plan reloads don't false-miss.
-    const result = await trainingService.getPlannedWorkoutById(user.id, id);
+    // Load by id (not "this week"), so timezone edges / plan reloads don't false-miss. A day the plan
+    // re-laid since this screen was linked to opens where that workout went.
+    const result = await trainingService.getCurrentPlannedWorkout(user.id, id);
 
     if (!result.success) {
       setLoadError(result.error);
@@ -78,6 +79,9 @@ export default function WorkoutDayScreen() {
     }
 
     const found = result.data;
+    if (found && found.id !== id && found.status !== 'cancelled') {
+      router.setParams({ id: found.id });
+    }
     if (found && found.status !== 'cancelled') {
       setLoaded(found);
       // `setPlannedWorkout` seeds the exercises itself, and keeps unsaved edits for this workout.
@@ -105,7 +109,6 @@ export default function WorkoutDayScreen() {
       const saved = await trainingService.updatePlannedWorkoutExercises(
         workout.id,
         exercises,
-        workout.metadata,
       );
       if (!saved.success) {
         Alert.alert('Could not save your changes', saved.error || 'Please try again.');
@@ -115,6 +118,7 @@ export default function WorkoutDayScreen() {
       planned = saved.data;
       setLoaded(planned);
       markSaved(planned);
+      if (planned.id !== id) router.setParams({ id: planned.id });
     }
 
     // Pass the plan at start — same path as the home "Start Workout" button. Starting without
@@ -146,6 +150,7 @@ export default function WorkoutDayScreen() {
     locations,
     selectedId,
     tabataModeEnabled,
+    id,
     markSaved,
     setSessionPlan,
     startSessionFromPlanned,
@@ -170,11 +175,11 @@ export default function WorkoutDayScreen() {
         const result = await trainingService.updatePlannedWorkoutExercises(
           workout.id,
           nextExercises,
-          workout.metadata,
         );
         if (result.success) {
           setLoaded(result.data);
           markSaved(result.data);
+          if (result.data.id !== id) router.setParams({ id: result.data.id });
         } else {
           setExercises(previousExercises);
         }
@@ -182,7 +187,7 @@ export default function WorkoutDayScreen() {
         setExercises(previousExercises);
       }
     },
-    [workout, exercises, setExercises, markSaved],
+    [workout, exercises, id, setExercises, markSaved],
   );
 
   const handleAddExercise = useCallback(
@@ -204,11 +209,11 @@ export default function WorkoutDayScreen() {
         const result = await trainingService.updatePlannedWorkoutExercises(
           workout.id,
           nextExercises,
-          workout.metadata,
         );
         if (result.success) {
           setLoaded(result.data);
           markSaved(result.data);
+          if (result.data.id !== id) router.setParams({ id: result.data.id });
         } else {
           setExercises(previousExercises);
           Alert.alert('Could not add that exercise', result.error || 'Please try again.');
@@ -217,7 +222,7 @@ export default function WorkoutDayScreen() {
         setExercises(previousExercises);
       }
     },
-    [workout, exercises, setExercises, markSaved],
+    [workout, exercises, id, setExercises, markSaved],
   );
 
   if (loading) {

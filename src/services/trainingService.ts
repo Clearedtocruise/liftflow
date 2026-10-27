@@ -1,4 +1,6 @@
 import { api, apiClient } from '@/api/client';
+import { localDateString } from '@/lib/localDate';
+import { pickReplacementPlannedRow, type ReplaceablePlannedRow } from '@/lib/plannedWorkoutReplacement';
 import { fail, fromError, ok } from '@/lib/serviceResult';
 import { dedupePlannedWorkoutsByDate } from '@/lib/weekPlan';
 import { withTimeout } from '@/lib/withTimeout';
@@ -63,6 +65,36 @@ function mapPlanned(row: PlannedRow): PlannedWorkout {
     metadata: (row.metadata ?? undefined) as PlannedWorkout['metadata'],
     createdAt: row.created_at,
   };
+}
+
+/** How far ahead a replaced workout is looked for: the cycle keeps two weeks on the calendar. */
+const REPLACEMENT_SEARCH_DAYS = 21;
+
+/**
+ * `row` while it is still on the plan, otherwise the row now standing in for it, or null. See
+ * {@link pickReplacementPlannedRow}.
+ */
+async function currentPlannedRow(
+  row: PlannedRow,
+  options?: { sameWorkoutOnly?: boolean },
+): Promise<PlannedRow | null> {
+  if (row.status !== 'cancelled') return row;
+  const today = localDateString();
+  const from = row.scheduled_date < today ? row.scheduled_date : today;
+  const until = new Date(`${from}T12:00:00Z`);
+  until.setUTCDate(until.getUTCDate() + REPLACEMENT_SEARCH_DAYS);
+  const { data } = await supabase
+    .from('planned_workouts')
+    .select('*')
+    .eq('user_id', row.user_id)
+    .eq('status', 'planned')
+    .gte('scheduled_date', from)
+    .lte('scheduled_date', until.toISOString().slice(0, 10));
+  return pickReplacementPlannedRow(
+    row as ReplaceablePlannedRow,
+    (data ?? []) as Array<PlannedRow & ReplaceablePlannedRow>,
+    options,
+  );
 }
 
 function mapProgramDashboard(raw: Record<string, unknown>): ProgramDashboard {
@@ -620,26 +652,61 @@ export const trainingService: ITrainingService = {
     }
   },
 
+  async getCurrentPlannedWorkout(userId: string, plannedWorkoutId: string) {
+    try {
+      const { data, error } = await supabase
+        .from('planned_workouts')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('id', plannedWorkoutId)
+        .maybeSingle();
+      if (error) return fail(error.message);
+      if (!data) return ok(null);
+      return ok(mapPlanned((await currentPlannedRow(data as PlannedRow)) ?? (data as PlannedRow)));
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
+  /**
+   * Writes only the exercise list, onto the row as the database holds it now. Writing back the
+   * metadata the screen loaded instead dropped anything written since — a swap's `rescheduledAt`
+   * among it, after which the next cycle refresh put the projected day back on that date.
+   */
   async updatePlannedWorkoutExercises(
     plannedWorkoutId: string,
     exercises: import('@/types/workoutExecution').EditableWorkoutExercise[],
-    existingMetadata?: PlannedWorkout['metadata'],
   ) {
     try {
       const { editableExercisesToTemplate } = await import('@/lib/workoutPlan');
+      const { data: stored, error: readError } = await supabase
+        .from('planned_workouts')
+        .select('*')
+        .eq('id', plannedWorkoutId)
+        .maybeSingle();
+      if (readError) return fail(readError.message);
+      const target = stored ? await currentPlannedRow(stored as PlannedRow, { sameWorkoutOnly: true }) : null;
+      if (!target || target.status === 'cancelled') {
+        return fail('This workout was replaced when your plan updated. Go back to your weekly plan and open the day again.');
+      }
+
       const metadata = {
-        ...(existingMetadata ?? {}),
+        ...(target.metadata ?? {}),
         exercises: editableExercisesToTemplate(exercises),
       };
 
       const { data, error } = await supabase
         .from('planned_workouts')
         .update({ metadata })
-        .eq('id', plannedWorkoutId)
+        .eq('id', target.id)
+        .neq('status', 'cancelled')
         .select('*')
-        .single();
+        .maybeSingle();
 
       if (error) return fail(error.message);
+      if (!data) {
+        return fail('This workout was replaced when your plan updated. Go back to your weekly plan and open the day again.');
+      }
       return ok(mapPlanned(data as PlannedRow));
     } catch (e) {
       return fromError(e);
