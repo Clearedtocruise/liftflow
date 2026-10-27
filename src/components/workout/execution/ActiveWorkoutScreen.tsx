@@ -80,7 +80,6 @@ import { exerciseIsFinished, shouldShowExerciseComplete } from '@/lib/workoutExe
 import { resolveSwapTargetIndex } from '@/lib/workoutSwapTarget';
 import { eachSideLabelForSet, expandSetsForEachSide } from '@/lib/eachSideSets';
 import { resolveExerciseInputSeed } from '@/lib/activeWorkoutWeightSeed';
-import { lightDayWorkingSuggestion } from '@/lib/workingWeightSuggestion';
 import { missingPlanExerciseNames } from '@/lib/sessionPlanIntegrity';
 import {
   countLoggedSets,
@@ -899,8 +898,7 @@ export function ActiveWorkoutScreen({
       .getRecentSetsForExercise(
         user.id,
         currentExercise.exerciseId,
-        // Enough to reach past one light day to the session before it.
-        20,
+        5,
         historyMode,
         currentExercise.exercise?.name,
         session.id,
@@ -984,11 +982,10 @@ export function ActiveWorkoutScreen({
       // Bodyweight days of a loaded lift sit in its history now; the weight to suggest is the last
       // time it was loaded.
       const lastLoaded = result.data.find((set) => set.weightKg != null && set.weightKg > 0);
-      const lightDay = lightDayWorkingSuggestion(result.data);
       const seed = resolveExerciseInputSeed({
         sessionSets: currentExercise.sets ?? [],
-        historyWeightKg: lightDay?.weightKg ?? lastLoaded?.weightKg,
-        historyReps: lightDay?.reps ?? lastLoaded?.reps ?? last?.reps,
+        historyWeightKg: lastLoaded?.weightKg,
+        historyReps: lastLoaded?.reps ?? last?.reps,
         historyDurationSeconds: last?.durationSeconds,
         suggestedWeightKg: clampPlanWeightKgForExercise(
           currentExercise.suggestedWeight,

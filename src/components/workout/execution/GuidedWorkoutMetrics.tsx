@@ -4,14 +4,8 @@ import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import { formatPlanTargetPerformance, formatPreviousPerformanceLine } from '@/lib/activeWorkoutMetrics';
 import type { ExerciseLoggingMode } from '@/lib/exerciseModality';
-import { lightDayWorkingSuggestion } from '@/lib/workingWeightSuggestion';
 import type { DistanceUnit } from '@/types/common';
 import type { ExerciseHistorySet } from '@/types/workoutExecution';
-
-function shortDate(date: string): string {
-  const parsed = new Date(`${date}T12:00:00Z`);
-  return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
-}
 
 type SessionSetSummary = {
   weightKg?: number;
@@ -67,7 +61,6 @@ export function GuidedWorkoutMetrics({
     .reverse()
     .find((set) => (set.weightKg ?? 0) > 0 || (set.reps ?? 0) > 0);
   const historySet = historySets[0];
-  const lightDay = loggingMode === 'weighted' ? lightDayWorkingSuggestion(historySets) : null;
 
   let suggestedLine: string | null = null;
   let suggestedSource: string | null = null;
@@ -81,14 +74,6 @@ export function GuidedWorkoutMetrics({
         distanceUnit,
       );
       suggestedSource = 'from this session';
-    } else if (lightDay) {
-      const low = formatWeight(lightDay.lowWeightKg);
-      const high = formatWeight(lightDay.highWeightKg);
-      suggestedLine =
-        low === high
-          ? `${low} ${weightLabel}${lightDay.reps ? ` × ${lightDay.reps}` : ''}`
-          : `${low}–${high} ${weightLabel}`;
-      suggestedSource = `from ${shortDate(lightDay.date)} · last session was lighter`;
     } else if (historySet?.weightKg != null && historySet.weightKg > 0) {
       suggestedLine = formatPreviousPerformanceLine(
         historySet,
