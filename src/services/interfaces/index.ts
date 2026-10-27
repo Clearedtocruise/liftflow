@@ -204,6 +204,8 @@ export interface ITrainingService {
   ): Promise<ServiceResult<PlannedWorkout[]>>;
   /** Load one planned workout by id — does not depend on the current week window. */
   getPlannedWorkoutById(userId: string, plannedWorkoutId: string): Promise<ServiceResult<PlannedWorkout | null>>;
+  /** That workout, or the row now standing in for it when the plan replaced it. */
+  getCurrentPlannedWorkout(userId: string, plannedWorkoutId: string): Promise<ServiceResult<PlannedWorkout | null>>;
   /** The next scheduled session strictly after `afterDate`, unconstrained by week boundaries. */
   getNextPlannedWorkout(userId: string, afterDate: string): Promise<ServiceResult<PlannedWorkout | null>>;
   /** Every row `date` holds, read without the week dedupe that hides all but one of them. */
@@ -238,7 +240,6 @@ export interface ITrainingService {
   updatePlannedWorkoutExercises(
     plannedWorkoutId: string,
     exercises: import('@/types/workoutExecution').EditableWorkoutExercise[],
-    existingMetadata?: PlannedWorkout['metadata'],
   ): Promise<ServiceResult<PlannedWorkout>>;
 
   // Custom day-based program cycle (Basic tier)

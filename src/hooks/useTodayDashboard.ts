@@ -179,7 +179,6 @@ export function useTodayDashboard(): TodayDashboardState {
         const saved = await trainingService.updatePlannedWorkoutExercises(
           todaysWorkout.id,
           exercises,
-          todaysWorkout.metadata,
         );
         if (!saved.success) {
           Alert.alert('Could not save your changes', saved.error || 'Please try again.');

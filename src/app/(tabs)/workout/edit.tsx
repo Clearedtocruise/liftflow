@@ -32,7 +32,6 @@ export default function WorkoutEditRoute() {
       const result = await trainingService.updatePlannedWorkoutExercises(
         plannedWorkout.id,
         exercises,
-        plannedWorkout.metadata,
       );
       if (!result.success) {
         setSaveError(result.error);
