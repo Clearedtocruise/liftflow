@@ -171,6 +171,13 @@ export interface IWorkoutService {
     exerciseName?: string,
     excludeSessionId?: string | null,
   ): Promise<ServiceResult<import('@/types/workoutExecution').ExerciseHistorySet[]>>;
+  /** The heaviest set ever logged for this lift, across its spellings. */
+  getHeaviestSetForExercise(
+    userId: string,
+    exerciseId: string,
+    exerciseName?: string,
+    excludeSessionId?: string | null,
+  ): Promise<ServiceResult<import('@/types/workoutExecution').ExerciseHistorySet | null>>;
   /** Density tracking */
   calculateDensity(sessionId: string): Promise<ServiceResult<WorkoutDensityMetrics>>;
 }

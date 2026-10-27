@@ -7,6 +7,10 @@ import type { ExerciseLoggingMode } from '@/lib/exerciseModality';
 import type { DistanceUnit } from '@/types/common';
 import type { ExerciseHistorySet } from '@/types/workoutExecution';
 
+function shortDate(loggedAt: string): string {
+  return new Date(loggedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
 type SessionSetSummary = {
   weightKg?: number;
   reps?: number;
@@ -22,6 +26,8 @@ type GuidedWorkoutMetricsProps = {
   repRange: string;
   /** Prior workouts only — not the sets logged earlier in this session. */
   historySets: ExerciseHistorySet[];
+  /** The heaviest set ever logged for this lift, on any day before this one. */
+  heaviestSet?: ExerciseHistorySet | null;
   /** Sets already logged on this exercise in the active workout (supersets included). */
   sessionSets?: SessionSetSummary[];
   targetPerformanceLine?: string | null;
@@ -40,6 +46,7 @@ export function GuidedWorkoutMetrics({
   loggingMode,
   repRange,
   historySets,
+  heaviestSet,
   sessionSets = [],
   targetPerformanceLine,
   formatWeight,
@@ -155,6 +162,18 @@ export function GuidedWorkoutMetrics({
           </AppText>
         )}
       </View>
+
+      {loggingMode === 'weighted' && heaviestSet?.weightKg != null && heaviestSet.weightKg > 0 ? (
+        <View style={styles.block}>
+          <AppText variant="label" color="textSecondary">
+            Best Performance
+          </AppText>
+          <AppText variant="bodyBold">
+            {formatPreviousPerformanceLine(heaviestSet, loggingMode, formatWeight, weightLabel, distanceUnit)}
+            {` · ${shortDate(heaviestSet.loggedAt)}`}
+          </AppText>
+        </View>
+      ) : null}
 
       <View style={styles.block}>
         <AppText variant="label" color="textSecondary">

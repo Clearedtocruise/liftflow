@@ -365,6 +365,7 @@ export function ActiveWorkoutScreen({
    */
   const [addedExerciseNotice, setAddedExerciseNotice] = useState<string | null>(null);
   const [historySets, setHistorySets] = useState<ExerciseHistorySet[]>([]);
+  const [heaviestSet, setHeaviestSet] = useState<ExerciseHistorySet | null>(null);
   const [coachPrescription, setCoachPrescription] = useState<ExerciseCoachPrescription | null>(null);
   const [showComplete, setShowComplete] = useState(false);
   /** Mirrors the auto-advance timer so the complete card only claims a jump that is really queued. */
@@ -877,6 +878,27 @@ export function ActiveWorkoutScreen({
       setWeightKg(pending);
     }
   }, [watchDraftWeightKg]);
+
+  // Shown beside the last session so a high-rep or light day does not hide what the lift is
+  // normally worked at.
+  useEffect(() => {
+    setHeaviestSet(null);
+    if (!user?.id || !currentExercise?.exerciseId) return;
+    let cancelled = false;
+    void workoutService
+      .getHeaviestSetForExercise(
+        user.id,
+        currentExercise.exerciseId,
+        currentExercise.exercise?.name,
+        session?.id,
+      )
+      .then((result) => {
+        if (!cancelled && result.success) setHeaviestSet(result.data);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, currentExercise?.exerciseId, currentExercise?.exercise?.name, session?.id]);
 
   useEffect(() => {
     if (!user || !currentExercise?.exerciseId) return;
@@ -2297,6 +2319,7 @@ export function ActiveWorkoutScreen({
                   loggingMode={loggingMode}
                   repRange={repRange}
                   historySets={historySets}
+                  heaviestSet={heaviestSet}
                   sessionSets={completedSets.map((set) => ({
                     weightKg: set.weight,
                     reps: set.reps,
