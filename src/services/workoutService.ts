@@ -490,6 +490,29 @@ async function applySessionExercisePlanInternal(
   }
 }
 
+/** Every `workout_exercises` row of this lifter's that logged this lift under any of its spellings. */
+async function familyWorkoutExerciseIds(
+  userId: string,
+  exerciseId: string,
+  exerciseName?: string,
+  excludeSessionId?: string | null,
+): Promise<ServiceResult<string[]>> {
+  const exerciseIds = await exerciseFamilyIds(exerciseId, exerciseName);
+  let exerciseQuery = supabase
+    .from('workout_exercises')
+    .select('id, workout_sessions!inner(user_id)')
+    .in('exercise_id', exerciseIds)
+    .eq('workout_sessions.user_id', userId);
+
+  if (excludeSessionId) {
+    exerciseQuery = exerciseQuery.neq('session_id', excludeSessionId);
+  }
+
+  const { data, error } = await exerciseQuery;
+  if (error) return fail(error.message);
+  return ok((data ?? []).map((row) => row.id as string));
+}
+
 export const workoutService: IWorkoutService = {
   async startSession(userId, payload: StartSessionPayload) {
     try {
@@ -1316,22 +1339,9 @@ export const workoutService: IWorkoutService = {
     excludeSessionId?: string | null,
   ) {
     try {
-      const exerciseIds = await exerciseFamilyIds(exerciseId, exerciseName);
-      let exerciseQuery = supabase
-        .from('workout_exercises')
-        .select('id, workout_sessions!inner(user_id)')
-        .in('exercise_id', exerciseIds)
-        .eq('workout_sessions.user_id', userId);
-
-      if (excludeSessionId) {
-        exerciseQuery = exerciseQuery.neq('session_id', excludeSessionId);
-      }
-
-      const { data: exerciseRows, error: exerciseError } = await exerciseQuery;
-
-      if (exerciseError) return fail(exerciseError.message);
-
-      const workoutExerciseIds = (exerciseRows ?? []).map((row) => row.id);
+      const family = await familyWorkoutExerciseIds(userId, exerciseId, exerciseName, excludeSessionId);
+      if (!family.success) return family;
+      const workoutExerciseIds = family.data;
       if (workoutExerciseIds.length === 0) return ok([] as ExerciseHistorySet[]);
 
       const { data, error } = await supabase
@@ -1378,6 +1388,34 @@ export const workoutService: IWorkoutService = {
         .slice(0, limit);
 
       return ok(sets);
+    } catch (e) {
+      return fromError(e);
+    }
+  },
+
+  async getHeaviestSetForExercise(userId, exerciseId, exerciseName, excludeSessionId) {
+    try {
+      const family = await familyWorkoutExerciseIds(userId, exerciseId, exerciseName, excludeSessionId);
+      if (!family.success) return family;
+      if (family.data.length === 0) return ok(null);
+
+      const { data, error } = await supabase
+        .from('workout_sets')
+        .select('weight, reps, logged_at')
+        .in('workout_exercise_id', family.data)
+        .gt('weight', 0)
+        .gt('reps', 0)
+        .order('weight', { ascending: false })
+        .order('reps', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) return fail(error.message);
+      if (!data) return ok(null);
+      return ok({
+        weightKg: data.weight as number,
+        reps: data.reps as number,
+        loggedAt: data.logged_at as string,
+      } satisfies ExerciseHistorySet);
     } catch (e) {
       return fromError(e);
     }
