@@ -3,6 +3,7 @@ import { test } from 'node:test';
 
 import {
   advanceCycleDay,
+  carriedDayEdits,
   applyCycleTemplateEdit,
   clampCycleLength,
   completeCurrentCycleDay,
@@ -373,4 +374,57 @@ test('training swapped days walks the program forward instead of stalling on one
   }
 
   assert.deepEqual(trained, [2, 6, 3, 1]);
+});
+
+const sixDayCycle = {
+  version: 2,
+  days: [1, 2, 3, 4, 5, 6].map((dayNumber) => ({
+    dayNumber,
+    isRest: false,
+    label: `Day ${dayNumber}`,
+    exercises: [
+      { name: `Lift ${dayNumber}A`, sets: 3, repRange: '8-10' },
+      { name: `Lift ${dayNumber}B`, sets: 3, repRange: '8-10' },
+    ],
+  })),
+};
+
+function plannedRow(date: string, cycleDay: number, exercises = sixDayCycle.days[cycleDay - 1].exercises) {
+  return { status: 'planned', scheduled_date: date, metadata: { cycleDay, cycleVersion: 2, exercises } };
+}
+
+test('a missed day pushes Legs back a date and the exercise added to Legs goes with it', () => {
+  const legsWithCalves = [...sixDayCycle.days[2].exercises, { name: 'Calf Raise', sets: 3, repRange: '12' }];
+  const rows = [plannedRow('2026-10-27', 3, legsWithCalves), plannedRow('2026-10-28', 4), plannedRow('2026-10-29', 5)];
+  // Monday's Day 2 was missed, so Day 2 lands today and everything after it moves back a date.
+  const writes = [
+    { date: '2026-10-27', dayNumber: 2 },
+    { date: '2026-10-28', dayNumber: 3 },
+    { date: '2026-10-29', dayNumber: 4 },
+    { date: '2026-11-03', dayNumber: 3 },
+  ];
+  const carried = carriedDayEdits(rows, writes, sixDayCycle);
+  assert.deepEqual([...carried.keys()], ['2026-10-28']);
+  assert.equal(carried.get('2026-10-28')?.at(-1)?.name, 'Calf Raise');
+});
+
+test('a day written as the template says carries nothing', () => {
+  const rows = [plannedRow('2026-10-27', 3), plannedRow('2026-10-28', 4)];
+  const writes = [
+    { date: '2026-10-27', dayNumber: 2 },
+    { date: '2026-10-28', dayNumber: 3 },
+  ];
+  assert.equal(carriedDayEdits(rows, writes, sixDayCycle).size, 0);
+});
+
+test('an edited day that is not being rewritten keeps its edit where it is', () => {
+  const edited = [...sixDayCycle.days[2].exercises, { name: 'Calf Raise', sets: 3, repRange: '12' }];
+  const rows = [plannedRow('2026-10-27', 3, edited)];
+  assert.equal(carriedDayEdits(rows, [{ date: '2026-11-02', dayNumber: 3 }], sixDayCycle).size, 0);
+});
+
+test('after a template edit the new template wins over an old day edit', () => {
+  const edited = [...sixDayCycle.days[2].exercises, { name: 'Calf Raise', sets: 3, repRange: '12' }];
+  const rows = [{ status: 'planned', scheduled_date: '2026-10-27', metadata: { cycleDay: 3, cycleVersion: 1, exercises: edited } }];
+  assert.equal(carriedDayEdits(rows, [{ date: '2026-10-27', dayNumber: 3 }], sixDayCycle).size, 0);
 });

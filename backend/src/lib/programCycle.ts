@@ -346,6 +346,7 @@ export type MaterializedCycleRow = {
     rescheduledAt?: string;
     rescheduledFrom?: string;
     vacatedDates?: string[];
+    exercises?: CycleTemplateExercise[];
   } | null;
 };
 
@@ -418,4 +419,71 @@ export function needsCycleDayMaterialization(
       row.metadata?.cycleDay === dayNumber &&
       row.metadata?.cycleVersion === cycleVersion,
   );
+}
+
+function exerciseListSignature(exercises: CycleTemplateExercise[]): string {
+  return JSON.stringify(
+    exercises.map((exercise) => [
+      (exercise.name ?? exercise.exerciseName ?? '').trim().toLowerCase(),
+      Number(exercise.sets) || 0,
+      String(exercise.repRange ?? exercise.reps ?? '').trim(),
+    ]),
+  );
+}
+
+/**
+ * Exercise lists the lifter edited onto one day, keyed by the date that day is re-laid onto.
+ *
+ * Re-laying a day writes it fresh from the template, which is right for a template edit but threw
+ * away an exercise added to a single day: a missed day pushes the next one back a date, and Legs
+ * with its added calf raise came back without it. An edit follows its day to the nearest date that
+ * day is written to, as long as no untouched copy of that day sits closer, and only within the same
+ * template version — after a template edit the new template wins.
+ */
+export function carriedDayEdits(
+  rows: MaterializedCycleRow[],
+  writes: Array<{ date: string; dayNumber: number }>,
+  cycle: Pick<ProgramCycle, 'version' | 'days'>,
+): Map<string, CycleTemplateExercise[]> {
+  const rewritten = new Set(writes.map((write) => write.date));
+  const carried = new Map<string, CycleTemplateExercise[]>();
+  const gap = (a: string, b: string) =>
+    Math.abs(Date.parse(`${a}T12:00:00Z`) - Date.parse(`${b}T12:00:00Z`)) / 86_400_000;
+
+  const sources = rows
+    .filter((row) => {
+      const meta = row.metadata;
+      if (row.status !== 'planned' || !row.scheduled_date || !rewritten.has(row.scheduled_date)) return false;
+      if (!meta || meta.rescheduledAt || meta.cycleVersion !== cycle.version || typeof meta.cycleDay !== 'number') {
+        return false;
+      }
+      const template = cycle.days.find((day) => day.dayNumber === meta.cycleDay);
+      return (
+        Array.isArray(meta.exercises) &&
+        meta.exercises.length > 0 &&
+        template != null &&
+        exerciseListSignature(meta.exercises) !== exerciseListSignature(template.exercises)
+      );
+    })
+    .sort((a, b) => String(a.scheduled_date).localeCompare(String(b.scheduled_date)));
+
+  for (const source of sources) {
+    const from = source.scheduled_date as string;
+    const dayNumber = source.metadata?.cycleDay;
+    const target = writes
+      .filter((write) => write.dayNumber === dayNumber && !carried.has(write.date))
+      .sort((a, b) => gap(a.date, from) - gap(b.date, from) || a.date.localeCompare(b.date))[0];
+    if (!target) continue;
+    const closerUntouched = rows.some(
+      (row) =>
+        row.status === 'planned' &&
+        row.scheduled_date &&
+        !rewritten.has(row.scheduled_date) &&
+        row.metadata?.cycleDay === dayNumber &&
+        gap(row.scheduled_date, from) <= gap(target.date, from),
+    );
+    if (closerUntouched) continue;
+    carried.set(target.date, source.metadata!.exercises!);
+  }
+  return carried;
 }

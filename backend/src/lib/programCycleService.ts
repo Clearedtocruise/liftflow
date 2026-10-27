@@ -14,6 +14,7 @@
 import { localDateString } from './localDate.js';
 import { totalPlannedVolume } from './programProgression.js';
 import {
+  carriedDayEdits,
   completeCurrentCycleDay,
   cycleDayAfterCompletion,
   currentCycleDay,
@@ -172,6 +173,7 @@ async function materializeCycleDay(
   cycle: ProgramCycle,
   dayNumber: number,
   date: string,
+  editedExercises?: CycleTemplateExercise[],
 ): Promise<string | null> {
   await clearMaterializedCycleDay(db, userId, date);
 
@@ -180,7 +182,7 @@ async function materializeCycleDay(
     return null;
   }
 
-  const exercises = day.exercises.map((exercise) => ({
+  const exercises = editedExercises ?? day.exercises.map((exercise) => ({
     name: exercise.name,
     exerciseName: exercise.name,
     sets: exercise.sets,
@@ -234,7 +236,7 @@ async function materializeCycleDay(
         intervalRounds: day.intervalRounds,
         exercises,
         plannedVolume: totalPlannedVolume(
-          exercises.map((e) => ({ sets: e.sets, reps: e.reps, weightLbs: e.weightLbs })),
+          exercises.map((e) => ({ sets: e.sets, reps: e.reps ?? e.repRange ?? '8-10', weightLbs: e.weightLbs })),
         ),
       },
     })
@@ -294,6 +296,7 @@ async function materializeUpcomingCycleDays(
   ], programId);
 
   const pointerDate = cycle.anchorDate && cycle.anchorDate > fromDate ? cycle.anchorDate : fromDate;
+  const writes: Array<{ date: string; dayNumber: number }> = [];
   for (let offset = 0; offset < aheadDays; offset += 1) {
     const date = addIsoDays(fromDate, offset);
     // The pointer's day lands on its anchor when the anchor is still ahead (the day after a
@@ -315,7 +318,12 @@ async function materializeUpcomingCycleDays(
       continue;
     }
 
-    await materializeCycleDay(db, userId, programId, cycle, dayNumber, date);
+    writes.push({ date, dayNumber });
+  }
+
+  const edits = carriedDayEdits((windowRows ?? []) as MaterializedCycleRow[], writes, cycle);
+  for (const { date, dayNumber } of writes) {
+    await materializeCycleDay(db, userId, programId, cycle, dayNumber, date, edits.get(date));
   }
 }
 
