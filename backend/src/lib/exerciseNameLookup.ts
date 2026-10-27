@@ -75,6 +75,35 @@ function dropChestSupportOnRearDeltFly(words: string[]): string[] {
   return key.replace(/\bchest supported\s*/, '').split(' ').filter(Boolean);
 }
 
+/**
+ * Lifts done with a barbell unless the name says otherwise, so "Barbell Back Squat" and "Back
+ * Squat" log the same bar. Anything not listed keeps its barbell qualifier: a plain "Row" or "Curl"
+ * is as likely a dumbbell or cable.
+ */
+const BARBELL_BY_DEFAULT = new Set([
+  'back squat',
+  'front squat',
+  'pause squat',
+  'box squat',
+  'zercher squat',
+  'bench press',
+  'incline bench press',
+  'close grip bench press',
+  'deadlift',
+  'sumo deadlift',
+  'romanian deadlift',
+  'overhead press',
+  'military press',
+  'hip thrust',
+  'good morning',
+]);
+
+function dropBarbellOnBarbellLift(words: string[]): string[] {
+  if (!words.includes('barbell')) return words;
+  const rest = words.filter((word) => word !== 'barbell');
+  return BARBELL_BY_DEFAULT.has(rest.join(' ')) ? rest : words;
+}
+
 export function exerciseCanonicalKey(name: string): string {
   const base = exerciseNameKey(name);
   if (!base) return '';
@@ -103,7 +132,7 @@ export function exerciseHistoryKey(name: string): string {
     .map((word) => EQUIPMENT_ABBREVIATIONS[word] ?? WORD_ALIASES[word] ?? COMPOUND_ALIASES[word] ?? singularizeWord(word))
     .join(' ')
     .split(' ');
-  return dropChestSupportOnRearDeltFly(dropOneArmQualifier(words)).join(' ');
+  return dropBarbellOnBarbellLift(dropChestSupportOnRearDeltFly(dropOneArmQualifier(words))).join(' ');
 }
 
 /** The same key with word boundaries removed: "Lat Pulldown" == "Lat Pull Down". */

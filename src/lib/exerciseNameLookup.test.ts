@@ -161,3 +161,16 @@ test('plan entries the plan keeps apart stay apart, so neither drops out of the 
   );
   assert.equal(namesMatchExercise('Pull Ups', 'Pull-Up'), true);
 });
+
+test('a lift done with a barbell by default shares history with its "Barbell …" spelling', () => {
+  assert.equal(namesShareHistory('Back Squat', 'Barbell back squat'), true);
+  assert.equal(namesShareHistory('Bench Press', 'BB Bench Press'), true);
+  assert.equal(namesShareHistory('Romanian Deadlift', 'Barbell Romanian deadlift'), true);
+  assert.ok(exerciseNamePatterns('Barbell back squat').includes('%back%squat%'));
+  // A plain row or curl is as likely a dumbbell or cable, and a dumbbell press is not the bar.
+  assert.equal(namesShareHistory('Row', 'Barbell Row'), false);
+  assert.equal(namesShareHistory('Curl', 'Barbell Curl'), false);
+  assert.equal(namesShareHistory('Bench Press', 'Dumbbell Bench Press'), false);
+  // Reads only: the plan still keeps the two spellings apart.
+  assert.equal(namesMatchExercise('Back Squat', 'Barbell back squat'), false);
+});
