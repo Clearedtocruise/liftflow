@@ -25,6 +25,8 @@ import { useSubscription } from '@/hooks/useSubscription';
 import { useUnits } from '@/hooks/useUnits';
 import { loadRolloverValidationState, type RolloverValidationState } from '@/lib/rolloverDebug';
 import {
+    areCoachChallengesEnabled,
+    COACH_CHALLENGES_PREF_KEY,
     isTabataModeEnabled,
     TABATA_MODE_PREF_KEY,
     tabataModeSummary,
@@ -69,6 +71,7 @@ export default function SettingsScreen() {
   const [locationDetection, setLocationDetection] = useState(true);
   const [locationPermission, setLocationPermission] = useState<string>('—');
   const [tabataMode, setTabataMode] = useState(false);
+  const [coachChallenges, setCoachChallenges] = useState(true);
   const [validationState, setValidationState] = useState<RolloverValidationState | null>(null);
   const [editingDisplayName, setEditingDisplayName] = useState(false);
   const [displayNameDraft, setDisplayNameDraft] = useState('');
@@ -105,6 +108,7 @@ export default function SettingsScreen() {
           setVoiceInputMode(mode);
         }
         setTabataMode(isTabataModeEnabled(result.data));
+        setCoachChallenges(areCoachChallengesEnabled(result.data));
       }
     });
     deviceLocationService.getPermissionStatus().then((status) => {
@@ -411,6 +415,23 @@ export default function SettingsScreen() {
             const coaching = prefs.success ? prefs.data.coachingPreferences ?? {} : {};
             await userService.updatePreferences(user.id, {
               coachingPreferences: { ...coaching, [TABATA_MODE_PREF_KEY]: next },
+            });
+          }}
+        />
+        <SettingsRow
+          label="Coach challenges"
+          value={coachChallenges ? 'On' : 'Off'}
+          icon={
+            <AppSymbol name="flame" fallback="★" size={20} tintColor={LiftFlowColors.textSecondary} />
+          }
+          onPress={async () => {
+            if (!user) return;
+            const next = !coachChallenges;
+            setCoachChallenges(next);
+            const prefs = await userService.getPreferences(user.id);
+            const coaching = prefs.success ? prefs.data.coachingPreferences ?? {} : {};
+            await userService.updatePreferences(user.id, {
+              coachingPreferences: { ...coaching, [COACH_CHALLENGES_PREF_KEY]: next },
             });
           }}
         />

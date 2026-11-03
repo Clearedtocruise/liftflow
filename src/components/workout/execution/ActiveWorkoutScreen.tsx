@@ -26,6 +26,7 @@ import {
 import { LiftFlowColors, Radius, Spacing, TouchTarget } from '@/constants/theme';
 import { useAppResume } from '@/hooks/useAppResume';
 import { useAuth } from '@/hooks/useAuth';
+import { useCoachChallengesPreference } from '@/hooks/useCoachChallengesPreference';
 import { useUnits } from '@/hooks/useUnits';
 import { formatWorkoutClockTime, useWorkoutElapsedSeconds } from '@/hooks/useWorkoutElapsedSeconds';
 import { useWorkoutTimerEngine } from '@/hooks/useWorkoutTimerEngine';
@@ -375,6 +376,7 @@ export function ActiveWorkoutScreen({
   const [restTargetSeconds, setRestTargetSeconds] = useState(() =>
     resolveTraditionalRestSeconds(executionMode),
   );
+  const { coachChallengesEnabled } = useCoachChallengesPreference();
   const [activeChallenge, setActiveChallenge] = useState<WorkoutChallengeTemplate | null>(null);
   const [challengeTrigger, setChallengeTrigger] = useState<WorkoutChallengeTrigger>('between_sets');
   const [challengeTargetExerciseName, setChallengeTargetExerciseName] = useState<string | null>(null);
@@ -1512,6 +1514,7 @@ export function ActiveWorkoutScreen({
 
   const offerBetweenSetsChallenge = useCallback(() => {
     if (
+      !coachChallengesEnabled ||
       activeChallenge ||
       groupComplete ||
       restActive ||
@@ -1526,6 +1529,7 @@ export function ActiveWorkoutScreen({
     setChallengeTrigger('between_sets');
     setActiveChallenge(template);
   }, [
+    coachChallengesEnabled,
     activeChallenge,
     challengeRecords,
     currentExercise?.exercise?.name,
@@ -2090,7 +2094,7 @@ export function ActiveWorkoutScreen({
 
   function handleNextExercise() {
     const nextName = nextExercise?.exercise?.name;
-    const template = pickWorkoutChallenge(challengeRecords, 'between_exercises');
+    const template = coachChallengesEnabled ? pickWorkoutChallenge(challengeRecords, 'between_exercises') : null;
     if (template && nextName && !activeChallenge) {
       pendingAdvanceAfterChallengeRef.current = performExerciseAdvance;
       setChallengeTargetExerciseName(nextName);

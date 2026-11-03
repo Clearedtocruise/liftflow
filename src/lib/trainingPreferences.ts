@@ -2,6 +2,7 @@ import { INTERVAL_MODE_DEFAULTS } from '@/constants/workoutExecutionModes';
 import type { UserPreferences } from '@/types';
 
 export const TABATA_MODE_PREF_KEY = 'tabataModeEnabled';
+export const COACH_CHALLENGES_PREF_KEY = 'coachChallengesEnabled';
 
 /** In-workout Tabata timer: work and rest can be adjusted within this range (seconds). */
 export const TABATA_INTERVAL_BOUNDS = {
@@ -64,6 +65,11 @@ export function clampTabataBetweenExerciseRest(seconds: number): number {
 
 export function isTabataModeEnabled(preferences?: UserPreferences | null): boolean {
   return preferences?.coachingPreferences?.[TABATA_MODE_PREF_KEY] === true;
+}
+
+/** Optional mid-workout challenges ("Bonus Reps") — on unless the lifter turned them off. */
+export function areCoachChallengesEnabled(preferences?: UserPreferences | null): boolean {
+  return preferences?.coachingPreferences?.[COACH_CHALLENGES_PREF_KEY] !== false;
 }
 
 export function tabataModeSummary(): string {
