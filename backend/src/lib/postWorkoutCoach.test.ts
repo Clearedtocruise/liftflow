@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { kgToDisplayWeight, sumConsumedMealMacros } from './postWorkoutCoach.js';
+import { kgToDisplayWeight, nextSessionAdvice, sumConsumedMealMacros } from './postWorkoutCoach.js';
 
 test('an lbs user sees total volume converted from kg, not the raw kg number', () => {
   // 135 lb x 5 reps logged (stored as ~61.235 kg) => total_volume ~= 306.175 kg-reps.
@@ -41,4 +41,33 @@ test('post-workout protein only counts meals marked eaten, not the uneaten plan'
   ]);
   assert.equal(Math.round(totals.proteinG), 103);
   assert.equal(Math.round(totals.calories), 1300);
+});
+
+test('a held plank is judged on time, not told to aim for 29–30 reps', () => {
+  const plank = { name: 'Plank', target: '30 sec/side', weightUnit: 'lbs' as const };
+  // Logged as one "rep" with a duration — how every timed hold is stored.
+  assert.equal(nextSessionAdvice({ ...plank, sets: [{ reps: 1, duration_seconds: 60 }, { reps: 1, duration_seconds: 60 }] }), null);
+  assert.equal(
+    nextSessionAdvice({ ...plank, sets: [{ reps: 1, duration_seconds: 20 }] }),
+    'Plank: work up to 30-second holds.',
+  );
+  assert.equal(
+    nextSessionAdvice({ name: 'Hollow Hold', target: '1 min', weightUnit: 'lbs', sets: [{ reps: 1, duration_seconds: 45 }] }),
+    'Hollow Hold: work up to 60-second holds.',
+  );
+});
+
+test('bodyweight reps short of target get a rep goal, never load advice', () => {
+  assert.equal(
+    nextSessionAdvice({ name: 'Pull Up', target: '8-10', weightUnit: 'lbs', sets: [{ reps: 5, weight: null }] }),
+    'Pull Up: aim for 7–8 reps next time.',
+  );
+  assert.equal(
+    nextSessionAdvice({ name: 'Back Squat', target: '8-10', weightUnit: 'lbs', sets: [{ reps: 4, weight: 102 }] }),
+    'Back Squat: reduce load slightly or keep weight and aim for 7–8 reps.',
+  );
+  assert.equal(
+    nextSessionAdvice({ name: 'Crunch', target: null, weightUnit: 'lbs', sets: [{ reps: 80, weight: null }] }),
+    null,
+  );
 });

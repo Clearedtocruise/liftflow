@@ -8,6 +8,7 @@ import { SectionHeader } from '@/components/layout/SectionHeader';
 import { AppText } from '@/components/ui/AppText';
 import { LiftFlowColors, Radius, Spacing } from '@/constants/theme';
 import { useUnits } from '@/hooks/useUnits';
+import { formatWorkDuration } from '@/lib/exerciseWorkSummary';
 import type { WorkoutSession } from '@/types';
 import type { PostWorkoutCoachSummary } from '@/types/coachActivation';
 import type { WorkoutChallengeRecord } from '@/types/workoutChallenge';
@@ -130,8 +131,9 @@ export function WorkoutSummaryScreen({
             {exercise.sets.map((set) => (
               <AppText key={set.id} variant="footnote" color="textSecondary">
                 Set {set.setNumber}:{' '}
-                {set.weight != null ? `${units.formatWeight(set.weight)} × ` : ''}
-                {set.reps ?? '—'} reps
+                {set.durationSeconds != null && set.durationSeconds > 0 && !(set.weight != null && set.weight > 0)
+                  ? formatWorkDuration(set.durationSeconds)
+                  : `${set.weight != null ? `${units.formatWeight(set.weight)} × ` : ''}${set.reps ?? '—'} reps`}
                 {set.isPr ? ' · PR' : ''}
               </AppText>
             ))}

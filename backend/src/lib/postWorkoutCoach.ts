@@ -54,6 +54,57 @@ export function kgToDisplayWeight(kg: number, unit: 'kg' | 'lbs'): number {
   return Math.round(kg * LB_PER_KG);
 }
 
+export type AdviceSet = { weight?: number | null; reps?: number | null; duration_seconds?: number | null };
+
+const TIMED_TARGET = /\b(sec|secs|second|seconds|s|min|mins|minute|minutes)\b/i;
+
+function targetSeconds(target: string): number | null {
+  const first = target.match(/\d+/)?.[0];
+  if (!first) return null;
+  return /\bmin/i.test(target) && !/\bsec/i.test(target) ? Number(first) * 60 : Number(first);
+}
+
+/**
+ * One exercise's "Next Session" line, or null when there is nothing to say.
+ *
+ * A held plank is logged as one "rep" with a duration, and its target reads "30 sec", so treating
+ * every exercise as reps told a lifter who held 60 seconds to "reduce load or aim for 29–30 reps".
+ * Holds are judged on time, and load advice is only given for a set that carried load.
+ */
+export function nextSessionAdvice(input: {
+  name: string;
+  target?: string | null;
+  suggestedWeightKg?: number | null;
+  sets: AdviceSet[];
+  weightUnit: 'kg' | 'lbs';
+}): string | null {
+  const { name, sets, weightUnit } = input;
+  const lastSet = sets[sets.length - 1];
+  if (!lastSet) return null;
+  const target = String(input.target ?? '8');
+  const loaded = (lastSet.weight ?? 0) > 0;
+
+  const held = lastSet.duration_seconds ?? 0;
+  if (TIMED_TARGET.test(target) || (held > 0 && !loaded)) {
+    const goal = targetSeconds(target);
+    if (goal && held > 0 && held < goal) return `${name}: work up to ${goal}-second holds.`;
+    return null;
+  }
+
+  const targetReps = parseInt(target.match(/\d+/)?.[0] ?? '8', 10);
+  const reps = lastSet.reps ?? 0;
+  if (reps >= targetReps && loaded && input.suggestedWeightKg) {
+    const increaseKg = Math.max(2.5, Math.round(input.suggestedWeightKg * 0.025 * 2) / 2);
+    return `${name}: increase by ${kgToDisplayWeight(increaseKg, weightUnit)} ${weightUnit} next session if you hit ${targetReps} reps again.`;
+  }
+  if (reps < targetReps - 2) {
+    return loaded
+      ? `${name}: reduce load slightly or keep weight and aim for ${targetReps - 1}–${targetReps} reps.`
+      : `${name}: aim for ${targetReps - 1}–${targetReps} reps next time.`;
+  }
+  return null;
+}
+
 export async function generatePostWorkoutCoachSummary(
   userId: string,
   sessionId: string,
@@ -79,7 +130,7 @@ export async function generatePostWorkoutCoachSummary(
   // Progression compares the *last* set against the target, so the rows must be ordered.
   const { data: sets } = await db
     .from('workout_sets')
-    .select('workout_exercise_id, weight, reps, is_pr, set_number, logged_at')
+    .select('workout_exercise_id, weight, reps, duration_seconds, is_pr, set_number, logged_at')
     .in(
       'workout_exercise_id',
       (exercises ?? []).map((e) => e.id),
@@ -155,24 +206,14 @@ export async function generatePostWorkoutCoachSummary(
   for (const ex of exercises ?? []) {
     const exSets = (sets ?? []).filter((s) => s.workout_exercise_id === ex.id);
     if (exSets.length === 0) continue;
-
-    const exName =
-      (ex.exercises as { name?: string; slug?: string } | null)?.name ?? 'Exercise';
-    const targetReps = parseInt(String(ex.suggested_reps ?? '8').match(/\d+/)?.[0] ?? '8', 10);
-    const lastSet = exSets[exSets.length - 1];
-    const hitTarget = (lastSet.reps ?? 0) >= targetReps;
-
-    if (hitTarget && ex.suggested_weight) {
-      const increaseKg = Math.max(2.5, Math.round(ex.suggested_weight * 0.025 * 2) / 2);
-      const increaseDisplay = kgToDisplayWeight(increaseKg, weightUnit);
-      progressionRecommendations.push(
-        `${exName}: increase by ${increaseDisplay} ${weightUnit} next session if you hit ${targetReps} reps again.`,
-      );
-    } else if ((lastSet.reps ?? 0) < targetReps - 2) {
-      progressionRecommendations.push(
-        `${exName}: reduce load slightly or keep weight and aim for ${targetReps - 1}–${targetReps} reps.`,
-      );
-    }
+    const line = nextSessionAdvice({
+      name: (ex.exercises as { name?: string; slug?: string } | null)?.name ?? 'Exercise',
+      target: ex.suggested_reps as string | null,
+      suggestedWeightKg: ex.suggested_weight as number | null,
+      sets: exSets,
+      weightUnit,
+    });
+    if (line) progressionRecommendations.push(line);
   }
 
   if (progressionRecommendations.length === 0) {
