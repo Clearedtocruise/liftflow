@@ -41,3 +41,18 @@ export function shouldApplyHealthWeight(sample: LoggedWeight, lastLogged: Logged
   if (isUnitMixup(sample.kg, lastLogged.kg)) return false;
   return Date.parse(sample.recordedAt) > Date.parse(lastLogged.recordedAt);
 }
+
+/**
+ * The body weight to use when the profile and the athlete's own last logged weight disagree by a
+ * pounds-for-kilograms factor. 182.5 lb landed in the kilogram column as 182.48, and every
+ * bodyweight rep then counted 402 lb of body. The logged weight is what the athlete typed and saw.
+ */
+export function trustedBodyWeightKg(
+  profileKg: number | null | undefined,
+  lastLoggedKg: number | null | undefined,
+): number | null {
+  const profile = profileKg != null && Number.isFinite(profileKg) && profileKg > 0 ? profileKg : null;
+  const logged = lastLoggedKg != null && Number.isFinite(lastLoggedKg) && lastLoggedKg > 0 ? lastLoggedKg : null;
+  if (profile != null && logged != null && isUnitMixup(profile, logged)) return logged;
+  return profile ?? logged;
+}
