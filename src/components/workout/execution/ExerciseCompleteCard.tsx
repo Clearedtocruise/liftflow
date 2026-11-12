@@ -11,6 +11,8 @@ type ExerciseCompleteCardProps = {
   work: ExerciseWork;
   hasPr: boolean;
   onNext: () => void;
+  /** Adds another lift to today's workout, including after the last planned one. */
+  onAddExercise?: () => void;
   isLastExercise: boolean;
   autoAdvancing?: boolean;
 };
@@ -42,6 +44,7 @@ export function ExerciseCompleteCard({
   work,
   hasPr,
   onNext,
+  onAddExercise,
   isLastExercise,
   autoAdvancing = false,
 }: ExerciseCompleteCardProps) {
@@ -52,22 +55,26 @@ export function ExerciseCompleteCard({
     <Card style={styles.card} glow>
       <View style={styles.badge}>
         <AppText variant="label" color="success">
-          Exercise Complete
+          ✓  Exercise Complete
         </AppText>
       </View>
-      <AppText variant="bodyBold">{lines.title}</AppText>
-      <AppText variant="metric" style={styles.metric}>
-        {lines.metric}
-      </AppText>
-      {lines.detail ? (
-        <AppText variant="footnote" color="textSecondary">
-          {lines.detail}
+      <View style={styles.workBlock}>
+        <AppText variant="caption" color="textSecondary">
+          {lines.title}
         </AppText>
-      ) : null}
+        <AppText variant="metric" color="accent" style={styles.metric}>
+          {lines.metric}
+        </AppText>
+        {lines.detail ? (
+          <AppText variant="footnote" color="textSecondary" align="center">
+            {lines.detail}
+          </AppText>
+        ) : null}
+      </View>
       {hasPr ? (
         <View style={styles.prBadge}>
           <AppText variant="caption" color="accent">
-            PR Achieved
+            🏆  PR Achieved
           </AppText>
         </View>
       ) : null}
@@ -76,11 +83,16 @@ export function ExerciseCompleteCard({
           {isLastExercise ? 'Finishing workout…' : 'Next exercise starting…'}
         </AppText>
       ) : null}
-      <PrimaryButton
-        label={isLastExercise ? 'Finish Workout' : 'Next Exercise'}
-        onPress={onNext}
-        size="large"
-      />
+      <View style={styles.actions}>
+        <PrimaryButton
+          label={isLastExercise ? 'Finish Workout' : 'Next Exercise'}
+          onPress={onNext}
+          size="large"
+        />
+        {onAddExercise ? (
+          <PrimaryButton label="Add Exercise" icon="+" variant="secondary" onPress={onAddExercise} />
+        ) : null}
+      </View>
     </Card>
   );
 }
@@ -90,6 +102,14 @@ const styles = StyleSheet.create({
     gap: Spacing.md,
     alignItems: 'center',
     marginTop: Spacing.lg,
+  },
+  workBlock: {
+    alignItems: 'center',
+    gap: Spacing.xs,
+  },
+  actions: {
+    alignSelf: 'stretch',
+    gap: Spacing.sm,
   },
   badge: {
     paddingHorizontal: Spacing.md,

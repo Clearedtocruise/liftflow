@@ -1,5 +1,5 @@
 import { useFocusEffect } from '@react-navigation/native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, StyleSheet, View } from 'react-native';
 
@@ -46,6 +46,7 @@ import type { PlannedWorkout } from '@/types/training';
 import type { WorkoutChallengeRecord } from '@/types/workoutChallenge';
 
 export default function WorkoutScreen() {
+  const { addExercise } = useLocalSearchParams<{ addExercise?: string }>();
   const { user } = useAuth();
   const { revision, setFromAdaptation } = usePlanAdjustment();
   const { exercises, setPlannedWorkout, plannedWorkout } = useWorkoutPlanDraft();
@@ -443,6 +444,7 @@ export default function WorkoutScreen() {
         onFinish={handleFinishWorkout}
         onCancel={cancelSession}
         finishing={finishing}
+        openAddExerciseOnMount={addExercise === '1'}
       />
     );
   }

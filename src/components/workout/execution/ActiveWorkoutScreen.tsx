@@ -130,6 +130,8 @@ type ActiveWorkoutScreenProps = {
   onFinish: () => void;
   onCancel: () => void;
   finishing?: boolean;
+  /** Opens the add-exercise picker as soon as the screen is up (coming back from the summary). */
+  openAddExerciseOnMount?: boolean;
 };
 
 type LogSetResult = { ok: true } | { ok: false; error: string };
@@ -143,6 +145,7 @@ export function ActiveWorkoutScreen({
   onFinish,
   onCancel,
   finishing = false,
+  openAddExerciseOnMount = false,
 }: ActiveWorkoutScreenProps) {
   const executionMode = normalizeExecutionMode(executionModeProp);
   const {
@@ -1132,7 +1135,7 @@ export function ActiveWorkoutScreen({
       exerciseComplete: showComplete,
       restRunning: restActive,
       challengeOpen: Boolean(activeChallenge),
-      workoutPaused: isPaused,
+      workoutPaused: isPaused || exercisePickerVisible,
       justFinishedExercise: justFinishedExerciseRef.current,
       usesIntervalTimer: executionModeUsesIntervalTimer(executionMode),
       loggedSets: completedSets.length,
@@ -1153,6 +1156,7 @@ export function ActiveWorkoutScreen({
     restActive,
     activeChallenge,
     isPaused,
+    exercisePickerVisible,
     currentIndex,
     scheduleAutoExerciseAdvance,
     executionMode,
@@ -1430,6 +1434,21 @@ export function ActiveWorkoutScreen({
     setCurrentIndex(nextIndex);
     setShowComplete(false);
   }
+
+  function openAddExercisePicker() {
+    // The rest clock is its own modal, and leaving it up swallows the picker on iOS.
+    setRestOverlayOpen(false);
+    setExercisePickerMode('add');
+    setExercisePickerVisible(true);
+  }
+
+  const openedAddExerciseRef = useRef(false);
+  useEffect(() => {
+    if (!openAddExerciseOnMount || openedAddExerciseRef.current) return;
+    openedAddExerciseRef.current = true;
+    setExercisePickerMode('add');
+    setExercisePickerVisible(true);
+  }, [openAddExerciseOnMount]);
 
   async function handleAddExercise(exercise: Exercise) {
     // The new exercise slots in directly after the current one rather than at the end of the
@@ -2575,10 +2594,7 @@ export function ActiveWorkoutScreen({
                       <CompactAction label="+ Add Set" onPress={handleAddSet} disabled={isPaused} />
                       <CompactAction
                         label="+ Add Exercise"
-                        onPress={() => {
-                          setExercisePickerMode('add');
-                          setExercisePickerVisible(true);
-                        }}
+                        onPress={openAddExercisePicker}
                         disabled={isPaused}
                       />
                       <CompactAction
@@ -2658,6 +2674,7 @@ export function ActiveWorkoutScreen({
             )}
             hasPr={exerciseHadPr}
             onNext={handleNextExercise}
+            onAddExercise={openAddExercisePicker}
             autoAdvancing={autoAdvanceScheduled && !isFinalExercise}
             isLastExercise={isFinalExercise}
           />
