@@ -45,6 +45,8 @@ type TodayHeroCardProps = {
   onPreviewWorkout?: () => void;
   onContinueWorkout?: () => void;
   onViewHistory?: () => void;
+  /** Log more work after today's session is done. */
+  onAddExercises?: () => void;
   /** Quick-log path when the athlete runs their own workouts. */
   onLogOwnWorkout?: () => void;
 };
@@ -65,6 +67,7 @@ export function TodayHeroCard({
   onPreviewWorkout,
   onContinueWorkout,
   onViewHistory,
+  onAddExercises,
   onLogOwnWorkout,
 }: TodayHeroCardProps) {
   const resting = state.kind === 'rest' || state.kind === 'self-directed';
@@ -171,7 +174,10 @@ export function TodayHeroCard({
             onPress={onViewHistory ?? onOpenRecovery}
             size="large"
           />
-          <PrimaryButton label="Focus on Recovery" variant="secondary" onPress={onOpenRecovery} />
+          {onAddExercises ? (
+            <PrimaryButton label="Add Exercises" icon="+" variant="secondary" onPress={onAddExercises} />
+          ) : null}
+          <PrimaryButton label="Focus on Recovery" variant="ghost" onPress={onOpenRecovery} />
         </>
       ) : state.kind === 'rest' ? (
         <>

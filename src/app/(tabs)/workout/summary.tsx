@@ -91,6 +91,24 @@ export default function WorkoutSummaryRoute() {
     router.replace('/(tabs)/workout');
   }, [session, continuingWorkout, reopenSession]);
 
+  // Inside the reopen window the exercise joins this same workout. Past it, the workout stays as
+  // finished and the extra lift is logged in its own quick-log session rather than rewriting it.
+  const handleAddExercise = useCallback(async () => {
+    if (!session || continuingWorkout) return;
+    if (!canReopenSession(session)) {
+      router.push('/(tabs)/workout/manual-log');
+      return;
+    }
+    setContinuingWorkout(true);
+    const { session: reopened, error } = await reopenSession(session.id);
+    setContinuingWorkout(false);
+    if (!reopened) {
+      Alert.alert('Could not add an exercise', error ?? 'Something went wrong. Please try again.');
+      return;
+    }
+    router.replace({ pathname: '/(tabs)/workout', params: { addExercise: '1' } });
+  }, [session, continuingWorkout, reopenSession]);
+
   if (loading) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: LiftFlowColors.background }}>
@@ -122,6 +140,7 @@ export default function WorkoutSummaryRoute() {
       onShare={() => {
         void socialShareService.shareWorkoutRecap(session);
       }}
+      onAddExercise={handleAddExercise}
       onContinueWorkout={canReopenSession(session) ? handleContinueWorkout : undefined}
       continuingWorkout={continuingWorkout}
     />

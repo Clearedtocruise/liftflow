@@ -181,6 +181,7 @@ export default function DashboardScreen() {
         onRetry={() => void refresh()}
         onOpenRecovery={() => router.push('/(features)/recovery-check-in')}
         onViewHistory={() => router.push('/(tabs)/history')}
+        onAddExercises={() => router.push('/(tabs)/workout/manual-log')}
         onLogOwnWorkout={() => router.push('/(tabs)/workout/manual-log')}
         onManageWorkout={() => {
           if (!todaysWorkout) return;
