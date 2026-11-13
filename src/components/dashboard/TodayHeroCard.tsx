@@ -96,9 +96,14 @@ export function TodayHeroCard({
       {celebrating ? <CelebrationBurst seed={state.name} /> : null}
 
       <View style={styles.topRow}>
-        <AppText variant="label" color="accent">
-          {celebrating ? 'SESSION DONE' : 'TODAY'}
-        </AppText>
+        <View style={[styles.statusPill, celebrating && styles.statusPillDone, resting && styles.statusPillRest]}>
+          <AppText variant="caption" style={styles.statusIcon}>
+            {celebrating ? '✓' : resting ? '☾' : '●'}
+          </AppText>
+          <AppText variant="label" color="textPrimary">
+            {celebrating ? 'SESSION DONE' : resting ? 'REST DAY' : 'TODAY'}
+          </AppText>
+        </View>
         {hrvMs != null ? (
           <View style={styles.hrvBadge}>
             <AppText variant="caption" style={styles.hrvIcon}>
@@ -174,10 +179,10 @@ export function TodayHeroCard({
             onPress={onViewHistory ?? onOpenRecovery}
             size="large"
           />
-          {onAddExercises ? (
-            <PrimaryButton label="Add Exercises" icon="+" variant="secondary" onPress={onAddExercises} />
-          ) : null}
-          <PrimaryButton label="Focus on Recovery" variant="ghost" onPress={onOpenRecovery} />
+          <ActionRow>
+            {onAddExercises ? <ActionTile icon="+" label="Add Exercises" onPress={onAddExercises} /> : null}
+            <ActionTile icon="☾" label="Focus on Recovery" onPress={onOpenRecovery} />
+          </ActionRow>
         </>
       ) : state.kind === 'rest' ? (
         <>
@@ -198,16 +203,18 @@ export function TodayHeroCard({
             size="large"
             icon="✨"
           />
-          {onManageDay ? (
-            <PrimaryButton
-              label="Move or Swap Day"
-              variant="secondary"
-              onPress={onManageDay}
-              loading={manageDayBusy}
-              disabled={busy || manageDayBusy}
-            />
-          ) : null}
-          <PrimaryButton label="Focus on Recovery" variant="secondary" onPress={onOpenRecovery} />
+          <ActionRow>
+            {onManageDay ? (
+              <ActionTile
+                icon="⇄"
+                label="Move or Swap Day"
+                onPress={onManageDay}
+                loading={manageDayBusy}
+                disabled={busy || manageDayBusy}
+              />
+            ) : null}
+            <ActionTile icon="☾" label="Focus on Recovery" onPress={onOpenRecovery} />
+          </ActionRow>
         </>
       ) : state.kind === 'in-progress' ? (
         <>
@@ -246,26 +253,64 @@ export function TodayHeroCard({
             disabled={busy}
             size="large"
           />
-          {onManageDay ? (
-            <PrimaryButton
-              label="Move or Swap Day"
-              variant="secondary"
-              onPress={onManageDay}
-              loading={manageDayBusy}
-              disabled={busy || manageDayBusy}
-            />
-          ) : null}
-          {onManageWorkout ? (
-            <PrimaryButton
-              label="Replace Exercises"
-              variant="secondary"
-              onPress={onManageWorkout}
-              disabled={busy}
-            />
-          ) : null}
+          <ActionRow>
+            {onManageDay ? (
+              <ActionTile
+                icon="⇄"
+                label="Move or Swap Day"
+                onPress={onManageDay}
+                loading={manageDayBusy}
+                disabled={busy || manageDayBusy}
+              />
+            ) : null}
+            {onManageWorkout ? (
+              <ActionTile icon="✎" label="Replace Exercises" onPress={onManageWorkout} disabled={busy} />
+            ) : null}
+          </ActionRow>
         </>
       )}
     </LinearGradient>
+  );
+}
+
+function ActionRow({ children }: { children: React.ReactNode }) {
+  return <View style={styles.actionRow}>{children}</View>;
+}
+
+/** A compact secondary action: a glyph over a short label, sharing the row evenly. */
+function ActionTile({
+  icon,
+  label,
+  onPress,
+  loading,
+  disabled,
+}: {
+  icon: string;
+  label: string;
+  onPress: () => void;
+  loading?: boolean;
+  disabled?: boolean;
+}) {
+  const inactive = disabled || loading;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled: !!inactive }}
+      disabled={inactive}
+      onPress={onPress}
+      style={({ pressed }) => [styles.tile, pressed && styles.pressed, inactive && styles.tileDisabled]}>
+      {loading ? (
+        <ActivityIndicator color={LiftFlowColors.accent} />
+      ) : (
+        <AppText variant="headline" color="accent">
+          {icon}
+        </AppText>
+      )}
+      <AppText variant="caption" color="textPrimary" style={styles.tileLabel}>
+        {label}
+      </AppText>
+    </Pressable>
   );
 }
 
@@ -361,7 +406,7 @@ function RecoveryBlock({
       <Pressable
         accessibilityRole="button"
         onPress={onOpenRecovery}
-        style={({ pressed }) => [styles.recoveryPrompt, pressed && styles.pressed]}>
+        style={({ pressed }) => [styles.panel, styles.recoveryPrompt, pressed && styles.pressed]}>
         <AppText variant="label" color="textTertiary">
           RECOVERY SCORE
         </AppText>
@@ -373,8 +418,8 @@ function RecoveryBlock({
   }
 
   return (
-    <View style={styles.recoveryRow}>
-      <ProgressRing percent={percent} size={104} thickness={8}>
+    <View style={[styles.panel, styles.recoveryRow]}>
+      <ProgressRing percent={percent} size={88} thickness={8}>
         <AppText variant="headline" style={styles.recoveryValue}>
           {Math.round(percent)}%
         </AppText>
@@ -462,7 +507,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.lg,
-    marginTop: Spacing.xs,
+    padding: Spacing.md,
   },
   recoveryValue: {
     color: MetricAccents.recovery.tint,
@@ -478,12 +523,60 @@ const styles = StyleSheet.create({
     gap: 2,
     paddingVertical: Spacing.md,
     paddingHorizontal: Spacing.lg,
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    borderColor: LiftFlowColors.border,
-    backgroundColor: 'rgba(255,255,255,0.03)',
   },
   pressed: {
     opacity: 0.8,
+  },
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    paddingVertical: 6,
+    paddingHorizontal: Spacing.md,
+    borderRadius: Radius.full,
+    borderWidth: 1,
+    borderColor: 'rgba(14, 144, 255, 0.45)',
+    backgroundColor: 'rgba(14, 144, 255, 0.14)',
+  },
+  statusPillRest: {
+    borderColor: 'rgba(155, 123, 255, 0.45)',
+    backgroundColor: 'rgba(155, 123, 255, 0.14)',
+  },
+  statusPillDone: {
+    borderColor: 'rgba(0, 229, 168, 0.5)',
+    backgroundColor: 'rgba(0, 229, 168, 0.16)',
+  },
+  statusIcon: {
+    color: LiftFlowColors.accent,
+  },
+  panel: {
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.10)',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+  },
+  actionRow: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+  },
+  tile: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.xs,
+    minHeight: 68,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.sm,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(255,255,255,0.07)',
+  },
+  tileDisabled: {
+    opacity: 0.5,
+  },
+  tileLabel: {
+    textAlign: 'center',
+    fontWeight: '600',
   },
 });
