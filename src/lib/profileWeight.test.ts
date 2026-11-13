@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { parseProfileWeightInput, shouldApplyHealthWeight } from './profileWeight';
+import { parseProfileWeightInput, shouldApplyHealthWeight, trustedBodyWeightKg } from './profileWeight';
 
 test('pounds typed in Settings are saved as kilograms', () => {
   const parsed = parseProfileWeightInput('182.5', 'lb');
@@ -37,4 +37,14 @@ test('a newer plausible Health sample replaces the logged weight', () => {
 test('with no logged weight, any in-range Health sample applies', () => {
   assert.equal(shouldApplyHealthWeight({ kg: 82.1, recordedAt: '2026-10-10T06:00:00Z' }, null), true);
   assert.equal(shouldApplyHealthWeight({ kg: 402.3, recordedAt: '2026-10-10T06:00:00Z' }, null), false);
+});
+
+test('a profile weight that is the logged weight in pounds gives way to the logged weight', () => {
+  // 182.5 lb logged as 82.78 kg; the profile column held 182.48.
+  assert.equal(trustedBodyWeightKg(182.48, 82.78), 82.78);
+  assert.equal(trustedBodyWeightKg(82.78 / 2.2046226218, 82.78), 82.78);
+  // A real change since the last log is kept.
+  assert.equal(trustedBodyWeightKg(80.5, 82.78), 80.5);
+  assert.equal(trustedBodyWeightKg(null, 82.78), 82.78);
+  assert.equal(trustedBodyWeightKg(81, null), 81);
 });

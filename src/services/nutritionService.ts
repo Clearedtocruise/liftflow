@@ -9,6 +9,7 @@ import { planDataCache } from '@/lib/planDataCache';
 import { MEAL_NOT_FOUND } from '@/lib/mealErrors';
 import { enrichMealMeta, correctedMacrosIfInflated, correctedStoredMacrosIfDaySized, serializeMealMeta } from '@/lib/mealIngredients';
 import { isInvertedBodyWeightKg, normalizeBodyWeightKg } from '@/lib/bodyWeightKg';
+import { trustedBodyWeightKg } from '@/lib/profileWeight';
 import { fail, fromError, ok } from '@/lib/serviceResult';
 import { getWeekRange } from '@/lib/weekPlan';
 import type { INutritionService } from '@/services/interfaces';
@@ -34,13 +35,30 @@ function weekStartDate(timeZone?: string | null): string {
   return getWeekRange(new Date(), resolveTimeZone(timeZone)).from;
 }
 
-/** Fix profiles.weight_kg when it looks like lbs×2.2 (~400 kg). Fire-and-forget safe. */
+/**
+ * Fix profiles.weight_kg when it looks like lbs×2.2 (~400 kg), or when it is the lifter's own last
+ * logged weight in pounds (182.5 lb saved as 182.48 kg). Fire-and-forget safe.
+ */
 async function healInvertedProfileWeight(userId: string): Promise<void> {
   try {
     const { data } = await supabase.from('profiles').select('weight_kg').eq('id', userId).maybeSingle();
     const raw = data?.weight_kg != null ? Number(data.weight_kg) : null;
-    if (!isInvertedBodyWeightKg(raw)) return;
-    await supabase.from('profiles').update({ weight_kg: normalizeBodyWeightKg(raw) }).eq('id', userId);
+    if (isInvertedBodyWeightKg(raw)) {
+      await supabase.from('profiles').update({ weight_kg: normalizeBodyWeightKg(raw) }).eq('id', userId);
+      return;
+    }
+    const { data: lastLogged } = await supabase
+      .from('body_composition_records')
+      .select('weight_kg')
+      .eq('user_id', userId)
+      .not('weight_kg', 'is', null)
+      .order('recorded_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const trusted = trustedBodyWeightKg(raw, lastLogged?.weight_kg != null ? Number(lastLogged.weight_kg) : null);
+    if (raw != null && trusted != null && trusted !== raw) {
+      await supabase.from('profiles').update({ weight_kg: trusted }).eq('id', userId);
+    }
   } catch {
     // Non-fatal — meal heal still runs.
   }

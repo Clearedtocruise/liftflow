@@ -1,4 +1,5 @@
 import { setVolumeKg } from '@/lib/bodyweightVolume';
+import { trustedBodyWeightKg } from '@/lib/profileWeight';
 import { mapHistoryItem, mapSession, mapSet } from '@/lib/db-mappers';
 import { getExerciseLoggingMode } from '@/lib/exerciseModality';
 import {
@@ -61,15 +62,29 @@ async function recalculateSessionTotals(sessionId: string): Promise<void> {
     .select('weight_kg')
     .eq('id', session.userId)
     .maybeSingle();
-  const bodyWeightKg = profile?.weight_kg != null ? Number(profile.weight_kg) : null;
+  const { data: lastLogged } = await supabase
+    .from('body_composition_records')
+    .select('weight_kg')
+    .eq('user_id', session.userId)
+    .not('weight_kg', 'is', null)
+    .order('recorded_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const bodyWeightKg = trustedBodyWeightKg(
+    profile?.weight_kg != null ? Number(profile.weight_kg) : null,
+    lastLogged?.weight_kg != null ? Number(lastLogged.weight_kg) : null,
+  );
 
   let totalSets = 0;
   let totalVolume = 0;
 
   for (const exercise of session.exercises) {
-    const isBodyweight = getExerciseLoggingMode(exercise.exercise) === 'bodyweight';
+    const mode = getExerciseLoggingMode(exercise.exercise);
+    const isBodyweight = mode === 'bodyweight';
     for (const set of exercise.sets) {
       totalSets += 1;
+      // A held plank or a run moves no load. Its "1 rep" is only the set marker.
+      if ((mode === 'timed' || mode === 'cardio') && !(set.weight != null && set.weight > 0)) continue;
       // A loaded lift switched to bodyweight for the day logs reps with no weight.
       const bodyweightSet = isBodyweight || !(set.weight != null && set.weight > 0);
       totalVolume += setVolumeKg(
