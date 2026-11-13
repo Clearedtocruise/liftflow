@@ -11,8 +11,14 @@ test('variants match before their base movement', () => {
   assert.equal(bodyweightShare('Bench Dips'), 0.5);
   assert.equal(bodyweightShare('Parallel Bar Dip'), 0.95);
   assert.equal(bodyweightShare('Pull-Ups'), 1);
-  assert.equal(bodyweightShare('Dead Bugs'), 0.2);
-  assert.equal(bodyweightShare('Hanging Leg Raises'), 0.32);
+});
+
+test('core floor work counts reps, not volume', () => {
+  for (const name of ['Crunches', 'Cable Crunch', 'Sit-Ups', 'Dead Bugs', 'Hanging Leg Raises', 'Russian Twists']) {
+    assert.equal(bodyweightShare(name), 0, name);
+    assert.equal(setVolumeKg({ isBodyweight: true, exerciseName: name, reps: 20 }, 82.78), 0, name);
+  }
+  assert.equal(setVolumeKg({ isBodyweight: true, exerciseName: 'Weighted Crunch', weightKg: 10, reps: 10 }, 82.78), 100);
 });
 
 test('an unlisted movement counts nothing rather than a guess', () => {

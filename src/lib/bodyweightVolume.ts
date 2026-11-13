@@ -4,8 +4,10 @@ const MAX_BODY_WEIGHT_KG = 250;
 /**
  * Share of body weight each rep moves, from published force-plate and EMG studies (push-up ≈ 64%,
  * knee push-up ≈ 49%, incline ≈ 41–55%, decline ≈ 70%). First match wins, so the more specific
- * variant must come before its base movement. A movement not listed here counts nothing rather
- * than a guess.
+ * variant must come before its base movement. Core floor work (crunches, sit-ups, leg raises,
+ * twists, dead bugs)
+ * is deliberately absent: it counts reps, not volume, unless weight is added. A movement not listed
+ * here counts nothing rather than a guess.
  */
 const BODYWEIGHT_SHARES: ReadonlyArray<readonly [RegExp, number]> = [
   [/\bdecline\b.*\bpush[\s-]*ups?\b|\bfeet[\s-]*elevated\b.*\bpush[\s-]*ups?\b/i, 0.7],
@@ -21,14 +23,6 @@ const BODYWEIGHT_SHARES: ReadonlyArray<readonly [RegExp, number]> = [
   [/\bcalf[\s-]*raises?\b/i, 1],
   [/\b(air|bodyweight|pistol)[\s-]*squats?\b|\blunges?\b|\bsplit[\s-]*squats?\b|\bstep[\s-]*ups?\b/i, 0.8],
   [/\bglute[\s-]*bridges?\b|\bhip[\s-]*thrusts?\b/i, 0.5],
-  [/\bsit[\s-]*ups?\b/i, 0.6],
-  [/\bcrunch(es)?\b/i, 0.4],
-  [
-    /\bleg[\s-]*raises?\b|\bv[\s-]*ups?\b|\btoes[\s-]*to[\s-]*bar\b|\b(flutter|scissor)[\s-]*kicks?\b|\bthrow[\s-]*downs?\b|\bwindshield[\s-]*wipers?\b/i,
-    0.32,
-  ],
-  [/\brussian[\s-]*twists?\b/i, 0.3],
-  [/\bdead[\s-]*bugs?\b/i, 0.2],
 ];
 
 export function bodyweightShare(exerciseName: string | null | undefined): number {

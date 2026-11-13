@@ -17,7 +17,7 @@ test('a timed HIIT round counts its seconds the same way', () => {
   assert.equal(formatWorkDuration(160), '2:40');
 });
 
-test('pull-ups and leg raises finish with reps and the body-weight share they moved', () => {
+test('pull-ups finish with reps and the body-weight share they moved; leg raises just reps', () => {
   const pullUps = summarizeExerciseWork('bodyweight', [{ reps: 8 }, { reps: 8 }, { reps: 8 }], 'Pull Up', BW);
   assert.equal(pullUps.kind, 'reps');
   if (pullUps.kind === 'reps') {
@@ -25,7 +25,11 @@ test('pull-ups and leg raises finish with reps and the body-weight share they mo
     assert.ok(Math.abs(pullUps.volumeKg - 24 * 82.8) < 0.01);
   }
   const legRaises = summarizeExerciseWork('bodyweight', [{ reps: 8 }, { reps: 9 }, { reps: 8 }], 'Hanging Leg Raise', BW);
-  if (legRaises.kind === 'reps') assert.equal(legRaises.reps, 25);
+  assert.equal(legRaises.kind, 'reps');
+  if (legRaises.kind === 'reps') {
+    assert.equal(legRaises.reps, 25);
+    assert.equal(legRaises.volumeKg, 0);
+  }
 });
 
 test('an ab move with no known share still reports its reps instead of nothing', () => {
