@@ -194,13 +194,55 @@ function deriveFromNamePattern(name: string): ExerciseMuscleProfile {
   // always use plurals ("Curls", "Rows", "Pullups", "Squats"), so every pattern below accepts an
   // optional trailing "s" (or "es"/irregular plural) instead of only the singular lift name — the
   // reported bug where Curls, Pullups, Barbell Rows and DB Rows all rendered as "Full Body".
-  if (/\b(benches?|flys?|flyes?|flies|push-?ups?|dips?)\b/.test(lower)) {
+  // Close-grip pressing shifts the load to the triceps; the chest still works, so both lead.
+  if (/\bclose[\s-]*grip\b.*\b(bench|press(?:es)?)\b/.test(lower)) {
+    return { primary: ['triceps', 'chest'], secondary: ['front-delts'] };
+  }
+  // Triceps isolation, ahead of every rule below: "French Press" and "Overhead Extension" would
+  // otherwise read as a shoulder press, and "Pushdowns" as nothing at all.
+  if (
+    /\b(skull[\s-]*crushers?|push-?downs?|french\s+press(?:es)?|(?:tricep|triceps)\s+extensions?|overhead\s+(?:(?:tricep|triceps)\s+)?extensions?)\b/.test(
+      lower,
+    )
+  ) {
+    return { primary: ['triceps'], secondary: ['forearms'] };
+  }
+  // `bench(?:es)?`, not `benches?`: that spells "benche" plus an optional s and never matched a
+  // plain "Bench" ("Close Grip Bench" rendered as Full Body).
+  if (/\b(bench(?:es)?|fl(?:y|ies|yes)|push-?ups?|dips?)\b/.test(lower)) {
     return { primary: ['chest'], secondary: ['triceps', 'front-delts'] };
+  }
+  if (/\b(pec\s*decks?|cable\s+cross-?overs?)\b/.test(lower)) {
+    return { primary: ['chest'], secondary: ['front-delts'] };
+  }
+  if (/\bface\s*pulls?\b/.test(lower)) {
+    return { primary: ['rear-delts'], secondary: ['traps', 'mid-back'] };
+  }
+  if (/\bshrugs?\b/.test(lower)) {
+    return { primary: ['traps'], secondary: ['forearms'] };
+  }
+  if (/\b(pull-?overs?)\b/.test(lower)) {
+    return { primary: ['lats'], secondary: ['chest', 'triceps'] };
+  }
+  if (/\bleg\s+extensions?\b/.test(lower)) {
+    return { primary: ['quads'], secondary: [] };
+  }
+  if (/\b(hip\s+thrusts?|glute\s+bridges?)\b/.test(lower)) {
+    return { primary: ['glutes'], secondary: ['hamstrings'] };
+  }
+  if (/\b(good\s+mornings?)\b/.test(lower)) {
+    return { primary: ['hamstrings', 'lower-back'], secondary: ['glutes'] };
+  }
+  if (/\b(hyperextensions?|back\s+extensions?|supermans?)\b/.test(lower)) {
+    return { primary: ['lower-back'], secondary: ['glutes', 'hamstrings'] };
+  }
+  if (/\b(ab\s+wheels?|rollouts?|bird[\s-]*dogs?)\b/.test(lower)) {
+    return { primary: ['core'], secondary: ['abs'] };
   }
   if (/\b(pull-?ups?|pulldowns?|chin-?ups?|rows?)\b/.test(lower)) {
     return { primary: ['lats'], secondary: ['biceps', 'mid-back'] };
   }
-  if (/\b(squats?|lunges?|leg\s+press(?:es)?)\b/.test(lower)) {
+  if (/\b(squats?|lunges?|step-?ups?|leg\s+press(?:es)?)\b/.test(lower)) {
     return { primary: ['quads', 'glutes'], secondary: ['hamstrings'] };
   }
   if (/\b(deadlifts?|rdls?|hinges?)\b/.test(lower)) {
@@ -239,7 +281,7 @@ function deriveFromNamePattern(name: string): ExerciseMuscleProfile {
   if (/\b(lateral\s+raises?|front\s+raises?|rear\s+delts?)\b/.test(lower)) {
     return { primary: ['shoulders'], secondary: [] };
   }
-  if (/\b(runs?|walks?|cardio|bikes?|cycles?|swims?|rowers?)\b/.test(lower)) {
+  if (/\b(runs?|walks?|cardio|bikes?|cycles?|swims?|rowers?|jump\s+rope|ellipticals?|stair\s*(?:climbers?|masters?)|box\s+jumps?|mountain\s+climbers?)\b/.test(lower)) {
     return { primary: ['quads'], secondary: ['calves', 'glutes'] };
   }
   return { primary: ['full-body'], secondary: [] };
