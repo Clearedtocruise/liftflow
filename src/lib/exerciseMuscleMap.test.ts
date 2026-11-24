@@ -91,3 +91,27 @@ test('incline and chest presses are chest work, not shoulder presses', () => {
   assert.deepEqual(resolveExerciseMuscles('DB Press').primary, ['shoulders']);
   assert.deepEqual(resolveExerciseMuscles('Leg Press').primary, ['quads', 'glutes']);
 });
+
+test('a bare "Bench" is chest work, and close-grip bench leads with triceps', () => {
+  // `benches?` spells "benche" + optional s, so a plain "Bench" fell through to Full Body.
+  assert.deepEqual(resolveExerciseMuscles('Bench').primary, ['chest']);
+  assert.deepEqual(resolveExerciseMuscles('Flat Bench').primary, ['chest']);
+  assert.deepEqual(resolveExerciseMuscles('Close Grip Bench').primary, ['triceps', 'chest']);
+  assert.deepEqual(resolveExerciseMuscles('Close-Grip Bench Press').primary, ['triceps', 'chest']);
+  assert.deepEqual(resolveExerciseMuscles('Dumbbell Flyes').primary, ['chest']);
+});
+
+test('triceps isolation lifts resolve to triceps in singular and plural', () => {
+  for (const name of ['Skull Crusher', 'Skull Crushers', 'Cable Pushdown', 'Rope Pushdowns', 'French Press', 'Overhead Tricep Extension']) {
+    assert.deepEqual(resolveExerciseMuscles(name).primary, ['triceps'], name);
+  }
+});
+
+test('common gym lifts never render as Full Body', () => {
+  for (const name of [
+    'Pec Deck', 'Cable Crossover', 'Face Pulls', 'Shrugs', 'Leg Extension', 'Hip Thrusts', 'Good Mornings',
+    'Hyperextensions', 'Step-Ups', 'Ab Wheel', 'Bird Dog', 'Pullover', 'Mountain Climbers',
+  ]) {
+    assert.notEqual(resolveExerciseMuscles(name).primary[0], 'full-body', name);
+  }
+});
