@@ -462,10 +462,10 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(0, 229, 168, 0.35)',
   },
   backdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   backdropScrim: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   topRow: {
     flexDirection: 'row',

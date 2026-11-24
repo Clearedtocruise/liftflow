@@ -124,7 +124,7 @@ export function CelebrationBurst({ seed }: CelebrationBurstProps) {
 
 const styles = StyleSheet.create({
   stage: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     overflow: 'hidden',
   },
   particle: {

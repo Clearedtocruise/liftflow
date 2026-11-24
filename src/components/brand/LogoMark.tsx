@@ -81,12 +81,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   outerGlow: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     transform: [{ scale: 1.35 }],
     overflow: 'hidden',
   },
   innerGlow: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     transform: [{ scale: 1.12 }],
   },
 });

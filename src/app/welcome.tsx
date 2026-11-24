@@ -86,7 +86,7 @@ const styles = StyleSheet.create({
     backgroundColor: LiftFlowColors.background,
   },
   horizonGlow: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     opacity: 0.9,
   },
   content: {

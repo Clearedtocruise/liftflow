@@ -153,7 +153,7 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   heroFade: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   title: {
     letterSpacing: 0.8,

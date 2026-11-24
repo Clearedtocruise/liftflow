@@ -1,4 +1,3 @@
-import type { Audio } from 'expo-av';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { api } from '@/api/client';
@@ -9,6 +8,7 @@ import {
   MIN_TRANSCRIBE_BYTES,
   startRecording,
   stopRecording,
+  type VoiceRecording,
 } from '@/lib/voice/recordAudio';
 import { isRecorderSessionBusyError } from '@/lib/voice/recorderSessionError';
 import {
@@ -48,7 +48,7 @@ export function useVoiceRecognition(options: VoiceRecognitionOptions = {}) {
   const { enabled = true, inputMode = 'tap_toggle', onFinalTranscript } = options;
 
   const transcriptRef = useRef('');
-  const recordingRef = useRef<Audio.Recording | null>(null);
+  const recordingRef = useRef<VoiceRecording | null>(null);
   const disposeMonitorRef = useRef<(() => void) | null>(null);
   const autoStopRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stoppingRef = useRef(false);

@@ -190,7 +190,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   bleedWrap: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   bleedImage: {
     width: '100%',
@@ -267,7 +267,7 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   heroFade: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   copy: {
     gap: Spacing.sm,

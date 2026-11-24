@@ -1,4 +1,4 @@
-import { Audio } from 'expo-av';
+import { AudioModule, RecordingPresets, requestRecordingPermissionsAsync, type AudioRecorder } from 'expo-audio';
 import { File } from 'expo-file-system';
 import { Platform } from 'react-native';
 
@@ -16,12 +16,26 @@ import { isRecorderSessionBusyError } from '@/lib/voice/recorderSessionError';
  * Android, neither of which the transcription API accepts. High quality yields `.m4a` on both.
  * Metering is already enabled on the preset — required for end-of-speech auto-stop.
  */
-const RECORDING_OPTIONS: Audio.RecordingOptions = {
-  ...Audio.RecordingOptionsPresets.HIGH_QUALITY,
+const RECORDING_OPTIONS = {
+  ...RecordingPresets.HIGH_QUALITY,
   // Explicit — some devices omit metering from the preset merge and then end-of-speech never
   // sees speech, so the hard cap is the only stop and empty takes look like a broken mic.
   isMeteringEnabled: true,
 };
+
+/**
+ * The native recorder takes the platform's own flat options. `useAudioRecorder` does this
+ * flattening itself; this app holds one imperative recorder, so it does the same here.
+ */
+function nativeRecordingOptions() {
+  const { ios, android, web, ...common } = RECORDING_OPTIONS as typeof RECORDING_OPTIONS & {
+    ios?: object;
+    android?: object;
+    web?: object;
+  };
+  const platform = Platform.OS === 'ios' ? ios : Platform.OS === 'android' ? android : web;
+  return { ...common, ...platform };
+}
 
 /**
  * Last-resort cap if both end-of-speech paths go quiet. A spoken set is a few seconds, so 30s of
@@ -40,7 +54,9 @@ export const METERING_POLL_MS = 100;
 export const MIN_TRANSCRIBE_BYTES = 1024;
 
 /** The native layer only allows one Recording at a time — keep the live handle here to unload it. */
-let liveRecording: Audio.Recording | null = null;
+export type VoiceRecording = AudioRecorder;
+
+let liveRecording: VoiceRecording | null = null;
 
 export type RecordedAudio = {
   bytes: Uint8Array;
@@ -49,7 +65,7 @@ export type RecordedAudio = {
 };
 
 export async function hasMicrophonePermission(): Promise<boolean> {
-  const { granted } = await Audio.requestPermissionsAsync();
+  const { granted } = await requestRecordingPermissionsAsync();
   return granted;
 }
 
@@ -68,7 +84,7 @@ export type RecordingCallbacks = {
 
 export async function startRecording(
   options?: RecordingCallbacks,
-): Promise<{ recording: Audio.Recording; dispose: () => void }> {
+): Promise<{ recording: VoiceRecording; dispose: () => void }> {
   if (liveRecording) {
     await cancelRecording(liveRecording);
   }
@@ -100,7 +116,7 @@ export async function startRecording(
 
 async function openRecording(
   options?: RecordingCallbacks,
-): Promise<{ recording: Audio.Recording; dispose: () => void }> {
+): Promise<{ recording: VoiceRecording; dispose: () => void }> {
   let eosState: EndOfSpeechState = createEndOfSpeechState(Date.now());
   let stopped = false;
   let poll: ReturnType<typeof setInterval> | null = null;
@@ -124,28 +140,27 @@ async function openRecording(
     options.onEndOfSpeech();
   };
 
-  const { recording } = await Audio.Recording.createAsync(
-    RECORDING_OPTIONS,
-    (status) => evaluate(status.metering, status.isRecording),
-    METERING_POLL_MS,
-  );
+  const recording = new AudioModule.AudioRecorder(nativeRecordingOptions());
+  try {
+    await recording.prepareToRecordAsync();
+    recording.record();
+  } catch (error) {
+    recording.release();
+    throw error;
+  }
   liveRecording = recording;
 
-  /**
-   * The status callback is not delivered reliably on device — when it goes quiet nothing ever
-   * ends the capture, so the mic stays open, the transcript never arrives, no set is logged and
-   * the audio session stays held. Poll the recorder directly as well; both paths feed the same
-   * reducer, so whichever fires first ends the utterance.
-   */
+  // The recorder is polled for its meter reading: nothing else ends a capture, so a silent
+  // poll would leave the mic open, no set logged and the audio session held.
   if (options?.onEndOfSpeech || options?.onSpeechDetected) {
     poll = setInterval(() => {
       if (stopped) return;
-      void recording
-        .getStatusAsync()
-        .then((status) => evaluate(status.metering, status.isRecording))
-        .catch(() => {
-          clearPoll();
-        });
+      try {
+        const status = recording.getStatus();
+        evaluate(status.metering, status.isRecording);
+      } catch {
+        clearPoll();
+      }
     }, METERING_POLL_MS);
   }
 
@@ -154,7 +169,6 @@ async function openRecording(
     dispose: () => {
       stopped = true;
       clearPoll();
-      recording.setOnRecordingStatusUpdate(null);
     },
   };
 }
@@ -170,21 +184,24 @@ function contentTypeForUri(uri: string): string {
  * Always releases the audio session, even when reading the file fails, so a failed attempt cannot
  * leave playback routed to the earpiece for the rest of the session.
  *
- * Unduck *before* stopAndUnloadAsync: after unload, expo-av treats the session as Inactive and
- * silently skips applying MixWithOthers — which left music muted until the app restarted.
+ * Unduck *before* stopping: once the recorder is torn down the session can be Inactive, and a
+ * mode applied then never reaches the hardware — which left music muted until the app restarted.
  */
-export async function stopRecording(recording: Audio.Recording): Promise<RecordedAudio | null> {
+export async function stopRecording(recording: VoiceRecording): Promise<RecordedAudio | null> {
+  let uri: string | null = null;
   try {
-    recording.setOnRecordingStatusUpdate(null);
     await unduckWhileSessionActive();
-    await recording.stopAndUnloadAsync();
+    await recording.stop();
+    uri = recording.uri ?? recording.getStatus().url;
   } finally {
     if (liveRecording === recording) liveRecording = null;
     await releaseAudioSession();
   }
 
-  const uri = recording.getURI();
-  if (!uri) return null;
+  if (!uri) {
+    recording.release();
+    return null;
+  }
 
   // expo-file-system's File cannot read blob: URIs, which is what the web recorder produces.
   if (Platform.OS === 'web') {
@@ -194,17 +211,22 @@ export async function stopRecording(recording: Audio.Recording): Promise<Recorde
   }
 
   const bytes = await new File(uri).bytes();
+  recording.release();
   return { bytes, contentType: contentTypeForUri(uri), uri };
 }
 
 /** Best effort — a discarded recording that cannot be unloaded must not surface as an error. */
-export async function cancelRecording(recording: Audio.Recording): Promise<void> {
+export async function cancelRecording(recording: VoiceRecording): Promise<void> {
   try {
-    recording.setOnRecordingStatusUpdate(null);
     await unduckWhileSessionActive();
-    await recording.stopAndUnloadAsync();
+    await recording.stop();
   } catch {
-    // already unloaded
+    // already stopped
+  }
+  try {
+    recording.release();
+  } catch {
+    // already released
   }
   if (liveRecording === recording) liveRecording = null;
   await releaseAudioSession();
