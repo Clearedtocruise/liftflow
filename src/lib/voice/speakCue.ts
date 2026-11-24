@@ -10,12 +10,13 @@ type SpeakCueOptions = {
 };
 
 /**
- * Speak a short cue and hand the lifter's music back when it ends.
+ * Speak a short cue without ever touching the volume of the lifter's music.
  *
- * On iOS the cue must not borrow the shared session. Recording already ducked it, and expo-av
- * never deactivates that session with the flag other apps need in order to resume, so a
- * confirmation spoken on the shared session left Spotify quiet after the set was logged.
- * A private speech session ducks for the phrase and restores the other audio itself.
+ * On iOS the cue is spoken on the app's own session, set to mix with other audio and not to duck
+ * it. A private speech session used to be used so the system would restore the music after the
+ * phrase, but that duck can outlive the phrase: the music stayed quiet until the app was left.
+ * Ducking is only ever undone by whoever asked for it, so asking for none leaves nothing to
+ * undo. The phrase plays over the music instead of lowering it.
  */
 export async function speakCue(message: string, options: SpeakCueOptions = {}): Promise<void> {
   const text = message.trim();
@@ -36,15 +37,12 @@ export async function speakCue(message: string, options: SpeakCueOptions = {}): 
     const safetyTimer = setTimeout(finish, Math.min(20_000, Math.max(4_000, text.length * 90)));
 
     if (Platform.OS === 'ios') {
-      // Drop any duck the recorder still holds before the private session starts, or that duck
-      // outlives the phrase. Do not touch the session again once the phrase ends: toggling it
-      // then pauses the music the speech session just restored.
+      // Drop any duck the recorder still holds, then speak on the now mix-only session.
       void releaseAudioSession().finally(() => {
         Speech.speak(text, {
           rate: options.rate ?? 1,
           pitch: options.pitch ?? 1,
           language: options.language,
-          useApplicationAudioSession: false,
           onDone: finish,
           onStopped: finish,
           onError: finish,
