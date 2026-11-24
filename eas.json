@@ -44,7 +44,8 @@
       "autoIncrement": true,
       "distribution": "store",
       "ios": {
-        "resourceClass": "m-medium"
+        "resourceClass": "m-medium",
+        "image": "macos-tahoe-26.6-xcode-27.2"
       },
       "android": {
         "buildType": "app-bundle"
@@ -65,7 +66,8 @@
       "distribution": "store",
       "channel": "testflight",
       "ios": {
-        "resourceClass": "m-medium"
+        "resourceClass": "m-medium",
+        "image": "macos-tahoe-26.6-xcode-27.2"
       },
       "env": {
         "EXPO_PUBLIC_SENTRY_DSN": "https://55002ad407685e9e5485e2ed58efac92@o4511486214864896.ingest.us.sentry.io/4511486225285120",

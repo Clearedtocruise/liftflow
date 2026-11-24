@@ -1,79 +1,65 @@
-import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av';
+import { setAudioModeAsync } from 'expo-audio';
+import { Platform } from 'react-native';
 
 /**
  * The one place the app changes the shared audio session.
  *
- * Recording forces iOS into the PlayAndRecord category. expo-av maps
- * `InterruptionModeIOS.DuckOthers` to *only* `AVAudioSessionCategoryOptionDuckOthers` — it does
- * not also set MixWithOthers. Apple requires MixWithOthers for ducking to work; without it,
- * PlayAndRecord takes the session exclusively and **stops** Spotify / Apple Music. An interrupted
- * app only resumes when the session is deactivated with `notifyOthersOnDeactivation`, a flag
- * expo-av does not expose — so the track died when the mic (or "Rest complete") opened and
- * never came back.
- *
- * MixWithOthers on iOS keeps other audio playing. Android can still duck.
+ * Gym music must keep playing while the mic is open and while a cue is spoken. On iOS that means
+ * the session mixes with other audio and never ducks it: a duck is only undone by whoever asked
+ * for it, and one that outlives its phrase leaves the music quiet until the app is left. Android
+ * has real audio focus, so it ducks while the mic is open and the cue is spoken.
  *
  * Every call passes a complete mode rather than a patch, because `setAudioModeAsync` merges with
  * whatever was set last and two callers patching different fields is how this drifted.
- *
- * Important: expo-av only applies category changes while it considers the session active. Calling
- * MixWithOthers *after* `stopAndUnloadAsync` (session demoted to Inactive) stores the flag but
- * does not update the hardware session. Call `unduckWhileSessionActive` before unloading the
- * recorder, then `releaseAudioSession`. Do **not** toggle expo-av audio enable off then on —
- * that tears the whole AV subsystem down, stops other apps' music, and leaves the next
- * `Recording.createAsync` failing with a session-busy / recorder-not-prepared error (shown as
- * "Voice is busy" after a retry storm against the transcribe rate limit).
  */
 
-const PLAYBACK_HANDOFF = {
-  allowsRecordingIOS: false,
-  playsInSilentModeIOS: true,
-  staysActiveInBackground: false,
-  interruptionModeIOS: InterruptionModeIOS.MixWithOthers,
-  interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
-  shouldDuckAndroid: false,
-  playThroughEarpieceAndroid: false,
-} as const;
+type VoiceAudioMode = Parameters<typeof setAudioModeAsync>[0];
+
+const PLAYBACK_HANDOFF: VoiceAudioMode = {
+  allowsRecording: false,
+  playsInSilentMode: true,
+  shouldPlayInBackground: false,
+  interruptionMode: 'mixWithOthers',
+  shouldRouteThroughEarpiece: false,
+};
+
+const ANDROID_DUCKS = Platform.OS === 'android';
 
 /** Mic open: mix on iOS so gym music keeps playing; duck on Android. */
 export async function enterVoiceCaptureMode(): Promise<void> {
-  await Audio.setAudioModeAsync({
-    // Must be set before createAsync or iOS refuses to open the input route.
-    allowsRecordingIOS: true,
-    playsInSilentModeIOS: true,
-    staysActiveInBackground: false,
-    interruptionModeIOS: InterruptionModeIOS.MixWithOthers,
-    interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
-    shouldDuckAndroid: true,
-    playThroughEarpieceAndroid: false,
+  await setAudioModeAsync({
+    // Must be set before the recorder is prepared or iOS refuses to open the input route.
+    allowsRecording: true,
+    playsInSilentMode: true,
+    shouldPlayInBackground: false,
+    interruptionMode: ANDROID_DUCKS ? 'duckOthers' : 'mixWithOthers',
+    shouldRouteThroughEarpiece: false,
   });
 }
 
 /** Speaking a confirmation: mix on iOS so "Rest complete" does not kill the playlist. */
 export async function enterVoicePlaybackMode(): Promise<void> {
-  await Audio.setAudioModeAsync({
-    allowsRecordingIOS: false,
-    playsInSilentModeIOS: true,
-    staysActiveInBackground: false,
-    interruptionModeIOS: InterruptionModeIOS.MixWithOthers,
-    interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
-    shouldDuckAndroid: true,
-    playThroughEarpieceAndroid: false,
+  await setAudioModeAsync({
+    allowsRecording: false,
+    playsInSilentMode: true,
+    shouldPlayInBackground: false,
+    interruptionMode: ANDROID_DUCKS ? 'duckOthers' : 'mixWithOthers',
+    shouldRouteThroughEarpiece: false,
   });
 }
 
 /**
- * Leave PlayAndRecord while the recorder (or a just-finished cue) still keeps the
- * expo-av session Active so the native category actually updates.
+ * Leave PlayAndRecord while the recorder (or a just-finished cue) is still alive, so the native
+ * category updates before the recorder is torn down.
  */
 export async function unduckWhileSessionActive(): Promise<void> {
-  await Audio.setAudioModeAsync(PLAYBACK_HANDOFF).catch(() => undefined);
+  await setAudioModeAsync(PLAYBACK_HANDOFF).catch(() => undefined);
 }
 
 /**
  * Hands the session back to other apps. Prefer calling {@link unduckWhileSessionActive} first
- * while a recorder/sound is still loaded; this is the idle cleanup pass.
+ * while a recorder/player is still loaded; this is the idle cleanup pass.
  */
 export async function releaseAudioSession(): Promise<void> {
-  await Audio.setAudioModeAsync(PLAYBACK_HANDOFF).catch(() => undefined);
+  await setAudioModeAsync(PLAYBACK_HANDOFF).catch(() => undefined);
 }

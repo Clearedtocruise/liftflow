@@ -1,4 +1,5 @@
-import { Audio } from 'expo-av';
+import { createAudioPlayer, type AudioPlayer } from 'expo-audio';
+import { File, Paths } from 'expo-file-system';
 import * as Speech from 'expo-speech';
 import { Platform } from 'react-native';
 
@@ -11,7 +12,24 @@ import { getAccessToken } from '@/supabase/client';
 import type { CoachingRequest } from '@/types/ai';
 import type { ServiceResult } from '@/types/common';
 
-let sound: Audio.Sound | null = null;
+let player: AudioPlayer | null = null;
+
+function releasePlayer() {
+  const current = player;
+  player = null;
+  try {
+    current?.remove();
+  } catch {
+    // already released
+  }
+}
+
+function base64ToBytes(base64: string): Uint8Array {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
 
 async function playOpenAiSpeech(text: string): Promise<boolean> {
   try {
@@ -30,20 +48,21 @@ async function playOpenAiSpeech(text: string): Promise<boolean> {
     const data = (await response.json()) as { audioBase64?: string };
     if (!data.audioBase64) return false;
 
-    if (sound) {
-      await sound.unloadAsync();
-      sound = null;
-    }
+    releasePlayer();
 
     // Ducks the lifter's music for the length of the reply instead of taking the session from it.
     await enterVoicePlaybackMode();
-    const uri = `data:audio/mp3;base64,${data.audioBase64}`;
-    const { sound: newSound } = await Audio.Sound.createAsync({ uri });
-    sound = newSound;
-    newSound.setOnPlaybackStatusUpdate((status) => {
-      if (status.isLoaded && status.didJustFinish) void releaseAudioSession();
+    const file = new File(Paths.cache, 'coach-reply.mp3');
+    file.create({ overwrite: true });
+    file.write(base64ToBytes(data.audioBase64));
+    const reply = createAudioPlayer({ uri: file.uri });
+    player = reply;
+    const subscription = reply.addListener('playbackStatusUpdate', (status) => {
+      if (!status.didJustFinish) return;
+      subscription.remove();
+      void releaseAudioSession();
     });
-    await newSound.playAsync();
+    reply.play();
     return true;
   } catch {
     return false;
@@ -82,7 +101,7 @@ export const voiceCoachingService = {
 
   stopSpeaking() {
     Speech.stop();
-    sound?.stopAsync().catch(() => undefined);
+    releasePlayer();
     void releaseAudioSession();
   },
 

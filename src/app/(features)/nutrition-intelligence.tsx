@@ -1,7 +1,6 @@
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, RefreshControl, StyleSheet, View } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
 
 import { EmptyStateCard, ErrorStateCard } from '@/components/layout/StateCard';
 import { PrimaryButton } from '@/components/layout/PrimaryButton';

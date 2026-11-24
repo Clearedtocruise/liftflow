@@ -131,21 +131,21 @@ const coachSpeech = source('src/services/voiceCoachingService.ts');
 
 check(
   'iOS capture mixes with other audio instead of exclusive DuckOthers',
-  /enterVoiceCaptureMode[\s\S]*?interruptionModeIOS:\s*InterruptionModeIOS\.MixWithOthers/.test(audioSession),
+  /enterVoiceCaptureMode[\s\S]*?interruptionMode:\s*ANDROID_DUCKS \? 'duckOthers' : 'mixWithOthers'/.test(audioSession),
   true,
 );
 check(
   'iOS spoken cues mix with other audio instead of exclusive DuckOthers',
-  /enterVoicePlaybackMode[\s\S]*?interruptionModeIOS:\s*InterruptionModeIOS\.MixWithOthers/.test(audioSession),
+  /enterVoicePlaybackMode[\s\S]*?interruptionMode:\s*ANDROID_DUCKS \? 'duckOthers' : 'mixWithOthers'/.test(audioSession),
   true,
 );
-check('Android still ducks', audioSession.includes('InterruptionModeAndroid.DuckOthers'), true);
-check('releasing hands playback back to other apps', audioSession.includes('InterruptionModeIOS.MixWithOthers'), true);
-check('releasing turns recording off so audio leaves the earpiece', audioSession.includes('allowsRecordingIOS: false'), true);
-check('the session is never held into the background', audioSession.includes('staysActiveInBackground: false'), true);
+check('Android still ducks', audioSession.includes("'duckOthers'") && audioSession.includes("Platform.OS === 'android'"), true);
+check('releasing hands playback back to other apps', /PLAYBACK_HANDOFF[\s\S]*?interruptionMode: 'mixWithOthers'/.test(audioSession), true);
+check('releasing turns recording off so audio leaves the earpiece', audioSession.includes('allowsRecording: false'), true);
+check('the session is never held into the background', audioSession.includes('shouldPlayInBackground: false'), true);
 check(
-  'release does not toggle Audio.setIsEnabledAsync(false) — that stops other apps and leaves the next take busy',
-  /setIsEnabledAsync\(\s*false\s*\)/.test(audioSession),
+  'release does not toggle setIsAudioActiveAsync(false) — that stops other apps and leaves the next take busy',
+  /setIsAudioActiveAsync\(\s*false\s*\)/.test(audioSession),
   false,
 );
 
@@ -153,7 +153,7 @@ console.log('\nEvery path out of recording releases the session');
 check('stopping releases it', recordAudio.includes('await releaseAudioSession()'), true);
 check('stopping unducks while the recorder still holds the session', recordAudio.includes('unduckWhileSessionActive'), true);
 check('a recorder that fails to open releases it', /releaseAudioSession\(\);\s*\n\s*throw/.test(recordAudio), true);
-check('spoken replies release it when they finish', coachSpeech.includes('didJustFinish) void releaseAudioSession()'), true);
+check('spoken replies release it when they finish', coachSpeech.includes('didJustFinish') && coachSpeech.includes('void releaseAudioSession()'), true);
 check('device Speech fallbacks also release via speakCue', coachSpeech.includes("from '@/lib/voice/speakCue'"), true);
 
 console.log('\nTap once — silence ends the capture and restores music');
@@ -163,7 +163,7 @@ check('end-of-speech reducer exists', endOfSpeech.includes('reduceEndOfSpeech'),
 check('recorder watches metering for end of speech', recordAudio.includes('onEndOfSpeech') && recordAudio.includes('status.metering'), true);
 // The status callback has been seen going silent on device, which left the mic open, the set
 // unlogged and the music ducked for the rest of the workout.
-check('recorder also polls the recorder directly', recordAudio.includes('getStatusAsync'), true);
+check('recorder also polls the recorder directly', recordAudio.includes('recording.getStatus()'), true);
 check('a stuck capture is capped in seconds, not half a minute', recordAudio.includes('MAX_RECORDING_MS = 15_000'), true);
 check('hook auto-stops via end-of-speech callback', voiceHook.includes('onEndOfSpeech'), true);
 check('hook no longer tells users to hold the button', voiceHook.includes('Hold the button'), false);
